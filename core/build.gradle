@@ -86,3 +86,16 @@ tasks.register('generateVectors', JavaExec) {
 }
 
 check.dependsOn 'parityTest'
+
+/**
+ * Regenerate the byte-by-byte annotated frame used in WALKTHROUGH.md.
+ * Generated, never hand-written, so the documentation cannot drift from the
+ * bytes the code actually emits.
+ */
+tasks.register('annotateFrame', JavaExec) {
+    group = 'documentation'
+    description = 'Dump a real Maxima frame, annotated field by field'
+    dependsOn 'parityClasses'
+    classpath = sourceSets.parity.runtimeClasspath + files("${rootDir}/tools/vectorgen/out")
+    mainClass = 'Annotate'
+}

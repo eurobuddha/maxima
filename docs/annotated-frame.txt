@@ -1,0 +1,71 @@
+A COMPLETE MAXIMA FRAME, 1225 BYTES
+  offset  bytes                              field                        meaning
+  --------------------------------------------------------------------------------------------------------
+
+  ---- TCP frame header (Frame.java) ----
+  0000  000004C5                           int32 length                 = 1221 bytes of body follow
+  0004  0A                                 uint8 type                   0x0A = 10 = MSG_MAXIMA_TXPOW
+
+  ---- MaxTxPoW (MaxTxPoW.java) ----
+  0005  00000003                           MiniString len               = 3
+  0009  312E30                               "1.0"                      version, parsed then discarded
+
+  ---- MaximaPackage - PLAINTEXT, this is all a relay reads ----
+  0012  00000003                           MiniString len               = 3
+  0016  312E30                               "1.0"                      version
+  0019  000000A2                           MiniData len                 = 162
+  0023  30819F300D06092A864886F70D010101..   to (routing key)           recipient's X.509 DER pubkey, IN THE CLEAR
+  0185  0000035C                           MiniData len                 = 860  (the CryptoPackage)
+
+  ---- CryptoPackage - everything below here is encrypted to `to` ----
+  0189  00000010                           MiniData len                 = 16
+  0193  F62780282DEB0F096079AACEAB082D82     iv                         AES-CBC initialisation vector
+  0209  00000080                           MiniData len                 = 128
+  0213  1DB8DE24CEA855854053DCC0E81E79F0..   secret                     AES-128 key, RSA-wrapped to the recipient
+  0341  000002C0                           MiniData len                 = 704
+  0345  3FC17B336C885C7B0FF23AB9E2B3035B..   ciphertext                 AES/CBC/PKCS5 over the MaximaInternal
+
+  ---- the TxPoW carrier follows (header + hasBody flag) ----
+  1049  ...                                TxPoW                        carrier; only customHash is checked
+
+
+DECRYPTED: MaximaInternal, 696 bytes
+  --------------------------------------------------------------------------------------------------------
+  0000  000000A2                           MiniData len                 = 162
+  0004  30819F300D06092A864886F70D010101..   from                       sender's pubkey (the SIGNER)
+  0166  0000018A                           MiniData len                 = 394  (the MaximaMessage)
+  0170  00000020B32BEE93E8F4C9FC5232E0C1..   data                       the MaximaMessage, signed below
+  0564  00000080                           MiniData len                 = 128
+  0568  6196836D531E0B3AD2E28EBC663E87C2..   signature                  SHA256withRSA over `data`
+
+
+INNERMOST: MaximaMessage, 394 bytes
+  NOTE THE ORDER: random, from, to, TIME, application, data
+  --------------------------------------------------------------------------------------------------------
+  0000  00000020                           MiniData len                 = 32
+  0004  B32BEE93E8F4C9FC5232E0C182737C9F..   random                     makes every msgid unique
+  0036  000000A2                           MiniData len                 = 162
+  0040  30819F300D06092A864886F70D010101..   from                       must equal MaximaInternal.from
+  0202  000000A2                           MiniData len                 = 162
+  0206  30819F300D06092A864886F70D010101..   to                         
+  0368  000601989E26CE00                   MiniNumber timeMilli         scale, len, then BigInteger BE
+  0376  00000005                           MiniString len               = 5
+  0380  6D79617070                           "myapp"                    the application string
+  0385  00000005                           MiniData len                 = 5
+  0389  68656C6C6F                           "hello"                    the payload
+
+
+THE TWO HASHES - same shape, different objects, easy to confuse
+  --------------------------------------------------------------------------------------------------------
+  msgid      = SHA3-256(MaximaMessage) = 0xD4DA0F4A87C4E9C09D4CF9EA97D20F61ED3C02DD5D34C24754C55C4CF6F759FD
+               both peers derive this identically -> dedup key
+  customHash = SHA3-256(MaximaPackage) = 0x74711B0DEB85447E7EAFD965AA8BFF19E7DA5A532C9012405D7D9CAE18337350
+               sits in the TxPoW header; the ONLY thing a receiver verifies
+
+THE FIVE ACK FRAMES - senders byte-compare the whole body
+  --------------------------------------------------------------------------------------------------------
+  FAIL       080000000100   (04-byte len omitted; this is the body)
+  OK         080000000101   (04-byte len omitted; this is the body)
+  UNKNOWN    080000000102   (04-byte len omitted; this is the body)
+  TOOBIG     080000000103   (04-byte len omitted; this is the body)
+  WRONGHASH  080000000104   (04-byte len omitted; this is the body)
