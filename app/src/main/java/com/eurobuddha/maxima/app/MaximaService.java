@@ -50,6 +50,7 @@ public final class MaximaService extends Service {
 
     private static volatile MaximaNode sNode;
     private static volatile AndroidContribution sPolicy;
+    private static volatile com.eurobuddha.maxima.core.chat.ChatEngine sChat;
     private final AtomicBoolean mPumping = new AtomicBoolean(false);
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
@@ -60,6 +61,10 @@ public final class MaximaService extends Service {
 
     public static AndroidContribution policy() {
         return sPolicy;
+    }
+
+    public static com.eurobuddha.maxima.core.chat.ChatEngine chat() {
+        return sChat;
     }
 
     @Override
@@ -184,6 +189,11 @@ public final class MaximaService extends Service {
                         if (after != before) {
                             EventLog.add("relays " + before + " -> " + after);
                         }
+                        // Write-behind: state changes are batched, so they must
+                        // actually be flushed on the heartbeat.
+                        if (sChat != null) {
+                            sChat.flushState();
+                        }
                         lastMaintain = System.currentTimeMillis();
                         updateNotification(after + " relay(s) connected");
                     }
@@ -246,6 +256,11 @@ public final class MaximaService extends Service {
                 cm.unregisterNetworkCallback(mNetCallback);
             }
         } catch (Exception ignored) {
+        }
+        com.eurobuddha.maxima.core.chat.ChatEngine ch = sChat;
+        if (ch != null) {
+            // Flush deferred state and release the receipt pool.
+            ch.close();
         }
         MaximaNode n = sNode;
         if (n != null) {

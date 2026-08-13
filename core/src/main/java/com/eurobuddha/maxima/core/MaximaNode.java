@@ -4,6 +4,7 @@ import com.eurobuddha.maxima.core.codec.MiniData;
 import com.eurobuddha.maxima.core.contacts.Contact;
 import com.eurobuddha.maxima.core.contacts.ContactCtrl;
 import com.eurobuddha.maxima.core.directory.MlsStore;
+import com.eurobuddha.maxima.core.identity.Keys;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 import com.eurobuddha.maxima.core.mailbox.Mailbox;
 import com.eurobuddha.maxima.core.msg.MaximaMessage;
@@ -199,12 +200,22 @@ public final class MaximaNode {
         for (Map.Entry<String, String> e : mStore.all(C_CONTACTS).entrySet()) {
             try {
                 Contact c = contactFromJson(e.getValue());
-                if (c != null && c.publicKey != null) {
-                    mContacts.put(c.publicKey.toUpperCase(), c);
-                    loaded++;
+                if (c == null || c.publicKey == null || c.publicKey.isEmpty()) {
+                    // Do not silently drop it - a contact vanishing with no
+                    // trace is worse than a noisy skip.
+                    System.err.println("[chat] skipping unreadable contact record " + e.getKey());
+                    continue;
                 }
-            } catch (Exception ignored) {
-                // One unreadable contact must not stop the rest loading.
+                String key = Keys.norm(c.publicKey);
+                mContacts.put(key, c);
+                // Migrate records written under the older 0X... form.
+                if (!key.equals(e.getKey())) {
+                    mStore.remove(C_CONTACTS, e.getKey());
+                    mStore.put(C_CONTACTS, key, e.getValue());
+                }
+                loaded++;
+            } catch (Exception ex) {
+                System.err.println("[chat] bad contact record " + e.getKey() + ": " + ex);
             }
         }
         if (loaded > 0) {
@@ -214,13 +225,13 @@ public final class MaximaNode {
 
     /** Add or update a contact and persist it. */
     public void storeContact(Contact zContact) {
-        mContacts.put(zContact.publicKey.toUpperCase(), zContact);
+        mContacts.put(Keys.norm(zContact.publicKey), zContact);
         saveContact(zContact);
         fireContacts(zContact, false);
     }
 
     private void saveContact(Contact zContact) {
-        mStore.put(C_CONTACTS, zContact.publicKey.toUpperCase(), contactToJson(zContact));
+        mStore.put(C_CONTACTS, Keys.norm(zContact.publicKey), contactToJson(zContact));
     }
 
     /**
@@ -366,7 +377,7 @@ public final class MaximaNode {
     }
 
     public void addAllowedContact(String zPublicKeyHex) {
-        mAllowedContacts.add(zPublicKeyHex.toUpperCase());
+        mAllowedContacts.add(Keys.norm(zPublicKeyHex));
     }
 
     public java.util.List<String> allowedContacts() {
@@ -379,7 +390,7 @@ public final class MaximaNode {
 
     // ---- classic: maxextra addpermanent / listpermanent / clearpermanent ----
     public void addPermanent(String zPublicKeyHex) {
-        mPermanent.add(zPublicKeyHex.toUpperCase());
+        mPermanent.add(Keys.norm(zPublicKeyHex));
         mDirectory.addPermanent(zPublicKeyHex);
     }
 
@@ -388,7 +399,7 @@ public final class MaximaNode {
     }
 
     public void removePermanent(String zPublicKeyHex) {
-        mPermanent.remove(zPublicKeyHex.toUpperCase());
+        mPermanent.remove(Keys.norm(zPublicKeyHex));
     }
 
     public void clearPermanent() {
@@ -470,11 +481,11 @@ public final class MaximaNode {
     // ---- classic: maxcontacts action:remove ----
     /** Remove a contact AND tell them, as classic does. */
     public boolean removeContact(String zPublicKeyHex) {
-        Contact c = mContacts.remove(zPublicKeyHex.toUpperCase());
+        Contact c = mContacts.remove(Keys.norm(zPublicKeyHex));
         if (c == null) {
             return false;
         }
-        mStore.remove(C_CONTACTS, zPublicKeyHex.toUpperCase());
+        mStore.remove(C_CONTACTS, Keys.norm(zPublicKeyHex));
         fireContacts(c, true);
         String json = ContactCtrl.buildDelete(mIdentity.publicKeyHex());
         for (String addr : c.addresses) {
@@ -593,7 +604,7 @@ public final class MaximaNode {
     }
 
     public Contact contact(String zPublicKeyHex) {
-        return mContacts.get(zPublicKeyHex.toUpperCase());
+        return mContacts.get(Keys.norm(zPublicKeyHex));
     }
 
     // ---------------------------------------------------------------
@@ -670,27 +681,27 @@ public final class MaximaNode {
                     zMsg.mFrom.to0xString());
 
             if (p.delete) {
-                Contact gone = mContacts.remove(p.contact.publicKey.toUpperCase());
-                mStore.remove(C_CONTACTS, p.contact.publicKey.toUpperCase());
+                Contact gone = mContacts.remove(Keys.norm(p.contact.publicKey));
+                mStore.remove(C_CONTACTS, Keys.norm(p.contact.publicKey));
                 if (gone != null) {
                     fireContacts(gone, true);
                 }
                 return;
             }
             // Classic gate: may a stranger add us at all?
-            boolean known = mContacts.containsKey(p.contact.publicKey.toUpperCase());
+            boolean known = mContacts.containsKey(Keys.norm(p.contact.publicKey));
             if (!known && !mAllowAllContacts
-                    && !mAllowedContacts.contains(p.contact.publicKey.toUpperCase())) {
+                    && !mAllowedContacts.contains(Keys.norm(p.contact.publicKey))) {
                 return;
             }
 
-            Contact existing = mContacts.get(p.contact.publicKey.toUpperCase());
+            Contact existing = mContacts.get(Keys.norm(p.contact.publicKey));
             if (existing != null) {
                 // Carry over what only we know.
                 p.contact.myAddress = existing.myAddress;
             }
             recordAddressHistory(p.contact, existing);
-            mContacts.put(p.contact.publicKey.toUpperCase(), p.contact);
+            mContacts.put(Keys.norm(p.contact.publicKey), p.contact);
             saveContact(p.contact);
             fireContacts(p.contact, false);
 

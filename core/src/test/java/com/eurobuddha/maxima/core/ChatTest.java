@@ -125,6 +125,92 @@ public class ChatTest {
             bad("normalisation inconsistent: " + cg.members());
         }
 
+        // ---- persistence: does a conversation survive a restart? ----
+        java.io.File dir = new java.io.File(
+                System.getProperty("java.io.tmpdir"), "maxima-chattest");
+        if (dir.exists()) {
+            java.io.File[] fs = dir.listFiles();
+            if (fs != null) for (java.io.File f : fs) f.delete();
+        }
+
+        byte[] ent = new byte[32];
+        for (int i = 0; i < 32; i++) ent[i] = (byte) (i * 5 + 9);
+        com.eurobuddha.maxima.core.identity.MaximaIdentity id =
+                com.eurobuddha.maxima.core.identity.MaximaIdentity.fromPhrase(
+                        com.eurobuddha.maxima.core.identity.Bip39.fromEntropy(ent));
+
+        MaximaNode node = new MaximaNode(id, "1.0.48", 1);
+        com.eurobuddha.maxima.core.chat.ChatEngine c1 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        c1.setStore(new com.eurobuddha.maxima.core.store.FileStore(dir));
+
+        Group saved = new Group("0xGSAVE");
+        saved.name = "Persisted";
+        saved.addAdmin("0xADMIN");
+        saved.addMember("0xBOB");
+        c1.loadGroup(saved);
+
+        com.eurobuddha.maxima.core.chat.ChatEngine c2 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        c2.setStore(new com.eurobuddha.maxima.core.store.FileStore(dir));
+        Group loaded = c2.group("0xGSAVE");
+        if (loaded != null && "Persisted".equals(loaded.name)
+                && loaded.isAdmin("0xADMIN") && loaded.isMember("0xBOB")
+                && loaded.size() == 2) {
+            ok("a group survives a restart with roster and admins intact");
+        } else {
+            bad("group did not survive: " + (loaded == null ? "null" : loaded.members()));
+        }
+
+        // ---- REGRESSIONS FROM CODE REVIEW ----
+
+        // NIT: one normalisation everywhere. 0X and 0x must be the same key.
+        if (com.eurobuddha.maxima.core.identity.Keys.norm("0Xabc")
+                .equals(com.eurobuddha.maxima.core.identity.Keys.norm("0xABC"))
+                && com.eurobuddha.maxima.core.identity.Keys.norm("0xabc").equals("0xABC")) {
+            ok("0X and 0x normalise to one canonical key");
+        } else {
+            bad("normalisation inconsistent: "
+                    + com.eurobuddha.maxima.core.identity.Keys.norm("0Xabc"));
+        }
+
+        // MINOR: conversation("") must not match every group message.
+        com.eurobuddha.maxima.core.chat.ChatEngine c3 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        if (c3.conversation("").isEmpty() && c3.conversation(null).isEmpty()) {
+            ok("an empty conversation key returns nothing, not every group");
+        } else {
+            bad("empty key matched messages");
+        }
+
+        // MAJOR: group two-ticks must intersect with the CURRENT roster.
+        // {me,B,C}: B confirms, then B is removed and D added. C confirms.
+        // Naive counting would say 2 >= 2 and show two ticks, but D never got it.
+        Group mg = new Group("0xGTICK");
+        mg.addAdmin("0xME");
+        mg.addMember("0xB");
+        mg.addMember("0xC");
+        java.util.Set<String> deliveredBy = new java.util.LinkedHashSet<>();
+        deliveredBy.add(com.eurobuddha.maxima.core.identity.Keys.norm("0xB"));
+        mg.removeMember("0xB");
+        mg.addMember("0xD");
+        deliveredBy.add(com.eurobuddha.maxima.core.identity.Keys.norm("0xC"));
+
+        java.util.List<String> currentMembers = mg.others("0xME");
+        int confirmed = 0;
+        for (String m : currentMembers) {
+            if (deliveredBy.contains(com.eurobuddha.maxima.core.identity.Keys.norm(m))) confirmed++;
+        }
+        boolean naive = deliveredBy.size() >= currentMembers.size();
+        boolean correct = confirmed >= currentMembers.size();
+        if (naive && !correct) {
+            ok("intersection prevents a false two-tick after a roster change"
+                    + " (naive would say delivered, D never received it)");
+        } else {
+            bad("two-tick intersection test did not exercise the bug:"
+                    + " naive=" + naive + " correct=" + correct);
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

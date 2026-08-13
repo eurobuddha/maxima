@@ -29,19 +29,9 @@ public final class Group {
     private final Set<String> mAdmins = new LinkedHashSet<>();
     public long lastActivity;
 
-    /**
-     * One normalisation, used everywhere.
-     * Matches MiniData.to0xString(): lowercase "0x", uppercase hex.
-     */
+    /** Delegates to the one shared normaliser. */
     public static String norm(String zKey) {
-        if (zKey == null) {
-            return "";
-        }
-        String k = zKey.trim();
-        if (k.toLowerCase().startsWith("0x")) {
-            return "0x" + k.substring(2).toUpperCase();
-        }
-        return k.toUpperCase();
+        return com.eurobuddha.maxima.core.identity.Keys.norm(zKey);
     }
 
     public Group(String zId) {
