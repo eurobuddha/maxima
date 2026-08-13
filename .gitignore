@@ -1,0 +1,16 @@
+# build output
+build/
+*/build/
+.gradle/
+tools/vectorgen/out/
+
+# local machine config (contains the SDK path)
+local.properties
+
+# runtime data - NEVER commit: seed.txt is a spendable Minima wallet seed
+data/
+*/data/
+*.log
+seed.txt
+
+.DS_Store

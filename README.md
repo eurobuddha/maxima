@@ -1,0 +1,178 @@
+# Maxima — decentralised information layer for Minima
+
+An original, **wire-compatible** reimplementation of Minima's Maxima comms layer,
+built as a shared JVM core with two hosts: an always-on Android APK and a
+headless Linux/PC server.
+
+Minima Core (this fork) ships no Maxima layer, so there is no off-chain comms
+substrate — and without it there is no Layer 2 at all, only on-chain settlement.
+Classic Maxima is the foundation and the inspiration; this is a chance to build
+it again, better, without breaking interoperability.
+
+## Status
+
+**Complete and verified against the live network.** All milestones done.
+
+| Milestone | State |
+|---|---|
+| 1. `:core` codec + golden vectors | **63/63** parity vs the reference jar |
+| 2. Crypto, identity, `Mx` address | **21/21**, identity pinned by golden keys |
+| 2b. BIP39 + seed portability | **13/13** seed parity vs the reference |
+| 3. Synthetic TxPoW carrier | **10/10**, reference parses and validates it |
+| 4. Send path (**live gate**) | real node replied `MAXIMA_OK` |
+| 5. Receive path (**live gate**) | relayed receive through a public relay |
+| 6. Contacts + MLS | live contact exchange with reciprocation |
+| 7. `:server` relay/directory/mailbox | **stock Minima node sends through it** |
+| 8. `:app` Android daemon | builds; **on-device behaviour unverified** |
+| 9. Reply-as-new-message | cross-relay RPC between two NAT'd peers |
+| 10. Multi-homing | 3 relays, each independently deliverable |
+| 11. Reliability + mailbox | dedup, replay window, retry, store-and-forward |
+| 12. Phone Tier 1 services | **19/19** live |
+| 13. Outward IPC | broadcast surface with approval + namespacing |
+
+### Verification summary
+
+```
+1  codec parity vs reference   : 63/0        6  live send (classic node) : ack OK
+2  identity+crypto+carrier     : 21/0        7  relayed receive (public) : PASSED
+3  seed parity vs reference    : 13/0        8  cross-relay RPC          : 4/0
+4  reference accepts our unit  : 10/0        9  multi-homing             : 5/0
+5  live node identity          :  8/0        10 tier1 services (public)  : 19/0
+```
+
+**The headline proof.** A stock, unmodified Minima node was told
+`maxima action:send` to an address on our relay and reported `delivered: True`;
+our NAT'd client received the message with a valid signature. The full path
+`classic node -> our RelayServer -> our client` works, so this is a drop-in
+Maxima host for unmodified software.
+
+Two things this project deliberately does NOT claim:
+
+- **The Android app is unproven on a device.** It compiles and produces an APK,
+  but multi-hour behaviour under Doze, on a real carrier, with OEM battery
+  killers, has not been tested. That remains the single biggest risk.
+- **Host adoption by a classic node could not be demonstrated on loopback.** The
+  reference refuses any Maxima host on a `127.`/`10.`/`192.`/`172.` address
+  unless started with `-allowallip` (`MaximaManager.java:525-533`). Sending
+  through our relay has no such restriction and is proven; adoption needs a
+  public deployment to demonstrate.
+
+Full plan: `~/.claude/plans/sunny-whistling-moth.md`
+
+## Layout
+
+```
+core/       pure JVM library, Java 11, zero runtime dependencies
+server/     headless relay + directory + mailbox (fat jar, runs on a Pi)
+app/        Android always-on transport + outward IPC surface
+tools/      vectorgen — golden vectors + parity harnesses vs the reference jar
+fixtures/   golden-vectors.json (generated, committed)
+```
+
+```bash
+./gradlew :core:parityTest      # the interop gate
+./gradlew :server:fatJar        # java -jar maxima-server.jar --port 9001
+./gradlew :app:assembleDebug    # the APK
+```
+
+## The interop gate
+
+Everything rests on byte-exactness. Get one field order or one encoding wrong
+and we are simply invisible on the live network — no error, no signal.
+
+So correctness is not asserted against our own understanding of the protocol.
+`tools/vectorgen` drives the **real Minima reference implementation**
+(`core/Minima/jar/minima.jar`) to emit byte-exact fixtures, and `ParityTest`
+asserts our codec reproduces every one of them.
+
+```bash
+# regenerate fixtures from the reference implementation
+./gradlew :core:generateVectors
+
+# assert byte-for-byte parity (also wired into `check`)
+./gradlew :core:parityTest
+```
+
+Without Gradle:
+
+```bash
+javac --release 11 -d build/classes $(find core/src/main/java -name '*.java')
+javac --release 11 -cp build/classes -d build/classes \
+      core/src/test/java/com/eurobuddha/maxima/core/ParityTest.java
+java -cp build/classes com.eurobuddha.maxima.core.ParityTest fixtures/golden-vectors.json
+```
+
+The gate exits non-zero on any mismatch. (Verified: corrupting one vector
+produces `PASSED: 62 FAILED: 1` and exit 1.)
+
+## Live validation against a running node
+
+Two harnesses check us against a node on the real network, which the synthetic
+vectors cannot do:
+
+```bash
+# 1. Identity: a node publishes both its raw RSA key AND its Mx encoding,
+#    so it hands us a real-world vector pair.
+curl -s "http://127.0.0.1:4446/maxima%20action:info" > /tmp/maxinfo.json
+java -cp build/classes com.eurobuddha.maxima.core.LiveNodeCheck /tmp/maxinfo.json
+
+# 2. Frame layer: greet a real node and decode what comes back.
+java -cp build/classes com.eurobuddha.maxima.core.WireProbe 127.0.0.1 4442
+```
+
+```bash
+# 3. Does the REFERENCE accept a unit our code built? Run this before any
+#    live send - it catches carrier/crypto faults without touching the network.
+javac -cp "$REF_JAR:build/classes" -d tools/vectorgen/out tools/vectorgen/CarrierCheck.java
+java -cp "$REF_JAR:build/classes:tools/vectorgen/out" CarrierCheck
+
+# 4. Send a real signed+encrypted message and read the ack.
+java -cp build/classes com.eurobuddha.maxima.core.LiveSend /tmp/maxinfo.json 127.0.0.1 4442
+```
+
+`WireProbe` and `LiveSend` leave no lasting state on the peer — an *incoming*
+connection is never adopted as a Maxima host, and the default application
+string is our own so the node just notifies its apps.
+
+`LiveContactTest` is the exception: it **writes a contact row** to prove
+interop from the node's own side. Remove it afterwards with
+`maxcontacts action:remove id:<id>`.
+
+Results against a live v1.0.48.3 node: our `Mx` encoder reproduced the node's
+own published `mxpublickey` exactly, and we decoded a 40 KB real `Greeting`
+(1,100 chain ids) plus a `MAXIMA_CTRL` frame, both re-serialising
+byte-identical.
+
+## Protocol notes worth knowing
+
+Details that are easy to get wrong and are pinned by vectors:
+
+- **Framing** is `int32 BE length | uint8 type | payload`. No magic, no version,
+  no checksum. Maxima uses types `9` (CTRL) and `10` (TXPOW), and reuses `8`
+  (PING) as the **ack channel**.
+- **`MaximaMessage` field order** is `random, from, to, timeMilli, application,
+  data` — time is *fourth*.
+- **`MLSPacketGETResp` wire order** differs from its constructor order.
+- **`MaximaCTRLMessage` payloads are asymmetric**: type 0 carries a raw DER
+  public key, type 1 carries the raw UTF-8 bytes of an `Mx…` string — and that
+  string is the **bare key with NO `@host:port`**. The *receiver* appends the
+  address it observed the connection from. Sending a full address doubles the
+  host on the peer's side. *(Corrected from live traffic — a real node sent
+  exactly 271 bytes with no `@`.)*
+- **`Mx` base32 is not RFC 4648 and not Crockford.** It is a positional
+  big-integer conversion with `i→w, l→y, o→z` substitutions, so leading zero
+  bytes are destroyed — which is exactly why the address framing prepends a
+  `0x01` guard byte.
+- **Hex encoding of empty input is `""`, not `"0x"`.**
+- **Ack bodies are byte-compared** by senders, so all five must be exact.
+- **`MiniNumber` is capped at ±(2^64 − 1)** and 44 decimal places.
+
+## Design constraints
+
+- **Java 11 language level** throughout `:core` — the whole `apks/` fleet is
+  Java 11, so anything newer cannot be consumed by the Android module.
+- **`:core` imports no `android.*` and no node IPC.** Platform concerns (crypto
+  backend, storage, clock, sockets) are injected at the edges.
+- **`:core` has zero runtime dependencies.** SHA3-256 comes from the JDK;
+  Android below API 29 injects a Bouncy Castle digest via
+  `Hashes.setSha3Supplier()`.

@@ -1,0 +1,209 @@
+package com.eurobuddha.maxima.core.session;
+
+import com.eurobuddha.maxima.core.identity.MaximaIdentity;
+import com.eurobuddha.maxima.core.net.HostConnection;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * MULTI-HOMING - attach to several relays at once and publish all of them.
+ *
+ * Classic publishes ONE address from ONE randomly chosen connected host, and
+ * purges a host after 7 days. That is fine for a server and wrong for a phone,
+ * where relays come and go constantly.
+ *
+ * Here we hold N attachments, publish every resulting address in the contact
+ * metadata, and let senders race or fail over. It costs nothing on the wire -
+ * it is just more contact metadata - and it structurally removes dependence on
+ * any single relay operator, which is the decentralisation goal.
+ *
+ * Host selection is CHURN-NATIVE by design: relays are scored on observed
+ * uptime, expected to vanish, and never depended on individually.
+ */
+public final class HostPool {
+
+    /** Attach to this many relays by default. */
+    public static final int DEFAULT_TARGET = 3;
+
+    /** Scored record of one relay we know about. */
+    public static final class HostRecord {
+        public final String hostPort;
+        public volatile long attachedAt;
+        public volatile long lastSeen;
+        /** Successful attachments. */
+        public volatile int successes;
+        /** Failed attach attempts or drops. */
+        public volatile int failures;
+        public volatile long totalUptimeMs;
+
+        HostRecord(String zHostPort) {
+            hostPort = zHostPort;
+        }
+
+        /**
+         * Higher is better. Rewards observed uptime, penalises failures, and
+         * deliberately does NOT trust a relay just because it is currently up -
+         * a relay that has never dropped but has only been seen for a minute
+         * should not outrank one with hours behind it.
+         */
+        public double score() {
+            double attempts = successes + failures;
+            double reliability = attempts == 0 ? 0.5 : (successes / attempts);
+            double uptimeHours = totalUptimeMs / 3_600_000.0;
+            // Diminishing returns on uptime so one long-lived relay cannot
+            // dominate the pool forever.
+            return reliability * (1.0 + Math.log1p(uptimeHours));
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s score=%.2f up=%.1fh ok=%d fail=%d",
+                    hostPort, score(), totalUptimeMs / 3_600_000.0, successes, failures);
+        }
+    }
+
+    private final MaximaIdentity mIdentity;
+    private final String mVersion;
+    private final int mTarget;
+
+    private final Map<String, HostRecord> mKnown = new ConcurrentHashMap<>();
+    private final Map<String, HostConnection> mActive = new ConcurrentHashMap<>();
+
+    public HostPool(MaximaIdentity zIdentity, String zVersion, int zTarget) {
+        mIdentity = zIdentity;
+        mVersion = zVersion;
+        mTarget = zTarget;
+    }
+
+    public HostPool(MaximaIdentity zIdentity, String zVersion) {
+        this(zIdentity, zVersion, DEFAULT_TARGET);
+    }
+
+    /** Tell the pool a relay exists. Does not connect. */
+    public void addCandidate(String zHostPort) {
+        mKnown.computeIfAbsent(zHostPort, HostRecord::new);
+    }
+
+    public void addCandidates(List<String> zHostPorts) {
+        for (String h : zHostPorts) {
+            addCandidate(h);
+        }
+    }
+
+    public List<HostRecord> knownByScore() {
+        List<HostRecord> all = new ArrayList<>(mKnown.values());
+        all.sort(Comparator.comparingDouble(HostRecord::score).reversed());
+        return all;
+    }
+
+    public int activeCount() {
+        return mActive.size();
+    }
+
+    public List<String> activeHosts() {
+        return new ArrayList<>(mActive.keySet());
+    }
+
+    /**
+     * EVERY address we can currently be reached on.
+     * This is what goes into contact metadata, and what an RPC request lists as
+     * its reply-to set.
+     */
+    public List<String> contactAddresses() {
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, HostConnection> e : mActive.entrySet()) {
+            if (e.getValue().isAttached()) {
+                out.add(e.getValue().contactAddress());
+            }
+        }
+        Collections.sort(out);
+        return out;
+    }
+
+    public HostConnection connection(String zHostPort) {
+        return mActive.get(zHostPort);
+    }
+
+    /**
+     * Attach to one relay and record the outcome.
+     *
+     * @return true if it attached
+     */
+    public boolean attachOne(String zHostPort, int zTimeoutMs) {
+        HostRecord rec = mKnown.computeIfAbsent(zHostPort, HostRecord::new);
+        if (mActive.containsKey(zHostPort)) {
+            return true;
+        }
+        HostConnection conn = new HostConnection(
+                zHostPort.substring(0, zHostPort.lastIndexOf(':')),
+                Integer.parseInt(zHostPort.substring(zHostPort.lastIndexOf(':') + 1)),
+                mIdentity.hostKey(zHostPort),
+                mVersion);
+        try {
+            conn.attach(zTimeoutMs);
+            mActive.put(zHostPort, conn);
+            rec.successes++;
+            rec.attachedAt = System.currentTimeMillis();
+            rec.lastSeen = rec.attachedAt;
+            return true;
+        } catch (Exception e) {
+            rec.failures++;
+            conn.close();
+            return false;
+        }
+    }
+
+    /**
+     * Bring the pool up to its target, best-scoring candidates first.
+     *
+     * @return how many are attached afterwards
+     */
+    public int fill(int zTimeoutMs) {
+        for (HostRecord rec : knownByScore()) {
+            if (mActive.size() >= mTarget) {
+                break;
+            }
+            if (!mActive.containsKey(rec.hostPort)) {
+                attachOne(rec.hostPort, zTimeoutMs);
+            }
+        }
+        return mActive.size();
+    }
+
+    /** Drop one relay, banking its uptime so the score reflects reality. */
+    public void detach(String zHostPort) {
+        HostConnection conn = mActive.remove(zHostPort);
+        if (conn == null) {
+            return;
+        }
+        HostRecord rec = mKnown.get(zHostPort);
+        if (rec != null && rec.attachedAt > 0) {
+            rec.totalUptimeMs += System.currentTimeMillis() - rec.attachedAt;
+            rec.lastSeen = System.currentTimeMillis();
+            rec.attachedAt = 0;
+        }
+        conn.close();
+    }
+
+    /** Detach anything no longer attached, then refill. Call on a heartbeat. */
+    public int reconcile(int zTimeoutMs) {
+        for (String h : new ArrayList<>(mActive.keySet())) {
+            HostConnection c = mActive.get(h);
+            if (c == null || !c.isAttached()) {
+                detach(h);
+            }
+        }
+        return fill(zTimeoutMs);
+    }
+
+    public void closeAll() {
+        for (String h : new ArrayList<>(mActive.keySet())) {
+            detach(h);
+        }
+    }
+}

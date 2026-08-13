@@ -1,0 +1,67 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+android {
+    namespace 'com.eurobuddha.maxima.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.eurobuddha.maxima.app"
+        minSdk 28
+        targetSdk 35
+        versionCode 100
+        versionName "0.1.0"
+    }
+
+    signingConfigs {
+        release {
+            // Fleet-wide signing, from ~/.gradle/gradle.properties.
+            if (project.hasProperty('MINIMA_FAMILY_RELEASE_STORE_FILE')) {
+                storeFile file(MINIMA_FAMILY_RELEASE_STORE_FILE)
+                storePassword MINIMA_FAMILY_RELEASE_STORE_PASSWORD
+                keyAlias MINIMA_FAMILY_RELEASE_KEY_ALIAS
+                keyPassword MINIMA_FAMILY_RELEASE_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (project.hasProperty('MINIMA_FAMILY_RELEASE_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    packaging {
+        resources {
+            // Bouncy Castle and jspecify both ship META-INF/versions/9 OSGI
+            // metadata; none of it is needed at runtime on Android.
+            excludes += [
+                    'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA',
+                    'META-INF/versions/**',
+                    'META-INF/LICENSE*', 'META-INF/NOTICE*',
+                    'META-INF/DEPENDENCIES', 'META-INF/INDEX.LIST'
+            ]
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    implementation files('libs/minimaapi.aar')
+    implementation libs.appcompat
+    implementation libs.material
+    // WorkManager is the resurrection belt when the OS kills our service.
+    implementation 'androidx.work:work-runtime:2.9.1'
+    // Android < API 29 has no SHA3-256 in its default provider; :core takes a
+    // digest supplier rather than a hard dependency, and we inject BC here.
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+}

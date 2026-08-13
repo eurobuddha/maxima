@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Needed to reach the Minima Core node app on Android 11+; without this
+         a targeted setPackage() broadcast is silently dropped. -->
+    <queries>
+        <package android:name="org.minimarex.minimacore" />
+    </queries>
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- specialUse, NOT dataSync: dataSync foreground services are capped at
+         roughly 6h/day on Android 14/15, which kills an overnight connection. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Starting a foreground service from a broadcast receiver is only legal
+         with the battery-optimisation exemption. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Handler.postDelayed does not survive Doze; only an exact
+         allow-while-idle alarm fires reliably overnight. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:label="Maxima"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".MaximaService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Peer-to-peer messaging transport that must hold a
+                    persistent connection so messages can be received while the
+                    device is idle." />
+        </service>
+
+        <receiver
+            android:name=".HeartbeatReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- OUTWARD IPC: how Minima Core and other companion apps use us as
+             their transport. Mirrors the minimaapi broadcast pattern so it is
+             familiar to anything already talking to the node. -->
+        <receiver
+            android:name=".ipc.MaximaApiReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.eurobuddha.maxima.app.REGISTER" />
+                <action android:name="com.eurobuddha.maxima.app.SEND" />
+                <action android:name="com.eurobuddha.maxima.app.SUBSCRIBE" />
+                <action android:name="com.eurobuddha.maxima.app.IDENTITY" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.eurobuddha.maxima.app.payloads"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+</manifest>

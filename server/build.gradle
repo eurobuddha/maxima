@@ -1,0 +1,39 @@
+plugins {
+    id 'application'
+}
+
+/*
+ * :server may target a newer JDK than :core (which is pinned to 11 so Android
+ * can consume it). Kept at 11 for now so one toolchain builds everything; raise
+ * it if virtual threads become worth the split.
+ */
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    implementation project(':core')
+}
+
+application {
+    mainClass = 'com.eurobuddha.maxima.server.Main'
+}
+
+/** Runnable fat jar - the deploy artifact for a Pi or a VPS. */
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Self-contained runnable jar'
+    archiveBaseName = 'maxima-server'
+    manifest {
+        attributes 'Main-Class': 'com.eurobuddha.maxima.server.Main'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+}

@@ -1,0 +1,25 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'maxima'
+
+// :core is a pure JVM library shared by both hosts. It must never import
+// android.* or the node IPC layer - see core/build.gradle.
+include ':core'
+
+// Added as they are built (milestones 7 and 8 in the plan):
+include ':server'
+include ':app'

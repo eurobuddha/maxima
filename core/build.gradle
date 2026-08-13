@@ -1,0 +1,88 @@
+plugins {
+    id 'java-library'
+}
+
+/*
+ * Java 11 is a HARD constraint, not a preference.
+ *
+ * Every compileOptions in the apks/ fleet is VERSION_11 and core/minima-core
+ * matches, so :core must stay at that language level to be consumable by the
+ * Android module. That means: no records, no sealed classes, no switch
+ * expressions, no pattern matching, no text blocks.
+ */
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+/*
+ * :core has ZERO runtime dependencies by design.
+ *
+ * SHA3-256 comes from the JDK provider. Android below API 29 lacks it, so the
+ * :app module injects a Bouncy Castle digest via Hashes.setSha3Supplier()
+ * rather than :core taking a hard dependency. Any dependency added here must be
+ * verified ON DEVICE - see apks/base/H2_VERIFYERROR_FIX.md for a JVM library
+ * that a Samsung ART verifier rejected outright.
+ */
+dependencies {
+}
+
+/*
+ * The interop gate.
+ *
+ * fixtures/golden-vectors.json is generated from the REAL Minima reference
+ * implementation by tools/vectorgen. This task asserts our codec reproduces
+ * every vector byte-for-byte; a mismatch means we are invisible on the live
+ * Maxima network.
+ *
+ * Regenerate vectors with:  ./gradlew :core:generateVectors
+ * Run the gate with:        ./gradlew :core:parityTest
+ */
+sourceSets {
+    parity {
+        java.srcDirs = ['src/test/java']
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+tasks.register('parityTest', JavaExec) {
+    group = 'verification'
+    description = 'Assert :core is byte-identical to the Minima reference implementation'
+    dependsOn 'parityClasses'
+    classpath = sourceSets.parity.runtimeClasspath
+    mainClass = 'com.eurobuddha.maxima.core.ParityTest'
+    args = [file("${rootDir}/fixtures/golden-vectors.json").absolutePath]
+}
+
+tasks.register('generateVectors', JavaExec) {
+    group = 'verification'
+    description = 'Regenerate golden vectors from the reference minima.jar'
+
+    def refJar = file("${System.getProperty('user.home')}/Projects/minima/core/Minima/jar/minima.jar")
+    def genSrc = file("${rootDir}/tools/vectorgen")
+    def genOut = file("${buildDir}/vectorgen")
+
+    doFirst {
+        if (!refJar.exists()) {
+            throw new GradleException("Reference jar not found: ${refJar}")
+        }
+        genOut.mkdirs()
+        exec {
+            commandLine 'javac', '-nowarn', '-cp', refJar.absolutePath,
+                    '-d', genOut.absolutePath,
+                    new File(genSrc, 'VectorGen.java').absolutePath
+        }
+    }
+
+    classpath = files(refJar, genOut)
+    mainClass = 'VectorGen'
+    args = [file("${rootDir}/fixtures/golden-vectors.json").absolutePath]
+}
+
+check.dependsOn 'parityTest'
