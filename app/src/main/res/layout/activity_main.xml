@@ -2,13 +2,249 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/status"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:textSize="13sp"
-        android:text="Starting..." />
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- ============ STATUS ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="STATUS"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:text="starting..." />
+
+        <!-- ============ MY ADDRESS ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="MY ADDRESS  (give this to people)"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/address"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:textSize="10sp"
+            android:textIsSelectable="true"
+            android:text="" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_copy"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Copy" />
+
+            <Button
+                android:id="@+id/btn_share"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Share" />
+        </LinearLayout>
+
+        <!-- ============ ADD CONTACT ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="ADD A CONTACT"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <EditText
+            android:id="@+id/new_contact"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="paste their Mx...@host:port"
+            android:inputType="textNoSuggestions"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:importantForAutofill="no" />
+
+        <Button
+            android:id="@+id/btn_add_contact"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Introduce myself" />
+
+        <!-- ============ SEND ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="SEND A MESSAGE"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <Spinner
+            android:id="@+id/contact_picker"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <EditText
+            android:id="@+id/message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="message"
+            android:inputType="text"
+            android:importantForAutofill="no" />
+
+        <Button
+            android:id="@+id/btn_send"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Send" />
+
+        <!-- ============ CONTRIBUTION ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="WHAT THIS PHONE CONTRIBUTES"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/contribution"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:text="" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_contrib_toggle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Turn off" />
+
+            <Button
+                android:id="@+id/btn_contrib_metered"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Wifi only" />
+        </LinearLayout>
+
+        <!-- ============ RELAYS ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="RELAYS"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <EditText
+            android:id="@+id/new_relay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="host:port  e.g. 31.125.188.214:8001"
+            android:inputType="textNoSuggestions"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:importantForAutofill="no" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_add_relay"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Add relay" />
+
+            <Button
+                android:id="@+id/btn_relays"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Manage" />
+        </LinearLayout>
+
+        <!-- ============ LOG ============ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="LOG"
+                android:textStyle="bold"
+                android:textSize="12sp"
+                android:letterSpacing="0.1" />
+
+            <Button
+                android:id="@+id/btn_clear_log"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:textSize="11sp"
+                android:text="Clear" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="10sp"
+            android:textIsSelectable="true"
+            android:text="(nothing yet)" />
+
+        <!-- ============ SEED ============ -->
+        <Button
+            android:id="@+id/btn_phrase"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Show seed phrase (wallet-grade!)" />
+
+    </LinearLayout>
 </ScrollView>

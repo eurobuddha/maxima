@@ -48,20 +48,18 @@ public final class MaximaService extends Service {
 
     public static final String ACTION_TICK = "com.eurobuddha.maxima.app.TICK";
 
-    /** Relays to try. Deliberately several operators - never depend on one. */
-    private static final List<String> DEFAULT_RELAYS = Arrays.asList(
-            "eurobuddha.com:9001",
-            "eurobuddha.com:8001",
-            "34.105.180.174:9001",
-            "168.138.15.32:9001");
-
     private static volatile MaximaNode sNode;
+    private static volatile AndroidContribution sPolicy;
     private final AtomicBoolean mPumping = new AtomicBoolean(false);
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
 
     public static MaximaNode node() {
         return sNode;
+    }
+
+    public static AndroidContribution policy() {
+        return sPolicy;
     }
 
     @Override
@@ -78,6 +76,27 @@ public final class MaximaService extends Service {
         MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
         sNode = new MaximaNode(id, "1.0.48", 3);
         sNode.setName(SeedStore.displayName(this));
+
+        // Surface inbound chat so the UI has something to show. Anything that
+        // is not ours is logged too - silence is the enemy of debugging on a
+        // device with no console.
+        sNode.setMessageListener((msg, msgid) -> {
+            String app = msg.mApplication.toString();
+            String body = new String(msg.mData.getBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            if (Chat.APPLICATION.equals(app)) {
+                EventLog.add("MESSAGE from " + shortKey(msg.mFrom.to0xString()) + ": " + body);
+            } else {
+                EventLog.add("inbound [" + app + "] " + body.length() + " bytes");
+            }
+        });
+        // Contribution is gated on real device state, re-evaluated on every
+        // request rather than latched at startup.
+        sPolicy = new AndroidContribution(this);
+        sNode.tier1().setPolicy(sPolicy);
+
+        EventLog.add("identity " + id.mxIdentity().substring(0, 20) + "...");
+        EventLog.add("contributing: " + sPolicy.describe().split("\\n")[0]);
 
         registerNetworkCallback();
         Log.i(TAG, "created, identity " + id.mxIdentity().substring(0, 24) + "...");
@@ -111,8 +130,17 @@ public final class MaximaService extends Service {
         mPumpThread = new Thread(() -> {
             MaximaNode node = sNode;
             try {
-                int attached = node.start(DEFAULT_RELAYS, 30000);
+                List<String> relays = RelayStore.get(MaximaService.this);
+                EventLog.add("attaching to " + relays.size() + " candidate relay(s)");
+                int attached = node.start(relays, 30000);
                 updateNotification(attached + " relay(s) connected");
+                if (attached == 0) {
+                    EventLog.add("NO RELAYS REACHED - check the relay list and connectivity");
+                } else {
+                    for (String a : node.myAddresses()) {
+                        EventLog.add("attached: " + a.substring(a.indexOf('@')));
+                    }
+                }
                 Log.i(TAG, "attached to " + attached + " relays: " + node.myAddresses());
 
                 long lastMaintain = System.currentTimeMillis();
@@ -126,9 +154,14 @@ public final class MaximaService extends Service {
                         }
                     }
                     if (System.currentTimeMillis() - lastMaintain > 60_000) {
+                        int before = node.pool().activeCount();
                         node.maintain(20000);
+                        int after = node.pool().activeCount();
+                        if (after != before) {
+                            EventLog.add("relays " + before + " -> " + after);
+                        }
                         lastMaintain = System.currentTimeMillis();
-                        updateNotification(node.pool().activeCount() + " relay(s) connected");
+                        updateNotification(after + " relay(s) connected");
                     }
                     if (!any) {
                         Thread.sleep(200);
@@ -227,6 +260,33 @@ public final class MaximaService extends Service {
                 nm.notify(NOTIF_ID, buildNotification(zText));
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    static String shortKey(String zHex) {
+        return zHex.length() > 20 ? zHex.substring(0, 20) + "..." : zHex;
+    }
+
+    /** Send a chat message. Returns null on success, or an error to show. */
+    public static String sendChat(String zAddress, String zText) {
+        MaximaNode n = sNode;
+        if (n == null) {
+            return "transport not running";
+        }
+        try {
+            com.eurobuddha.maxima.core.MaximaSender.Result r =
+                    n.sendRaw(zAddress, Chat.APPLICATION,
+                            zText.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (r.isOk()) {
+                EventLog.add("sent to " + zAddress.substring(zAddress.indexOf('@')) + ": " + zText);
+                return null;
+            }
+            EventLog.add("send failed: " + r.statusName);
+            return r.statusName + (r.status == 2
+                    ? " - the relay has no route for them (are they online?)" : "");
+        } catch (Exception e) {
+            EventLog.add("send error: " + e.getMessage());
+            return String.valueOf(e.getMessage());
         }
     }
 

@@ -58,6 +58,24 @@ public final class Tier1Services {
     private long mMaxBlobBytes = 4L * 1024 * 1024;
     private int mMaxBlobs = 512;
 
+    /** Asked before every duty we would perform for someone else. */
+    private volatile ContributionPolicy mPolicy = ContributionPolicy.ALWAYS;
+
+    // Simple counters, so a device can SHOW what it is contributing. Being able
+    // to see your own usefulness is most of why anyone leaves it switched on.
+    private final java.util.concurrent.atomic.AtomicLong mMailHeld =
+            new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong mLookupsServed =
+            new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong mBlobsStored =
+            new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong mReceiptsSigned =
+            new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong mGossipLearned =
+            new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong mRefused =
+            new java.util.concurrent.atomic.AtomicLong();
+
     public Tier1Services(MaximaIdentity zIdentity, Mailbox zMailbox, MlsStore zDirectory) {
         mIdentity = zIdentity;
         mMailbox = zMailbox;
@@ -75,6 +93,30 @@ public final class Tier1Services {
     public Map<String, String> gossip() {
         return mGossip;
     }
+
+    public void setPolicy(ContributionPolicy zPolicy) {
+        mPolicy = zPolicy == null ? ContributionPolicy.ALWAYS : zPolicy;
+    }
+
+    public ContributionPolicy policy() {
+        return mPolicy;
+    }
+
+    /** What this device has actually done for other people. */
+    public String contributionSummary() {
+        return "mail held " + mMailHeld.get()
+                + " | lookups " + mLookupsServed.get()
+                + " | blobs " + mBlobsStored.get()
+                + " | receipts " + mReceiptsSigned.get()
+                + " | addresses shared " + mGossipLearned.get()
+                + (mRefused.get() > 0 ? " | declined " + mRefused.get() : "");
+    }
+
+    public long mailHeld() { return mMailHeld.get(); }
+    public long lookupsServed() { return mLookupsServed.get(); }
+    public long blobsStored() { return mBlobsStored.get(); }
+    public long receiptsSigned() { return mReceiptsSigned.get(); }
+    public long declined() { return mRefused.get(); }
 
     public void setBlobLimits(int zMaxBlobs, long zMaxBytes) {
         mMaxBlobs = zMaxBlobs;
@@ -106,8 +148,15 @@ public final class Tier1Services {
             if (parts.length != 2) {
                 throw new IllegalArgumentException("expected recipient|hex");
             }
+            if (!mPolicy.acceptMailbox()) {
+                mRefused.incrementAndGet();
+                return "DECLINED".getBytes(StandardCharsets.UTF_8);
+            }
             byte[] cipher = new MiniData(parts[1]).getBytes();
             Mailbox.Result r = mMailbox.store(parts[0], cipher);
+            if (r == Mailbox.Result.STORED) {
+                mMailHeld.incrementAndGet();
+            }
             return r.name().getBytes(StandardCharsets.UTF_8);
         });
 
@@ -158,13 +207,21 @@ public final class Tier1Services {
             if (p.length != 2) {
                 throw new IllegalArgumentException("expected key|address");
             }
+            if (!mPolicy.acceptDirectory()) {
+                mRefused.incrementAndGet();
+                return "DECLINED".getBytes(StandardCharsets.UTF_8);
+            }
             mGossip.put(p[0].trim().toUpperCase(), p[1].trim());
+            mGossipLearned.incrementAndGet();
             return "ok".getBytes(StandardCharsets.UTF_8);
         });
 
         zReg.register(GOSSIP_ASK, req -> {
             String key = req.payloadAsString().trim().toUpperCase();
             String addr = mGossip.get(key);
+            if (addr != null) {
+                mLookupsServed.incrementAndGet();
+            }
             return (addr == null ? "" : addr).getBytes(StandardCharsets.UTF_8);
         });
     }
@@ -185,8 +242,14 @@ public final class Tier1Services {
             if (mBlobs.size() >= mMaxBlobs && !mBlobs.containsKey(idOf(content))) {
                 throw new IllegalArgumentException("blob store full");
             }
+            if (!mPolicy.acceptStorage()) {
+                mRefused.incrementAndGet();
+                throw new IllegalStateException("not accepting storage right now");
+            }
             String id = idOf(content);
-            mBlobs.put(id, content);
+            if (mBlobs.put(id, content) == null) {
+                mBlobsStored.incrementAndGet();
+            }
             return id.getBytes(StandardCharsets.UTF_8);
         });
 
@@ -211,6 +274,11 @@ public final class Tier1Services {
     // ---------------------------------------------------------------
     private void registerWitness(ServiceRegistry zReg) {
         zReg.register(WITNESS_SIGN, req -> {
+            if (!mPolicy.acceptWitness()) {
+                mRefused.incrementAndGet();
+                throw new IllegalStateException("not witnessing right now");
+            }
+            mReceiptsSigned.incrementAndGet();
             String msgid = req.payloadAsString().trim();
             long now = System.currentTimeMillis();
             String statement = msgid + "|" + now;
