@@ -76,6 +76,7 @@ public final class MaximaService extends Service {
         MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
         sNode = new MaximaNode(id, "1.0.48", 3);
         sNode.setName(SeedStore.displayName(this));
+        sNode.setStaticMls(MlsStore.get(this));
 
         // Surface inbound chat so the UI has something to show. Anything that
         // is not ours is logged too - silence is the enemy of debugging on a

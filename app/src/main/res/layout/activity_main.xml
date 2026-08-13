@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:clipToPadding="false"
     android:fillViewport="true">
 
     <LinearLayout
@@ -9,6 +11,37 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp">
+
+        <!-- ============ NAME (classic: maxima action:setname) ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="MY MAXIMA NAME"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/name_field"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:hint="your name"
+                android:inputType="textNoSuggestions|textCapWords"
+                android:maxLength="32"
+                android:importantForAutofill="no" />
+
+            <Button
+                android:id="@+id/btn_set_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Set" />
+        </LinearLayout>
 
         <!-- ============ STATUS ============ -->
         <TextView
@@ -28,12 +61,12 @@
             android:textSize="13sp"
             android:text="starting..." />
 
-        <!-- ============ MY ADDRESS ============ -->
+        <!-- ============ CONTACT ADDRESS (classic: `contact`) ============ -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:text="MY ADDRESS  (give this to people)"
+            android:text="MY CONTACT ADDRESS  (give this out)"
             android:textStyle="bold"
             android:textSize="12sp"
             android:letterSpacing="0.1" />
@@ -46,6 +79,14 @@
             android:fontFamily="monospace"
             android:textSize="10sp"
             android:textIsSelectable="true"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/address_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="10sp"
             android:text="" />
 
         <LinearLayout
@@ -162,21 +203,30 @@
                 android:text="Wifi only" />
         </LinearLayout>
 
-        <!-- ============ RELAYS ============ -->
+        <!-- ============ HOSTS (classic: `maxima action:hosts`) ============ -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:text="RELAYS"
+            android:text="MAXIMA HOSTS  (relay your traffic)"
             android:textStyle="bold"
             android:textSize="12sp"
             android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/hosts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:textSize="10sp"
+            android:text="" />
 
         <EditText
             android:id="@+id/new_relay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="host:port  e.g. 31.125.188.214:8001"
+            android:hint="add host:port  e.g. 31.125.188.214:8001"
             android:inputType="textNoSuggestions"
             android:textSize="12sp"
             android:fontFamily="monospace"
@@ -192,7 +242,7 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:text="Add relay" />
+                android:text="Add host" />
 
             <Button
                 android:id="@+id/btn_relays"
@@ -200,6 +250,55 @@
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:text="Manage" />
+        </LinearLayout>
+
+        <!-- ============ MLS (classic: staticmls) ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="LOCATION SERVICE (MLS)"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/mls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:textSize="10sp"
+            android:text="" />
+
+        <EditText
+            android:id="@+id/new_mls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="pin a static MLS:  Mx...@host:port"
+            android:inputType="textNoSuggestions"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:importantForAutofill="no" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_set_mls"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Pin MLS" />
+
+            <Button
+                android:id="@+id/btn_clear_mls"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Clear" />
         </LinearLayout>
 
         <!-- ============ LOG ============ -->

@@ -27,6 +27,9 @@ public final class EventLog {
     }
 
     public static synchronized void add(String zLine) {
+        // Mirror to logcat as well. An in-app log is useless the moment the app
+        // will not start, and `adb logcat -s Maxima` is how anyone else debugs.
+        android.util.Log.i("Maxima", zLine);
         LINES.addFirst(FMT.format(new Date()) + "  " + zLine);
         while (LINES.size() > MAX) {
             LINES.removeLast();

@@ -20,6 +20,9 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.eurobuddha.maxima.core.MaximaNode;
 import com.eurobuddha.maxima.core.contacts.Contact;
@@ -46,6 +49,12 @@ public final class MainActivity extends AppCompatActivity {
     private EditText mMessage;
     private EditText mNewContact;
     private EditText mNewRelay;
+    private EditText mNewMls;
+    private EditText mNameField;
+    private TextView mHosts;
+    private TextView mMls;
+    private TextView mAddressNote;
+    private boolean mNameTouched;
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final List<Contact> mContacts = new ArrayList<>();
@@ -63,6 +72,17 @@ public final class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // targetSdk 35 forces edge-to-edge, so without this the top of the
+        // screen sits under the status bar and the bottom under the navigation
+        // bar - half the UI unreachable.
+        View root = findViewById(R.id.root_scroll);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
+
         mStatus = findViewById(R.id.status);
         mAddress = findViewById(R.id.address);
         mLog = findViewById(R.id.log);
@@ -71,6 +91,12 @@ public final class MainActivity extends AppCompatActivity {
         mMessage = findViewById(R.id.message);
         mNewContact = findViewById(R.id.new_contact);
         mNewRelay = findViewById(R.id.new_relay);
+        mNewMls = findViewById(R.id.new_mls);
+        mNameField = findViewById(R.id.name_field);
+        mHosts = findViewById(R.id.hosts);
+        mMls = findViewById(R.id.mls);
+        mAddressNote = findViewById(R.id.address_note);
+        mNameField.setText(SeedStore.displayName(this));
 
         Sha3Provider.install();
         requestBatteryExemption();
@@ -95,6 +121,9 @@ public final class MainActivity extends AppCompatActivity {
             EventLog.add("heavy duties " + (now ? "wifi only" : "any network"));
             render();
         });
+        findViewById(R.id.btn_set_name).setOnClickListener(v -> setName());
+        findViewById(R.id.btn_set_mls).setOnClickListener(v -> setMls());
+        findViewById(R.id.btn_clear_mls).setOnClickListener(v -> clearMls());
         findViewById(R.id.btn_clear_log).setOnClickListener(v -> {
             EventLog.clear();
             render();
@@ -135,16 +164,42 @@ public final class MainActivity extends AppCompatActivity {
         s.append("   outbox ").append(node.outbox().size());
         mStatus.setText(s.toString());
 
+        // ONE address, like classic's `contact` field. The others are real and
+        // usable, but a human copying an address should get one address.
         List<String> addrs = node.myAddresses();
         if (addrs.isEmpty()) {
-            mAddress.setText("(no address yet - not attached to any relay)");
+            mAddress.setText("(none yet - not attached to a host)");
+            mAddressNote.setText("");
         } else {
-            StringBuilder a = new StringBuilder();
-            for (String x : addrs) {
-                a.append(x).append("\n\n");
-            }
-            mAddress.setText(a.toString().trim());
+            mAddress.setText(addrs.get(0));
+            mAddressNote.setText(addrs.size() == 1
+                    ? "reachable via 1 host"
+                    : "also reachable via " + (addrs.size() - 1) + " more host(s) - "
+                    + "any of them works, this is multi-homing");
         }
+
+        StringBuilder hb = new StringBuilder();
+        List<String> hosts = node.pool().activeHosts();
+        if (hosts.isEmpty()) {
+            hb.append("(none connected)");
+        } else {
+            for (String h : hosts) {
+                hb.append("  connected  ").append(h).append('\n');
+            }
+        }
+        for (String cand : RelayStore.get(this)) {
+            if (!hosts.contains(cand)) {
+                hb.append("  --         ").append(cand).append('\n');
+            }
+        }
+        mHosts.setText(hb.toString().trim());
+
+        String mls = node.mlsAddress();
+        mMls.setText(mls.isEmpty()
+                ? "(none - no host has offered one)"
+                : (node.isStaticMls() ? "PINNED   " : "from host  ")
+                + mls.substring(0, Math.min(24, mls.length())) + "..."
+                + mls.substring(mls.indexOf('@') < 0 ? mls.length() : mls.indexOf('@')));
 
         // Repopulate the contact picker only when it actually changed.
         List<Contact> cs = node.contacts();
@@ -327,6 +382,55 @@ public final class MainActivity extends AppCompatActivity {
                             .show();
                 })
                 .show();
+    }
+
+    /** Classic: maxima action:setname. Contacts see this. */
+    private void setName() {
+        String n = mNameField.getText().toString().trim();
+        if (n.isEmpty()) {
+            toast("Enter a name");
+            return;
+        }
+        SeedStore.setDisplayName(this, n);
+        MaximaNode node = MaximaService.node();
+        if (node != null) {
+            node.setName(n);
+            EventLog.add("name set to \"" + n + "\" - telling contacts");
+            // Contacts hold the old name until we tell them, same as classic's
+            // refresh on setname.
+            new Thread(node::refreshContacts, "refresh-name").start();
+        }
+        toast("Name set to " + n);
+    }
+
+    /** Classic: maxextra action:staticmls host:... */
+    private void setMls() {
+        String m = mNewMls.getText().toString().trim();
+        if (!m.startsWith("Mx") || !m.contains("@") || !m.contains(":")) {
+            toast("Needs the form Mx...@host:port");
+            return;
+        }
+        MaximaNode node = MaximaService.node();
+        if (node == null) {
+            toast("Transport not running");
+            return;
+        }
+        node.setStaticMls(m);
+        MlsStore.save(this, m);
+        mNewMls.setText("");
+        EventLog.add("static MLS pinned");
+        new Thread(node::refreshContacts, "refresh-mls").start();
+        toast("MLS pinned");
+    }
+
+    private void clearMls() {
+        MaximaNode node = MaximaService.node();
+        if (node != null) {
+            node.setStaticMls("");
+        }
+        MlsStore.save(this, "");
+        EventLog.add("static MLS cleared - will use whatever a host offers");
+        toast("Cleared");
     }
 
     private void requestBatteryExemption() {

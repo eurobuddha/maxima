@@ -1,21 +1,34 @@
 package com.eurobuddha.maxima.app;
 
+import android.util.Log;
+
 import com.eurobuddha.maxima.core.crypto.Hashes;
 
-import java.security.MessageDigest;
-import java.security.Security;
+import org.bouncycastle.crypto.digests.SHA3Digest;
 
 /**
- * Android below API 29 has no SHA3-256 in its default provider, and SHA3 is
- * load-bearing here (msgid, the carrier binding, the Mx checksum). :core takes
- * a digest supplier rather than a hard dependency, so we inject Bouncy Castle.
+ * Supplies SHA3-256 on Android.
  *
- * Any JVM library on Android needs on-device verification, not just a desktop
- * test run - see apks/base/H2_VERIFYERROR_FIX.md, where a Samsung bytecode
- * verifier rejected H2 outright and killed the node at boot.
+ * Android has no SHA3-256 in its default providers - still true at API 36, as
+ * two Samsung devices demonstrated by crashing. The obvious fix,
+ * {@code Security.addProvider(new BouncyCastleProvider())} then
+ * {@code getInstance("SHA3-256","BC")}, DOES NOT WORK: Android already ships a
+ * cut-down provider registered under the name "BC", and
+ * {@code addProvider} silently does nothing when the name is taken. The lookup
+ * then resolves to Android's version, which has no SHA3, and throws
+ * {@code no such algorithm: SHA3-256 for provider BC}.
+ *
+ * So we skip JCE entirely and use Bouncy Castle's lightweight API directly -
+ * which is exactly what Minima's own {@code Crypto.hashData()} does with
+ * {@code new SHA3Digest(256)}.
+ *
+ * {@link Hashes#setSha3} known-answer-tests whatever we hand it, so a bad
+ * implementation fails loudly here at startup rather than silently producing a
+ * wrong identity.
  */
 public final class Sha3Provider {
 
+    private static final String TAG = "Sha3Provider";
     private static boolean sInstalled;
 
     private Sha3Provider() {
@@ -25,24 +38,17 @@ public final class Sha3Provider {
         if (sInstalled) {
             return;
         }
+
+        // Bouncy Castle lightweight API - no provider registration involved.
+        Hashes.setSha3(data -> {
+            SHA3Digest d = new SHA3Digest(256);
+            d.update(data, 0, data.length);
+            byte[] out = new byte[d.getDigestSize()];
+            d.doFinal(out, 0);
+            return out;
+        });
+
         sInstalled = true;
-        try {
-            MessageDigest.getInstance("SHA3-256");
-            return; // platform already has it (API 29+)
-        } catch (Exception ignored) {
-            // fall through
-        }
-        try {
-            Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-            Hashes.setSha3Supplier(() -> {
-                try {
-                    return MessageDigest.getInstance("SHA3-256", "BC");
-                } catch (Exception e) {
-                    throw new IllegalStateException("BC SHA3-256 unavailable", e);
-                }
-            });
-        } catch (Throwable t) {
-            throw new IllegalStateException("No SHA3-256 available on this device", t);
-        }
+        Log.i(TAG, "SHA3-256 installed via Bouncy Castle lightweight API (known-answer verified)");
     }
 }
