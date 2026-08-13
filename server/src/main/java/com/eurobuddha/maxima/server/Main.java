@@ -24,7 +24,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.1.1";
+    public static final String VERSION = "0.1.2";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -35,6 +35,7 @@ public final class Main {
         String data = System.getProperty("user.home") + "/.maxima";
         int rate = DEFAULT_RATE;
         String protocol = DEFAULT_PROTOCOL;
+        boolean selftest = false;
 
         // --- parse first, do nothing else, so informational flags are pure ---
         for (int i = 0; i < args.length; i++) {
@@ -60,6 +61,9 @@ public final class Main {
                 case "--rate":
                     rate = intArg(args, ++i, "--rate");
                     break;
+                case "--selftest":
+                    selftest = true;
+                    break;
                 case "--protocol":
                     protocol = strArg(args, ++i, "--protocol");
                     break;
@@ -70,6 +74,10 @@ public final class Main {
                     usage(System.err);
                     System.exit(2);
             }
+        }
+
+        if (selftest) {
+            System.exit(SelfTest.run(port, protocol));
         }
 
         try {
@@ -158,6 +166,7 @@ public final class Main {
         out.println("  --data <dir>     data directory                (default ~/.maxima)");
         out.println("  --rate <n>       max messages/min per peer     (default " + DEFAULT_RATE + ")");
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
+        out.println("  --selftest       run an on-box test and exit (no firewall involved)");
         out.println("  -v, --version    print the version and exit");
         out.println("  -h, --help       print this and exit");
         out.println();
