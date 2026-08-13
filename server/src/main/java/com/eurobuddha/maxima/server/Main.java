@@ -3,6 +3,7 @@ package com.eurobuddha.maxima.server;
 import com.eurobuddha.maxima.core.identity.Bip39;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 
+import java.net.BindException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,35 +13,85 @@ import java.util.List;
 /**
  * Headless Maxima relay.
  *
- * <pre>
- *   maxima-server [--port 9001] [--data ~/.maxima] [--rate 600]
- * </pre>
- *
- * The seed phrase lives in {@code &lt;data&gt;/seed.txt}, generated on first run.
- * It is a real Minima phrase, so the same identity can be reproduced on another
- * machine - or on a phone - simply by using the same words.
+ * CLI rules, learned from getting them wrong in 0.1.0:
+ *   - informational flags NEVER touch disk. --help used to fall through into
+ *     the start path and generate a seed phrase, which is wallet-grade
+ *     material created by asking for help.
+ *   - unknown flags are an ERROR. Silently ignoring a typo meant --pot 9501
+ *     quietly listened on the default port instead.
+ *   - a port already in use gets an explanation, not a stack trace.
  */
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = "0.1.1";
 
-    public static void main(String[] args) throws Exception {
-        int port = 9001;
+    private static final int DEFAULT_PORT = 9001;
+    private static final String DEFAULT_PROTOCOL = "1.0.48";
+    private static final int DEFAULT_RATE = 600;
+
+    public static void main(String[] args) {
+        int port = DEFAULT_PORT;
         String data = System.getProperty("user.home") + "/.maxima";
-        int rate = 600;
-        String version = "1.0.48";
+        int rate = DEFAULT_RATE;
+        String protocol = DEFAULT_PROTOCOL;
 
-        for (int i = 0; i < args.length - 1; i++) {
-            switch (args[i]) {
-                case "--port": port = Integer.parseInt(args[++i]); break;
-                case "--data": data = args[++i]; break;
-                case "--rate": rate = Integer.parseInt(args[++i]); break;
-                case "--version": version = args[++i]; break;
-                default: break;
+        // --- parse first, do nothing else, so informational flags are pure ---
+        for (int i = 0; i < args.length; i++) {
+            String a = args[i];
+            switch (a) {
+                case "-h":
+                case "--help":
+                    usage(System.out);
+                    return;
+                case "-v":
+                case "--version":
+                    System.out.println("maxima-server " + VERSION);
+                    return;
+                case "--port":
+                    port = intArg(args, ++i, "--port");
+                    if (port < 1 || port > 65535) {
+                        fail("--port must be 1-65535, got " + port);
+                    }
+                    break;
+                case "--data":
+                    data = strArg(args, ++i, "--data");
+                    break;
+                case "--rate":
+                    rate = intArg(args, ++i, "--rate");
+                    break;
+                case "--protocol":
+                    protocol = strArg(args, ++i, "--protocol");
+                    break;
+                default:
+                    // Silently ignoring this is how you end up on the wrong port.
+                    System.err.println("Unknown option: " + a);
+                    System.err.println();
+                    usage(System.err);
+                    System.exit(2);
             }
         }
 
+        try {
+            run(port, data, rate, protocol);
+        } catch (BindException be) {
+            System.err.println();
+            System.err.println("ERROR: port " + port + " is already in use.");
+            System.err.println();
+            System.err.println("  Something else is bound to it - very likely a Minima node,");
+            System.err.println("  which uses 9001 by default. Pick a free port:");
+            System.err.println();
+            System.err.println("      java -jar maxima-server-" + VERSION + ".jar --port 9501");
+            System.err.println();
+            System.err.println("  Check what holds it with:  lsof -i :" + port);
+            System.exit(1);
+        } catch (Exception e) {
+            System.err.println("ERROR: " + e);
+            System.exit(1);
+        }
+    }
+
+    private static void run(int port, String data, int rate, String protocol) throws Exception {
         Path dir = Paths.get(data);
         Files.createDirectories(dir);
         Path seedFile = dir.resolve("seed.txt");
@@ -54,7 +105,6 @@ public final class Main {
             phrase = String.join(" ", words);
             Files.write(seedFile, phrase.getBytes(StandardCharsets.UTF_8));
             try {
-                // Best effort: this file is a spendable Minima seed.
                 Files.setPosixFilePermissions(seedFile,
                         java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
             } catch (Exception ignored) {
@@ -74,16 +124,18 @@ public final class Main {
         System.out.println("  data     : " + dir);
         System.out.println("  rate cap : " + rate + " msg/min per destination");
 
-        RelayServer relay = new RelayServer(id, port, version);
+        RelayServer relay = new RelayServer(id, port, protocol);
         relay.setRateLimit(rate);
         relay.start();
 
         System.out.println("  listening on 0.0.0.0:" + port);
         System.out.println();
+        System.out.println("  Clients reach you at <their-Mx-key>@<your-public-ip>:" + port);
+        System.out.println("  This port must be open to the internet or the relay cannot relay.");
+        System.out.println();
 
         Runtime.getRuntime().addShutdownHook(new Thread(relay::stop));
 
-        // Status line, so an operator can see it working at a glance.
         while (true) {
             Thread.sleep(30_000);
             System.out.printf("[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
@@ -91,5 +143,60 @@ public final class Main {
                     relay.relayedCount(), relay.storedCount(), relay.droppedCount(),
                     relay.mailbox().totalItems(), relay.directory().size());
         }
+    }
+
+    // ---------------------------------------------------------------
+
+    private static void usage(java.io.PrintStream out) {
+        out.println("maxima-server " + VERSION + " - Maxima relay, directory and mailbox");
+        out.println();
+        out.println("USAGE");
+        out.println("  java -jar maxima-server-" + VERSION + ".jar [options]");
+        out.println();
+        out.println("OPTIONS");
+        out.println("  --port <n>       TCP port to listen on         (default " + DEFAULT_PORT + ")");
+        out.println("  --data <dir>     data directory                (default ~/.maxima)");
+        out.println("  --rate <n>       max messages/min per peer     (default " + DEFAULT_RATE + ")");
+        out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
+        out.println("  -v, --version    print the version and exit");
+        out.println("  -h, --help       print this and exit");
+        out.println();
+        out.println("EXAMPLES");
+        out.println("  # 9001 is the Minima default - use another port if a node has it");
+        out.println("  java -jar maxima-server-" + VERSION + ".jar --port 9501");
+        out.println();
+        out.println("  java -jar maxima-server-" + VERSION + ".jar --port 9501 --data /var/lib/maxima");
+        out.println();
+        out.println("NOTES");
+        out.println("  On first run a seed phrase is generated and written to <data>/seed.txt");
+        out.println("  (mode 600). That phrase is ALSO a spendable Minima wallet seed - back it");
+        out.println("  up like money. Reusing the same phrase reproduces the same identity.");
+        out.println();
+        out.println("  The listening port must be reachable from the public internet, otherwise");
+        out.println("  no client can attach and the relay has nothing to relay.");
+    }
+
+    private static String strArg(String[] args, int i, String name) {
+        if (i >= args.length) {
+            fail(name + " needs a value");
+        }
+        return args[i];
+    }
+
+    private static int intArg(String[] args, int i, String name) {
+        String s = strArg(args, i, name);
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            fail(name + " needs a number, got '" + s + "'");
+            return -1;
+        }
+    }
+
+    private static void fail(String msg) {
+        System.err.println("ERROR: " + msg);
+        System.err.println();
+        usage(System.err);
+        System.exit(2);
     }
 }

@@ -9,6 +9,29 @@ Verify before you run anything:
 shasum -a 256 -c SHA256SUMS
 ```
 
+## 0.1.1 — 2026-08-13
+
+Server CLI fixes. **Upgrade from 0.1.0** — the old one had two real bugs.
+
+| Artifact | Size | Status |
+|---|---|---|
+| `maxima-server-0.1.1.jar` | 136 KB | **tested** |
+| `maxima-app-0.1.0-debug.apk` | 21 MB | unchanged; still never run on a device |
+
+- `--help` / `-h` now prints usage. In 0.1.0 it printed nothing, fell through,
+  and **generated a seed phrase on disk** — an informational flag creating
+  wallet-grade material.
+- A port already in use now explains itself instead of throwing a raw
+  `BindException` stack trace, and suggests `--port 9501`.
+- Unknown flags are an error. In 0.1.0 `--pot 9501` was silently ignored and the
+  relay listened on the default port.
+- `--version` prints the build version. The old `--version` (greeting string) is
+  now `--protocol`.
+- Port range is validated.
+
+`--port` existed and worked in 0.1.0 — but with no `--help` and a stack trace on
+a busy port, there was no way to discover that.
+
 ## 0.1.0 — 2026-08-13
 
 | Artifact | Size | Status |
