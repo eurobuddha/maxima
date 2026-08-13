@@ -54,6 +54,9 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
             case MaximaApiMessages.ACTION_SUBSCRIBE:
                 handleSubscribe(context, intent, pkg, cls, reqId);
                 return;
+            case MaximaApiMessages.ACTION_CONTACTS:
+                handleContacts(context, intent, pkg, cls, reqId);
+                return;
             default:
         }
     }
@@ -152,6 +155,95 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
             r.putExtra(MaximaApiMessages.EXTRA_RESULT, "subscribed");
         }
         ctx.sendBroadcast(r);
+    }
+
+    /**
+     * Contact operations, so a client app does not need its own contact list.
+     * There is exactly one contact book per identity, and it lives here.
+     *
+     * op = list | add | remove
+     */
+    private void handleContacts(Context ctx, Intent intent, String pkg, String cls, String reqId) {
+        Intent r = reply(pkg, cls, reqId);
+        MaximaNode node = MaximaService.node();
+
+        if (!isApproved(ctx, pkg)) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR, "not approved");
+            ctx.sendBroadcast(r);
+            return;
+        }
+        if (node == null) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR, "transport not running");
+            ctx.sendBroadcast(r);
+            return;
+        }
+
+        String op = intent.getStringExtra(MaximaApiMessages.EXTRA_OP);
+        op = op == null ? "list" : op;
+
+        try {
+            switch (op) {
+                case "list": {
+                    // publickey \u001f name \u001f address, records separated by \u001e
+                    StringBuilder sb = new StringBuilder();
+                    for (com.eurobuddha.maxima.core.contacts.Contact c : node.contacts()) {
+                        if (sb.length() > 0) {
+                            sb.append('\u001e');
+                        }
+                        sb.append(c.publicKey).append('\u001f')
+                                .append(c.name).append('\u001f')
+                                .append(c.primaryAddress() == null ? "" : c.primaryAddress());
+                    }
+                    r.putExtra(MaximaApiMessages.EXTRA_CONTACTS, sb.toString());
+                    r.putExtra(MaximaApiMessages.EXTRA_RESULT, "ok");
+                    break;
+                }
+                case "add": {
+                    String addr = intent.getStringExtra(MaximaApiMessages.EXTRA_TO);
+                    if (addr == null || addr.isEmpty()) {
+                        r.putExtra(MaximaApiMessages.EXTRA_ERROR, "missing address");
+                        break;
+                    }
+                    final String a = addr;
+                    new Thread(() -> {
+                        Intent out = reply(pkg, cls, reqId);
+                        try {
+                            node.introduce(a, true);
+                            out.putExtra(MaximaApiMessages.EXTRA_RESULT, "introduced");
+                        } catch (Exception e) {
+                            out.putExtra(MaximaApiMessages.EXTRA_ERROR, String.valueOf(e.getMessage()));
+                        }
+                        ctx.sendBroadcast(out);
+                    }, "ipc-add-contact").start();
+                    return;
+                }
+                case "remove": {
+                    String key = intent.getStringExtra(MaximaApiMessages.EXTRA_PUBLICKEY);
+                    if (key == null) {
+                        r.putExtra(MaximaApiMessages.EXTRA_ERROR, "missing publickey");
+                        break;
+                    }
+                    final String k = key;
+                    new Thread(() -> {
+                        Intent out = reply(pkg, cls, reqId);
+                        out.putExtra(MaximaApiMessages.EXTRA_RESULT,
+                                node.removeContact(k) ? "removed" : "not found");
+                        ctx.sendBroadcast(out);
+                    }, "ipc-remove-contact").start();
+                    return;
+                }
+                default:
+                    r.putExtra(MaximaApiMessages.EXTRA_ERROR, "unknown op: " + op);
+            }
+        } catch (Exception e) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR, String.valueOf(e.getMessage()));
+        }
+        ctx.sendBroadcast(r);
+    }
+
+    /** Every package the user has approved. */
+    public static java.util.Set<String> approvedPackages(Context ctx) {
+        return new HashSet<>(prefs(ctx).getStringSet(APPROVED, new HashSet<>()));
     }
 
     // ---------------------------------------------------------------

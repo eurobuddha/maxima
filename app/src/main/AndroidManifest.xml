@@ -80,6 +80,7 @@
                 <action android:name="com.eurobuddha.maxima.app.SEND" />
                 <action android:name="com.eurobuddha.maxima.app.SUBSCRIBE" />
                 <action android:name="com.eurobuddha.maxima.app.IDENTITY" />
+                <action android:name="com.eurobuddha.maxima.app.CONTACTS" />
             </intent-filter>
         </receiver>
 

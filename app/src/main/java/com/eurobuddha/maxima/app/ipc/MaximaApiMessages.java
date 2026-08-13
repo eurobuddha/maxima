@@ -32,11 +32,15 @@ public final class MaximaApiMessages {
     public static final String ACTION_SEND = PKG + ".SEND";
     public static final String ACTION_SUBSCRIBE = PKG + ".SUBSCRIBE";
     public static final String ACTION_IDENTITY = PKG + ".IDENTITY";
+    /** Contact operations: list, add, remove. */
+    public static final String ACTION_CONTACTS = PKG + ".CONTACTS";
 
     // ---- us -> app ----
     public static final String ACTION_RESPONSE = PKG + ".RESPONSE";
     /** An inbound Maxima message for an application string you subscribed to. */
     public static final String ACTION_DELIVER = PKG + ".DELIVER";
+    /** Contacts changed, or a host attached/dropped. Classic's MAXIMACONTACTS/MAXIMAHOSTS. */
+    public static final String ACTION_EVENT = PKG + ".EVENT";
 
     // ---- extras ----
     public static final String EXTRA_PACKAGE = "package";
@@ -62,6 +66,17 @@ public final class MaximaApiMessages {
     public static final String EXTRA_MSGID = "msgid";
     public static final String EXTRA_ADDRESSES = "addresses";
     public static final String EXTRA_PUBLICKEY = "publickey";
+    public static final String EXTRA_OP = "op";
+    public static final String EXTRA_CONTACTS = "contacts";
+    public static final String EXTRA_EVENT = "event";
+    public static final String EXTRA_HOST = "host";
+    public static final String EXTRA_CONNECTED = "connected";
+    public static final String EXTRA_TIME = "timemilli";
+    public static final String EXTRA_NAME = "name";
+
+    // event names, matching classic
+    public static final String EVENT_CONTACTS = "MAXIMACONTACTS";
+    public static final String EVENT_HOSTS = "MAXIMAHOSTS";
 
     /**
      * Above this many bytes we hand over a content:// URI instead.

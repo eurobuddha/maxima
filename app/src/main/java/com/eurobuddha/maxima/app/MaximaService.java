@@ -85,10 +85,33 @@ public final class MaximaService extends Service {
             String app = msg.mApplication.toString();
             String body = new String(msg.mData.getBytes(),
                     java.nio.charset.StandardCharsets.UTF_8);
-            if (Chat.APPLICATION.equals(app)) {
-                EventLog.add("MESSAGE from " + shortKey(msg.mFrom.to0xString()) + ": " + body);
-            } else {
-                EventLog.add("inbound [" + app + "] " + body.length() + " bytes");
+            EventLog.add("inbound [" + app + "] " + msg.mData.getLength() + " bytes from "
+                    + shortKey(msg.mFrom.to0xString()));
+
+            // Hand it to whichever app subscribed to this application string.
+            // Without this the IPC surface is send-only and a client app can
+            // never receive anything - which was the case until now.
+            com.eurobuddha.maxima.app.ipc.MaximaApiDelivery.deliver(
+                    MaximaService.this, msg, msgid);
+        });
+
+        // Classic publishes MAXIMACONTACTS and MAXIMAHOSTS; apps using us as
+        // transport need both to react to a contact appearing or a host going.
+        sNode.setEventListener(new MaximaNode.EventListener() {
+            public void onContactsChanged(
+                    com.eurobuddha.maxima.core.contacts.Contact c, boolean removed) {
+                EventLog.add((removed ? "contact removed: " : "contact updated: ") + c.name);
+                com.eurobuddha.maxima.app.ipc.MaximaApiDelivery.event(
+                        MaximaService.this,
+                        com.eurobuddha.maxima.app.ipc.MaximaApiMessages.EVENT_CONTACTS,
+                        c.publicKey, removed);
+            }
+
+            public void onHostsChanged(String hostPort, boolean connected) {
+                com.eurobuddha.maxima.app.ipc.MaximaApiDelivery.event(
+                        MaximaService.this,
+                        com.eurobuddha.maxima.app.ipc.MaximaApiMessages.EVENT_HOSTS,
+                        hostPort, connected);
             }
         });
         // Contribution is gated on real device state, re-evaluated on every
