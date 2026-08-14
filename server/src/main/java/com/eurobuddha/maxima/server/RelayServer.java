@@ -98,6 +98,11 @@ public final class RelayServer {
     private final Map<String, RateLimit> mLimits = new ConcurrentHashMap<>();
     private volatile int mMaxPerMinute = 600;
 
+    /** Probes cost us an outbound dial, so they get a tighter, separate cap. */
+    private final Map<String, RateLimit> mProbeLimits = new ConcurrentHashMap<>();
+    private static final int MAX_PROBES_PER_MINUTE = 12;
+    private static final int PROBE_TIMEOUT_MS = 4000;
+
     private static final class RateLimit {
         long windowStart = System.currentTimeMillis();
         int count;
@@ -425,6 +430,14 @@ public final class RelayServer {
                 return;
             }
 
+            // Tier 2 reachability probe: dial the caller back at the requested
+            // port and report whether an endpoint answered.
+            if (com.eurobuddha.maxima.core.net.Probe.APPLICATION.equals(
+                    mm.mApplication.toString())) {
+                handleProbe(zConn, mm);
+                return;
+            }
+
             // Directory SET/GET reply on the ack channel, classic style.
             MiniData reply = mMls.handleClassic(mm, Frame.RESPONSE_OK, Frame.RESPONSE_UNKNOWN);
             if (reply != null) {
@@ -435,6 +448,56 @@ public final class RelayServer {
 
         } catch (Exception e) {
             zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+        }
+    }
+
+    /**
+     * Prove (or disprove) the caller's own reachability.
+     *
+     * THE ONE SECURITY RULE: we dial the SOURCE IP of this connection, never an
+     * IP the caller names. A client can only ever prove ITS OWN port, so the
+     * service cannot be turned into a port scanner. On top of that: the target
+     * port must be high, the source IP must be a real public address (never
+     * loopback/RFC1918 - the relay must not be tricked into probing its own
+     * LAN), and probes are rate-limited per caller, since each one costs the
+     * relay an outbound dial.
+     *
+     * Reply on the ack channel: OK = reachable, FAIL = not.
+     */
+    private void handleProbe(Conn zConn, MaximaMessage zMsg) throws Exception {
+        int port = com.eurobuddha.maxima.core.net.Probe.portOf(zMsg.mData.getBytes());
+        String target = zConn.sourceIp;
+
+        boolean bad = port < com.eurobuddha.maxima.core.net.Probe.MIN_PORT
+                || port > 65535
+                || !com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(target)
+                || !allowProbe(zMsg.mFrom.to0xString());
+        if (bad) {
+            zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+            return;
+        }
+
+        boolean reachable = com.eurobuddha.maxima.core.net.Probe.dial(
+                target, port, PROBE_TIMEOUT_MS, mVersion);
+        log("probe " + target + ":" + port + " -> " + (reachable ? "reachable" : "no"));
+        zConn.write(Frame.ack(reachable ? Frame.RESPONSE_OK : Frame.RESPONSE_FAIL));
+    }
+
+    /** Probe rate limit: cheap for the caller, an outbound dial for us. */
+    private boolean allowProbe(String zCallerKey) {
+        if (mProbeLimits.size() > MAX_RATE_ENTRIES) {
+            long now = System.currentTimeMillis();
+            mProbeLimits.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
+        }
+        RateLimit rl = mProbeLimits.computeIfAbsent(zCallerKey, k -> new RateLimit());
+        synchronized (rl) {
+            long now = System.currentTimeMillis();
+            if (now - rl.windowStart > 60_000) {
+                rl.windowStart = now;
+                rl.count = 0;
+            }
+            rl.count++;
+            return rl.count <= MAX_PROBES_PER_MINUTE;
         }
     }
 

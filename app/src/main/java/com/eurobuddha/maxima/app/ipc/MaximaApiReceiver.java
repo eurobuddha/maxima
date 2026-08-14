@@ -314,7 +314,8 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
                 || a.equals(com.eurobuddha.maxima.core.chat.ChatMessage.APPLICATION)
                 || a.equals(com.eurobuddha.maxima.core.rpc.RpcEnvelope.APPLICATION)
                 || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_SET)
-                || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_GET);
+                || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_GET)
+                || a.equals(com.eurobuddha.maxima.core.net.Probe.APPLICATION);
     }
 
     // ---------------------------------------------------------------
