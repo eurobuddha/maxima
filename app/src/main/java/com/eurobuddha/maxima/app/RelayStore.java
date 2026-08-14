@@ -26,9 +26,23 @@ public final class RelayStore {
      * the rest are stock Minima nodes, which relay for us perfectly well.
      * Multi-homing means we do not depend on any single one.
      */
+    /**
+     * Where a fresh install attaches.
+     *
+     * Ours first, because they run this build and therefore answer mailbox,
+     * directory and witness requests; the trailing classic Minima nodes are
+     * fallbacks that can relay but know nothing of the extensions. Spread
+     * across four operators and four countries on purpose - a default list
+     * that all lands in one datacentre is a single point of failure wearing
+     * the costume of a decentralised one.
+     */
     public static final List<String> DEFAULTS = Arrays.asList(
-            "31.125.188.214:8001",
-            "34.105.180.174:9001",
+            "95.179.179.181:9501",     // sally      - Amsterdam, NL
+            "65.109.31.226:9501",      // eurobuddha - Helsinki, FI
+            "45.77.246.226:9501",      // maxima     - Singapore, SG
+            "78.141.237.9:9501",       // openproject- London, GB
+            "31.125.188.214:8001",     // the Pi     - residential, GB
+            "34.105.180.174:9001",     // classic Minima nodes below here
             "168.138.15.32:9001",
             "34.32.118.123:9001");
 

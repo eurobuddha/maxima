@@ -24,7 +24,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.1.2";
+    public static final String VERSION = "0.1.4";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -120,7 +120,18 @@ public final class Main {
             System.out.println("Generated a NEW identity at " + seedFile);
             System.out.println();
             System.out.println("  !! This phrase is also a Minima WALLET seed. Back it up like money.");
-            System.out.println("  " + phrase);
+            if (System.console() != null) {
+                // Interactive: the operator is looking at a terminal, so show it.
+                System.out.println("  " + phrase);
+            } else {
+                // Under systemd, stdout is a LOG FILE. Printing a wallet seed
+                // into a file that gets rotated, backed up and shipped to a log
+                // collector is how a seed leaks - and the operator has no way to
+                // un-print it. The seed file itself is 0600; point at that.
+                System.out.println("  Not printed here: stdout is not a terminal and this");
+                System.out.println("  would write a spendable seed into a log file.");
+                System.out.println("  Read it once, over ssh:   cat " + seedFile);
+            }
             System.out.println();
         }
 
