@@ -841,18 +841,27 @@ public final class MaximaNode {
     public MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData)
             throws Exception {
         Exception last = null;
+        String lan = mLanPeers.get(Keys.norm(zContact.publicKey));
         // A LAN-discovered address is tried FIRST: it is on the same network,
         // reaches the peer's direct endpoint with no relay, and works even with
-        // the internet down. If it fails (they left the LAN) we fall straight
-        // through to the relay addresses, so it is a pure bonus, never a
-        // dependency.
+        // the internet down. If it fails we fall straight through to the relay
+        // addresses AND forget the LAN entry, so a peer who left the network
+        // stops taxing every future send with a connect timeout - the entry
+        // self-heals even if the mDNS "lost" event was missed.
         for (String addr : sendOrder(zContact)) {
+            boolean isLan = addr.equals(lan);
             try {
                 MaximaSender.Result r = sendRaw(addr, zApplication, zData);
                 if (r.isOk()) {
                     return r;
                 }
+                if (isLan) {
+                    forgetLanPeer(zContact.publicKey);
+                }
             } catch (Exception e) {
+                if (isLan) {
+                    forgetLanPeer(zContact.publicKey);
+                }
                 last = e;
             }
         }

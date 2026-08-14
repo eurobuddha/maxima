@@ -43,7 +43,16 @@ public final class LanDiscovery {
     private NsdManager.RegistrationListener mReg;
     private NsdManager.DiscoveryListener mDisc;
     private volatile boolean mRunning;
-    private String mServiceName = "";
+    private volatile String mServiceName = "";
+
+    /**
+     * serviceName -> peer identity, so a "lost" event (which carries only the
+     * service name) can forget the right LAN address. Without this a contact
+     * who walks off the Wi-Fi leaves a dead address at the FRONT of every send
+     * to them - a connect-timeout stall on the hot path until the process dies.
+     */
+    private final java.util.Map<String, String> mResolved =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     public LanDiscovery(Context zCtx, MaximaNode zNode) {
         mCtx = zCtx;
@@ -66,7 +75,22 @@ public final class LanDiscovery {
                 return;
             }
             register(zPort);
-            discover();
+            // If discovery throws AFTER registration succeeded, unwind the
+            // registration - otherwise the next tick re-registers on top of a
+            // live listener we can no longer reach, leaking it and advertising
+            // twice.
+            try {
+                discover();
+            } catch (Exception discoverFailed) {
+                try {
+                    if (mReg != null) {
+                        mNsd.unregisterService(mReg);
+                    }
+                } catch (Exception ignored) {
+                }
+                mReg = null;
+                throw discoverFailed;
+            }
             mRunning = true;
         } catch (Exception e) {
             EventLog.add("LAN discovery unavailable: " + e.getMessage());
@@ -92,6 +116,7 @@ public final class LanDiscovery {
         }
         mReg = null;
         mDisc = null;
+        mResolved.clear();
     }
 
     // ---------------------------------------------------------------
@@ -143,9 +168,14 @@ public final class LanDiscovery {
             }
 
             public void onServiceLost(NsdServiceInfo s) {
-                // We do not know the identity from a lost event alone; the LAN
-                // address will simply fail and the send falls through to relays.
-                // A stale LAN entry costs one failed attempt, not a lost message.
+                // Forget the LAN address as soon as the peer leaves, so it stops
+                // sitting at the front of every send to them. The lost event
+                // carries only the service name, so we map it back to the
+                // identity we recorded at resolve time.
+                String peerId = mResolved.remove(s.getServiceName());
+                if (peerId != null) {
+                    mNode.forgetLanPeer(peerId);
+                }
             }
 
             public void onDiscoveryStopped(String type) {
@@ -172,12 +202,20 @@ public final class LanDiscovery {
                         if (idBytes == null || s.getHost() == null) {
                             return;
                         }
+                        // IPv4 only. A Maxima address parses on the first ':',
+                        // so an IPv6 literal (link-local is common on a LAN)
+                        // would break the host:port split - skip it rather than
+                        // store an address that fails on every send.
+                        if (!(s.getHost() instanceof java.net.Inet4Address)) {
+                            return;
+                        }
                         String peerId = new String(idBytes, StandardCharsets.UTF_8);
                         String hostPort = s.getHost().getHostAddress() + ":" + s.getPort();
                         // Only matters if they are a contact; the node ignores
                         // the rest. Tried first by sendToContact from now on.
                         if (mNode.contact(peerId) != null) {
                             mNode.noteLanPeer(peerId, hostPort);
+                            mResolved.put(s.getServiceName(), peerId);
                             EventLog.add("LAN peer found: " + mNode.contact(peerId).name
                                     + " at " + hostPort);
                         }

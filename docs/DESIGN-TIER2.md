@@ -1,5 +1,12 @@
 # Tier 2 — opportunistic real reachability
 
+> **STATUS: COMPLETE.** A ✅ map (`portmap`, 8/8 + live refusal) · B ✅ listen
+> (`DirectEndpoint`, 4/4) · C ✅ prove (`probe.dial`, 7/7 + live on the fleet) ·
+> D ✅ orchestrate (`DirectReachability`, review-hardened) · E ✅ LAN
+> (`LanDiscovery` + `noteLanPeer`, 4/4). Each phase was code-reviewed and its
+> findings fixed before the next. Only Wi-Fi Direct / BLE (phase F) remains
+> deferred.
+
 Tier 1 made phones useful **without** reachability: mailbox, directory, gossip,
 blobs, witness — all served by dialling out. Tier 2 is the next rung: when
 conditions allow, a phone acquires a **genuine public ip:port** and becomes

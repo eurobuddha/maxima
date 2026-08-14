@@ -62,6 +62,20 @@ to the shared-IP model.
 would exclude phones and buys nothing, since nobody else verifies it either.
 Admission control (rate limits, quotas, caps) is the substitute, and is real.
 
+**LAN forged-OK (availability, our-builds only).** A LAN-discovered address is
+tried first and honoured on an unauthenticated `RESPONSE_OK` ack. A hostile host
+on the SAME Wi-Fi could advertise a real contact's identity (that contact is
+broadcasting it on the segment) pointing at itself and return OK without holding
+any key, so the message is not delivered and we do not fall back to the relay
+for that send. Confidentiality is intact — the payload is sealed to the
+contact's real identity key and the attacker cannot read it — and the contact
+record is never altered; this is a LAN-local, our-own-builds, availability-only
+issue. Two backstops make it self-correcting: a LAN address is forgotten on the
+first failed send and on the mDNS "lost" event, and for chat the missing second
+tick (a real end-to-end receipt the forger cannot produce) reveals non-delivery.
+A cryptographically authenticated direct ack would close it fully; deferred as
+disproportionate for an opportunistic bonus path. Accepted, consciously.
+
 **IPv6 out of scope.** Classic parses an address on the first `:` and cannot
 carry v6 literals. Every address path is v4-only by construction.
 

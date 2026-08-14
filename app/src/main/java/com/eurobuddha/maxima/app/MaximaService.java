@@ -410,10 +410,11 @@ public final class MaximaService extends Service {
             if (sLan != null) {
                 sLan.stop();
             }
-            // Only stop the listener if the public path is not advertising.
-            if (sDirect == null
-                    || sDirect.state() != com.eurobuddha.maxima.app.direct
-                            .DirectReachability.State.ADVERTISED) {
+            // Only stop the listener if no direct address is advertised.
+            // Guard on the ACTUAL invariant (is an address set) rather than the
+            // state enum, which the other thread sets AFTER setDirectAddress -
+            // so the enum can briefly lag a live address.
+            if (n.directAddress().isEmpty()) {
                 n.stopDirect();
             }
         }

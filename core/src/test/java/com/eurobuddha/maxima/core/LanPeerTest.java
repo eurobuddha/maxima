@@ -105,6 +105,20 @@ public class LanPeerTest {
             bad("stale LAN address not handled: failed=" + failedAfter + " got=" + got.get());
         }
 
+        // SELF-HEAL: a LAN address that fails a send must be forgotten on the
+        // spot, so a peer who left the network cannot tax every future send with
+        // a connect timeout even if the mDNS "lost" event was missed.
+        me.noteLanPeer(peerId.publicKeyHex(), "127.0.0.1:1");   // dead LAN port
+        try {
+            me.sendToContact(peer, "lan_test_v1", "will fail".getBytes());
+        } catch (Exception ignored) {
+        }
+        if (me.lanAddressFor(peerId.publicKeyHex()) == null) {
+            ok("a failed LAN send evicts the stale address immediately (self-heal)");
+        } else {
+            bad("stale LAN address survived a failed send");
+        }
+
         peerEndpoint.stop();
         me.stop();
 
