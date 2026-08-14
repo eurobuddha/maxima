@@ -288,7 +288,9 @@ public final class MaximaService extends Service {
                     // certainly dead; drop it before advertising a stale route.
                     com.eurobuddha.maxima.app.direct.DirectReachability d = sDirect;
                     if (d != null) {
-                        new Thread(d::onNetworkChanged, "direct-netchange").start();
+                        // Non-blocking: the manager queues the withdraw on its
+                        // own state thread and returns at once.
+                        d.onNetworkChanged();
                     }
                 }
 

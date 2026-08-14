@@ -13,12 +13,13 @@ import com.eurobuddha.maxima.core.net.Probe;
 import com.eurobuddha.maxima.core.portmap.PortMapper;
 
 import java.net.InetAddress;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Tier 2 on the phone: turn a lucky network into a genuine public address.
- *
- * The state machine, driven from the service's existing 60s heartbeat so it
- * costs no extra wakeups:
  *
  *   OFF ──gates pass──▶ MAPPING ──got a port──▶ PROBING ──proven──▶ ADVERTISED
  *    ▲                                                                   │
@@ -27,28 +28,49 @@ import java.net.InetAddress;
  * The cardinal rule, inherited from every layer below: advertise NOTHING that
  * has not just been proven reachable from OUTSIDE. A phone testing its own port
  * is worthless (hairpin NAT), so proof is a relay dialling us back (phase C).
- * The alternative - publishing an address we merely hope works - is the exact
- * classic-Maxima failure this whole tier exists to end.
+ * Publishing an address we merely hope works is the exact classic-Maxima
+ * failure this whole tier exists to end.
  *
- * All of this is best-effort and OPPORTUNISTIC. The common outcome on cellular
- * or a CGNAT home line is "no public port," and staying Tier 1 is a success,
- * not a failure - so nothing here ever logs an error for the ordinary case.
+ * CONCURRENCY. Everything that touches state runs on ONE dedicated thread, so
+ * there are no locks and nothing to contend for. A blocking map/probe therefore
+ * cannot stall an "immediate" withdraw held behind a monitor - the withdraw is
+ * simply the next task on the same thread. And because a network change can
+ * arrive WHILE a probe is in flight on the old network, every attempt captures
+ * a generation number; a change bumps it, and the attempt refuses to advertise
+ * if its generation is stale. That closes the window where we might otherwise
+ * publish an address just "proven" on a network that has already gone.
+ *
+ * All of this is OPPORTUNISTIC. The common outcome on cellular or a CGNAT home
+ * line is "no public port", and staying Tier 1 is a success - so nothing here
+ * logs an error for the ordinary case.
  */
 public final class DirectReachability {
 
     public enum State { OFF, MAPPING, PROBING, ADVERTISED }
 
+    /** Re-prove from scratch at most this often, to catch a silently-changed WAN IP. */
+    private static final long REPROVE_INTERVAL_MS = 20 * 60 * 1000;
+
     private final Context mCtx;
     private final MaximaNode mNode;
     private final AndroidContribution mPolicy;
 
+    /** One thread runs every state operation, in submission order. */
+    private final ExecutorService mExec = Executors.newSingleThreadExecutor(daemon("direct-state"));
+    /** Contact refreshes on their own single thread, so they never queue behind a probe. */
+    private final ExecutorService mRefresh = Executors.newSingleThreadExecutor(daemon("direct-refresh"));
+
     private volatile State mState = State.OFF;
     private volatile String mPublicAddress = "";
     private volatile String mDetail = "not started";
+    private volatile boolean mStopping;
+    /** Bumped by any event that invalidates an in-flight attempt. */
+    private volatile int mGen;
 
     private final PortMapper mMapper = new PortMapper();
     private PortMapper.Mapping mMapping;
     private long mMappedAtMs;
+    private long mProvenAtMs;
     private int mListenPort = -1;
 
     public DirectReachability(Context zCtx, MaximaNode zNode, AndroidContribution zPolicy) {
@@ -69,12 +91,42 @@ public final class DirectReachability {
         return mDetail;
     }
 
+    /** Heartbeat entry. Returns immediately; the work runs on the state thread. */
+    public void tick() {
+        submit(this::doTick);
+    }
+
     /**
-     * Called on the heartbeat. Everything here can block (port mapping, a probe
-     * round-trip), so it MUST run off the main thread - the service heartbeat
-     * already does.
+     * Network changed or was lost. Bumps the generation so any in-flight attempt
+     * refuses to advertise, then queues a withdraw - neither step waits on the
+     * blocking work, which was the whole problem with a shared monitor.
      */
-    public synchronized void tick() {
+    public void onNetworkChanged() {
+        mGen++;
+        submit(() -> withdraw("network changed"));
+    }
+
+    public void shutdown() {
+        mStopping = true;
+        mGen++;
+        submit(() -> withdraw("stopping"));
+        mExec.shutdown();
+        try {
+            // Give the queued withdraw a moment to release the router mapping.
+            // Best-effort: the lease expires on its own regardless.
+            mExec.awaitTermination(2, TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        mRefresh.shutdown();
+    }
+
+    // ---------------------------------------------------------------
+
+    private void doTick() {
+        if (mStopping) {
+            return;
+        }
         if (!gatesPass()) {
             if (mState != State.OFF) {
                 withdraw("conditions no longer met");
@@ -82,7 +134,6 @@ public final class DirectReachability {
             mDetail = gateReason();
             return;
         }
-
         switch (mState) {
             case OFF:
                 attempt();
@@ -91,26 +142,22 @@ public final class DirectReachability {
                 renewIfDue();
                 break;
             default:
-                // MAPPING/PROBING are transient inside one attempt(); if we are
-                // parked in them across ticks, something stalled - re-attempt.
+                // Parked in a transient state (an attempt threw part way). Reset
+                // cleanly and try again rather than re-entering half-initialised.
+                withdraw("retrying");
                 attempt();
         }
     }
 
-    /** Network changed or was lost - drop any advertised address immediately. */
-    public synchronized void onNetworkChanged() {
-        if (mState != State.OFF) {
-            withdraw("network changed");
-        }
-    }
-
-    public synchronized void shutdown() {
-        withdraw("stopping");
-    }
-
-    // ---------------------------------------------------------------
-
     private void attempt() {
+        int gen = mGen;
+
+        // Never leak a previous mapping if we are re-entering.
+        if (mMapping != null) {
+            mMapper.release(mMapping);
+            mMapping = null;
+        }
+
         // 1. a local listener (idempotent - startDirect returns the same port)
         mListenPort = mNode.startDirect(0);
         if (mListenPort <= 0) {
@@ -125,9 +172,17 @@ public final class DirectReachability {
         mMapper.setGatewayHint(gatewayHint());
         PortMapper.Mapping m = mMapper.map(mListenPort);
         if (m == null) {
-            // The ordinary case on most networks. Quietly stay Tier 1.
             mState = State.OFF;
             mDetail = "this network has no forwardable public port (staying Tier 1)";
+            return;
+        }
+
+        // The network may have changed while map() blocked. If so, this mapping
+        // belongs to a network that is gone - release it and do not advertise.
+        if (mStopping || gen != mGen || !gatesPass()) {
+            mMapper.release(m);
+            mState = State.OFF;
+            mDetail = "network changed during mapping (staying Tier 1)";
             return;
         }
         mMapping = m;
@@ -136,9 +191,18 @@ public final class DirectReachability {
         // 3. PROVE it from outside before advertising a single thing
         mState = State.PROBING;
         mDetail = "verifying " + m.externalIp + ":" + m.externalPort + " from outside…";
-        if (!proveReachable(m.externalPort)) {
-            // Mapped but not reachable (double NAT, ISP filtering). Release and
-            // stay Tier 1 - never advertise an unproven address.
+        boolean reachable = proveReachable(m.externalPort);
+
+        // Re-check AFTER the probe too - it also blocks, and a change during it
+        // is exactly the dead-address window we must not advertise into.
+        if (mStopping || gen != mGen || !gatesPass()) {
+            mMapper.release(m);
+            mMapping = null;
+            mState = State.OFF;
+            mDetail = "network changed during verification (staying Tier 1)";
+            return;
+        }
+        if (!reachable) {
             mMapper.release(m);
             mMapping = null;
             mState = State.OFF;
@@ -149,6 +213,7 @@ public final class DirectReachability {
         // 4. advertise, and tell contacts
         mPublicAddress = m.externalIp + ":" + m.externalPort;
         mNode.setDirectAddress(mPublicAddress);
+        mProvenAtMs = System.currentTimeMillis();
         mState = State.ADVERTISED;
         mDetail = "reachable at " + mPublicAddress + " via " + m.via;
         EventLog.add("DIRECT reachable at " + mPublicAddress + " (" + m.via + ")");
@@ -160,6 +225,19 @@ public final class DirectReachability {
             mState = State.OFF;
             return;
         }
+        // Periodically re-prove from scratch: a WAN IP can change under a stable
+        // Wi-Fi link with NO network-change event, and a renewed lease on a
+        // stale IP would keep us advertising an address that is now wrong.
+        if (System.currentTimeMillis() - mProvenAtMs > REPROVE_INTERVAL_MS) {
+            String was = mPublicAddress;
+            withdraw("periodic re-verification");
+            attempt();
+            if (mState != State.ADVERTISED) {
+                EventLog.add("DIRECT " + was + " no longer reachable on re-check");
+            }
+            return;
+        }
+
         long ageMs = System.currentTimeMillis() - mMappedAtMs;
         long halfLifeMs = mMapping.lifetimeSeconds * 1000L / 2;
         if (ageMs < halfLifeMs) {
@@ -174,9 +252,9 @@ public final class DirectReachability {
     }
 
     /**
-     * Ask a connected relay to dial us back. Reachable iff the relay's ack is
-     * OK. We try each attached relay until one answers definitively; a relay
-     * that is itself unreachable to us tells us nothing.
+     * Ask a connected relay to dial us back. Reachable iff a relay's ack is OK.
+     * A relay that cannot itself reach us tells us nothing, so we try each until
+     * one answers definitively.
      */
     private boolean proveReachable(int zExternalPort) {
         for (String hostPort : mNode.pool().activeHosts()) {
@@ -192,8 +270,6 @@ public final class DirectReachability {
                 com.eurobuddha.maxima.core.MaximaSender.Result r =
                         mNode.sendRaw(relayAddr, Probe.APPLICATION,
                                 Probe.request(zExternalPort));
-                // OK => the relay dialled our external port and an endpoint (us)
-                // answered. FAIL is inconclusive from one relay, so keep trying.
                 if (r.isOk()) {
                     return true;
                 }
@@ -209,7 +285,8 @@ public final class DirectReachability {
             mMapper.release(mMapping);
             mMapping = null;
         }
-        if (!mPublicAddress.isEmpty()) {
+        boolean wasAdvertised = !mPublicAddress.isEmpty();
+        if (wasAdvertised) {
             EventLog.add("DIRECT withdrawn (" + zWhy + ")");
         }
         mPublicAddress = "";
@@ -217,22 +294,36 @@ public final class DirectReachability {
         mNode.stopDirect();
         mState = State.OFF;
         mDetail = zWhy;
-        // Contacts must be told our direct address is gone, so they stop trying
-        // a now-dead route and fall back to the relays.
-        refreshContacts();
+        // Only bother contacts if we actually had an address to retract.
+        if (wasAdvertised) {
+            refreshContacts();
+        }
     }
 
     private void refreshContacts() {
-        new Thread(mNode::refreshContacts, "direct-refresh").start();
+        try {
+            mRefresh.submit(mNode::refreshContacts);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Shutting down; contacts will reconcile on next start.
+        }
+    }
+
+    private void submit(Runnable zTask) {
+        try {
+            mExec.submit(zTask);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // After shutdown; nothing to do.
+        }
     }
 
     // ---- gates ----
 
     /**
-     * Direct reachability is the heaviest opportunistic duty, so it takes the
-     * strictest gate: contribution on, unmetered (Wi-Fi), and charging for the
-     * initial attempt. Cellular never tries - carrier CGNAT makes it pointless
-     * and the port-mapper's public-IP check would refuse the result anyway.
+     * The heaviest opportunistic duty gets the strictest gate: contribution on,
+     * unmetered (Wi-Fi), and charging for the initial attempt. Cellular never
+     * tries - carrier CGNAT makes it pointless and the mapper's public-IP check
+     * would refuse the result anyway. Once ADVERTISED we keep it while on Wi-Fi
+     * even off charge, since the expensive map+probe is already paid.
      */
     private boolean gatesPass() {
         if (!AndroidContribution.isEnabled(mCtx)) {
@@ -241,8 +332,6 @@ public final class DirectReachability {
         if (!mPolicy.isUnmetered()) {
             return false;
         }
-        // Charging is required to START; once advertised we keep it while on
-        // Wi-Fi even off charge, since the expensive part (map+probe) is done.
         if (mState == State.OFF && !mPolicy.isCharging()) {
             return false;
         }
@@ -256,17 +345,13 @@ public final class DirectReachability {
         if (!mPolicy.isUnmetered()) {
             return "off (needs Wi-Fi - CGNAT makes cellular pointless)";
         }
-        if (!mPolicy.isCharging()) {
+        if (mState == State.OFF && !mPolicy.isCharging()) {
             return "off (needs charging to start)";
         }
         return "ready";
     }
 
-    /**
-     * The default gateway address, read from the active network where the
-     * platform will tell us. NAT-PMP needs it; SSDP finds its own, so a null
-     * here only costs the NAT-PMP path.
-     */
+    /** The default-route gateway, where the platform will tell us. NAT-PMP needs it. */
     private InetAddress gatewayHint() {
         try {
             ConnectivityManager cm = mCtx.getSystemService(ConnectivityManager.class);
@@ -286,5 +371,13 @@ public final class DirectReachability {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private static ThreadFactory daemon(String zName) {
+        return r -> {
+            Thread t = new Thread(r, zName);
+            t.setDaemon(true);
+            return t;
+        };
     }
 }
