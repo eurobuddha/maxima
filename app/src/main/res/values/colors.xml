@@ -24,4 +24,5 @@
     <color name="ux_bubble_in">#FF1F1F2B</color>
     <color name="ux_bubble_out">#FF2E2413</color>
     <color name="ux_tick_read">#FF4FA3F7</color>
+    <color name="ic_launcher_background">#16111F</color>
 </resources>
