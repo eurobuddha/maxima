@@ -77,8 +77,8 @@ public final class RelayServer {
     private volatile int mMaxConnections = 512;
     /** Concurrent connections from one source IP (a CGNAT still fits many users). */
     private volatile int mMaxPerSource = 16;
-    /** Idle ms before ANY connection is reaped - registered or not. */
-    private static final int IDLE_TIMEOUT_MS = 300_000;
+    /** Idle ms before an UNREGISTERED connection (never became a client) is reaped. */
+    private static final int IDLE_TIMEOUT_MS = 120_000;
     /** Cap on every rate-limit / bookkeeping map, so none can grow unbounded. */
     private static final int MAX_RATE_ENTRIES = 50_000;
 
@@ -317,13 +317,20 @@ public final class RelayServer {
                 try {
                     body = Frame.readOrSkip(zConn.in, MAX_KEEP);
                 } catch (java.net.SocketTimeoutException te) {
-                    // Reap ANY connection idle past the deadline, registered or
-                    // not. The old code exempted registered connections, so one
-                    // CTRL frame bought a permanent slot - a thread and FD held
-                    // forever. A real client that is genuinely idle just
-                    // re-attaches; mail queued meanwhile is drained on return.
-                    if (System.currentTimeMillis() - zConn.lastSeen > IDLE_TIMEOUT_MS) {
-                        log("reaping idle connection from " + zConn.sourceIp);
+                    // Reap only a connection that never became a client (no
+                    // route). A REGISTERED connection is a real client that has
+                    // proven itself and is legitimately quiet while it waits for
+                    // pushes - it sends nothing for long stretches by design.
+                    // Reaping it on idle disconnects every phone every few
+                    // minutes, and where it cannot cleanly re-attach (e.g. its
+                    // home relay via hairpin NAT) it goes dark. Registered
+                    // connections are instead bounded by the per-source (16) and
+                    // global (512) connection caps plus TCP keepalive; the
+                    // unregistered slow-loris - a socket that greets and never
+                    // registers - is what actually needs reaping.
+                    if (zConn.routingKey == null
+                            && System.currentTimeMillis() - zConn.lastSeen > IDLE_TIMEOUT_MS) {
+                        log("reaping idle non-client from " + zConn.sourceIp);
                         break;
                     }
                     continue;
