@@ -31,7 +31,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:label="Maxima"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:theme="@style/Theme.Maxima">
 
         <activity
             android:name=".MainActivity"
@@ -42,6 +42,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The conversation screen. Exported=false: the only ways in are our
+             own Chats tab and our own notification. -->
+        <activity
+            android:name=".chat.ChatActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".MaximaService"

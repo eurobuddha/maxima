@@ -80,8 +80,42 @@ public final class MaximaService extends Service {
 
         MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
         sNode = new MaximaNode(id, "1.0.48", 3);
+
+        // Persistence, BEFORE anything reads or writes node state. Until now
+        // the app ran memory-only, so every contact, every held mailbox item
+        // and every address-history line died with the process - which on
+        // Android means whenever the OS felt like it.
+        sNode.setStore(new com.eurobuddha.maxima.core.store.FileStore(
+                new java.io.File(getFilesDir(), "node")));
+
         sNode.setName(SeedStore.displayName(this));
         sNode.setStaticMls(MlsStore.get(this));
+
+        com.eurobuddha.maxima.core.chat.ChatEngine chat =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(sNode);
+        chat.setStore(new com.eurobuddha.maxima.core.store.FileStore(
+                new java.io.File(getFilesDir(), "chat")));
+        chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
+        final MaximaNode node = sNode;
+        chat.setListener(new com.eurobuddha.maxima.core.chat.ChatEngine.Listener() {
+            public void onMessage(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {
+                if (!e.mine) {
+                    com.eurobuddha.maxima.app.chat.ChatNotifier.onInbound(
+                            MaximaService.this, chat, e, node);
+                }
+                com.eurobuddha.maxima.app.chat.ChatHub.dispatchMessage(e);
+            }
+
+            public void onStateChanged(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {
+                com.eurobuddha.maxima.app.chat.ChatHub.dispatchState(e);
+            }
+
+            public void onGroupChanged(com.eurobuddha.maxima.core.chat.Group g) {
+                com.eurobuddha.maxima.app.chat.ChatHub.dispatchGroup(g);
+            }
+        });
+        sChat = chat;
+        com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
 
         // Surface inbound chat so the UI has something to show. Anything that
         // is not ours is logged too - silence is the enemy of debugging on a
@@ -93,9 +127,13 @@ public final class MaximaService extends Service {
             EventLog.add("inbound [" + app + "] " + msg.mData.getLength() + " bytes from "
                     + shortKey(msg.mFrom.to0xString()));
 
-            // Hand it to whichever app subscribed to this application string.
-            // Without this the IPC surface is send-only and a client app can
-            // never receive anything - which was the case until now.
+            // Chat is OURS - it is the one application string this app owns,
+            // so it never goes out over IPC. Everything else is handed to
+            // whichever app subscribed to that application string.
+            com.eurobuddha.maxima.core.chat.ChatEngine ce = sChat;
+            if (ce != null && ce.onInbound(msg)) {
+                return;
+            }
             com.eurobuddha.maxima.app.ipc.MaximaApiDelivery.deliver(
                     MaximaService.this, msg, msgid);
         });

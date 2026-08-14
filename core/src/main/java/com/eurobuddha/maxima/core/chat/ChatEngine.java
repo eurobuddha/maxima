@@ -123,6 +123,18 @@ public final class ChatEngine {
 
     private static final String C_GROUPS = "chat_groups";
     private static final String C_MESSAGES = "chat_messages";
+    private static final String C_READ = "chat_read";
+
+    /**
+     * When each conversation was last read by US.
+     *
+     * Separate from the delivery receipt a peer sends: this is purely local
+     * bookkeeping so the list can show an unread badge and a notification can
+     * be suppressed for a thread already on screen. Persisted, because opening
+     * the app after a restart to find everything unread again is worse than
+     * useless - it trains you to ignore the badge.
+     */
+    private final Map<String, Long> mLastRead = new ConcurrentHashMap<>();
 
     /**
      * Cap on retained messages per conversation.
@@ -160,6 +172,13 @@ public final class ChatEngine {
                 mGroups.put(g.id, g);
             } catch (Exception ex) {
                 System.err.println("[chat] bad group record " + e.getKey() + ": " + ex);
+            }
+        }
+        for (Map.Entry<String, String> e : mStore.all(C_READ).entrySet()) {
+            try {
+                mLastRead.put(e.getKey(), Long.parseLong(e.getValue().trim()));
+            } catch (Exception ex) {
+                System.err.println("[chat] bad read mark " + e.getKey() + ": " + ex);
             }
         }
         for (Map.Entry<String, String> e : mStore.all(C_MESSAGES).entrySet()) {
@@ -340,6 +359,101 @@ public final class ChatEngine {
 
     public Entry message(String zId) {
         return mMessages.get(zId);
+    }
+
+    /**
+     * How many inbound messages in this conversation arrived after we last read
+     * it. Counted from the message list rather than kept as a counter, so it
+     * cannot drift out of step with what is actually on screen.
+     */
+    public int unread(String zPeerOrGroup) {
+        long since = lastRead(zPeerOrGroup);
+        int n = 0;
+        for (Entry e : conversation(zPeerOrGroup)) {
+            if (!e.mine && e.time > since) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** One pass. Polled by the main screen, so it must not scan per conversation. */
+    public int totalUnread() {
+        int n = 0;
+        for (Entry e : mMessages.values()) {
+            if (e.mine) {
+                continue;
+            }
+            String k = e.isGroup() ? e.groupId : e.peer;
+            if (k != null && !k.isEmpty() && e.time > lastRead(k)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** One conversation, as the list screen needs it. */
+    public static final class Summary {
+        public final String conversation;
+        public final String lastBody;
+        public final String lastSender;
+        public final boolean lastMine;
+        public final long lastTime;
+        public final int unread;
+
+        Summary(String zConv, String zBody, String zSender, boolean zMine,
+                long zTime, int zUnread) {
+            conversation = zConv;
+            lastBody = zBody;
+            lastSender = zSender;
+            lastMine = zMine;
+            lastTime = zTime;
+            unread = zUnread;
+        }
+    }
+
+    /**
+     * Every conversation with its newest line and unread count, newest first,
+     * in ONE pass over the messages.
+     *
+     * The list screen used to call conversation() and unread() per conversation
+     * and each of those scans everything, so drawing K conversations over M
+     * messages cost O(K*M) - on the main thread, on every receipt. With a few
+     * hundred messages and a burst of ticks that is a visible stall.
+     */
+    public List<Summary> summaries() {
+        Map<String, Entry> newest = new LinkedHashMap<>();
+        Map<String, Integer> unread = new LinkedHashMap<>();
+        for (Entry e : mMessages.values()) {
+            String k = e.isGroup() ? e.groupId : e.peer;
+            if (k == null || k.isEmpty()) {
+                continue;
+            }
+            Entry cur = newest.get(k);
+            if (cur == null || e.time > cur.time) {
+                newest.put(k, e);
+            }
+            if (!e.mine && e.time > lastRead(k)) {
+                unread.merge(k, 1, Integer::sum);
+            }
+        }
+        List<Summary> out = new ArrayList<>();
+        for (Map.Entry<String, Entry> en : newest.entrySet()) {
+            Entry e = en.getValue();
+            out.add(new Summary(en.getKey(), e.body, e.sender, e.mine, e.time,
+                    unread.getOrDefault(en.getKey(), 0)));
+        }
+        out.sort((a, b) -> Long.compare(b.lastTime, a.lastTime));
+        return out;
+    }
+
+    public long lastRead(String zPeerOrGroup) {
+        Long v = mLastRead.get(key(zPeerOrGroup));
+        return v == null ? 0L : v;
+    }
+
+    private static String key(String zPeerOrGroup) {
+        return zPeerOrGroup == null ? "" : zPeerOrGroup;
     }
 
     // ---------------------------------------------------------------
@@ -611,6 +725,26 @@ public final class ChatEngine {
      * previous per-message loop could fire hundreds of sends from a single tap.
      */
     public void markRead(String zPeerOrGroup) {
+        // The local mark is set whether or not we TELL them. Read receipts are
+        // a privacy choice about the other person; the unread badge is ours.
+        //
+        // The mark is the timestamp of the newest message we have actually
+        // seen, NOT the wall clock. Using the clock loses a message that
+        // arrives in the same millisecond as the tap - it is stamped at or
+        // before the mark, so it is born already read and never notified. That
+        // is not theoretical: opening a thread while a message is in flight is
+        // exactly when it happens.
+        String k = key(zPeerOrGroup);
+        if (!k.isEmpty()) {
+            long mark = mLastRead.getOrDefault(k, 0L);
+            for (Entry e : conversation(k)) {
+                if (!e.mine && e.time > mark) {
+                    mark = e.time;
+                }
+            }
+            mLastRead.put(k, mark);
+            mStore.put(C_READ, k, Long.toString(mark));
+        }
         if (!mSendReadReceipts) {
             return;
         }

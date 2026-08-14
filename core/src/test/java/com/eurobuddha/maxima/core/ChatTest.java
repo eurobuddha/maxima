@@ -20,6 +20,24 @@ public class ChatTest {
     static void ok(String m) { pass++; System.out.println("  ok  " + m); }
     static void bad(String m) { fail++; System.out.println("  XX  " + m); }
 
+    /** A signed-and-verified inbound message, minus the transport. */
+    static com.eurobuddha.maxima.core.msg.MaximaMessage inbound(
+            String zFrom, String zTo, String zBody) {
+        com.eurobuddha.maxima.core.msg.MaximaMessage m =
+                new com.eurobuddha.maxima.core.msg.MaximaMessage();
+        m.mRandom = new com.eurobuddha.maxima.core.codec.MiniData(
+                com.eurobuddha.maxima.core.crypto.MaximaCrypto.randomBytes(32));
+        m.mFrom = new com.eurobuddha.maxima.core.codec.MiniData(zFrom);
+        m.mTo = new com.eurobuddha.maxima.core.codec.MiniData(zTo);
+        m.mTimeMilli = new com.eurobuddha.maxima.core.codec.MiniNumber(
+                System.currentTimeMillis());
+        m.mApplication = new com.eurobuddha.maxima.core.codec.MiniString(
+                ChatMessage.APPLICATION);
+        m.mData = new com.eurobuddha.maxima.core.codec.MiniData(
+                zBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return m;
+    }
+
     public static void main(String[] args) {
         // ---- wire format round trip ----
         ChatMessage t = ChatMessage.text("0xID1", "hello, with \"quotes\" and a\ttab");
@@ -209,6 +227,92 @@ public class ChatTest {
         } else {
             bad("two-tick intersection test did not exercise the bug:"
                     + " naive=" + naive + " correct=" + correct);
+        }
+
+        // ---- UNREAD TRACKING (stage 2) ----
+
+        java.io.File udir = new java.io.File(
+                System.getProperty("java.io.tmpdir"), "maxima-unreadtest");
+        if (udir.exists()) {
+            java.io.File[] fs = udir.listFiles();
+            if (fs != null) for (java.io.File f : fs) f.delete();
+        }
+        com.eurobuddha.maxima.core.chat.ChatEngine u1 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        u1.setStore(new com.eurobuddha.maxima.core.store.FileStore(udir));
+
+        String them = "0x" + "AB".repeat(32);
+        u1.onInbound(inbound(them, id.publicKeyHex(),
+                ChatMessage.text("0xU1", "first").encode()));
+        u1.onInbound(inbound(them, id.publicKeyHex(),
+                ChatMessage.text("0xU2", "second").encode()));
+
+        if (u1.unread(them) == 2 && u1.totalUnread() == 2) {
+            ok("two inbound messages count as two unread");
+        } else {
+            bad("unread count wrong: " + u1.unread(them) + " / " + u1.totalUnread());
+        }
+
+        // markRead must clear the badge even with read receipts OFF - telling
+        // them is a privacy choice, our own badge is not.
+        u1.markRead(them);
+        if (u1.unread(them) == 0) {
+            ok("markRead clears the badge with read receipts disabled");
+        } else {
+            bad("markRead did not clear the badge: " + u1.unread(them));
+        }
+
+        u1.onInbound(inbound(them, id.publicKeyHex(),
+                ChatMessage.text("0xU3", "after reading").encode()));
+        if (u1.unread(them) == 1) {
+            ok("a message arriving after markRead is unread again");
+        } else {
+            bad("post-read message not counted: " + u1.unread(them));
+        }
+
+        // Our OWN messages must never make our own thread unread.
+        com.eurobuddha.maxima.core.chat.ChatEngine u2 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        u2.setStore(new com.eurobuddha.maxima.core.store.FileStore(udir));
+        if (u2.unread(them) == 1) {
+            ok("the read mark survives a restart - the badge does not reset");
+        } else {
+            bad("read mark lost on restart: " + u2.unread(them));
+        }
+
+        // The mark must come from the messages, not the clock. Reading an EMPTY
+        // thread and then receiving must leave the message unread - with a
+        // wall-clock mark the arrival is stamped at or before the mark and is
+        // born already read, with no notification and no badge.
+        String quiet = "0x" + "CD".repeat(32);
+        u1.markRead(quiet);
+        u1.onInbound(inbound(quiet, id.publicKeyHex(),
+                ChatMessage.text("0xU4", "arrived the same instant").encode()));
+        if (u1.unread(quiet) == 1) {
+            ok("a message racing markRead on an empty thread is still unread");
+        } else {
+            bad("message swallowed by the read mark: " + u1.unread(quiet));
+        }
+
+        // summaries() must agree with the per-conversation calls it replaces -
+        // it exists only to be faster, so a divergence is a silent wrong badge.
+        java.util.List<com.eurobuddha.maxima.core.chat.ChatEngine.Summary> sums =
+                u1.summaries();
+        boolean agrees = !sums.isEmpty();
+        for (com.eurobuddha.maxima.core.chat.ChatEngine.Summary sm : sums) {
+            if (sm.unread != u1.unread(sm.conversation)) {
+                agrees = false;
+            }
+        }
+        int summed = 0;
+        for (com.eurobuddha.maxima.core.chat.ChatEngine.Summary sm : sums) {
+            summed += sm.unread;
+        }
+        if (agrees && summed == u1.totalUnread() && sums.get(0).lastBody.equals("arrived the same instant")) {
+            ok("summaries() agrees with unread()/totalUnread() and leads with the newest");
+        } else {
+            bad("summaries diverged: agrees=" + agrees + " summed=" + summed
+                    + " total=" + u1.totalUnread());
         }
 
         System.out.println();
