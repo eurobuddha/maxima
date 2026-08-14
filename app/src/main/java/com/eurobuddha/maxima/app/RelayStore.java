@@ -41,6 +41,8 @@ public final class RelayStore {
             "65.109.31.226:9501",      // eurobuddha - Helsinki, FI
             "45.77.246.226:9501",      // maxima     - Singapore, SG
             "78.141.237.9:9501",       // openproject- London, GB
+            "45.77.57.24:9501",        // vigilance  - London, GB
+            "192.248.151.55:9501",     // megammr    - London, GB
             "31.125.188.214:8001",     // the Pi     - residential, GB
             "34.105.180.174:9001",     // classic Minima nodes below here
             "168.138.15.32:9001",
