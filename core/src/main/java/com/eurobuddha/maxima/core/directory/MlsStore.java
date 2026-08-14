@@ -37,7 +37,22 @@ public final class MlsStore {
         }
     }
 
-    private final Map<String, Entry> mEntries = new ConcurrentHashMap<>();
+    /**
+     * Cap on directory entries, LRU-evicted.
+     *
+     * Each SET is signed by a FRESH identity (free to mint, PoW unverified), so
+     * without a cap an attacker publishes unboundedly many entries that are
+     * never resolved and never expire (flushExpired must be driven, and the TTL
+     * only matters on read) - a slow memory-exhaustion. LRU + the maintenance
+     * flush keep it bounded.
+     */
+    public static final int DEFAULT_MAX_ENTRIES = 200_000;
+    /** Cap on addresses per entry, so one SET cannot carry tens of thousands. */
+    public static final int MAX_ADDRESSES = 8;
+
+    /** Access-order for LRU; eviction is manual in {@link #put} (see the cap). */
+    private final Map<String, Entry> mEntries = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<>(1024, 0.75f, true));
     private final long mTtlMs;
     /** Identities allowed to be resolved by anyone (the "permanent" list). */
     private final List<String> mPermanent = new ArrayList<>();
@@ -55,11 +70,23 @@ public final class MlsStore {
      * otherwise anyone could overwrite anyone's directory entry.
      */
     public void put(String zSignerPublicKey, List<String> zAddresses, List<String> zAllowedReaders) {
-        mEntries.put(norm(zSignerPublicKey), new Entry(
-                norm(zSignerPublicKey),
-                new ArrayList<>(zAddresses),
-                new ArrayList<>(zAllowedReaders),
-                System.currentTimeMillis()));
+        // Bound the per-entry lists so one SET cannot carry a huge address blob.
+        List<String> addrs = zAddresses.size() > MAX_ADDRESSES
+                ? new ArrayList<>(zAddresses.subList(0, MAX_ADDRESSES))
+                : new ArrayList<>(zAddresses);
+        List<String> readers = zAllowedReaders.size() > MAX_ADDRESSES
+                ? new ArrayList<>(zAllowedReaders.subList(0, MAX_ADDRESSES))
+                : new ArrayList<>(zAllowedReaders);
+        synchronized (mEntries) {
+            mEntries.put(norm(zSignerPublicKey), new Entry(
+                    norm(zSignerPublicKey), addrs, readers, System.currentTimeMillis()));
+            // LRU cap: evict the least-recently-accessed while over the limit.
+            java.util.Iterator<String> it = mEntries.keySet().iterator();
+            while (mEntries.size() > DEFAULT_MAX_ENTRIES && it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
     }
 
     /**

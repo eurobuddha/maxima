@@ -115,6 +115,11 @@ public final class Mailbox {
         load();
     }
 
+    /** Persist any write-behind changes. Drive from a maintenance tick + shutdown. */
+    public synchronized void flush() {
+        mStore.flush();
+    }
+
     private void load() {
         for (Map.Entry<String, String> e : mStore.all(C_MAIL).entrySet()) {
             try {
@@ -132,6 +137,12 @@ public final class Mailbox {
                     continue;
                 }
                 byte[] ct = new com.eurobuddha.maxima.core.codec.MiniData(v[1]).getBytes();
+                // Re-enforce the global caps on reload: a persisted set that was
+                // tampered with locally must not let us blow past them in memory.
+                if (mBoxes.size() >= mMaxBoxes || mTotalBytes + ct.length > mMaxTotalBytes) {
+                    mStore.remove(C_MAIL, e.getKey());
+                    continue;
+                }
                 Box box = mBoxes.computeIfAbsent(recipient, x -> new Box());
                 box.items.add(new Item(
                         new MiniData(Hashes.sha3(ct)).to0xString(), recipient, ct, seq));

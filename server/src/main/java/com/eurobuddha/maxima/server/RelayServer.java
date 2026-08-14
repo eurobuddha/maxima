@@ -60,18 +60,51 @@ public final class RelayServer {
      * Storing for a never-seen key is exactly the attack: a flood to a million
      * random keys, none of which will ever collect, allocating a box each.
      */
-    private final Map<String, Boolean> mKnownRoutes = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> mKnownRoutes = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<String, Boolean>(1024, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> e) {
+                    return size() > MAX_KNOWN_ROUTES;
+                }
+            });
 
-    /** Concurrent connections we will hold. Beyond this, new ones are refused. */
-    private volatile int mMaxConnections = 2048;
-    /** Concurrent connections from one source IP. */
-    private volatile int mMaxPerSource = 64;
-    /** Idle seconds before a connection that never became a client is reaped. */
-    private static final int IDLE_TIMEOUT_MS = 120_000;
-    /** Cap on the per-destination rate-limit map, so it cannot grow unbounded. */
+    /**
+     * Concurrent connections we will hold. Kept modest for the Pi target: the
+     * relay is thread-per-connection, so 2048 threads was ~1-2 GB of stacks -
+     * enough to OOM the box before the cap even bit. A relay serving real
+     * clients needs far fewer, and clients re-attach if reaped.
+     */
+    private volatile int mMaxConnections = 512;
+    /** Concurrent connections from one source IP (a CGNAT still fits many users). */
+    private volatile int mMaxPerSource = 16;
+    /** Idle ms before ANY connection is reaped - registered or not. */
+    private static final int IDLE_TIMEOUT_MS = 300_000;
+    /** Cap on every rate-limit / bookkeeping map, so none can grow unbounded. */
     private static final int MAX_RATE_ENTRIES = 50_000;
 
+    /**
+     * The exact length of a valid routing key: the DER encoding of an RSA-1024
+     * public key. A CTRL/TYPE_ID announcing anything else is junk (the 1-byte
+     * key spam that filled the route maps), and is refused before it touches
+     * them.
+     */
+    private static final int ROUTING_KEY_DER_LEN = 162;
+
+    /** Per-source inbound frame budget - the master flood cap. */
+    private static final int PER_SOURCE_FRAMES_PER_MIN = 2000;
+    /** Per-source budget for the EXPENSIVE addressed-to-us (RSA decrypt) path. */
+    private static final int PER_SOURCE_TOUS_PER_MIN = 120;
+    /** Distinct routing keys one connection may register (a client needs one). */
+    private static final int MAX_ROUTES_PER_CONN = 4;
+    /** Global cap on remembered routing keys, LRU-evicted. */
+    private static final int MAX_KNOWN_ROUTES = 100_000;
+
     private final Map<String, Integer> mPerSource = new ConcurrentHashMap<>();
+    private final Map<String, RateLimit> mFrameLimits = new ConcurrentHashMap<>();
+    private final Map<String, RateLimit> mTousLimits = new ConcurrentHashMap<>();
+
+    /** The relay's own private key, parsed ONCE (not rebuilt from DER per decrypt). */
+    private volatile java.security.PrivateKey mPrivateKey;
 
     private final MlsStore mDirectory = new MlsStore();
 
@@ -117,6 +150,9 @@ public final class RelayServer {
         final DataOutputStream out;
         volatile String routingKey;
         volatile long lastSeen = System.currentTimeMillis();
+        /** Every route this conn registered, so cleanup removes ALL of them. */
+        final java.util.Set<String> routes =
+                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
 
         Conn(Socket zSocket) throws Exception {
             socket = zSocket;
@@ -142,6 +178,16 @@ public final class RelayServer {
         mIdentity = zIdentity;
         mPort = zPort;
         mVersion = zVersion;
+        // Parse the private key ONCE. handleForUs used to rebuild it from DER on
+        // every message addressed to us, which an attacker could force in a hot
+        // loop - a needless per-packet KeyFactory parse plus RSA op.
+        try {
+            mPrivateKey = java.security.KeyFactory.getInstance("RSA").generatePrivate(
+                    new java.security.spec.PKCS8EncodedKeySpec(
+                            mIdentity.keyPair().getPrivate().getEncoded()));
+        } catch (Exception e) {
+            throw new IllegalStateException("could not parse relay private key", e);
+        }
     }
 
     public void setPublicHost(String zHost) {
@@ -156,6 +202,11 @@ public final class RelayServer {
      * persisting it would only risk serving a stale address after downtime.
      */
     public void setStore(com.eurobuddha.maxima.core.store.Store zStore) {
+        // Write-behind: the mailbox is the hot path and must not fsync the whole
+        // file per stored item. Flushed on the maintenance tick + shutdown.
+        if (zStore instanceof com.eurobuddha.maxima.core.store.FileStore) {
+            ((com.eurobuddha.maxima.core.store.FileStore) zStore).setWriteBehind(true);
+        }
         mMailbox.setStore(zStore);
     }
 
@@ -266,9 +317,13 @@ public final class RelayServer {
                 try {
                     body = Frame.readOrSkip(zConn.in, MAX_KEEP);
                 } catch (java.net.SocketTimeoutException te) {
-                    if (zConn.routingKey == null
-                            && System.currentTimeMillis() - zConn.lastSeen > IDLE_TIMEOUT_MS) {
-                        log("reaping idle non-client from " + zConn.sourceIp);
+                    // Reap ANY connection idle past the deadline, registered or
+                    // not. The old code exempted registered connections, so one
+                    // CTRL frame bought a permanent slot - a thread and FD held
+                    // forever. A real client that is genuinely idle just
+                    // re-attaches; mail queued meanwhile is drained on return.
+                    if (System.currentTimeMillis() - zConn.lastSeen > IDLE_TIMEOUT_MS) {
+                        log("reaping idle connection from " + zConn.sourceIp);
                         break;
                     }
                     continue;
@@ -277,6 +332,12 @@ public final class RelayServer {
                     continue;
                 }
                 zConn.lastSeen = System.currentTimeMillis();
+                // Master flood cap: bound inbound frames per source IP before any
+                // expensive work. The source IP of an established TCP connection
+                // cannot be rotated, which is exactly why it is the right key.
+                if (!allow(mFrameLimits, zConn.sourceIp, PER_SOURCE_FRAMES_PER_MIN)) {
+                    continue;   // silently drop; a flooding source gets nothing
+                }
                 handleFrame(zConn, body);
             }
         } catch (Exception e) {
@@ -289,8 +350,12 @@ public final class RelayServer {
     private void cleanup(Conn zConn) {
         mConns.remove(zConn.id);
         mPerSource.computeIfPresent(zConn.sourceIp, (k, v) -> v <= 1 ? null : v - 1);
-        if (zConn.routingKey != null) {
-            mRoutes.remove(zConn.routingKey, zConn);
+        // Remove EVERY route this conn held, not just the last. The old code
+        // removed only zConn.routingKey, so any earlier key it registered leaked
+        // permanently, each still pinning this dead Conn (and its socket) in the
+        // route map - a straight path to OOM under a key-spam flood.
+        for (String k : zConn.routes) {
+            mRoutes.remove(k, zConn);
         }
         zConn.close();
     }
@@ -313,25 +378,36 @@ public final class RelayServer {
             case Frame.MSG_MAXIMA_CTRL: {
                 MaximaCTRLMessage ctrl = MaximaCTRLMessage.fromBytes(payload);
                 if (ctrl.getType().getAsInt() == MaximaCTRLMessage.TYPE_ID) {
+                    // A valid routing key is a full RSA-1024 public-key DER.
+                    // Anything else is junk - the 1-byte-key spam that filled the
+                    // route maps - and is refused before it touches them.
+                    if (ctrl.getData().getLength() != ROUTING_KEY_DER_LEN) {
+                        return;
+                    }
                     String key = ctrl.getData().to0xString();
+                    // Cap distinct routes per connection. One client needs one
+                    // key; a stream of fresh keys on a single conn was the OOM
+                    // engine. A new key beyond the cap is ignored.
+                    if (!zConn.routes.contains(key) && zConn.routes.size() >= MAX_ROUTES_PER_CONN) {
+                        return;
+                    }
                     // Do NOT displace a live binding for the same key. A routing
-                    // key is public (it is in every user's contact address), so
-                    // without this any client could announce someone else's key
-                    // and hijack or blackhole their inbound traffic. The first
-                    // live holder keeps the route until it actually drops.
+                    // key is public, so without this anyone could announce
+                    // someone else's key and hijack/blackhole their traffic. The
+                    // first live holder keeps the route until it actually drops.
                     Conn existing = mRoutes.get(key);
                     if (existing != null && existing != zConn
                             && !existing.socket.isClosed()) {
                         log("ignoring duplicate route claim for "
-                                + key.substring(0, 22) + "... from " + zConn.sourceIp);
+                                + safe(key) + " from " + zConn.sourceIp);
                         return;
                     }
                     zConn.routingKey = key;
+                    zConn.routes.add(key);
                     mRoutes.put(key, zConn);
                     mKnownRoutes.put(key, Boolean.TRUE);
-                    log("route registered " + key.substring(0, 22) + "... conn=" + zConn.id);
-                    // Deliver anything held while they were away - the whole
-                    // point of the mailbox, previously never wired up.
+                    log("route registered " + safe(key) + " conn=" + zConn.id);
+                    // Deliver anything held while they were away.
                     drainMailbox(zConn, key);
                 }
                 return;
@@ -370,6 +446,14 @@ public final class RelayServer {
 
         // Addressed to us -> we are the endpoint (directory, mailbox, ...).
         if (to.equalsIgnoreCase(new MiniData(mIdentity.publicKey()).to0xString())) {
+            // This path does an RSA-1024 private-key decrypt. It is legitimate
+            // low-volume traffic (directory SET/GET, probes), so a tight
+            // per-source budget stops an attacker forcing unlimited decrypts to
+            // pin the CPU, without hurting real clients.
+            if (!allow(mTousLimits, zConn.sourceIp, PER_SOURCE_TOUS_PER_MIN)) {
+                zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+                return;
+            }
             handleForUs(zConn, pkg);
             return;
         }
@@ -416,8 +500,11 @@ public final class RelayServer {
     private void handleForUs(Conn zConn, MaximaPackage zPkg) throws Exception {
         try {
             CryptoPackage cp = CryptoPackage.fromBytes(zPkg.mData.getBytes());
-            byte[] plain = MaximaCrypto.decrypt(cp,
-                    mIdentity.keyPair().getPrivate().getEncoded());
+            // Cached PrivateKey, not a per-call DER re-parse. Constant-behaviour
+            // decrypt: on bad RSA padding it returns a random key and continues
+            // through AES, so the padding-valid and padding-invalid paths do the
+            // same work - closing the Bleichenbacher timing side-channel.
+            byte[] plain = MaximaCrypto.decrypt(cp, mPrivateKey);
             MaximaInternal mi = MaximaInternal.fromBytes(plain);
 
             if (!MaximaCrypto.verify(mi.mFrom.getBytes(), mi.mData.getBytes(),
@@ -518,20 +605,31 @@ public final class RelayServer {
         try {
             java.util.List<Mailbox.Item> held = mMailbox.fetch(zKey, 0, 100);
             long acked = 0;
+            int sent = 0;
             for (Mailbox.Item item : held) {
                 try {
                     MaxTxPoW unit = MaxTxPoW.fromBytes(
                             reWrapForDelivery(item.ciphertext));
                     zConn.write(Frame.body(Frame.MSG_MAXIMA_TXPOW, unit));
-                    acked = item.sequence;
+                    sent++;
                 } catch (Exception e) {
                     break;
                 }
             }
-            if (acked > 0) {
-                mMailbox.acknowledge(zKey, acked);
-                log("delivered " + held.size() + " held item(s) to "
-                        + zKey.substring(0, 22) + "...");
+            // Deliberately do NOT acknowledge/delete here. Route registration is
+            // unauthenticated (a routing key is public and there is no
+            // proof-of-possession on the wire, an interop constraint), so an
+            // attacker could register an OFFLINE victim's key and, by acking,
+            // DESTROY their held mail while reading nothing. Non-destructive
+            // delivery means the worst a hijacker achieves is opaque ciphertext
+            // they cannot decrypt; the real recipient still collects it when
+            // they hold the key. Re-delivery on reconnect is deduped by msgid;
+            // the box clears on TTL. (A signed fetch/ack that proves identity
+            // possession is the proper full fix - deferred, needs client
+            // cooperation; see THREAT-MODEL.)
+            if (sent > 0) {
+                log("delivered " + sent + " held item(s) to "
+                        + safe(zKey) + " (not acked - unauthenticated route)");
             }
         } catch (Exception e) {
             log("mailbox drain error: " + e);
@@ -549,17 +647,23 @@ public final class RelayServer {
         return Codec.serialise(MaxTxPoW.create(pkg, System.currentTimeMillis()));
     }
 
-    /** Simple per-destination rate limit. */
+    /** Per-destination relay rate limit. */
     private boolean allow(String zKey) {
-        // Bound the map: a flood to endless distinct destinations must not grow
-        // a RateLimit per key forever. Over the cap, sweep entries whose window
-        // has expired; if still full, this destination is simply allowed (the
-        // per-connection and global caps are the real backstop).
-        if (mLimits.size() > MAX_RATE_ENTRIES) {
+        return allow(mLimits, zKey, mMaxPerMinute);
+    }
+
+    /**
+     * Windowed rate limit over an arbitrary keyed map. Used per-destination
+     * (relay), per-source (all inbound frames), and per-source (the expensive
+     * addressed-to-us path). Bounds the map so a flood of distinct keys cannot
+     * grow it without limit.
+     */
+    private boolean allow(Map<String, RateLimit> zMap, String zKey, int zPerMinute) {
+        if (zMap.size() > MAX_RATE_ENTRIES) {
             long now = System.currentTimeMillis();
-            mLimits.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
+            zMap.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
         }
-        RateLimit rl = mLimits.computeIfAbsent(zKey, k -> new RateLimit());
+        RateLimit rl = zMap.computeIfAbsent(zKey, k -> new RateLimit());
         synchronized (rl) {
             long now = System.currentTimeMillis();
             if (now - rl.windowStart > 60_000) {
@@ -567,8 +671,35 @@ public final class RelayServer {
                 rl.count = 0;
             }
             rl.count++;
-            return rl.count <= mMaxPerMinute;
+            return rl.count <= zPerMinute;
         }
+    }
+
+    /** Periodic maintenance: expire directory entries and sweep the rate maps. */
+    public void maintain() {
+        try {
+            mDirectory.flushExpired();
+        } catch (Exception ignored) {
+        }
+        long now = System.currentTimeMillis();
+        for (Map<String, RateLimit> m : java.util.Arrays.asList(mLimits, mFrameLimits,
+                mTousLimits, mProbeLimits)) {
+            m.entrySet().removeIf(e -> now - e.getValue().windowStart > 120_000);
+        }
+    }
+
+    /** Flush any write-behind persistence. Called on the maintenance tick + shutdown. */
+    public void flush() {
+        mMailbox.flush();
+    }
+
+    /** Strip control chars from an attacker-influenced value before logging it. */
+    private static String safe(String zKey) {
+        if (zKey == null) {
+            return "";
+        }
+        String k = zKey.length() > 22 ? zKey.substring(0, 22) + "..." : zKey;
+        return k.replaceAll("[\\p{Cntrl}]", "?");
     }
 
     private void log(String zMsg) {

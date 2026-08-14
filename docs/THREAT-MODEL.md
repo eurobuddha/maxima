@@ -5,10 +5,29 @@ is callable by other apps on the device; the mailbox holds ciphertext for
 strangers; the seed file is a spendable wallet seed. This records what is
 defended, and — honestly — what is not.
 
+> **Adversarial audit, 2026-08-14.** Five independent red-team passes (untrusted
+> parsing/DoS, SSRF, filesystem, crypto/auth, deploy/systemd) confirmed: no RCE,
+> no arbitrary file read/write, no SSRF, no auth bypass, no forgery, no directory
+> poisoning, no key/plaintext/seed extraction, and the relay never runs as root.
+> The findings were denial-of-service and blast-radius hardening; all are fixed
+> in server 0.1.8 + the hardened systemd unit. What follows records the defences
+> and the honest residuals.
+
 ## Defended
 
 | Attack | Defence |
 |---|---|
+| CPU exhaustion via forced RSA decrypts | Per-source-IP budget on the addressed-to-us path (120/min); the private key is parsed once, not per message; constant-behaviour decrypt. |
+| Memory exhaustion via junk route-key spam | CTRL/TYPE_ID keys must be a full RSA-1024 DER (162 bytes) or are refused; ≤4 routes per connection; `mKnownRoutes` LRU-capped; cleanup removes EVERY key a connection held, not just the last. |
+| Connection-slot / thread / FD exhaustion (slow-loris) | Idle reaper applies to ALL connections (registered or not); connection cap 512, per-source 16; per-source inbound frame cap 2000/min. |
+| Disk-I/O amplification (mailbox fsync-per-item) | The relay mailbox store is write-behind: one rewrite+fsync per dirty collection per maintenance tick, not per stored item. |
+| Directory (MLS) memory exhaustion | `MlsStore` LRU-capped at 200k entries, ≤8 addresses per entry, expired entries swept on the maintenance tick. |
+| RSA PKCS#1v1.5 padding oracle (Bleichenbacher) | The logical oracle was already masked (all failures → one `FAIL`); the timing residual is closed with the TLS countermeasure — a bad-padding decrypt substitutes a random key and runs the identical AES work. |
+| Destructive mailbox drain by a route hijacker | Drain is non-destructive: it delivers but never acknowledges/deletes on an unauthenticated route, so a hijacker gets opaque ciphertext and the real recipient still collects. |
+| Compromised-process reach (metadata credentials) | systemd `IPAddressDeny=169.254.0.0/16 fe80::/10` (a BPF egress filter applied even to an RCE'd process), `SystemCallFilter=@system-service`, empty `CapabilityBoundingSet`, `ProtectProc`, `PrivateDevices`, `RestrictAddressFamilies`. |
+| Repeatable-crash → invisible flap DoS | `Restart=on-failure` + `StartLimitBurst=5/300s`: after 5 crashes it stops and stays failed so monitoring sees it. |
+| Deploy of a corrupt/tampered jar | The jar's sha256 is verified ON THE BOX before the symlink is flipped. |
+| Seed-file exposure window | Created 0600 atomically (perms baked into creation), fails loudly if perms can't be set; data dir 0700; `UMask=0077`; log to the journal, not a world-readable flat file. |
 | Mailbox flood → OOM (a message to each of millions of random keys) | We only hold mail for a key that has actually registered a route with us this run; global caps on box count and total bytes with LRU eviction; per-box quotas. Bounded regardless of key count. See `Mailbox`, `RelayServer.handleMaxima`. |
 | Allocation amplification (a 1 KB frame declaring a 512 MB field) | `Reads.exact` grows with the bytes that actually arrive and fails EOF the moment the stream runs dry. Memory is proportional to real input, not the claim. |
 | Connection flood / slow-loris / FD exhaustion | Global connection cap, per-source-IP cap, and an idle timeout that reaps a connection which never became a client. `RelayServer` accept loop. |
@@ -30,10 +49,18 @@ else's key. We refuse to displace a *live* binding for a key (the first holder
 keeps it until it actually drops), which stops an online user from being
 bumped. But while a user is OFFLINE, an attacker can claim their key and
 receive their inbound ciphertext (undecryptable — no private key) or blackhole
-it. A cryptographic proof-of-possession would fix it but is wire-visible and
-would break interop with classic, which shares this property. Mitigated by
-multi-homing (a sender races several relays; poisoning one is not enough) and
-by the don't-displace-live rule. **Accepted as an interop constraint.**
+it, and hold the key to keep the victim locked out until the attacker's
+connection drops. A cryptographic proof-of-possession (relay sends a nonce, the
+client signs it with the routing private key) would close it fully but is a new
+wire exchange classic clients don't implement, so requiring it would break
+interop. The **destructive** part — the mailbox drain deleting a hijacked
+victim's held mail — is fixed: drain never acknowledges on an unauthenticated
+route, so the worst a hijacker achieves is opaque ciphertext, and the real
+recipient still collects when they reclaim the key. Mitigated further by
+multi-homing (a sender races several relays; poisoning one is not enough).
+**Blackhole/lockout accepted as an interop constraint; destruction fixed.** A
+backwards-compatible optional challenge (our clients verify, classic clients
+stay unverified and get only non-destructive delivery) is the planned full fix.
 
 **IPC is family-only.** The signature permission restricts callers to apps
 signed with our release key. Within that family, one app could still name

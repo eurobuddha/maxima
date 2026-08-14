@@ -35,11 +35,41 @@ public final class FileStore implements Store {
     private final File mDir;
     private final Map<String, Map<String, String>> mCache = new ConcurrentHashMap<>();
 
+    /**
+     * Write-behind mode.
+     *
+     * A keyed collection is fully rewritten and fsync'd on every put/remove.
+     * That is fine for the app (a handful of contacts, rare changes), but on the
+     * relay's mailbox it is O(size) disk I/O per stored item and O(size^2) to
+     * fill a box - a remote disk-amplification DoS, brutal on an SD card. With
+     * write-behind, put/remove only mark the collection dirty; {@link #flush}
+     * writes each dirty collection ONCE. The relay flushes on its maintenance
+     * tick and on shutdown, so the worst a crash costs is a few seconds of held
+     * mail - acceptable for best-effort store-and-forward.
+     */
+    private volatile boolean mWriteBehind;
+    private final java.util.Set<String> mDirty =
+            java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+
     public FileStore(File zDir) {
         mDir = zDir;
         if (!mDir.exists() && !mDir.mkdirs()) {
             throw new IllegalStateException("Cannot create data directory: " + mDir);
         }
+        // Owner-only: the mailbox holds ciphertext + who-has-mail metadata, and
+        // a sibling seed.txt is wallet-grade. Not group/world readable.
+        try {
+            mDir.setReadable(false, false);
+            mDir.setReadable(true, true);
+            mDir.setExecutable(false, false);
+            mDir.setExecutable(true, true);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Enable write-behind (relay mailbox). Off by default. */
+    public void setWriteBehind(boolean zOn) {
+        mWriteBehind = zOn;
     }
 
     // ---------------------------------------------------------------
@@ -49,7 +79,7 @@ public final class FileStore implements Store {
     @Override
     public synchronized void put(String zCollection, String zKey, String zValue) {
         load(zCollection).put(zKey, zValue);
-        persist(zCollection);
+        markOrPersist(zCollection);
     }
 
     @Override
@@ -60,6 +90,15 @@ public final class FileStore implements Store {
     @Override
     public synchronized void remove(String zCollection, String zKey) {
         if (load(zCollection).remove(zKey) != null) {
+            markOrPersist(zCollection);
+        }
+    }
+
+    /** Write now, or mark dirty for the next flush, per the write-behind mode. */
+    private void markOrPersist(String zCollection) {
+        if (mWriteBehind) {
+            mDirty.add(zCollection);
+        } else {
             persist(zCollection);
         }
     }
@@ -153,8 +192,18 @@ public final class FileStore implements Store {
     }
 
     @Override
-    public void flush() {
-        // Every write already lands on disk before returning.
+    public synchronized void flush() {
+        // In immediate mode every write already landed. In write-behind mode,
+        // persist each dirty collection exactly once here (one rewrite+fsync per
+        // collection per flush, not per item).
+        if (mDirty.isEmpty()) {
+            return;
+        }
+        List<String> collections = new ArrayList<>(mDirty);
+        mDirty.clear();
+        for (String c : collections) {
+            persist(c);
+        }
     }
 
     // ---------------------------------------------------------------

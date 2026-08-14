@@ -84,7 +84,7 @@ set -e
 id maxima >/dev/null 2>&1 || useradd --system --home /var/lib/maxima --shell /usr/sbin/nologin maxima
 mkdir -p /opt/maxima /var/lib/maxima
 chown -R maxima:maxima /var/lib/maxima
-chmod 750 /var/lib/maxima
+chmod 700 /var/lib/maxima
 REMOTE
 
 # ---- 3. the jar ----------------------------------------------------------
@@ -93,7 +93,16 @@ scp -q -o ConnectTimeout=20 "$JAR" "$TARGET:/opt/maxima/maxima-server-$VER.jar"
 $SSH "bash -s" <<REMOTE
 set -e
 cd /opt/maxima
-# The unit points at the symlink, so a rollback is one ln -sf away.
+# Verify the jar arrived byte-for-byte before we run it. A corrupted transfer
+# or a stale/tampered artifact must not be activated unchecked - the deploy
+# host is not the sole source of truth for what runs on the box.
+got=\$(sha256sum maxima-server-$VER.jar | cut -d' ' -f1)
+if [ "\$got" != "$SUM" ]; then
+    echo "SHA256 MISMATCH: expected $SUM got \$got - refusing to activate" >&2
+    rm -f maxima-server-$VER.jar
+    exit 1
+fi
+# Only now flip the symlink. The unit points at it, so a rollback is one ln -sf.
 ln -sf maxima-server-$VER.jar maxima-server.jar
 chmod 644 maxima-server-$VER.jar
 REMOTE
@@ -106,6 +115,10 @@ Description=Maxima relay, directory and mailbox ($VER)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
+# Contain a repeatable-crash DoS: after 5 starts in 5 min, stop and stay failed
+# so monitoring SEES it instead of an invisible 10s flap forever.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -115,32 +128,62 @@ Group=maxima
 # records, and an unbounded default heap on a 1 GB VPS is how you lose the box.
 ExecStart=/usr/bin/java -Xmx$HEAP -jar /opt/maxima/maxima-server.jar \\
     --port $PORT --data /var/lib/maxima
-Restart=always
+# on-failure (not always) so the StartLimit gate above can actually trip.
+Restart=on-failure
 RestartSec=10
 
-# The relay handles untrusted input from the open internet all day, so it gets
-# no more of the filesystem than it needs.
+# ---- filesystem: no more of it than the relay needs ----
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/maxima
+UMask=0077
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RemoveIPC=true
+
+# ---- privilege / capabilities: a compromised process gains nothing ----
+CapabilityBoundingSet=
+AmbientCapabilities=
 RestrictSUIDSGID=true
 RestrictNamespaces=true
+RestrictRealtime=true
 LockPersonality=true
-MemoryMax=512M
 
-StandardOutput=append:/var/log/maxima-relay.log
-StandardError=append:/var/log/maxima-relay.log
+# ---- syscalls: seccomp allowlist for a network service ----
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged ~@resources ~@obsolete
+SystemCallErrorNumber=EPERM
+
+# ---- network: block cloud-metadata + link-local so an RCE can't steal
+#      instance credentials. The relay/probe still reach public v4 peers. ----
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=169.254.0.0/16 fe80::/10
+
+# ---- resource ceilings ----
+MemoryMax=512M
+TasksMax=256
+
+# Journal, not a flat file: auto-rotated, access-controlled, rate-limited -
+# closes the old world-readable + unbounded-growth /var/log file.
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 REMOTE
 
-$SSH "touch /var/log/maxima-relay.log && chown maxima:maxima /var/log/maxima-relay.log"
+# Remove the legacy world-readable flat log (we log to the journal now).
+$SSH "rm -f /var/log/maxima-relay.log 2>/dev/null || true"
 
 # ---- 5. firewall ---------------------------------------------------------
 echo "[5/6] firewall"
@@ -178,10 +221,10 @@ if (ss -ltn 2>/dev/null || netstat -ltn) | grep -q ":$PORT "; then
     echo "      listening on $PORT"
 else
     echo "      NOT LISTENING on $PORT - last log lines:"
-    tail -20 /var/log/maxima-relay.log
+    journalctl -u maxima-relay -n 20 --no-pager 2>/dev/null || true
     exit 1
 fi
-grep -m1 "identity" /var/log/maxima-relay.log | sed 's/^/      /' || true
+journalctl -u maxima-relay -n 40 --no-pager 2>/dev/null | grep -m1 "identity" | sed 's/^/      /' || true
 REMOTE
 
 echo

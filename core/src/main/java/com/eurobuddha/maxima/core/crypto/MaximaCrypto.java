@@ -117,19 +117,57 @@ public final class MaximaCrypto {
         }
     }
 
-    /** Reverse of {@link #encrypt}. */
+    /** Reverse of {@link #encrypt}. Re-parses the key from DER each call. */
     public static byte[] decrypt(CryptoPackage zPackage, byte[] zRsaPrivateDer) {
+        return decrypt(zPackage, privateKeyFromDer(zRsaPrivateDer));
+    }
+
+    /**
+     * Reverse of {@link #encrypt}, with a PRE-PARSED key.
+     *
+     * CONSTANT-BEHAVIOUR w.r.t. RSA padding, the TLS Bleichenbacher
+     * countermeasure. A server that decrypts attacker-chosen ciphertext with its
+     * private key is a padding oracle if the code does visibly different work on
+     * conformant vs non-conformant PKCS#1 padding. Here, if the RSA unwrap throws
+     * (bad padding) we substitute a RANDOM 16-byte AES key and continue through
+     * the AES step regardless, so the two paths run the same operations and take
+     * the same time; the caller sees a decrypt failure either way (the random key
+     * makes the AES/PKCS5 unpad fail), never a distinguishable padding signal.
+     */
+    public static byte[] decrypt(CryptoPackage zPackage, java.security.PrivateKey zPrivate) {
+        byte[] aesKeyBytes;
+        boolean rsaOk;
         try {
             Cipher rsa = Cipher.getInstance(RSA_TRANSFORM);
-            rsa.init(Cipher.DECRYPT_MODE, privateKeyFromDer(zRsaPrivateDer));
-            byte[] aesKeyBytes = rsa.doFinal(zPackage.mSecret.getBytes());
-
+            rsa.init(Cipher.DECRYPT_MODE, zPrivate);
+            aesKeyBytes = rsa.doFinal(zPackage.mSecret.getBytes());
+            rsaOk = true;
+        } catch (Exception paddingOrKeyError) {
+            // Do NOT branch out here - fall through with a random key so the AES
+            // work below happens identically whether or not padding was valid.
+            aesKeyBytes = randomBytes(16);
+            rsaOk = false;
+        }
+        // A recovered key of a non-AES length would make Cipher.init throw and
+        // reveal (via a different exception path) that RSA succeeded - normalise
+        // it to 16 bytes so init always runs the same way.
+        if (aesKeyBytes.length != 16 && aesKeyBytes.length != 24 && aesKeyBytes.length != 32) {
+            aesKeyBytes = java.util.Arrays.copyOf(aesKeyBytes, 16);
+        }
+        try {
             Cipher aes = Cipher.getInstance(AES_TRANSFORM);
             aes.init(Cipher.DECRYPT_MODE,
                     new SecretKeySpec(aesKeyBytes, "AES"),
                     new IvParameterSpec(zPackage.mIvParam.getBytes()));
-            return aes.doFinal(zPackage.mData.getBytes());
-
+            byte[] out = aes.doFinal(zPackage.mData.getBytes());
+            if (!rsaOk) {
+                // We did the AES work for timing symmetry; the result is
+                // meaningless. Fail the same as a genuine decrypt failure.
+                throw new IllegalStateException("Maxima decrypt failed");
+            }
+            return out;
+        } catch (IllegalStateException rethrow) {
+            throw rethrow;
         } catch (Exception e) {
             throw new IllegalStateException("Maxima decrypt failed", e);
         }

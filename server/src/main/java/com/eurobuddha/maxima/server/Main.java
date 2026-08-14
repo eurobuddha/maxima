@@ -24,7 +24,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.1.7";
+    public static final String VERSION = "0.1.8";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -64,6 +64,11 @@ public final class Main {
                     break;
                 case "--rate":
                     rate = intArg(args, ++i, "--rate");
+                    if (rate < 1 || rate > 1_000_000) {
+                        // A negative/zero rate self-DoSes (every message fails);
+                        // a huge one disables the flood defence. Bound both.
+                        fail("--rate must be 1-1000000, got " + rate);
+                    }
                     break;
                 case "--selftest":
                     selftest = true;
@@ -116,11 +121,27 @@ public final class Main {
         } else {
             List<String> words = Bip39.generate(24);
             phrase = String.join(" ", words);
-            Files.write(seedFile, phrase.getBytes(StandardCharsets.UTF_8));
+            // Create the seed file 0600 ATOMICALLY (perms baked into creation),
+            // then write. The old order - write, THEN chmod - left the spendable
+            // wallet seed world/group-readable for a window, and silently kept it
+            // that way if the chmod failed. A seed we can't protect is not a seed
+            // we keep: fail loudly instead.
             try {
-                Files.setPosixFilePermissions(seedFile,
-                        java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
-            } catch (Exception ignored) {
+                Files.createFile(seedFile, java.nio.file.attribute.PosixFilePermissions
+                        .asFileAttribute(java.nio.file.attribute.PosixFilePermissions
+                                .fromString("rw-------")));
+                Files.write(seedFile, phrase.getBytes(StandardCharsets.UTF_8),
+                        java.nio.file.StandardOpenOption.WRITE);
+            } catch (UnsupportedOperationException nonPosix) {
+                // Non-POSIX filesystem (unusual for a relay host). Best effort.
+                Files.write(seedFile, phrase.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                try {
+                    Files.deleteIfExists(seedFile);
+                } catch (Exception ignored) {
+                }
+                throw new IllegalStateException(
+                        "refusing to store the seed without owner-only permissions", e);
             }
             System.out.println("Generated a NEW identity at " + seedFile);
             System.out.println();
@@ -163,10 +184,19 @@ public final class Main {
         System.out.println("  This port must be open to the internet or the relay cannot relay.");
         System.out.println();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(relay::stop));
+        // Flush write-behind mail on shutdown so a clean stop loses nothing.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            relay.flush();
+            relay.stop();
+        }));
 
         while (true) {
             Thread.sleep(30_000);
+            // Maintenance: expire directory entries, sweep the rate maps, and
+            // flush write-behind mail to disk (one rewrite per dirty collection,
+            // not per stored item).
+            relay.maintain();
+            relay.flush();
             System.out.printf("[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
                     relay.connectionCount(), relay.routeCount(),
                     relay.relayedCount(), relay.storedCount(), relay.droppedCount(),
