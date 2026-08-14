@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MaximaNode {
 
     private final MaximaIdentity mIdentity;
+    private final String mVersion;
     private final HostPool mPool;
     private final ServiceRegistry mServices = new ServiceRegistry();
     private final RpcPeer mRpc;
@@ -50,6 +51,11 @@ public final class MaximaNode {
     private final Outbox mOutbox = new Outbox();
     private final Mailbox mMailbox = new Mailbox();
     private final MlsStore mDirectory = new MlsStore();
+
+    /** Tier 2 inbound listener. Null until {@link #startDirect}. */
+    private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
+    /** Proven public ip:port, or empty. Set only after external proof. */
+    private volatile String mDirectAddress = "";
 
     /**
      * Durable storage. Defaults to memory-only so nothing breaks if a host
@@ -116,6 +122,7 @@ public final class MaximaNode {
 
     public MaximaNode(MaximaIdentity zIdentity, String zVersion, int zRelayTarget) {
         mIdentity = zIdentity;
+        mVersion = zVersion;
         mPool = new HostPool(zIdentity, zVersion, zRelayTarget);
         mRpc = new RpcPeer(zIdentity, mServices);
         mTier1 = new Tier1Services(zIdentity, mMailbox, mDirectory);
@@ -620,12 +627,77 @@ public final class MaximaNode {
     }
 
     public void stop() {
+        stopDirect();
         mPool.closeAll();
         mStore.flush();
     }
 
+    /**
+     * Tier 2: start accepting direct connections on zPort (0 = any free port).
+     *
+     * The endpoint does not, by itself, make us reachable - a NAT still sits in
+     * front. The caller (the Android reachability manager) maps a public port
+     * to it, PROVES the port from outside, and only then calls
+     * {@link #setDirectAddress} so the address is advertised. Starting the
+     * listener and advertising an address are deliberately two steps.
+     *
+     * @return the bound port, or -1 on failure
+     */
+    public synchronized int startDirect(int zPort) {
+        if (mDirect != null && mDirect.isRunning()) {
+            return mDirect.port();
+        }
+        mDirect = new com.eurobuddha.maxima.core.net.DirectEndpoint(
+                mIdentity, mVersion, this::handle);
+        return mDirect.start(zPort);
+    }
+
+    public synchronized void stopDirect() {
+        if (mDirect != null) {
+            mDirect.stop();
+            mDirect = null;
+        }
+        mDirectAddress = "";
+    }
+
+    public int directPort() {
+        return mDirect == null ? -1 : mDirect.port();
+    }
+
+    /**
+     * Advertise (or withdraw, with "") a PROVEN direct address of the form
+     * Mx&lt;identity&gt;@ip:port. Only call this AFTER the port has been shown
+     * reachable from outside - advertising an unverified address is the classic
+     * sin this whole layer refuses to repeat.
+     */
+    public void setDirectAddress(String zIpPort) {
+        mDirectAddress = zIpPort == null ? "" : zIpPort.trim();
+    }
+
+    public String directAddress() {
+        // Sealed to the IDENTITY key, not a per-host key: on a direct link the
+        // endpoint decrypts with the identity private key, and there is no relay
+        // to hide the routing key from anyway (the address already exposes our
+        // IP). Relay addresses keep their per-host keys for unlinkability.
+        return mDirectAddress.isEmpty()
+                ? "" : mIdentity.mxIdentity() + "@" + mDirectAddress;
+    }
+
+    /**
+     * Every address we can be reached at, direct first.
+     *
+     * Direct leads because it is the cheapest path for a sender - no relay hop -
+     * and senders already race the list and fail over, so a direct address that
+     * dies costs them one timeout before they fall back to a relay.
+     */
     public List<String> myAddresses() {
-        return mPool.contactAddresses();
+        List<String> out = new ArrayList<>();
+        String direct = directAddress();
+        if (!direct.isEmpty()) {
+            out.add(direct);
+        }
+        out.addAll(mPool.contactAddresses());
+        return out;
     }
 
     /**

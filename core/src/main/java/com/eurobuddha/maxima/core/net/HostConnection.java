@@ -162,6 +162,48 @@ public final class HostConnection implements Closeable {
     }
 
     /**
+     * Decrypt and verify a TXPOW carrier addressed to us, from ANY inbound path
+     * - a relay's pump loop or the direct endpoint. Factored out so the two can
+     * never drift: a divergence here is a signature check that only runs on one
+     * of them.
+     *
+     * @param zUnit          the carrier
+     * @param zExpectedKey   the routing key it must be addressed to (a relay's
+     *                       per-host key, or our identity key on a direct link)
+     * @param zPrivateDer    the matching private key, DER-encoded
+     * @return an ack status; on OK the out-param carries the Inbound
+     */
+    public static int unwrap(MaxTxPoW zUnit, byte[] zExpectedKey, byte[] zPrivateDer,
+                             Inbound[] zOut) {
+        try {
+            if (!zUnit.checkValidTxPoW()) {
+                return Frame.RESPONSE_WRONGHASH;
+            }
+            if (!new MiniData(zExpectedKey).equals(zUnit.mMaxima.mTo)) {
+                // Not for us. On a direct endpoint this means someone tried to
+                // use a phone as a relay - refused, we forward for nobody.
+                return Frame.RESPONSE_UNKNOWN;
+            }
+            CryptoPackage cp = CryptoPackage.fromBytes(zUnit.mMaxima.mData.getBytes());
+            byte[] plain = MaximaCrypto.decrypt(cp, zPrivateDer);
+            MaximaInternal mi = MaximaInternal.fromBytes(plain);
+            boolean sigOk = MaximaCrypto.verify(
+                    mi.mFrom.getBytes(), mi.mData.getBytes(), mi.mSignature.getBytes());
+            MaximaMessage mm = MaximaMessage.fromBytes(mi.mData.getBytes());
+            // The receiver's bind check: the signer must be the claimed sender.
+            if (!mm.mFrom.equals(mi.mFrom) || !sigOk) {
+                return Frame.RESPONSE_FAIL;
+            }
+            MiniData msgid = new MiniData(
+                    com.eurobuddha.maxima.core.crypto.Hashes.sha3(mi.mData.getBytes()));
+            zOut[0] = new Inbound(mm, msgid, true);
+            return Frame.RESPONSE_OK;
+        } catch (Exception e) {
+            return Frame.RESPONSE_FAIL;
+        }
+    }
+
+    /**
      * Block until a relayed Maxima message arrives for us, or the budget runs
      * out. Chain traffic and control frames are consumed and ignored.
      *
