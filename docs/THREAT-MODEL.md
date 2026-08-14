@@ -48,6 +48,16 @@ talks to whom (the routing key is plaintext), never the content. Mitigated by
 multi-homing and per-relay key rotation; not eliminated. Inherent to any relay
 model.
 
+**Probe confused-deputy on a shared/CGNAT egress IP.** The probe service dials
+only the SOURCE IP of the asking connection, never a caller-named host, so it
+cannot scan arbitrary targets. But where many users share one carrier-grade-NAT
+public IP, a caller can make the relay dial high ports on that *shared* IP — its
+NAT-neighbours. The leaked information is only "a Maxima endpoint answers here,"
+and the probe rate limit is keyed on that source IP (not the caller's
+free-to-mint identity), so it is throttled to 12/min per egress IP. A low-rate
+port oracle against your own CGNAT neighbourhood remains; accepted as inherent
+to the shared-IP model.
+
 **No proof-of-work verification.** Deliberate — verifying classic's nominal PoW
 would exclude phones and buys nothing, since nobody else verifies it either.
 Admission control (rate limits, quotas, caps) is the substitute, and is real.

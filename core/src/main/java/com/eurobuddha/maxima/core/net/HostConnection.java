@@ -179,6 +179,13 @@ public final class HostConnection implements Closeable {
             if (!zUnit.checkValidTxPoW()) {
                 return Frame.RESPONSE_WRONGHASH;
             }
+            // One size ceiling for BOTH inbound paths. The relay checked this
+            // separately; folding it here means the direct endpoint cannot
+            // silently accept a larger package than the relay would.
+            if (Codec.serialise(zUnit.mMaxima).length
+                    > com.eurobuddha.maxima.core.msg.MaximaPackage.MAX_SIZE) {
+                return Frame.RESPONSE_TOOBIG;
+            }
             if (!new MiniData(zExpectedKey).equals(zUnit.mMaxima.mTo)) {
                 // Not for us. On a direct endpoint this means someone tried to
                 // use a phone as a relay - refused, we forward for nobody.
@@ -237,40 +244,17 @@ public final class HostConnection implements Closeable {
 
             MaxTxPoW unit = MaxTxPoW.fromBytes(payload);
 
-            if (!unit.checkValidTxPoW()) {
-                ack(Frame.RESPONSE_WRONGHASH);
-                continue;
+            // ONE unwrap for both inbound paths. This used to be an inline copy
+            // that could drift from the direct endpoint's; now there is a single
+            // verification, addressed to our per-host key and decrypted with the
+            // per-host private key.
+            Inbound[] holder = new Inbound[1];
+            int status = unwrap(unit, routingKey(),
+                    mPerHostKey.getPrivate().getEncoded(), holder);
+            ack(status);
+            if (status == Frame.RESPONSE_OK && holder[0] != null) {
+                return holder[0];
             }
-            // Is it actually addressed to us?
-            if (!new MiniData(routingKey()).equals(unit.mMaxima.mTo)) {
-                ack(Frame.RESPONSE_UNKNOWN);
-                continue;
-            }
-
-            CryptoPackage cp = CryptoPackage.fromBytes(unit.mMaxima.mData.getBytes());
-            byte[] plain = MaximaCrypto.decrypt(cp, mPerHostKey.getPrivate().getEncoded());
-
-            MaximaInternal mi = MaximaInternal.fromBytes(plain);
-            boolean sigOk = MaximaCrypto.verify(
-                    mi.mFrom.getBytes(), mi.mData.getBytes(), mi.mSignature.getBytes());
-
-            MaximaMessage mm = MaximaMessage.fromBytes(mi.mData.getBytes());
-
-            // The receiver's bind check: the signer must be the claimed sender.
-            if (!mm.mFrom.equals(mi.mFrom)) {
-                ack(Frame.RESPONSE_FAIL);
-                continue;
-            }
-            if (!sigOk) {
-                ack(Frame.RESPONSE_FAIL);
-                continue;
-            }
-
-            ack(Frame.RESPONSE_OK);
-
-            MiniData msgid = new MiniData(
-                    com.eurobuddha.maxima.core.crypto.Hashes.sha3(mi.mData.getBytes()));
-            return new Inbound(mm, msgid, true);
         }
         return null;
     }

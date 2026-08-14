@@ -63,10 +63,15 @@ public final class Probe {
      *
      * @return true if the target answered as a Maxima endpoint
      */
-    public static boolean dial(String zHost, int zPort, int zTimeoutMs, String zVersion) {
+    public static boolean dial(String zHost, int zPort, int zConnectMs, int zReadMs,
+                               String zVersion) {
         try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(zHost, zPort), zTimeoutMs);
-            s.setSoTimeout(zTimeoutMs);
+            // Separate connect and read budgets, so a target that completes the
+            // TCP handshake and then goes silent blocks for connect+read, not
+            // 2x a single figure. The read budget is the shorter one - a real
+            // endpoint greets immediately.
+            s.connect(new InetSocketAddress(zHost, zPort), zConnectMs);
+            s.setSoTimeout(zReadMs);
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
 

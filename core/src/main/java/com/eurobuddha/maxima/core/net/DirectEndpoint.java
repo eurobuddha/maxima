@@ -12,6 +12,7 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Tier 2: accept a connection DIRECTLY, when this device has a public port.
@@ -53,7 +54,7 @@ public final class DirectEndpoint {
     private volatile int mPort;
     private final AtomicBoolean mRunning = new AtomicBoolean();
     private final Map<String, Integer> mPerSource = new ConcurrentHashMap<>();
-    private volatile int mConns;
+    private final AtomicInteger mConns = new AtomicInteger();
 
     public DirectEndpoint(MaximaIdentity zIdentity, String zVersion, Sink zSink) {
         mIdentity = zIdentity;
@@ -115,7 +116,7 @@ public final class DirectEndpoint {
                 String src = s.getInetAddress() == null
                         ? "?" : s.getInetAddress().getHostAddress();
 
-                if (mConns >= MAX_CONNECTIONS) {
+                if (mConns.get() >= MAX_CONNECTIONS) {
                     close(s);
                     continue;
                 }
@@ -125,12 +126,18 @@ public final class DirectEndpoint {
                     close(s);
                     continue;
                 }
-                synchronized (this) {
-                    mConns++;
+                mConns.incrementAndGet();
+                try {
+                    Thread t = new Thread(() -> serve(s, src), "maxima-direct-conn");
+                    t.setDaemon(true);
+                    t.start();
+                } catch (Throwable startFailed) {
+                    // If the thread cannot start (OOM / limit), reverse BOTH
+                    // counters we just took, or the endpoint slowly wedges shut.
+                    mConns.decrementAndGet();
+                    mPerSource.computeIfPresent(src, (k, v) -> v <= 1 ? null : v - 1);
+                    close(s);
                 }
-                Thread t = new Thread(() -> serve(s, src), "maxima-direct-conn");
-                t.setDaemon(true);
-                t.start();
             } catch (Exception e) {
                 if (!mRunning.get()) {
                     return;
@@ -199,9 +206,7 @@ public final class DirectEndpoint {
             // Normal on disconnect.
         } finally {
             mPerSource.computeIfPresent(zSource, (k, v) -> v <= 1 ? null : v - 1);
-            synchronized (this) {
-                mConns--;
-            }
+            mConns.decrementAndGet();
             close(zSocket);
         }
     }

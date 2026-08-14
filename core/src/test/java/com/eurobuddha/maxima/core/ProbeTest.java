@@ -37,7 +37,7 @@ public class ProbeTest {
         MaximaIdentity id = idFrom(81);
         DirectEndpoint ep = new DirectEndpoint(id, "1.0.48", inb -> { });
         int port = ep.start(0);
-        if (Probe.dial("127.0.0.1", port, 3000, "1.0.48")) {
+        if (Probe.dial("127.0.0.1", port, 3000, 3000, "1.0.48")) {
             ok("dial to a live DirectEndpoint reports reachable");
         } else {
             bad("dial to a live endpoint reported unreachable");
@@ -45,7 +45,7 @@ public class ProbeTest {
         ep.stop();
 
         // Nothing listening now -> not reachable (connection refused).
-        if (!Probe.dial("127.0.0.1", port, 1500, "1.0.48")) {
+        if (!Probe.dial("127.0.0.1", port, 1500, 1500, "1.0.48")) {
             ok("dial to a closed port reports NOT reachable");
         } else {
             bad("dial to a closed port claimed reachable");
@@ -64,7 +64,7 @@ public class ProbeTest {
         });
         t.setDaemon(true);
         t.start();
-        if (!Probe.dial("127.0.0.1", silent.getLocalPort(), 1500, "1.0.48")) {
+        if (!Probe.dial("127.0.0.1", silent.getLocalPort(), 1500, 1500, "1.0.48")) {
             ok("an open port that does not greet is NOT counted reachable");
         } else {
             bad("a silent open port was counted reachable");

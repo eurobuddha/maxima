@@ -101,7 +101,8 @@ public final class RelayServer {
     /** Probes cost us an outbound dial, so they get a tighter, separate cap. */
     private final Map<String, RateLimit> mProbeLimits = new ConcurrentHashMap<>();
     private static final int MAX_PROBES_PER_MINUTE = 12;
-    private static final int PROBE_TIMEOUT_MS = 4000;
+    private static final int PROBE_CONNECT_MS = 4000;
+    private static final int PROBE_READ_MS = 2000;
 
     private static final class RateLimit {
         long windowStart = System.currentTimeMillis();
@@ -468,17 +469,22 @@ public final class RelayServer {
         int port = com.eurobuddha.maxima.core.net.Probe.portOf(zMsg.mData.getBytes());
         String target = zConn.sourceIp;
 
+        // Rate limit keyed on the SOURCE IP, not the caller's identity key.
+        // Identity keypairs are free to mint and PoW is never verified, so a
+        // per-identity cap is defeated by rotating mFrom on every request; the
+        // source IP of an established TCP connection cannot be rotated, and it
+        // is also exactly what we are about to spend an outbound dial against.
         boolean bad = port < com.eurobuddha.maxima.core.net.Probe.MIN_PORT
                 || port > 65535
                 || !com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(target)
-                || !allowProbe(zMsg.mFrom.to0xString());
+                || !allowProbe(target);
         if (bad) {
             zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
             return;
         }
 
         boolean reachable = com.eurobuddha.maxima.core.net.Probe.dial(
-                target, port, PROBE_TIMEOUT_MS, mVersion);
+                target, port, PROBE_CONNECT_MS, PROBE_READ_MS, mVersion);
         log("probe " + target + ":" + port + " -> " + (reachable ? "reachable" : "no"));
         zConn.write(Frame.ack(reachable ? Frame.RESPONSE_OK : Frame.RESPONSE_FAIL));
     }
