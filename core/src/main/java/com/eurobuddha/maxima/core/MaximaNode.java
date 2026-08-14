@@ -56,6 +56,8 @@ public final class MaximaNode {
     private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
     /** Proven public ip:port, or empty. Set only after external proof. */
     private volatile String mDirectAddress = "";
+    /** Ephemeral LAN-discovered addresses: contact identity (norm) -> Mx@lanIp:port. */
+    private final Map<String, String> mLanPeers = new ConcurrentHashMap<>();
 
     /**
      * Durable storage. Defaults to memory-only so nothing breaks if a host
@@ -839,7 +841,12 @@ public final class MaximaNode {
     public MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData)
             throws Exception {
         Exception last = null;
-        for (String addr : zContact.addresses) {
+        // A LAN-discovered address is tried FIRST: it is on the same network,
+        // reaches the peer's direct endpoint with no relay, and works even with
+        // the internet down. If it fails (they left the LAN) we fall straight
+        // through to the relay addresses, so it is a pure bonus, never a
+        // dependency.
+        for (String addr : sendOrder(zContact)) {
             try {
                 MaximaSender.Result r = sendRaw(addr, zApplication, zData);
                 if (r.isOk()) {
@@ -853,6 +860,47 @@ public final class MaximaNode {
             throw last;
         }
         throw new IllegalStateException("no reachable address for " + zContact.name);
+    }
+
+    /** LAN address (if any) first, then the contact's known addresses. */
+    private List<String> sendOrder(Contact zContact) {
+        List<String> out = new ArrayList<>();
+        String lan = mLanPeers.get(Keys.norm(zContact.publicKey));
+        if (lan != null) {
+            out.add(lan);
+        }
+        out.addAll(zContact.addresses);
+        return out;
+    }
+
+    /**
+     * Note a peer just discovered on the local network (Tier 2 LAN, phase E).
+     *
+     * The address is sealed to the peer's IDENTITY key - exactly what their
+     * direct endpoint decrypts with - so it is built the same way our own direct
+     * address is. Kept OUT of the persisted contact: a LAN address is true only
+     * while both devices are on that network, so it is ephemeral by design.
+     *
+     * @param zPeerIdentityHex the peer's identity public key (0x hex)
+     * @param zLanHostPort     e.g. 192.168.1.42:9601
+     */
+    public void noteLanPeer(String zPeerIdentityHex, String zLanHostPort) {
+        Contact c = contact(zPeerIdentityHex);
+        if (c == null) {
+            return;   // only peers we already know as contacts
+        }
+        String mx = com.eurobuddha.maxima.core.identity.MxAddress.make(
+                new MiniData(zPeerIdentityHex));
+        mLanPeers.put(Keys.norm(zPeerIdentityHex), mx + "@" + zLanHostPort);
+    }
+
+    public void forgetLanPeer(String zPeerIdentityHex) {
+        mLanPeers.remove(Keys.norm(zPeerIdentityHex));
+    }
+
+    /** The LAN address currently known for a contact, or null. */
+    public String lanAddressFor(String zPeerIdentityHex) {
+        return mLanPeers.get(Keys.norm(zPeerIdentityHex));
     }
 
     /** Send an application message to an address, no reliability wrapper. */

@@ -158,11 +158,13 @@ public final class DirectReachability {
             mMapping = null;
         }
 
-        // 1. a local listener (idempotent - startDirect returns the same port)
-        mListenPort = mNode.startDirect(0);
+        // 1. the direct listener is owned by the service (it also serves LAN
+        //    peers, so it runs on Wi-Fi regardless of the public-mapping gate).
+        //    We only map a public port for it - we never start or stop it.
+        mListenPort = mNode.directPort();
         if (mListenPort <= 0) {
             mState = State.OFF;
-            mDetail = "could not open a local port";
+            mDetail = "listener not running";
             return;
         }
 
@@ -291,7 +293,8 @@ public final class DirectReachability {
         }
         mPublicAddress = "";
         mNode.setDirectAddress("");
-        mNode.stopDirect();
+        // Deliberately NOT stopDirect(): the listener is the service's to own,
+        // and LAN discovery still needs it. We only retract the PUBLIC address.
         mState = State.OFF;
         mDetail = zWhy;
         // Only bother contacts if we actually had an address to retract.

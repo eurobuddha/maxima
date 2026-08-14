@@ -52,6 +52,7 @@ public final class MaximaService extends Service {
     private static volatile AndroidContribution sPolicy;
     private static volatile com.eurobuddha.maxima.core.chat.ChatEngine sChat;
     private static volatile com.eurobuddha.maxima.app.direct.DirectReachability sDirect;
+    private static volatile com.eurobuddha.maxima.app.direct.LanDiscovery sLan;
     private final AtomicBoolean mPumping = new AtomicBoolean(false);
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
@@ -169,6 +170,7 @@ public final class MaximaService extends Service {
         // Tier 2 opportunistic reachability. Driven from the heartbeat below.
         sDirect = new com.eurobuddha.maxima.app.direct.DirectReachability(
                 this, sNode, sPolicy);
+        sLan = new com.eurobuddha.maxima.app.direct.LanDiscovery(this, sNode);
 
         EventLog.add("identity " + id.mxIdentity().substring(0, 20) + "...");
         EventLog.add("contributing: " + sPolicy.describe().split("\\n")[0]);
@@ -240,8 +242,19 @@ public final class MaximaService extends Service {
                         if (sChat != null) {
                             sChat.flushState();
                         }
-                        // Tier 2: map -> probe -> advertise / renew. Blocks, so
-                        // it belongs here on the pump thread, never on the UI.
+                        // Tier 2 listener + LAN discovery under a LIGHT gate:
+                        // contribution on and unmetered Wi-Fi. This runs the
+                        // direct listener (which serves LAN peers directly and
+                        // is the target for a public mapping) without requiring
+                        // charging - that stricter gate is only for the heavy
+                        // map/probe inside DirectReachability.
+                        try {
+                            manageLanAndListener();
+                        } catch (Exception e) {
+                            Log.w(TAG, "lan/listener: " + e);
+                        }
+                        // Tier 2: map -> probe -> advertise / renew. Non-blocking
+                        // (runs on its own state thread).
                         if (sDirect != null) {
                             try {
                                 sDirect.tick();
@@ -320,6 +333,10 @@ public final class MaximaService extends Service {
             }
         } catch (Exception ignored) {
         }
+        com.eurobuddha.maxima.app.direct.LanDiscovery lan = sLan;
+        if (lan != null) {
+            lan.stop();
+        }
         com.eurobuddha.maxima.app.direct.DirectReachability d = sDirect;
         if (d != null) {
             d.shutdown();
@@ -366,6 +383,39 @@ public final class MaximaService extends Service {
                 nm.notify(NOTIF_ID, buildNotification(zText));
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Own the direct listener and LAN discovery under the light Wi-Fi gate.
+     *
+     * On unmetered Wi-Fi with contribution enabled, the listener runs (so LAN
+     * peers can reach us and a public mapping has something to point at) and we
+     * advertise/discover on the local segment. Off that gate, both stop - a
+     * phone on cellular has no LAN peers and its listener would be unreachable.
+     */
+    private void manageLanAndListener() {
+        boolean gate = AndroidContribution.isEnabled(this) && sPolicy != null
+                && sPolicy.isUnmetered();
+        MaximaNode n = sNode;
+        if (n == null) {
+            return;
+        }
+        if (gate) {
+            int port = n.startDirect(0);   // idempotent
+            if (port > 0 && sLan != null) {
+                sLan.start(port);
+            }
+        } else {
+            if (sLan != null) {
+                sLan.stop();
+            }
+            // Only stop the listener if the public path is not advertising.
+            if (sDirect == null
+                    || sDirect.state() != com.eurobuddha.maxima.app.direct
+                            .DirectReachability.State.ADVERTISED) {
+                n.stopDirect();
+            }
         }
     }
 
