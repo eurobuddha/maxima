@@ -29,6 +29,21 @@ application {
 tasks.register('fatJar', Jar) {
     group = 'build'
     description = 'Self-contained runnable jar'
+
+    /*
+     * WITHOUT THIS the task zips whatever core.jar happens to be on disk.
+     * Resolving runtimeClasspath inside a `from { ... }` closure hides the
+     * dependency from Gradle, so :core is never rebuilt and an edit to :core
+     * silently does not reach the artifact - a jar with a NEW version number
+     * and OLD code in it, which is the worst possible failure mode because
+     * every check downstream reports the new version.
+     *
+     * Caught in the wild: a greeting fix was released as 0.1.5, deployed, and
+     * the relay on the wire still sent the old greeting.
+     */
+    dependsOn configurations.runtimeClasspath
+    inputs.files configurations.runtimeClasspath
+
     archiveBaseName = 'maxima-server'
     manifest {
         attributes 'Main-Class': 'com.eurobuddha.maxima.server.Main'

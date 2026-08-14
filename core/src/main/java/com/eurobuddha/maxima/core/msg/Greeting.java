@@ -62,12 +62,29 @@ public final class Greeting implements Streamable {
         return mChain;
     }
 
-    /** A greeting suitable for a comms-only peer: no chain, topBlock -1. */
+    /**
+     * A greeting suitable for a comms-only peer: no chain, topBlock -1.
+     *
+     * {@code host} is OMITTED unless we genuinely know our public address.
+     * A receiver treats extraData.host as an override of the address it dialled
+     * (NIOMessage.java:342-344), so advertising a bind address of "0.0.0.0"
+     * replaces a perfectly good public IP with a useless one - and classic then
+     * rejects the whole host as internal, because its blocklist includes
+     * anything starting "0." (MaximaManager.java:524-533). Measured against a
+     * stock 1.0.46.8 node: it connected, then logged
+     *   "Invalid IP for MAXIMA host ( is internal ) 0.0.0.0:9501"
+     * and refused to use us. Saying nothing is strictly better than saying
+     * something wrong: the client already knows the address it dialled.
+     *
+     * @param zHost our public host, or null/empty/0.0.0.0 to stay silent
+     */
     public static Greeting commsOnly(String zVersion, String zHost, int zPort) {
-        String json = "{\"welcome\":\"Maxima\",\"host\":\"" + zHost
-                + "\",\"port\":\"" + zPort + "\",\"peers\":[]}";
-        Greeting g = new Greeting(zVersion, json, -1);
-        return g;
+        boolean known = zHost != null && !zHost.isEmpty()
+                && !zHost.equals("0.0.0.0") && !zHost.equals("::");
+        String json = "{\"welcome\":\"Maxima\""
+                + (known ? ",\"host\":\"" + zHost + "\"" : "")
+                + ",\"port\":\"" + zPort + "\",\"peers\":[]}";
+        return new Greeting(zVersion, json, -1);
     }
 
     @Override

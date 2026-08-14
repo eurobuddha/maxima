@@ -53,6 +53,15 @@ public final class RelayServer {
     private final Map<Long, Conn> mConns = new ConcurrentHashMap<>();
 
     private final MlsStore mDirectory = new MlsStore();
+
+    /**
+     * Our public address, if the operator told us one.
+     *
+     * Empty means "say nothing in the greeting" - see Greeting.commsOnly. Only
+     * worth setting when the address a client dials is NOT the address it
+     * should keep using, e.g. behind a load balancer.
+     */
+    private volatile String mPublicHost = "";
     private final MlsService mMls = new MlsService(mDirectory);
     private final Mailbox mMailbox = new Mailbox();
 
@@ -103,6 +112,10 @@ public final class RelayServer {
         mIdentity = zIdentity;
         mPort = zPort;
         mVersion = zVersion;
+    }
+
+    public void setPublicHost(String zHost) {
+        mPublicHost = zHost == null ? "" : zHost.trim();
     }
 
     public MlsStore directory() {
@@ -218,7 +231,7 @@ public final class RelayServer {
                 // Reply with ours, then offer ourselves as a directory, exactly
                 // as a classic node does to an incoming peer.
                 zConn.write(Frame.body(Frame.MSG_GREETING,
-                        Greeting.commsOnly(mVersion, "0.0.0.0", mPort)));
+                        Greeting.commsOnly(mVersion, mPublicHost, mPort)));
                 zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL,
                         MaximaCTRLMessage.mls(mIdentity.mxIdentity())));
                 return;

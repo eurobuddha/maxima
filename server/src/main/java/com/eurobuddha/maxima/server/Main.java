@@ -24,7 +24,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.1.4";
+    public static final String VERSION = "0.1.5";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -33,6 +33,7 @@ public final class Main {
     public static void main(String[] args) {
         int port = DEFAULT_PORT;
         String data = System.getProperty("user.home") + "/.maxima";
+        String host = "";
         int rate = DEFAULT_RATE;
         String protocol = DEFAULT_PROTOCOL;
         boolean selftest = false;
@@ -54,6 +55,9 @@ public final class Main {
                     if (port < 1 || port > 65535) {
                         fail("--port must be 1-65535, got " + port);
                     }
+                    break;
+                case "--host":
+                    host = strArg(args, ++i, "--host");
                     break;
                 case "--data":
                     data = strArg(args, ++i, "--data");
@@ -81,7 +85,7 @@ public final class Main {
         }
 
         try {
-            run(port, data, rate, protocol);
+            run(port, data, rate, protocol, host);
         } catch (BindException be) {
             System.err.println();
             System.err.println("ERROR: port " + port + " is already in use.");
@@ -99,7 +103,8 @@ public final class Main {
         }
     }
 
-    private static void run(int port, String data, int rate, String protocol) throws Exception {
+    private static void run(int port, String data, int rate, String protocol, String host)
+            throws Exception {
         Path dir = Paths.get(data);
         Files.createDirectories(dir);
         Path seedFile = dir.resolve("seed.txt");
@@ -145,6 +150,7 @@ public final class Main {
 
         RelayServer relay = new RelayServer(id, port, protocol);
         relay.setRateLimit(rate);
+        relay.setPublicHost(host);
         relay.start();
 
         System.out.println("  listening on 0.0.0.0:" + port);
@@ -175,6 +181,9 @@ public final class Main {
         out.println("OPTIONS");
         out.println("  --port <n>       TCP port to listen on         (default " + DEFAULT_PORT + ")");
         out.println("  --data <dir>     data directory                (default ~/.maxima)");
+        out.println("  --host <ip>      public address to advertise   (default: say nothing,");
+        out.println("                   which is right unless clients reach you at a DIFFERENT");
+        out.println("                   address from the one they should keep using)");
         out.println("  --rate <n>       max messages/min per peer     (default " + DEFAULT_RATE + ")");
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");
