@@ -253,14 +253,17 @@ public class LiveTier1Test {
         long now = System.currentTimeMillis();
         boolean first = d.check(mid, now) == DedupCache.Verdict.ACCEPT;
         boolean dupe = d.check(mid, now) == DedupCache.Verdict.DUPLICATE;
-        boolean stale = d.check("0xBEEF", now - (60L * 60 * 1000)) == DedupCache.Verdict.STALE;
+        // Beyond the 6h freshness window (widened so genuinely-delayed and
+        // clock-skewed mail is not dropped - the msgid cache is the real replay
+        // defence). A day-old timestamp is unambiguously stale.
+        boolean stale = d.check("0xBEEF", now - (24L * 60 * 60 * 1000)) == DedupCache.Verdict.STALE;
         if (first && dupe) {
             ok("second delivery of the same msgid is dropped");
         } else {
             bad("dedup broken");
         }
         if (stale) {
-            ok("an hour-old replay is rejected on freshness");
+            ok("a day-old replay is rejected on freshness");
         } else {
             bad("stale message accepted");
         }

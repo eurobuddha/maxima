@@ -25,6 +25,17 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The IPC surface is guarded by this SIGNATURE-level permission: only an
+         app signed with the same key (the family release key) can send to it.
+         A BroadcastReceiver cannot verify its caller, so without this any
+         installed app could impersonate an approved one and act as the user's
+         identity. We both DEFINE it (so family apps can hold it) and REQUIRE it
+         on the receiver below. -->
+    <permission
+        android:name="com.eurobuddha.maxima.app.permission.USE_MAXIMA"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.eurobuddha.maxima.app.permission.USE_MAXIMA" />
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -83,7 +94,8 @@
              familiar to anything already talking to the node. -->
         <receiver
             android:name=".ipc.MaximaApiReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.eurobuddha.maxima.app.permission.USE_MAXIMA">
             <intent-filter>
                 <action android:name="com.eurobuddha.maxima.app.REGISTER" />
                 <action android:name="com.eurobuddha.maxima.app.SEND" />

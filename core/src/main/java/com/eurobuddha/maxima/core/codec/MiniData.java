@@ -63,8 +63,9 @@ public final class MiniData implements Streamable {
         if (len < 0) {
             throw new IOException("MiniData length negative: " + len);
         }
-        mData = new byte[len];
-        zIn.readFully(mData);
+        // Reads.exact, not new byte[len]: an attacker-declared length must not
+        // become an attacker-controlled allocation. See Reads.
+        mData = Reads.exact(zIn, len);
     }
 
     public static MiniData readFromStream(DataInputStream zIn) throws IOException {

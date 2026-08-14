@@ -24,7 +24,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.1.5";
+    public static final String VERSION = "0.1.6";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -151,6 +151,10 @@ public final class Main {
         RelayServer relay = new RelayServer(id, port, protocol);
         relay.setRateLimit(rate);
         relay.setPublicHost(host);
+        // Durable mailbox under <data>/mailbox, so a restart does not lose the
+        // ciphertext we are holding for offline peers.
+        relay.setStore(new com.eurobuddha.maxima.core.store.FileStore(
+                dir.resolve("relaystore").toFile()));
         relay.start();
 
         System.out.println("  listening on 0.0.0.0:" + port);

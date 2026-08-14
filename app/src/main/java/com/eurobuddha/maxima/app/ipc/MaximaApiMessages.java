@@ -45,7 +45,6 @@ public final class MaximaApiMessages {
     // ---- extras ----
     public static final String EXTRA_PACKAGE = "package";
     public static final String EXTRA_CLASS = "class";
-    public static final String EXTRA_APP_UID = "appuid";
     public static final String EXTRA_REQUEST_ID = "requestid";
 
     /** The Maxima `application` string this app owns. */

@@ -86,9 +86,9 @@ public final class Frame {
         if (len < 0) {
             throw new IOException("Negative frame length: " + len);
         }
-        byte[] body = new byte[len];
-        zIn.readFully(body);
-        return body;
+        // Incremental read: a frame header can claim 256 MB and deliver a few
+        // KB. Allocate with the bytes, not the claim. See Reads.
+        return com.eurobuddha.maxima.core.codec.Reads.exact(zIn, len);
     }
 
     /**

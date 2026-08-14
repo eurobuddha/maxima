@@ -167,12 +167,19 @@ public final class FileStore implements Store {
     /** temp + rename, so an interrupted write cannot leave a half file. */
     private void writeAtomic(File zTarget, List<String> zLines) {
         File tmp = new File(zTarget.getParentFile(), zTarget.getName() + ".tmp");
-        try (BufferedWriter w = new BufferedWriter(new OutputStreamWriter(
-                new FileOutputStream(tmp), StandardCharsets.UTF_8))) {
+        try (FileOutputStream fos = new FileOutputStream(tmp)) {
+            BufferedWriter w = new BufferedWriter(
+                    new OutputStreamWriter(fos, StandardCharsets.UTF_8));
             for (String l : zLines) {
                 w.write(l);
                 w.newLine();
             }
+            w.flush();
+            // force the bytes to disk BEFORE the rename. Rename gives atomicity
+            // of visibility, not durability: on some filesystems a crash right
+            // after rename can expose the new name with unflushed (empty)
+            // contents - the exact data-loss this class exists to prevent.
+            fos.getFD().sync();
         } catch (IOException e) {
             System.err.println("[store] write failed on " + tmp + ": " + e);
             return;

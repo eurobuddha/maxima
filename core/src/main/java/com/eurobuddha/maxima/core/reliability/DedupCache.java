@@ -19,7 +19,18 @@ import java.util.Map;
 public final class DedupCache {
 
     /** Reject anything older or more future-dated than this. */
-    public static final long DEFAULT_WINDOW_MS = 10L * 60 * 1000;
+    /**
+     * Freshness window, widened from 10 minutes to 6 hours.
+     *
+     * The msgid cache is the real replay defence; the timestamp window only
+     * bounds how long a captured message stays replayable. Ten minutes was too
+     * tight - it silently dropped a legitimately store-and-forwarded message,
+     * and any message from a phone with more than ten minutes of clock skew
+     * (common). Six hours keeps replay exposure short while not discarding
+     * real, merely-delayed, mail. Explicitly-fetched mailbox items bypass this
+     * entirely via {@link #seenBefore}.
+     */
+    public static final long DEFAULT_WINDOW_MS = 6L * 60 * 60 * 1000;
 
     /** Cap the cache so a flood cannot exhaust memory. */
     public static final int DEFAULT_MAX_ENTRIES = 20000;

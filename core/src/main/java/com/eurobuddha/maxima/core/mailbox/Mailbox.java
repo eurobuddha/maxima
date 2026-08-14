@@ -30,6 +30,16 @@ public final class Mailbox {
     public static final int DEFAULT_MAX_PER_PEER = 200;
     public static final long DEFAULT_MAX_BYTES_PER_PEER = 8L * 1024 * 1024;
 
+    /**
+     * GLOBAL caps across ALL boxes. Per-peer quotas alone do not bound the
+     * mailbox: the recipient key is attacker-chosen, so a flood to a million
+     * distinct random keys allocates a million boxes and OOMs a small relay
+     * long before any single box fills. These caps, plus LRU eviction of whole
+     * boxes, make total memory bounded regardless of how many keys are used.
+     */
+    public static final int DEFAULT_MAX_BOXES = 10000;
+    public static final long DEFAULT_MAX_TOTAL_BYTES = 256L * 1024 * 1024;
+
     public static final class Item {
         public final String id;
         public final String recipientKey;
@@ -55,21 +65,87 @@ public final class Mailbox {
         final List<Item> items = new ArrayList<>();
         long bytes;
         long nextSeq = 1;
+        /** For LRU eviction under the global cap. */
+        long lastActivity = System.currentTimeMillis();
     }
 
     private final Map<String, Box> mBoxes = new ConcurrentHashMap<>();
+
+    /**
+     * Optional durable backing.
+     *
+     * A relay runs under {@code Restart=always}; without this, every held
+     * ciphertext is lost on the next restart, which is precisely the failure
+     * this class exists to fix. One record per item, keyed recipient|sequence,
+     * value = storedAt|hex(ciphertext). Deletes on acknowledge/expire.
+     */
+    private com.eurobuddha.maxima.core.store.Store mStore =
+            com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY;
+    private static final String C_MAIL = "mailbox";
+
     private final long mTtlMs;
     private final int mMaxPerPeer;
     private final long mMaxBytesPerPeer;
+    private final int mMaxBoxes;
+    private final long mMaxTotalBytes;
+    private long mTotalBytes;
 
     public Mailbox() {
         this(DEFAULT_TTL_MS, DEFAULT_MAX_PER_PEER, DEFAULT_MAX_BYTES_PER_PEER);
     }
 
     public Mailbox(long zTtlMs, int zMaxPerPeer, long zMaxBytesPerPeer) {
+        this(zTtlMs, zMaxPerPeer, zMaxBytesPerPeer,
+                DEFAULT_MAX_BOXES, DEFAULT_MAX_TOTAL_BYTES);
+    }
+
+    public Mailbox(long zTtlMs, int zMaxPerPeer, long zMaxBytesPerPeer,
+                   int zMaxBoxes, long zMaxTotalBytes) {
         mTtlMs = zTtlMs;
         mMaxPerPeer = zMaxPerPeer;
         mMaxBytesPerPeer = zMaxBytesPerPeer;
+        mMaxBoxes = zMaxBoxes;
+        mMaxTotalBytes = zMaxTotalBytes;
+    }
+
+    /** Attach durable storage and reload whatever is held. Call before use. */
+    public synchronized void setStore(com.eurobuddha.maxima.core.store.Store zStore) {
+        mStore = zStore == null
+                ? com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY : zStore;
+        load();
+    }
+
+    private void load() {
+        for (Map.Entry<String, String> e : mStore.all(C_MAIL).entrySet()) {
+            try {
+                // key = RECIPIENT|SEQ ; value = storedAt|hex(ciphertext)
+                String[] k = e.getKey().split("\\|", 2);
+                String[] v = e.getValue().split("\\|", 2);
+                if (k.length != 2 || v.length != 2) {
+                    continue;
+                }
+                String recipient = k[0];
+                long seq = Long.parseLong(k[1]);
+                long storedAt = Long.parseLong(v[0]);
+                if (System.currentTimeMillis() - storedAt > mTtlMs) {
+                    mStore.remove(C_MAIL, e.getKey());
+                    continue;
+                }
+                byte[] ct = new com.eurobuddha.maxima.core.codec.MiniData(v[1]).getBytes();
+                Box box = mBoxes.computeIfAbsent(recipient, x -> new Box());
+                box.items.add(new Item(
+                        new MiniData(Hashes.sha3(ct)).to0xString(), recipient, ct, seq));
+                box.bytes += ct.length;
+                box.nextSeq = Math.max(box.nextSeq, seq + 1);
+                mTotalBytes += ct.length;
+            } catch (Exception ex) {
+                System.err.println("[mailbox] bad record " + e.getKey() + ": " + ex);
+            }
+        }
+    }
+
+    private String recKey(String zRecipient, long zSeq) {
+        return zRecipient + "|" + zSeq;
     }
 
     /**
@@ -79,8 +155,28 @@ public final class Mailbox {
      * - a sender retrying does not fill the box with copies.
      */
     public synchronized Result store(String zRecipientKey, byte[] zCiphertext) {
-        Box box = mBoxes.computeIfAbsent(norm(zRecipientKey), k -> new Box());
+        String key = norm(zRecipientKey);
+
+        // Enforce the GLOBAL caps before allocating a new box. A brand-new key
+        // that would push us over either global limit is refused rather than
+        // evicting a real recipient's mail for a stranger's flood; an existing
+        // box makes room by evicting the least-recently-used OTHER boxes.
+        boolean isNew = !mBoxes.containsKey(key);
+        if (isNew && mBoxes.size() >= mMaxBoxes) {
+            if (!evictLruUnless(key)) {
+                return Result.QUOTA_COUNT;
+            }
+        }
+        if (mTotalBytes + zCiphertext.length > mMaxTotalBytes) {
+            evictUntilFits(zCiphertext.length, key);
+            if (mTotalBytes + zCiphertext.length > mMaxTotalBytes) {
+                return Result.QUOTA_BYTES;
+            }
+        }
+
+        Box box = mBoxes.computeIfAbsent(key, k -> new Box());
         expire(box);
+        box.lastActivity = System.currentTimeMillis();
 
         String id = new MiniData(Hashes.sha3(zCiphertext)).to0xString();
         for (Item i : box.items) {
@@ -94,9 +190,50 @@ public final class Mailbox {
         if (box.bytes + zCiphertext.length > mMaxBytesPerPeer) {
             return Result.QUOTA_BYTES;
         }
-        box.items.add(new Item(id, norm(zRecipientKey), zCiphertext, box.nextSeq++));
+        Item item = new Item(id, key, zCiphertext, box.nextSeq++);
+        box.items.add(item);
         box.bytes += zCiphertext.length;
+        mTotalBytes += zCiphertext.length;
+        mStore.put(C_MAIL, recKey(key, item.sequence),
+                item.storedAt + "|" + new MiniData(zCiphertext).to0xString());
         return Result.STORED;
+    }
+
+    /** Drop the single least-recently-used box other than zKeep. */
+    private boolean evictLruUnless(String zKeep) {
+        String victim = null;
+        long oldest = Long.MAX_VALUE;
+        for (Map.Entry<String, Box> e : mBoxes.entrySet()) {
+            if (e.getKey().equals(zKeep)) {
+                continue;
+            }
+            if (e.getValue().lastActivity < oldest) {
+                oldest = e.getValue().lastActivity;
+                victim = e.getKey();
+            }
+        }
+        if (victim == null) {
+            return false;
+        }
+        Box b = mBoxes.remove(victim);
+        if (b != null) {
+            mTotalBytes -= b.bytes;
+            // Purge the durable copy too, or an evicted box reloads on restart
+            // and re-inflates past the cap.
+            for (Item i : b.items) {
+                mStore.remove(C_MAIL, recKey(victim, i.sequence));
+            }
+        }
+        return true;
+    }
+
+    /** Evict LRU boxes until zNeed bytes will fit under the global cap. */
+    private void evictUntilFits(int zNeed, String zKeep) {
+        while (mTotalBytes + zNeed > mMaxTotalBytes && mBoxes.size() > 0) {
+            if (!evictLruUnless(zKeep)) {
+                return;
+            }
+        }
     }
 
     /**
@@ -131,13 +268,21 @@ public final class Mailbox {
             return 0;
         }
         int before = box.items.size();
+        String rk = norm(zRecipientKey);
         box.items.removeIf(i -> {
             if (i.sequence <= zUpToSequence) {
                 box.bytes -= i.ciphertext.length;
+                mTotalBytes -= i.ciphertext.length;
+                mStore.remove(C_MAIL, recKey(rk, i.sequence));
                 return true;
             }
             return false;
         });
+        // An emptied box is dropped so acknowledged recipients do not count
+        // toward the global box cap forever.
+        if (box.items.isEmpty()) {
+            mBoxes.remove(norm(zRecipientKey), box);
+        }
         return before - box.items.size();
     }
 
@@ -171,10 +316,21 @@ public final class Mailbox {
         zBox.items.removeIf(i -> {
             if (now - i.storedAt > mTtlMs) {
                 zBox.bytes -= i.ciphertext.length;
+                mTotalBytes -= i.ciphertext.length;
+                mStore.remove(C_MAIL, recKey(i.recipientKey, i.sequence));
                 return true;
             }
             return false;
         });
+    }
+
+    /** Bytes held across every box. Bounded by the global cap. */
+    public synchronized long totalBytes() {
+        return mTotalBytes;
+    }
+
+    public synchronized int boxCount() {
+        return mBoxes.size();
     }
 
     private static String norm(String zKey) {

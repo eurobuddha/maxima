@@ -41,6 +41,26 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
             return;
         }
 
+        // A BroadcastReceiver gets NO trustworthy sender identity, so the caller
+        // hands us its own package name and we cannot, at this layer, prove the
+        // sender is who it claims. Two things close that gap:
+        //
+        //  1. The receiver is guarded by a SIGNATURE-level permission in the
+        //     manifest, so only an app signed with OUR key can send here at all.
+        //  2. We additionally require the CLAIMED package to be installed and
+        //     signed by the same certificate as us. A claim naming a non-family
+        //     app is rejected outright.
+        //
+        // Within the family (all apps share one release key) this reduces the
+        // residual to one family app impersonating another - a trust boundary we
+        // already accept. Opening the surface to arbitrary third-party apps
+        // later needs a bound Service reading Binder.getCallingUid(); noted in
+        // the IPC design doc.
+        if (!sameSignature(context, pkg)) {
+            Log.w(TAG, "rejecting IPC: " + pkg + " is not signed by our key");
+            return;
+        }
+
         switch (action) {
             case MaximaApiMessages.ACTION_REGISTER:
                 handleRegister(context, pkg, cls, reqId);
@@ -110,6 +130,14 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
             ctx.sendBroadcast(r);
             return;
         }
+        // The transport's own subsystems are off limits to external callers -
+        // otherwise an approved app could forge contacts, chat or MLS as the user.
+        if (isReserved(application)) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR,
+                    "application string is reserved by the transport");
+            ctx.sendBroadcast(r);
+            return;
+        }
         // Namespacing: an app may only send on application strings it owns.
         if (!ownsApplication(ctx, pkg, application)) {
             r.putExtra(MaximaApiMessages.EXTRA_ERROR,
@@ -148,10 +176,17 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         String application = intent.getStringExtra(MaximaApiMessages.EXTRA_APPLICATION);
         if (application == null || application.isEmpty()) {
             r.putExtra(MaximaApiMessages.EXTRA_ERROR, "missing application");
+        } else if (isReserved(application)) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR,
+                    "application string is reserved by the transport");
         } else if (!isApproved(ctx, pkg)) {
             r.putExtra(MaximaApiMessages.EXTRA_ERROR, "not approved");
+        } else if (!claimApplication(ctx, pkg, application)) {
+            // First claim wins and is permanent; a later app cannot steal a
+            // string another already owns and intercept its inbound traffic.
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR,
+                    "application string already claimed by another app");
         } else {
-            claimApplication(ctx, pkg, application);
             r.putExtra(MaximaApiMessages.EXTRA_RESULT, "subscribed");
         }
         ctx.sendBroadcast(r);
@@ -246,6 +281,42 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         return new HashSet<>(prefs(ctx).getStringSet(APPROVED, new HashSet<>()));
     }
 
+    /**
+     * Is zPkg installed AND signed by the same certificate as us?
+     *
+     * checkSignatures is the one call that works back to minSdk 28 and answers
+     * exactly the question that matters: is this a member of our app family.
+     */
+    private boolean sameSignature(Context ctx, String zPkg) {
+        if (zPkg.equals(ctx.getPackageName())) {
+            return true;
+        }
+        try {
+            return ctx.getPackageManager().checkSignatures(ctx.getPackageName(), zPkg)
+                    == android.content.pm.PackageManager.SIGNATURE_MATCH;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Application strings the transport OWNS. An external app may never send or
+     * subscribe on these: they are built from the node's own identity, so
+     * letting a client use them would let it forge contact introductions, chat
+     * messages or MLS entries AS THE USER.
+     */
+    static boolean isReserved(String zApplication) {
+        if (zApplication == null) {
+            return true;
+        }
+        String a = zApplication.trim();
+        return a.equals(com.eurobuddha.maxima.core.contacts.ContactCtrl.APPLICATION)
+                || a.equals(com.eurobuddha.maxima.core.chat.ChatMessage.APPLICATION)
+                || a.equals(com.eurobuddha.maxima.core.rpc.RpcEnvelope.APPLICATION)
+                || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_SET)
+                || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_GET);
+    }
+
     // ---------------------------------------------------------------
 
     private byte[] readPayload(Context ctx, Intent intent) {
@@ -299,8 +370,14 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         prefs(ctx).edit().putStringSet(APPROVED, s).apply();
     }
 
-    private static void claimApplication(Context ctx, String pkg, String application) {
+    /** @return false if another app already owns the string. */
+    private static boolean claimApplication(Context ctx, String pkg, String application) {
+        String owner = prefs(ctx).getString("app:" + application, null);
+        if (owner != null && !owner.equals(pkg)) {
+            return false;
+        }
         prefs(ctx).edit().putString("app:" + application, pkg).apply();
+        return true;
     }
 
     private static boolean ownsApplication(Context ctx, String pkg, String application) {
