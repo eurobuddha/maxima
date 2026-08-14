@@ -20,6 +20,12 @@ public class ChatTest {
     static void ok(String m) { pass++; System.out.println("  ok  " + m); }
     static void bad(String m) { fail++; System.out.println("  XX  " + m); }
 
+    // The read mark has millisecond resolution; real read/receive events are
+    // never in the same ms, so the test must not compress them below it.
+    static void sleepMs(long m) {
+        try { Thread.sleep(m); } catch (InterruptedException ignored) { }
+    }
+
     /** A signed-and-verified inbound message, minus the transport. */
     static com.eurobuddha.maxima.core.msg.MaximaMessage inbound(
             String zFrom, String zTo, String zBody) {
@@ -255,6 +261,7 @@ public class ChatTest {
 
         // markRead must clear the badge even with read receipts OFF - telling
         // them is a privacy choice, our own badge is not.
+        sleepMs(3);
         u1.markRead(them);
         if (u1.unread(them) == 0) {
             ok("markRead clears the badge with read receipts disabled");
@@ -262,6 +269,7 @@ public class ChatTest {
             bad("markRead did not clear the badge: " + u1.unread(them));
         }
 
+        sleepMs(3);
         u1.onInbound(inbound(them, id.publicKeyHex(),
                 ChatMessage.text("0xU3", "after reading").encode()));
         if (u1.unread(them) == 1) {
