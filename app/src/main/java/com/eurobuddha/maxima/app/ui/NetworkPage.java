@@ -34,6 +34,7 @@ public final class NetworkPage implements Page {
     private final LinearLayout mStats;
     private final LinearLayout mHosts;
     private final LinearLayout mContrib;
+    private final LinearLayout mDirect;
     private final TextView mMls;
     private final TextView mContribution;
     private final TextView mLog;
@@ -46,6 +47,7 @@ public final class NetworkPage implements Page {
         mStats = zView.findViewById(R.id.stats_container);
         mHosts = zView.findViewById(R.id.hosts_container);
         mContrib = zView.findViewById(R.id.contrib_container);
+        mDirect = zView.findViewById(R.id.direct_container);
         mMls = zView.findViewById(R.id.mls);
         mContribution = zView.findViewById(R.id.contribution);
         mLog = zView.findViewById(R.id.log);
@@ -57,6 +59,7 @@ public final class NetworkPage implements Page {
         zView.findViewById(R.id.q_mls).setOnClickListener(v -> Explain.show(mAct, "mls"));
         zView.findViewById(R.id.q_contribution)
                 .setOnClickListener(v -> Explain.show(mAct, "contribution"));
+        zView.findViewById(R.id.q_direct).setOnClickListener(v -> Explain.show(mAct, "direct"));
         zView.findViewById(R.id.q_log).setOnClickListener(v -> Explain.show(mAct, "log"));
 
         zView.findViewById(R.id.btn_add_relay).setOnClickListener(v -> addRelay());
@@ -182,6 +185,29 @@ public final class NetworkPage implements Page {
             ((Button) mView.findViewById(R.id.btn_contrib_metered))
                     .setText(AndroidContribution.unmeteredOnly(mAct)
                             ? "Wifi only ✓" : "Any network");
+        }
+
+        renderDirect();
+    }
+
+    private void renderDirect() {
+        com.eurobuddha.maxima.app.direct.DirectReachability d =
+                com.eurobuddha.maxima.app.MaximaService.direct();
+        mDirect.removeAllViews();
+        if (d == null) {
+            Ui.stat(mAct, mDirect, "Direct reachability", "starting…", "—", "direct");
+            return;
+        }
+        boolean advertised =
+                d.state() == com.eurobuddha.maxima.app.direct.DirectReachability.State.ADVERTISED;
+        Ui.state(mAct, mDirect, "Direct reachability",
+                d.detail(),
+                advertised ? "ON" : d.state().name().toLowerCase(),
+                Ui.colour(mAct, advertised ? R.color.ux_success : R.color.ux_subtext),
+                "direct");
+        if (advertised && !d.publicAddress().isEmpty()) {
+            Ui.mono(mAct, mDirect, "  public  " + d.publicAddress(),
+                    Ui.colour(mAct, R.color.ux_success));
         }
     }
 

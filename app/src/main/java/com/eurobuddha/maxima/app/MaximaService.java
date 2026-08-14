@@ -51,6 +51,7 @@ public final class MaximaService extends Service {
     private static volatile MaximaNode sNode;
     private static volatile AndroidContribution sPolicy;
     private static volatile com.eurobuddha.maxima.core.chat.ChatEngine sChat;
+    private static volatile com.eurobuddha.maxima.app.direct.DirectReachability sDirect;
     private final AtomicBoolean mPumping = new AtomicBoolean(false);
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
@@ -65,6 +66,10 @@ public final class MaximaService extends Service {
 
     public static com.eurobuddha.maxima.core.chat.ChatEngine chat() {
         return sChat;
+    }
+
+    public static com.eurobuddha.maxima.app.direct.DirectReachability direct() {
+        return sDirect;
     }
 
     @Override
@@ -161,6 +166,9 @@ public final class MaximaService extends Service {
         // request rather than latched at startup.
         sPolicy = new AndroidContribution(this);
         sNode.tier1().setPolicy(sPolicy);
+        // Tier 2 opportunistic reachability. Driven from the heartbeat below.
+        sDirect = new com.eurobuddha.maxima.app.direct.DirectReachability(
+                this, sNode, sPolicy);
 
         EventLog.add("identity " + id.mxIdentity().substring(0, 20) + "...");
         EventLog.add("contributing: " + sPolicy.describe().split("\\n")[0]);
@@ -232,6 +240,15 @@ public final class MaximaService extends Service {
                         if (sChat != null) {
                             sChat.flushState();
                         }
+                        // Tier 2: map -> probe -> advertise / renew. Blocks, so
+                        // it belongs here on the pump thread, never on the UI.
+                        if (sDirect != null) {
+                            try {
+                                sDirect.tick();
+                            } catch (Exception e) {
+                                Log.w(TAG, "direct reachability tick: " + e);
+                            }
+                        }
                         lastMaintain = System.currentTimeMillis();
                         updateNotification(after + " relay(s) connected");
                     }
@@ -267,6 +284,12 @@ public final class MaximaService extends Service {
                     if (n != null) {
                         new Thread(() -> n.maintain(20000), "maxima-renet").start();
                     }
+                    // A changed network means our mapped port is almost
+                    // certainly dead; drop it before advertising a stale route.
+                    com.eurobuddha.maxima.app.direct.DirectReachability d = sDirect;
+                    if (d != null) {
+                        new Thread(d::onNetworkChanged, "direct-netchange").start();
+                    }
                 }
 
                 @Override
@@ -294,6 +317,10 @@ public final class MaximaService extends Service {
                 cm.unregisterNetworkCallback(mNetCallback);
             }
         } catch (Exception ignored) {
+        }
+        com.eurobuddha.maxima.app.direct.DirectReachability d = sDirect;
+        if (d != null) {
+            d.shutdown();
         }
         com.eurobuddha.maxima.core.chat.ChatEngine ch = sChat;
         if (ch != null) {

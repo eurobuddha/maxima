@@ -287,6 +287,44 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ==== DIRECT REACHABILITY (Tier 2) ==== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/MaximaSectionLabel"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="DIRECT REACHABILITY  ·  A PUBLIC ADDRESS WHEN POSSIBLE" />
+
+                <TextView
+                    android:id="@+id/q_direct"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="10dp"
+                    android:text="?"
+                    android:textColor="@color/ux_accent"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/direct_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+
         <!-- ==== LOG ==== -->
         <LinearLayout
             android:layout_width="match_parent"

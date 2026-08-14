@@ -130,6 +130,22 @@ public final class Explain {
                         + "stay online. Each blob is capped well under the 256 KB "
                         + "message ceiling.");
 
+        put("direct", "Direct reachability",
+                "Normally your phone has no address of its own, so it borrows one "
+                        + "from a host. When conditions allow, it can instead get "
+                        + "a REAL public address and receive messages directly - "
+                        + "one hop shorter, and one fewer relay that sees who you "
+                        + "talk to.\n\n"
+                        + "It only happens on Wi-Fi, and only when your router will "
+                        + "hand out a public port (many will not). Your phone maps "
+                        + "a port, then asks a host to dial it back from the "
+                        + "outside - because a phone testing its own port is "
+                        + "meaningless. Only once that succeeds is the address "
+                        + "advertised, so a dead address is never published.\n\n"
+                        + "\"unavailable\" is the normal result on mobile data or "
+                        + "behind carrier NAT. Nothing is wrong - your phone stays "
+                        + "reachable through hosts as always.");
+
         put("gates", "Battery and network gates",
                 "\"unmetered\" means wifi. With Wifi only ✓, the heavier duties "
                         + "(mailbox, storage) pause on mobile data so you are never "
