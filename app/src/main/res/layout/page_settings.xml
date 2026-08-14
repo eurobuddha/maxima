@@ -134,6 +134,17 @@
                 android:textColor="@color/ux_error" />
 
             <Button
+                android:id="@+id/btn_restore"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/btn_ghost"
+                android:stateListAnimator="@null"
+                android:text="Restore a seed phrase"
+                android:textAllCaps="false"
+                android:textColor="@color/ux_text" />
+
+            <Button
                 android:id="@+id/btn_battery"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
