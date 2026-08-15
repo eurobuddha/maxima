@@ -78,6 +78,12 @@ public final class RelayRuntime {
     private Thread mMaintain;
     private volatile boolean mRunning;
     private volatile Consumer<Stats> mTickListener;
+    private volatile long mBlobBytes;
+
+    /** Enable the media blob shelf at this byte cap (0 = off). Set before start(). */
+    public void setBlobBytes(long zBytes) {
+        mBlobBytes = zBytes;
+    }
 
     public RelayRuntime(MaximaIdentity zIdentity, int zPort, String zProtocol,
                         int zRate, String zHost, Path zDataDir) {
@@ -148,6 +154,12 @@ public final class RelayRuntime {
         // ciphertext we hold for offline peers.
         relay.setStore(new com.eurobuddha.maxima.core.store.FileStore(
                 mDataDir.resolve("relaystore").toFile()));
+        // The media shelf: self-hosted media parked here survives a phone
+        // sleeping. Content-addressed, byte-capped, LRU — lives under <data>/blobs.
+        if (mBlobBytes > 0) {
+            relay.setBlobStore(new com.eurobuddha.maxima.core.store.BlobStore(
+                    mDataDir.resolve("blobs").toFile(), mBlobBytes));
+        }
         relay.start();
         mRelay = relay;
         mRunning = true;

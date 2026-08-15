@@ -132,6 +132,24 @@ public final class RelayServer {
     private static final int PER_SOURCE_CLAIMS_PER_MIN = 6;
     private final Map<String, RateLimit> mClaimLimits = new ConcurrentHashMap<>();
 
+    /**
+     * The media shelf: ciphertext chunks parked here by attached users so a
+     * phone's published media survives the phone sleeping. Null = blob service
+     * off (a relay without --blobstore). Content-addressed, byte-capped, LRU.
+     */
+    private volatile com.eurobuddha.maxima.core.store.BlobStore mBlobs;
+    /** Chunk puts cost us disk — cap per source. GETs ride the to-us limit. */
+    private static final int PER_SOURCE_BLOB_PUTS_PER_MIN = 60;
+    private final Map<String, RateLimit> mBlobPutLimits = new ConcurrentHashMap<>();
+
+    public void setBlobStore(com.eurobuddha.maxima.core.store.BlobStore zStore) {
+        mBlobs = zStore;
+    }
+
+    public com.eurobuddha.maxima.core.store.BlobStore blobStore() {
+        return mBlobs;
+    }
+
     private final AtomicLong mConnSeq = new AtomicLong();
     private final AtomicLong mRelayed = new AtomicLong();
     private final AtomicLong mDropped = new AtomicLong();
@@ -536,6 +554,71 @@ public final class RelayServer {
         }
     }
 
+    /**
+     * The media shelf. PUT is for attached users only (the connection must hold
+     * a registered route — the same anti-flood posture as the mailbox: strangers
+     * cannot fill our disk) and rate-limited per source. GET/HAS are open like
+     * MaxLite's /blob was: a chunk id is only ever learned from a sealed
+     * manifest, the bytes are ciphertext, and the reply is verified by hash on
+     * the client anyway.
+     */
+    private void handleBlob(Conn zConn, String zApp, MaximaMessage zMsg) throws Exception {
+        com.eurobuddha.maxima.core.store.BlobStore store = mBlobs;
+        if (store == null) {
+            zConn.write(Frame.ack(Frame.RESPONSE_UNKNOWN));   // service not offered here
+            return;
+        }
+        byte[] data = zMsg.mData.getBytes();
+        switch (zApp) {
+            case com.eurobuddha.maxima.core.media.MediaWire.APP_PUT: {
+                // Unlike the mailbox (a permanent box per key = a flood target),
+                // the shelf is content-addressed with a hard byte cap and
+                // least-recently-fetched eviction: a flood just churns the LRU.
+                // So the protection is the per-source rate limit + the cap, the
+                // same model the probe uses - not a per-connection route gate
+                // (a send opens a fresh connection that never registers a route).
+                if (!allow(mBlobPutLimits, zConn.sourceIp, PER_SOURCE_BLOB_PUTS_PER_MIN)) {
+                    zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+                    return;
+                }
+                try {
+                    String id = store.put(data);
+                    // Confirm with the id: the sender checks it matches its own.
+                    zConn.write(Frame.body(Frame.MSG_PING, new MiniData(
+                            id.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+                } catch (Exception e) {
+                    zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+                }
+                return;
+            }
+            case com.eurobuddha.maxima.core.media.MediaWire.APP_GET: {
+                byte[] chunk;
+                try {
+                    chunk = store.get(new String(data,
+                            java.nio.charset.StandardCharsets.UTF_8));
+                } catch (Exception e) {
+                    chunk = null;
+                }
+                if (chunk == null) {
+                    zConn.write(Frame.ack(Frame.RESPONSE_UNKNOWN));
+                } else {
+                    zConn.write(Frame.body(Frame.MSG_PING, new MiniData(chunk)));
+                }
+                return;
+            }
+            default: {   // APP_HAS
+                boolean has;
+                try {
+                    has = store.has(new String(data,
+                            java.nio.charset.StandardCharsets.UTF_8));
+                } catch (Exception e) {
+                    has = false;
+                }
+                zConn.write(Frame.ack(has ? Frame.RESPONSE_OK : Frame.RESPONSE_UNKNOWN));
+            }
+        }
+    }
+
     /** A message addressed to the relay itself - directory or mailbox traffic. */
     private void handleForUs(Conn zConn, MaximaPackage zPkg) throws Exception {
         try {
@@ -563,6 +646,13 @@ public final class RelayServer {
             if (com.eurobuddha.maxima.core.net.Probe.APPLICATION.equals(
                     mm.mApplication.toString())) {
                 handleProbe(zConn, mm);
+                return;
+            }
+
+            // The media shelf: park / fetch / check ciphertext chunks.
+            String mediaApp = mm.mApplication.toString();
+            if (com.eurobuddha.maxima.core.media.MediaWire.isMediaApp(mediaApp)) {
+                handleBlob(zConn, mediaApp, mm);
                 return;
             }
 
@@ -723,7 +813,7 @@ public final class RelayServer {
         }
         long now = System.currentTimeMillis();
         for (Map<String, RateLimit> m : java.util.Arrays.asList(mLimits, mFrameLimits,
-                mTousLimits, mProbeLimits, mClaimLimits)) {
+                mTousLimits, mProbeLimits, mClaimLimits, mBlobPutLimits)) {
             m.entrySet().removeIf(e -> now - e.getValue().windowStart > 120_000);
         }
         mPeers.expire();

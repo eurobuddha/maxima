@@ -20,11 +20,13 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = "0.3.0";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
     private static final int DEFAULT_RATE = 600;
+    /** Default media shelf: 4GB, matching the MaxLite relay it replaces. */
+    private static final long DEFAULT_BLOB_BYTES = 4L * 1024 * 1024 * 1024;
 
     public static void main(String[] args) {
         int port = DEFAULT_PORT;
@@ -33,6 +35,7 @@ public final class Main {
         int rate = DEFAULT_RATE;
         String protocol = DEFAULT_PROTOCOL;
         boolean selftest = false;
+        long blobBytes = DEFAULT_BLOB_BYTES;
 
         // --- parse first, do nothing else, so informational flags are pure ---
         for (int i = 0; i < args.length; i++) {
@@ -57,6 +60,14 @@ public final class Main {
                     break;
                 case "--data":
                     data = strArg(args, ++i, "--data");
+                    break;
+                case "--blobstore":
+                    // Media shelf size in MB (0 = off). A relay/desktop hosts a
+                    // lot; a Pi may want it small or disabled.
+                    blobBytes = (long) intArg(args, ++i, "--blobstore") * 1024L * 1024L;
+                    if (blobBytes < 0) {
+                        fail("--blobstore must be >= 0 (MB)");
+                    }
                     break;
                 case "--rate":
                     rate = intArg(args, ++i, "--rate");
@@ -86,7 +97,7 @@ public final class Main {
         }
 
         try {
-            run(port, data, rate, protocol, host);
+            run(port, data, rate, protocol, host, blobBytes);
         } catch (BindException be) {
             System.err.println();
             System.err.println("ERROR: port " + port + " is already in use.");
@@ -104,7 +115,7 @@ public final class Main {
         }
     }
 
-    private static void run(int port, String data, int rate, String protocol, String host)
+    private static void run(int port, String data, int rate, String protocol, String host, long blobBytes)
             throws Exception {
         Path dir = Paths.get(data);
 
@@ -140,8 +151,11 @@ public final class Main {
         System.out.println("  port     : " + port);
         System.out.println("  data     : " + dir);
         System.out.println("  rate cap : " + rate + " msg/min per destination");
+        System.out.println("  media    : " + (blobBytes > 0
+                ? (blobBytes / (1024 * 1024)) + " MB blob shelf" : "off"));
 
         RelayRuntime runtime = new RelayRuntime(id, port, protocol, rate, host, dir);
+        runtime.setBlobBytes(blobBytes);
         runtime.setTickListener(s -> System.out.printf(
                 "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
                 s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory));
@@ -175,6 +189,7 @@ public final class Main {
         out.println("                   which is right unless clients reach you at a DIFFERENT");
         out.println("                   address from the one they should keep using)");
         out.println("  --rate <n>       max messages/min per peer     (default " + DEFAULT_RATE + ")");
+        out.println("  --blobstore <MB> media shelf size in MB, 0=off (default 4096)");
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");
         out.println("  -v, --version    print the version and exit");
