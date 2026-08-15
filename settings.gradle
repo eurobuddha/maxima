@@ -22,4 +22,13 @@ include ':core'
 
 // Added as they are built (milestones 7 and 8 in the plan):
 include ':server'
-include ':app'
+
+// The Android module needs AGP + an Android SDK just to CONFIGURE, which a
+// desktop-installer CI runner may not want. -PskipAndroid=true leaves it out.
+if (!providers.gradleProperty('skipAndroid').isPresent()) {
+    include ':app'
+}
+
+// The set-and-forget desktop node: a native-installer app (jpackage) that runs
+// the relay in-process with automatic router port-forwarding and a tray UI.
+include ':desktop'
