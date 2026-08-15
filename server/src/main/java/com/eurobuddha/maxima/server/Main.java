@@ -1,14 +1,10 @@
 package com.eurobuddha.maxima.server;
 
-import com.eurobuddha.maxima.core.identity.Bip39;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 
 import java.net.BindException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 
 /**
  * Headless Maxima relay.
@@ -111,44 +107,20 @@ public final class Main {
     private static void run(int port, String data, int rate, String protocol, String host)
             throws Exception {
         Path dir = Paths.get(data);
-        Files.createDirectories(dir);
-        Path seedFile = dir.resolve("seed.txt");
 
-        String phrase;
-        if (Files.exists(seedFile)) {
-            phrase = new String(Files.readAllBytes(seedFile), StandardCharsets.UTF_8).trim();
+        // Seed resolution (0600 atomic) lives in RelayRuntime; how a NEW seed is
+        // shown to the operator is a CLI policy and stays here.
+        RelayRuntime.Seed seed = RelayRuntime.loadOrCreateSeed(dir);
+        Path seedFile = seed.file;
+        if (!seed.created) {
             System.out.println("Loaded identity from " + seedFile);
         } else {
-            List<String> words = Bip39.generate(24);
-            phrase = String.join(" ", words);
-            // Create the seed file 0600 ATOMICALLY (perms baked into creation),
-            // then write. The old order - write, THEN chmod - left the spendable
-            // wallet seed world/group-readable for a window, and silently kept it
-            // that way if the chmod failed. A seed we can't protect is not a seed
-            // we keep: fail loudly instead.
-            try {
-                Files.createFile(seedFile, java.nio.file.attribute.PosixFilePermissions
-                        .asFileAttribute(java.nio.file.attribute.PosixFilePermissions
-                                .fromString("rw-------")));
-                Files.write(seedFile, phrase.getBytes(StandardCharsets.UTF_8),
-                        java.nio.file.StandardOpenOption.WRITE);
-            } catch (UnsupportedOperationException nonPosix) {
-                // Non-POSIX filesystem (unusual for a relay host). Best effort.
-                Files.write(seedFile, phrase.getBytes(StandardCharsets.UTF_8));
-            } catch (Exception e) {
-                try {
-                    Files.deleteIfExists(seedFile);
-                } catch (Exception ignored) {
-                }
-                throw new IllegalStateException(
-                        "refusing to store the seed without owner-only permissions", e);
-            }
             System.out.println("Generated a NEW identity at " + seedFile);
             System.out.println();
             System.out.println("  !! This phrase is also a Minima WALLET seed. Back it up like money.");
             if (System.console() != null) {
                 // Interactive: the operator is looking at a terminal, so show it.
-                System.out.println("  " + phrase);
+                System.out.println("  " + seed.phrase);
             } else {
                 // Under systemd, stdout is a LOG FILE. Printing a wallet seed
                 // into a file that gets rotated, backed up and shipped to a log
@@ -161,7 +133,7 @@ public final class Main {
             System.out.println();
         }
 
-        MaximaIdentity id = MaximaIdentity.fromPhrase(phrase);
+        MaximaIdentity id = MaximaIdentity.fromPhrase(seed.phrase);
 
         System.out.println("Maxima relay " + VERSION + " starting");
         System.out.println("  identity : " + id.mxIdentity().substring(0, 44) + "...");
@@ -169,14 +141,11 @@ public final class Main {
         System.out.println("  data     : " + dir);
         System.out.println("  rate cap : " + rate + " msg/min per destination");
 
-        RelayServer relay = new RelayServer(id, port, protocol);
-        relay.setRateLimit(rate);
-        relay.setPublicHost(host);
-        // Durable mailbox under <data>/mailbox, so a restart does not lose the
-        // ciphertext we are holding for offline peers.
-        relay.setStore(new com.eurobuddha.maxima.core.store.FileStore(
-                dir.resolve("relaystore").toFile()));
-        relay.start();
+        RelayRuntime runtime = new RelayRuntime(id, port, protocol, rate, host, dir);
+        runtime.setTickListener(s -> System.out.printf(
+                "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
+                s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory));
+        runtime.start();
 
         System.out.println("  listening on 0.0.0.0:" + port);
         System.out.println();
@@ -185,23 +154,10 @@ public final class Main {
         System.out.println();
 
         // Flush write-behind mail on shutdown so a clean stop loses nothing.
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            relay.flush();
-            relay.stop();
-        }));
+        Runtime.getRuntime().addShutdownHook(new Thread(runtime::stop));
 
-        while (true) {
-            Thread.sleep(30_000);
-            // Maintenance: expire directory entries, sweep the rate maps, and
-            // flush write-behind mail to disk (one rewrite per dirty collection,
-            // not per stored item).
-            relay.maintain();
-            relay.flush();
-            System.out.printf("[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
-                    relay.connectionCount(), relay.routeCount(),
-                    relay.relayedCount(), relay.storedCount(), relay.droppedCount(),
-                    relay.mailbox().totalItems(), relay.directory().size());
-        }
+        // Block forever; the maintain loop runs on RelayRuntime's own thread.
+        Thread.currentThread().join();
     }
 
     // ---------------------------------------------------------------
