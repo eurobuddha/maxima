@@ -46,6 +46,9 @@ import java.util.List;
 public final class MainActivity extends AppCompatActivity implements ChatEngine.Listener {
 
     private TextView mPill;
+    private View mDot;
+    private android.animation.ObjectAnimator mPulse;
+    private boolean mPulsing;
     private ViewPager mPager;
     private final List<Page> mPages = new ArrayList<>();
 
@@ -74,6 +77,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         });
 
         mPill = findViewById(R.id.status_pill);
+        mDot = findViewById(R.id.status_dot);
 
         Sha3Provider.install();
         requestNotificationPermission();
@@ -140,6 +144,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         super.onPause();
         ChatHub.unregister(this);
         mHandler.removeCallbacks(mTick);
+        stopPulse();
     }
 
     /** Only the visible page is rendered; the others refresh when swiped to. */
@@ -159,21 +164,70 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         MaximaNode node = MaximaService.node();
         ChatEngine chat = MaximaService.chat();
         if (node == null) {
+            setDotColour(R.color.ux_subtext);
+            stopPulse();
             mPill.setText("starting…");
             mPill.setTextColor(getResources().getColor(R.color.ux_subtext, getTheme()));
             return;
         }
         int hosts = node.pool().activeCount();
         int unread = chat == null ? 0 : chat.totalUnread();
+        // The dot carries the online/offline state now (and breathes when live),
+        // so the label no longer needs a glyph.
         String text = hosts > 0
-                ? "● " + hosts + " host" + (hosts == 1 ? "" : "s")
-                : "○ offline";
+                ? hosts + " host" + (hosts == 1 ? "" : "s")
+                : "offline";
         if (unread > 0) {
             text += "   " + unread + " new";
         }
         mPill.setText(text);
         mPill.setTextColor(getResources().getColor(
                 hosts > 0 ? R.color.ux_success : R.color.ux_error, getTheme()));
+        if (hosts > 0) {
+            setDotColour(R.color.ux_success);
+            startPulse();
+        } else {
+            setDotColour(R.color.ux_error);
+            stopPulse();
+        }
+    }
+
+    private void setDotColour(int zColorRes) {
+        if (mDot == null || mDot.getBackground() == null) {
+            return;
+        }
+        mDot.getBackground().mutate().setTint(getResources().getColor(zColorRes, getTheme()));
+    }
+
+    /**
+     * A slow, subtle alpha "breath" on the status dot while connected - the
+     * classic live-heartbeat cue. Guarded so the 2s render tick does not restart
+     * (and stutter) an already-running animation.
+     */
+    private void startPulse() {
+        if (mPulsing || mDot == null) {
+            return;
+        }
+        if (mPulse == null) {
+            mPulse = android.animation.ObjectAnimator.ofFloat(mDot, "alpha", 1f, 0.3f);
+            mPulse.setDuration(950);
+            mPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            mPulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            mPulse.setInterpolator(
+                    new android.view.animation.AccelerateDecelerateInterpolator());
+        }
+        mPulse.start();
+        mPulsing = true;
+    }
+
+    private void stopPulse() {
+        if (mPulse != null) {
+            mPulse.cancel();
+        }
+        mPulsing = false;
+        if (mDot != null) {
+            mDot.setAlpha(1f);
+        }
     }
 
     public void toast(String zMsg) {

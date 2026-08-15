@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
+import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.core.chat.ChatEngine;
 
 /**
@@ -87,7 +88,7 @@ public final class ChatNotifier {
         b.setContentTitle(zTitle)
                 .setContentText(zText)
                 .setStyle(new Notification.BigTextStyle().bigText(zText))
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setAutoCancel(true)
                 .setContentIntent(pi);
         if (zCount > 1) {

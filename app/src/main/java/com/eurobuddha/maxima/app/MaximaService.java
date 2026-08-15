@@ -371,7 +371,7 @@ public final class MaximaService extends Service {
                 : new Notification.Builder(this);
         return b.setContentTitle("Maxima")
                 .setContentText(zText)
-                .setSmallIcon(android.R.drawable.stat_sys_upload)
+                .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setOngoing(true)
                 .build();
     }
