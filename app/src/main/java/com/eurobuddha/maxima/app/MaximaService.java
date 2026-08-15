@@ -118,6 +118,7 @@ public final class MaximaService extends Service {
         chat.setStore(new com.eurobuddha.maxima.core.store.FileStore(
                 new java.io.File(getFilesDir(), "chat")));
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
+        chat.setMediaService(sMedia);   // photos/videos in chat, self-hosted
         final MaximaNode node = sNode;
         chat.setListener(new com.eurobuddha.maxima.core.chat.ChatEngine.Listener() {
             public void onMessage(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {

@@ -109,6 +109,18 @@
         android:paddingTop="6dp"
         android:paddingBottom="10dp">
 
+        <ImageButton
+            android:id="@+id/btn_chat_attach"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Attach photo"
+            android:padding="8dp"
+            android:src="@android:drawable/ic_menu_camera"
+            app:tint="@color/ux_subtext"
+            xmlns:app="http://schemas.android.com/apk/res-auto" />
+
         <EditText
             android:id="@+id/chat_input"
             android:layout_width="0dp"

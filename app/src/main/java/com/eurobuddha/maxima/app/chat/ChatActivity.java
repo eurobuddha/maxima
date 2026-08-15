@@ -97,6 +97,151 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
         findViewById(R.id.btn_chat_send).setOnClickListener(v -> send());
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
+        findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachPhoto());
+    }
+
+    private static final int PICK_PHOTO = 71;
+
+    /** Decoded chat images, by message id — the WOTS-free path: fetch once. */
+    private final java.util.Map<String, android.graphics.Bitmap> mImageCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<String> mImageFetching =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    /** Show the image for a media bubble: cache hit, else fetch+decode off-main. */
+    private void bindImage(android.widget.ImageView view, String body, String id) {
+        android.graphics.Bitmap cached = mImageCache.get(id);
+        if (cached != null) {
+            view.setImageBitmap(cached);
+            view.setOnClickListener(v -> saveImage(id));
+            return;
+        }
+        view.setImageResource(android.R.drawable.ic_menu_gallery);
+        if (!mImageFetching.add(id)) {
+            return;   // already fetching
+        }
+        final String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(body);
+        new Thread(() -> {
+            try {
+                com.eurobuddha.maxima.core.media.MediaService media = MaximaService.media();
+                com.eurobuddha.maxima.core.media.MediaManifest mf =
+                        com.eurobuddha.maxima.core.media.MediaManifest.decode(
+                                new String(android.util.Base64.decode(
+                                        ref.substring("mx1:".length()),
+                                        android.util.Base64.URL_SAFE),
+                                        java.nio.charset.StandardCharsets.UTF_8));
+                byte[] bytes = media.fetch(mf);
+                android.graphics.Bitmap bmp = android.graphics.BitmapFactory
+                        .decodeByteArray(bytes, 0, bytes.length);
+                if (bmp != null) {
+                    mImageCache.put(id, bmp);
+                    runOnUiThread(this::render);
+                }
+            } catch (Exception e) {
+                // leave the placeholder; a redraw will retry
+            } finally {
+                mImageFetching.remove(id);
+            }
+        }, "chat-image").start();
+    }
+
+    private void saveImage(String id) {
+        android.graphics.Bitmap b = mImageCache.get(id);
+        if (b == null) {
+            return;
+        }
+        try {
+            android.content.ContentValues cv = new android.content.ContentValues();
+            cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+                    "maxima-" + System.currentTimeMillis() + ".jpg");
+            cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            android.net.Uri uri = getContentResolver().insert(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+            try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
+                b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
+            }
+            toast("Saved to Photos");
+        } catch (Exception e) {
+            toast("Save failed");
+        }
+    }
+
+    private void attachPhoto() {
+        android.content.Intent i = new android.content.Intent(
+                android.content.Intent.ACTION_GET_CONTENT);
+        i.setType("image/*");
+        startActivityForResult(android.content.Intent.createChooser(i, "Send photo"), PICK_PHOTO);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != PICK_PHOTO || res != RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        final android.net.Uri uri = data.getData();
+        final ChatEngine chat = MaximaService.chat();
+        final MaximaNode node = MaximaService.node();
+        if (chat == null || node == null) {
+            toast("Transport not running");
+            return;
+        }
+        final Group g = chat.group(mConversation);
+        final Contact c = g == null ? node.contact(mConversation) : null;
+        if (g == null && c == null) {
+            return;
+        }
+        toast("Sending photo…");
+        mLastSendWasMine = true;
+        new Thread(() -> {
+            try {
+                byte[] jpeg = readScaledJpeg(uri, 1400);
+                if (g != null) {
+                    chat.sendGroupMedia(g.id, jpeg, "image/jpeg", "");
+                } else {
+                    chat.sendMedia(c, jpeg, "image/jpeg", "");
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Photo failed: " + e.getMessage()));
+            }
+            runOnUiThread(this::render);
+        }, "chat-media").start();
+    }
+
+    /** Decode + downscale + re-encode a picked image to a modest JPEG. */
+    private byte[] readScaledJpeg(android.net.Uri uri, int maxPx) throws Exception {
+        try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+            android.graphics.BitmapFactory.Options bounds =
+                    new android.graphics.BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            byte[] all = readAll(in);
+            android.graphics.BitmapFactory.decodeByteArray(all, 0, all.length, bounds);
+            int sample = 1;
+            int big = Math.max(bounds.outWidth, bounds.outHeight);
+            while (big / sample > maxPx * 2) {
+                sample *= 2;
+            }
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = sample;
+            android.graphics.Bitmap bmp =
+                    android.graphics.BitmapFactory.decodeByteArray(all, 0, all.length, o);
+            if (bmp == null) {
+                throw new Exception("could not read image");
+            }
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, bos);
+            return bos.toByteArray();
+        }
+    }
+
+    private static byte[] readAll(java.io.InputStream in) throws Exception {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            bos.write(buf, 0, n);
+        }
+        return bos.toByteArray();
     }
 
     /**
@@ -439,7 +584,20 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 who.setVisibility(View.GONE);
             }
 
-            body.setText(e.body);
+            android.widget.ImageView image = v.findViewById(R.id.bubble_image);
+            if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
+                // A media message: caption as text (if any), image below.
+                String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+                body.setText(cap);
+                body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
+                image.setVisibility(View.VISIBLE);
+                bindImage(image, e.body, e.id);
+            } else {
+                image.setVisibility(View.GONE);
+                image.setImageDrawable(null);
+                body.setVisibility(View.VISIBLE);
+                body.setText(e.body);
+            }
 
             String stamp = mTime.format(new Date(e.time));
             if (e.mine) {

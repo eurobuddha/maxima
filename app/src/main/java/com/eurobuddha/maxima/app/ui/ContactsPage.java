@@ -58,6 +58,7 @@ public final class ContactsPage implements Page {
         zView.findViewById(R.id.q_contacts).setOnClickListener(v -> Explain.show(mAct, "contacts"));
         zView.findViewById(R.id.btn_copy).setOnClickListener(v -> copyAddress());
         zView.findViewById(R.id.btn_share).setOnClickListener(v -> shareAddress());
+        zView.findViewById(R.id.btn_qr).setOnClickListener(v -> showQr());
         zView.findViewById(R.id.btn_add_contact).setOnClickListener(v -> addContact());
     }
 
@@ -198,6 +199,54 @@ public final class ContactsPage implements Page {
         i.setType("text/plain");
         i.putExtra(Intent.EXTRA_TEXT, a);
         mAct.startActivity(Intent.createChooser(i, "Share your Maxima address"));
+    }
+
+    /** Show my address as a QR for a peer to scan, and offer to scan theirs. */
+    private void showQr() {
+        String a = myPrimaryAddress();
+        if (a == null) {
+            mAct.toast("No address yet");
+            return;
+        }
+        int px = (int) (260 * mAct.getResources().getDisplayMetrics().density);
+        android.graphics.Bitmap bmp = Qr.encode(a, px);
+        LinearLayout box = new LinearLayout(mAct);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        int pad = (int) (16 * mAct.getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad, pad, pad);
+        if (bmp != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(mAct);
+            iv.setImageBitmap(bmp);
+            box.addView(iv);
+        }
+        TextView t = new TextView(mAct);
+        t.setText("Let a friend scan this to add you.");
+        t.setTextColor(mAct.getResources().getColor(R.color.ux_subtext, mAct.getTheme()));
+        int tp = (int) (10 * mAct.getResources().getDisplayMetrics().density);
+        t.setPadding(0, tp, 0, 0);
+        box.addView(t);
+
+        new AlertDialog.Builder(mAct)
+                .setTitle("Your Maxima QR")
+                .setView(box)
+                .setPositiveButton("Scan a code", (d, w) -> mAct.scanQr())
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    /** Called by MainActivity with a scanned address; introduce to it. */
+    public void onScanned(String zText) {
+        if (zText == null) {
+            return;
+        }
+        String addr = zText.trim();
+        if (!addr.startsWith("Mx") && !addr.startsWith("MAX#")) {
+            mAct.toast("Not a Maxima address");
+            return;
+        }
+        mNewContact.setText(addr);
+        addContact();
     }
 
     /**

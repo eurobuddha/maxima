@@ -99,7 +99,7 @@ public final class ChatsPage implements Page {
             String who = s.lastMine ? "You: "
                     : (chat.group(s.conversation) != null
                     ? Names.contact(node, s.lastSender) + ": " : "");
-            r.preview = who + oneLine(s.lastBody);
+            r.preview = who + oneLine(com.eurobuddha.maxima.core.chat.ChatMedia.preview(s.lastBody));
             r.time = stamp(s.lastTime);
             r.unread = s.unread;
             rows.add(r);

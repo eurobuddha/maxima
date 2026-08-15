@@ -236,6 +236,31 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
     }
 
+    /** Launch the QR scanner; the result routes to ContactsPage.onScanned. */
+    public void scanQr() {
+        com.journeyapps.barcodescanner.ScanOptions o =
+                new com.journeyapps.barcodescanner.ScanOptions();
+        o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
+        o.setPrompt("Scan a Maxima QR");
+        o.setBeepEnabled(false);
+        o.setOrientationLocked(true);
+        mScanLauncher.launch(o);
+    }
+
+    private final androidx.activity.result.ActivityResultLauncher<
+            com.journeyapps.barcodescanner.ScanOptions> mScanLauncher =
+            registerForActivityResult(new com.journeyapps.barcodescanner.ScanContract(), result -> {
+                if (result == null || result.getContents() == null) {
+                    return;
+                }
+                for (Page p : mPages) {
+                    if (p instanceof com.eurobuddha.maxima.app.ui.ContactsPage) {
+                        ((com.eurobuddha.maxima.app.ui.ContactsPage) p)
+                                .onScanned(result.getContents());
+                    }
+                }
+            });
+
     /** Jump to a tab by index, used when one screen sends you to another. */
     public void showTab(int zIndex) {
         mPager.setCurrentItem(zIndex, true);

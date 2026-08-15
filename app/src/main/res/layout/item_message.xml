@@ -32,6 +32,17 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
+        <!-- media bubble: shown for photo/video messages, else GONE -->
+        <ImageView
+            android:id="@+id/bubble_image"
+            android:layout_width="220dp"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:layout_marginBottom="4dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="media"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/bubble_body"
             android:layout_width="wrap_content"

@@ -465,6 +465,44 @@ public final class ChatEngine {
     }
 
     /** Send a 1:1 message. Returns the local entry immediately, state QUEUED. */
+    /** The media layer, so a chat message can carry a self-hosted photo/video. */
+    private volatile com.eurobuddha.maxima.core.media.MediaService mMedia;
+
+    public void setMediaService(com.eurobuddha.maxima.core.media.MediaService zMedia) {
+        mMedia = zMedia;
+    }
+
+    /**
+     * Send a photo/video/audio: publish it to the self-hosted media mesh, then
+     * send a normal chat message whose body carries the manifest ref. Blocking
+     * on the publish (encrypt + replicate) — call off the main thread.
+     */
+    public Entry sendMedia(Contact zTo, byte[] zBytes, String zMime, String zCaption)
+            throws Exception {
+        if (mMedia == null) {
+            throw new IllegalStateException("media service not set");
+        }
+        String body = ChatMedia.wrap(zMime, publishRef(zBytes, zMime), zCaption);
+        return send(zTo, body);
+    }
+
+    public Entry sendGroupMedia(String zGroupId, byte[] zBytes, String zMime, String zCaption)
+            throws Exception {
+        if (mMedia == null) {
+            throw new IllegalStateException("media service not set");
+        }
+        String body = ChatMedia.wrap(zMime, publishRef(zBytes, zMime), zCaption);
+        return sendGroup(zGroupId, body);
+    }
+
+    /** Publish bytes and return an mx1: ref (RFC4648 url-safe base64 manifest,
+     *  matching android.util.Base64 URL_SAFE that the app UI decodes with). */
+    private String publishRef(byte[] zBytes, String zMime) throws Exception {
+        com.eurobuddha.maxima.core.media.MediaManifest mf = mMedia.publish(zBytes, zMime);
+        return "mx1:" + java.util.Base64.getUrlEncoder()
+                .encodeToString(mf.encode().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     public Entry send(Contact zTo, String zBody) {
         String id = newId();
         Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",

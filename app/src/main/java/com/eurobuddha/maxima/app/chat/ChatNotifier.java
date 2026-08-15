@@ -126,8 +126,8 @@ public final class ChatNotifier {
         }
         String title = Names.of(zNode, zChat, conv);
         String text = zEntry.isGroup()
-                ? Names.contact(zNode, zEntry.sender) + ": " + zEntry.body
-                : zEntry.body;
+                ? Names.contact(zNode, zEntry.sender) + ": " + com.eurobuddha.maxima.core.chat.ChatMedia.preview(zEntry.body)
+                : com.eurobuddha.maxima.core.chat.ChatMedia.preview(zEntry.body);
         show(zCtx, conv, title, text, zChat.unread(conv));
     }
 }
