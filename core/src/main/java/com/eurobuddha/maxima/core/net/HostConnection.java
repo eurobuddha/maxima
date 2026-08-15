@@ -60,6 +60,20 @@ public final class HostConnection implements Closeable {
     private String mTheirMlsAddress;
     private boolean mAttached;
 
+    /**
+     * A VERIFIED public endpoint of our own to claim in the greeting, or null
+     * for the long-standing default (claim the dialled host:port, which is what
+     * live classic nodes were measured to expect). Only a node that has PROVEN
+     * its inbound port open sets this — it is the announce half of relay-gossip
+     * discovery: the relay we greet sees the claim, checks the host matches our
+     * source IP, dials us back, and only then shares us onward.
+     */
+    private volatile String mAdvertisedEndpoint;
+
+    public void setAdvertisedEndpoint(String zHostPort) {
+        mAdvertisedEndpoint = (zHostPort == null || zHostPort.isEmpty()) ? null : zHostPort;
+    }
+
     public HostConnection(String zHost, int zPort, KeyPair zPerHostKey, String zVersion) {
         mHost = zHost;
         mPort = zPort;
@@ -105,8 +119,7 @@ public final class HostConnection implements Closeable {
         mIn = new DataInputStream(mSocket.getInputStream());
 
         // 1. Greet first.
-        Frame.write(mOut, Frame.body(Frame.MSG_GREETING,
-                Greeting.commsOnly(mVersion, mHost, mPort)));
+        Frame.write(mOut, Frame.body(Frame.MSG_GREETING, myGreeting()));
 
         // 2. Read until we see theirs, discarding chain data.
         long deadline = System.currentTimeMillis() + zTimeoutMs;
@@ -270,7 +283,25 @@ public final class HostConnection implements Closeable {
     }
 
     public byte[] serialisedGreeting() {
-        return Codec.serialise(Greeting.commsOnly(mVersion, mHost, mPort));
+        return Codec.serialise(myGreeting());
+    }
+
+    /** Our greeting: the advertised endpoint when we have a proven one, else the
+     *  measured-safe default of the dialled host:port. */
+    private Greeting myGreeting() {
+        String adv = mAdvertisedEndpoint;
+        if (adv != null) {
+            int c = adv.lastIndexOf(':');
+            if (c > 0) {
+                try {
+                    return Greeting.commsOnly(mVersion, adv.substring(0, c),
+                            Integer.parseInt(adv.substring(c + 1)));
+                } catch (NumberFormatException ignored) {
+                    // fall through to the default
+                }
+            }
+        }
+        return Greeting.commsOnly(mVersion, mHost, mPort);
     }
 
     @Override

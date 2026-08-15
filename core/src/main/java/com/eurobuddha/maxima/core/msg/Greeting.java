@@ -79,12 +79,83 @@ public final class Greeting implements Streamable {
      * @param zHost our public host, or null/empty/0.0.0.0 to stay silent
      */
     public static Greeting commsOnly(String zVersion, String zHost, int zPort) {
+        return commsOnly(zVersion, zHost, zPort, java.util.Collections.emptyList());
+    }
+
+    /**
+     * A comms-only greeting that also shares relays we have VERIFIED, in the
+     * exact shape classic uses for peer lists: a JSON array of "ip:port"
+     * strings (InetSocketAddressIO.addressesListToJSONArray). This is how
+     * relay-gossip discovery travels — no new message types, just the greeting
+     * vocabulary classic already has.
+     */
+    public static Greeting commsOnly(String zVersion, String zHost, int zPort,
+                                     List<String> zPeers) {
         boolean known = zHost != null && !zHost.isEmpty()
                 && !zHost.equals("0.0.0.0") && !zHost.equals("::");
+        StringBuilder peers = new StringBuilder("[");
+        for (int i = 0; i < zPeers.size(); i++) {
+            if (i > 0) {
+                peers.append(',');
+            }
+            peers.append('"').append(zPeers.get(i)).append('"');
+        }
+        peers.append(']');
         String json = "{\"welcome\":\"Maxima\""
                 + (known ? ",\"host\":\"" + zHost + "\"" : "")
-                + ",\"port\":\"" + zPort + "\",\"peers\":[]}";
+                + ",\"port\":\"" + zPort + "\",\"peers\":" + peers + "}";
         return new Greeting(zVersion, json, -1);
+    }
+
+    /**
+     * The "peers" array from a greeting's extra data — flat "ip:port" strings,
+     * classic's wire shape. Anything malformed is skipped, never thrown.
+     */
+    public static List<String> peersOf(String zExtraDataJson) {
+        List<String> out = new ArrayList<>();
+        if (zExtraDataJson == null) {
+            return out;
+        }
+        int k = zExtraDataJson.indexOf("\"peers\"");
+        if (k < 0) {
+            return out;
+        }
+        int open = zExtraDataJson.indexOf('[', k);
+        int close = open < 0 ? -1 : zExtraDataJson.indexOf(']', open);
+        if (open < 0 || close < 0) {
+            return out;
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\"([^\"]{1,64}:\\d{1,5})\"")
+                .matcher(zExtraDataJson.substring(open, close + 1));
+        while (m.find()) {
+            out.add(m.group(1));
+        }
+        return out;
+    }
+
+    /** The "host" claim from a greeting's extra data, or "" if absent. */
+    public static String hostOf(String zExtraDataJson) {
+        return flatValue(zExtraDataJson, "host");
+    }
+
+    /** The "port" claim from a greeting's extra data, or -1 if absent/bad. */
+    public static int portOf(String zExtraDataJson) {
+        try {
+            return Integer.parseInt(flatValue(zExtraDataJson, "port"));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private static String flatValue(String zJson, String zKey) {
+        if (zJson == null) {
+            return "";
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\"" + zKey + "\"\\s*:\\s*\"([^\"]*)\"")
+                .matcher(zJson);
+        return m.find() ? m.group(1) : "";
     }
 
     @Override

@@ -74,6 +74,19 @@ public final class HostPool {
     private final Map<String, HostRecord> mKnown = new ConcurrentHashMap<>();
     private final Map<String, HostConnection> mActive = new ConcurrentHashMap<>();
 
+    /** Our proven public endpoint to claim in greetings, or null (see HostConnection). */
+    private volatile String mAdvertisedEndpoint;
+
+    /** Claim (or stop claiming, with null) a proven endpoint on all FUTURE attaches. */
+    public void setAdvertisedEndpoint(String zHostPort) {
+        mAdvertisedEndpoint = (zHostPort == null || zHostPort.isEmpty()) ? null : zHostPort;
+        // Existing connections greet once at attach; new claims travel on the
+        // next (re)attach, which the reconcile cycle produces naturally.
+        for (HostConnection c : mActive.values()) {
+            c.setAdvertisedEndpoint(mAdvertisedEndpoint);
+        }
+    }
+
     public HostPool(MaximaIdentity zIdentity, String zVersion, int zTarget) {
         mIdentity = zIdentity;
         mVersion = zVersion;
@@ -144,6 +157,7 @@ public final class HostPool {
                 Integer.parseInt(zHostPort.substring(zHostPort.lastIndexOf(':') + 1)),
                 mIdentity.hostKey(zHostPort),
                 mVersion);
+        conn.setAdvertisedEndpoint(mAdvertisedEndpoint);
         try {
             conn.attach(zTimeoutMs);
             mActive.put(zHostPort, conn);

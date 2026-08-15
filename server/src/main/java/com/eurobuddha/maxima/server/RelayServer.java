@@ -119,6 +119,19 @@ public final class RelayServer {
     private final MlsService mMls = new MlsService(mDirectory);
     private final Mailbox mMailbox = new Mailbox();
 
+    /**
+     * Relay-gossip, the classic way: peers learned from inbound greetings whose
+     * host claim matches the connection's source IP, dial-back verified before
+     * they are ever shared, then served in OUR greeting's "peers" list — the
+     * same vocabulary classic Minima uses (Greeting extraData "host"/"port"/
+     * "peers", P2PPeersChecker's verify-before-adopt).
+     */
+    private final com.eurobuddha.maxima.core.session.RelayPeers mPeers =
+            new com.eurobuddha.maxima.core.session.RelayPeers();
+    /** Claims are cheap to send but cost us a verification dial — cap per source. */
+    private static final int PER_SOURCE_CLAIMS_PER_MIN = 6;
+    private final Map<String, RateLimit> mClaimLimits = new ConcurrentHashMap<>();
+
     private final AtomicLong mConnSeq = new AtomicLong();
     private final AtomicLong mRelayed = new AtomicLong();
     private final AtomicLong mDropped = new AtomicLong();
@@ -374,10 +387,30 @@ public final class RelayServer {
 
         switch (type) {
             case Frame.MSG_GREETING: {
-                // Reply with ours, then offer ourselves as a directory, exactly
-                // as a classic node does to an incoming peer.
+                // Relay-gossip intake, classic style: if the peer's greeting
+                // claims a public host:port, and the claimed host is EXACTLY the
+                // source IP of this connection (self-nomination only), queue a
+                // dial-back verification. Rate-limited — each claim can cost us
+                // an outbound dial.
+                try {
+                    Greeting theirs = Greeting.fromBytes(payload);
+                    String extra = theirs.getExtraData();
+                    String claimedHost = Greeting.hostOf(extra);
+                    int claimedPort = Greeting.portOf(extra);
+                    if (!claimedHost.isEmpty() && claimedHost.equals(zConn.sourceIp)
+                            && allow(mClaimLimits, zConn.sourceIp, PER_SOURCE_CLAIMS_PER_MIN)) {
+                        mPeers.claim(zConn.sourceIp, claimedHost, claimedPort,
+                                mPublicHost + ":" + mPort);
+                    }
+                } catch (Exception ignored) {
+                    // A malformed greeting still gets our reply below, as before.
+                }
+
+                // Reply with ours — now carrying the relays we have VERIFIED, so
+                // every client that attaches learns the wider fleet — then offer
+                // ourselves as a directory, exactly as a classic node does.
                 zConn.write(Frame.body(Frame.MSG_GREETING,
-                        Greeting.commsOnly(mVersion, mPublicHost, mPort)));
+                        Greeting.commsOnly(mVersion, mPublicHost, mPort, mPeers.share())));
                 zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL,
                         MaximaCTRLMessage.mls(mIdentity.mxIdentity())));
                 return;
@@ -690,9 +723,10 @@ public final class RelayServer {
         }
         long now = System.currentTimeMillis();
         for (Map<String, RateLimit> m : java.util.Arrays.asList(mLimits, mFrameLimits,
-                mTousLimits, mProbeLimits)) {
+                mTousLimits, mProbeLimits, mClaimLimits)) {
             m.entrySet().removeIf(e -> now - e.getValue().windowStart > 120_000);
         }
+        mPeers.expire();
     }
 
     /** Flush any write-behind persistence. Called on the maintenance tick + shutdown. */
