@@ -91,6 +91,12 @@ public final class MaximaApiDelivery {
         }
     }
 
+    /** Stage bytes as a content:// URI (5-min pruned) — shared with the media
+     *  get path, which hands large decrypted media back the same way. */
+    static Uri stageFile(Context zCtx, byte[] zData, String zId) {
+        return writePayload(zCtx, zId, zData);
+    }
+
     private static Uri writePayload(Context zCtx, String zId, byte[] zData) {
         try {
             File dir = new File(zCtx.getCacheDir(), "maximapayloads");

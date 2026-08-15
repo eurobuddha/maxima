@@ -34,6 +34,9 @@ public final class MaximaApiMessages {
     public static final String ACTION_IDENTITY = PKG + ".IDENTITY";
     /** Contact operations: list, add, remove. */
     public static final String ACTION_CONTACTS = PKG + ".CONTACTS";
+    /** Self-hosted media: EXTRA_OP "put" (datauri in -> manifest in EXTRA_DATA)
+     *  or "get" (manifest in EXTRA_DATA -> bytes out via datauri). */
+    public static final String ACTION_MEDIA = PKG + ".MEDIA";
 
     // ---- us -> app ----
     public static final String ACTION_RESPONSE = PKG + ".RESPONSE";

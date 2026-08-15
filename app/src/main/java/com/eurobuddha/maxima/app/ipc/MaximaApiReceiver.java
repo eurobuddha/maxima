@@ -80,6 +80,9 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
             case MaximaApiMessages.ACTION_CONTACTS:
                 handleContacts(context, intent, pkg, cls, reqId);
                 return;
+            case MaximaApiMessages.ACTION_MEDIA:
+                handleMedia(context, intent, pkg, cls, reqId);
+                return;
             default:
         }
     }
@@ -383,6 +386,91 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         ctx.sendBroadcast(r);
     }
 
+    /**
+     * Self-hosted media, so a client app never has to run its own relay or hold
+     * the whole file in a broadcast.
+     *
+     *   op=put : EXTRA_DATA_URI -> encrypt+chunk+publish (own store + relay
+     *            replicas) -> the manifest JSON in EXTRA_RESULT.
+     *   op=get : EXTRA_DATA the manifest JSON -> fetch+verify+decrypt -> the
+     *            bytes handed back as a content:// grant in EXTRA_DATA_URI.
+     *
+     * Encryption, chunking, replication and integrity are the transport's; the
+     * app only ever sees its own plaintext bytes and an opaque manifest string.
+     */
+    private void handleMedia(Context ctx, Intent intent, String pkg, String cls, String reqId) {
+        Intent r = reply(pkg, cls, reqId);
+        if (!isApproved(ctx, pkg)) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR, "not approved");
+            ctx.sendBroadcast(r);
+            return;
+        }
+        final com.eurobuddha.maxima.core.media.MediaService media = MaximaService.media();
+        if (media == null) {
+            r.putExtra(MaximaApiMessages.EXTRA_ERROR, "transport not running");
+            ctx.sendBroadcast(r);
+            return;
+        }
+        final String op = intent.getStringExtra(MaximaApiMessages.EXTRA_OP);
+        final String manifestJson = intent.getStringExtra(MaximaApiMessages.EXTRA_DATA);
+        final android.net.Uri inUri = intent.getParcelableExtra(MaximaApiMessages.EXTRA_DATA_URI);
+        final String mime = intent.getType() != null ? intent.getType()
+                : "application/octet-stream";
+
+        new Thread(() -> {
+            Intent out = reply(pkg, cls, reqId);
+            try {
+                if ("get".equals(op)) {
+                    com.eurobuddha.maxima.core.media.MediaManifest mf =
+                            com.eurobuddha.maxima.core.media.MediaManifest.decode(manifestJson);
+                    if (mf == null) {
+                        out.putExtra(MaximaApiMessages.EXTRA_ERROR, "bad manifest");
+                        ctx.sendBroadcast(out);
+                        return;
+                    }
+                    byte[] bytes = media.fetch(mf);   // verified end to end
+                    android.net.Uri uri = MaximaApiDelivery.stageFile(ctx, bytes,
+                            "media-" + reqId);
+                    ctx.grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    out.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    out.putExtra(MaximaApiMessages.EXTRA_DATA_URI, uri);
+                    out.putExtra(MaximaApiMessages.EXTRA_DATA_LEN, bytes.length);
+                    out.putExtra(MaximaApiMessages.EXTRA_RESULT, "ok");
+                } else {   // put
+                    byte[] plain = readUri(ctx, inUri);
+                    if (plain == null) {
+                        out.putExtra(MaximaApiMessages.EXTRA_ERROR, "no input");
+                        ctx.sendBroadcast(out);
+                        return;
+                    }
+                    com.eurobuddha.maxima.core.media.MediaManifest mf =
+                            media.publish(plain, mime);
+                    out.putExtra(MaximaApiMessages.EXTRA_RESULT, mf.encode());
+                }
+            } catch (Exception e) {
+                out.putExtra(MaximaApiMessages.EXTRA_ERROR, String.valueOf(e.getMessage()));
+            }
+            ctx.sendBroadcast(out);
+        }, "maxima-ipc-media").start();
+    }
+
+    private byte[] readUri(Context ctx, android.net.Uri uri) {
+        if (uri == null) {
+            return null;
+        }
+        try (java.io.InputStream in = ctx.getContentResolver().openInputStream(uri)) {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                bos.write(buf, 0, n);
+            }
+            return bos.toByteArray();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** Every package the user has approved. */
     public static java.util.Set<String> approvedPackages(Context ctx) {
         return new HashSet<>(prefs(ctx).getStringSet(APPROVED, new HashSet<>()));
@@ -422,7 +510,9 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
                 || a.equals(com.eurobuddha.maxima.core.rpc.RpcEnvelope.APPLICATION)
                 || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_SET)
                 || a.equals(com.eurobuddha.maxima.core.directory.MlsService.APP_GET)
-                || a.equals(com.eurobuddha.maxima.core.net.Probe.APPLICATION);
+                || a.equals(com.eurobuddha.maxima.core.net.Probe.APPLICATION)
+                // the media blob shelf is transport-internal; apps use ACTION_MEDIA
+                || com.eurobuddha.maxima.core.media.MediaWire.isMediaApp(a);
     }
 
     // ---------------------------------------------------------------

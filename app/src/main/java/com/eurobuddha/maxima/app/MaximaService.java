@@ -57,6 +57,13 @@ public final class MaximaService extends Service {
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
 
+    private static volatile com.eurobuddha.maxima.core.media.MediaService sMedia;
+
+    /** The media publish/fetch service (self-hosted blobs), or null if not up. */
+    public static com.eurobuddha.maxima.core.media.MediaService media() {
+        return sMedia;
+    }
+
     public static MaximaNode node() {
         return sNode;
     }
@@ -96,6 +103,15 @@ public final class MaximaService extends Service {
 
         sNode.setName(SeedStore.displayName(this));
         sNode.setStaticMls(MlsStore.get(this));
+
+        // The media layer: THIS phone is the source of truth for media it
+        // publishes (own BlobStore under files/media), and it fetches others'
+        // media chunk-by-chunk via relays / direct. Bounded so the app can't
+        // fill the phone; the owner's relays hold replicas for when we sleep.
+        sMedia = new com.eurobuddha.maxima.core.media.MediaService(sNode,
+                new com.eurobuddha.maxima.core.store.BlobStore(
+                        new java.io.File(getFilesDir(), "media"),
+                        512L * 1024 * 1024));
 
         com.eurobuddha.maxima.core.chat.ChatEngine chat =
                 new com.eurobuddha.maxima.core.chat.ChatEngine(sNode);
