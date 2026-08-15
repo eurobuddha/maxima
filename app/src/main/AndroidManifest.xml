@@ -24,7 +24,6 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
     <!-- The IPC surface is guarded by this SIGNATURE-level permission: only an
          app signed with the same key (the family release key) can send to it.
          A BroadcastReceiver cannot verify its caller, so without this any
