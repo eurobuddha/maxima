@@ -6,7 +6,7 @@ plugins {
 
 // A fresh artifact line. macOS jpackage requires a major version >= 1, so start
 // the packaged app at 1.0.0 (independent of the relay protocol version).
-version = '1.0.0'
+version = '1.0.1'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
