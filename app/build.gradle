@@ -64,5 +64,5 @@ dependencies {
     implementation 'androidx.work:work-runtime:2.9.1'
     // Android < API 29 has no SHA3-256 in its default provider; :core takes a
     // digest supplier rather than a hard dependency, and we inject BC here.
-    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+    implementation 'org.bouncycastle:bcprov-jdk15on:1.69'   // 1.7x removed the pqc.gmss Winternitz utils the vendored signer needs; 1.69 also has SHA3Digest
 }

@@ -86,6 +86,8 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         LayoutInflater inf = LayoutInflater.from(this);
         mPages.add(new ChatsPage(this, inf.inflate(R.layout.page_chats, null)));
         mPages.add(new ContactsPage(this, inf.inflate(R.layout.page_contacts, null)));
+        mPages.add(new com.eurobuddha.maxima.app.ui.WalletPage(this,
+                inf.inflate(R.layout.page_wallet, null)));
         mPages.add(new NetworkPage(this, inf.inflate(R.layout.page_network, null)));
         mPages.add(new SettingsPage(this, inf.inflate(R.layout.page_settings, null)));
 
@@ -120,7 +122,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         });
         // All four are cheap and hold live state; recreating them on every swipe
         // would drop scroll position and re-run every lookup.
-        mPager.setOffscreenPageLimit(3);
+        mPager.setOffscreenPageLimit(4);
         ((TabLayout) findViewById(R.id.tabs)).setupWithViewPager(mPager);
 
         mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
