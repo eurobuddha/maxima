@@ -106,6 +106,19 @@ disproportionate for an opportunistic bonus path. Accepted, consciously.
 **IPv6 out of scope.** Classic parses an address on the first `:` and cannot
 carry v6 literals. Every address path is v4-only by construction.
 
+**Relay gossip is Sybil-bounded, not Sybil-proof.** Discovery reuses classic's
+greeting vocabulary (`host`/`port` claim, `peers` list) with three gates: a
+relay accepts a claim only from the claimant itself (claimed host must equal
+the connection's source IP), verifies by dialling back before ever sharing it
+(`RelayPeers`), and a client adopts only after its own probe, capped to a
+bounded minority of its pool with the trusted bootstrap set never evicted
+(`RelayGossipClient`). An attacker who runs REAL reachable relays can still get
+some adopted — but they start at the bottom of `HostPool` scoring, are capped,
+and see only per-key routing metadata on E2E-encrypted, multi-homed traffic.
+Claim intake is rate-limited per source IP (dial-backs cost the relay an
+outbound connection). Accepted: this matches the classic network's own trust
+posture for peers.
+
 ## Not yet addressed
 
 - Per-connection bandwidth accounting (only message-rate and connection caps

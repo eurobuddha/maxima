@@ -29,6 +29,18 @@ it again, better, without breaking interoperability.
 | 11. Reliability + mailbox | dedup, replay window, retry, store-and-forward |
 | 12. Phone Tier 1 services | **19/19** live |
 | 13. Outward IPC | broadcast surface with approval + namespacing |
+| 14. Desktop node (`:desktop`) | native installers; auto port-forward + proof; relay gossip |
+
+## Run a node (desktop)
+
+Install the native package (dmg / msi / deb — see the `desktop-v*` GitHub
+releases) and that's it: the app runs a **full relay** in your menu bar, opens
+its inbound port on your router (NAT-PMP/UPnP), **proves** the port from outside
+via an existing relay before advertising anything, then announces itself so the
+fleet can discover and use it. Your identity is a 24-word seed created on first
+run (back it up — it is also a spendable Minima wallet seed). No router UPnP?
+The node stays an outbound-only contributor and says so honestly in the tray.
+Details: `docs/DESIGN-DESKTOP.md`.
 
 ### Verification summary
 
