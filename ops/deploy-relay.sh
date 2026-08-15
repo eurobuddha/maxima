@@ -31,6 +31,7 @@ shift
 
 PORT=9501
 HEAP=128m
+BLOB=1024   # media shelf in MB (0 = off). Conservative default for a shared VPS.
 JAR=""
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -39,6 +40,7 @@ while [ $# -gt 0 ]; do
         --port) PORT="$2"; shift 2 ;;
         --jar)  JAR="$2"; shift 2 ;;
         --heap) HEAP="$2"; shift 2 ;;
+        --blob) BLOB="$2"; shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -127,7 +129,7 @@ Group=maxima
 # -Xmx is deliberate: the working set is a routing table and a mailbox of small
 # records, and an unbounded default heap on a 1 GB VPS is how you lose the box.
 ExecStart=/usr/bin/java -Xmx$HEAP -jar /opt/maxima/maxima-server.jar \\
-    --port $PORT --data /var/lib/maxima
+    --port $PORT --data /var/lib/maxima --blobstore $BLOB
 # on-failure (not always) so the StartLimit gate above can actually trip.
 Restart=on-failure
 RestartSec=10
