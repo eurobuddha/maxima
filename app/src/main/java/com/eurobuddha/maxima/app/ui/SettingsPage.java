@@ -107,14 +107,38 @@ public final class SettingsPage implements Page {
                 "24 words", "seed");
 
         mApps.removeAllViews();
+        Set<String> pending = MaximaApiReceiver.pendingPackages(mAct);
         Set<String> approved = MaximaApiReceiver.approvedPackages(mAct);
-        if (approved.isEmpty()) {
+
+        // Requests first: an app asked to use Maxima as its transport and is
+        // waiting on the user. Approval is ALWAYS an explicit user action here -
+        // REGISTER only records the ask.
+        for (String pkg : pending) {
+            Ui.toggle(mAct, mApps, appLabel(pkg) + " — WANTS ACCESS",
+                    "Tap to approve or deny " + pkg, "pending", "ipc",
+                    () -> new AlertDialog.Builder(mAct)
+                            .setTitle("Let " + appLabel(pkg) + " use Maxima?")
+                            .setMessage(pkg + " wants to send and receive messages "
+                                    + "through your Maxima identity, on its own "
+                                    + "application channel.")
+                            .setNegativeButton("Deny", (d, w) -> {
+                                MaximaApiReceiver.deny(mAct, pkg);
+                                render();
+                            })
+                            .setPositiveButton("Approve", (d, w) -> {
+                                MaximaApiReceiver.approve(mAct, pkg);
+                                render();
+                            })
+                            .show());
+        }
+
+        if (approved.isEmpty() && pending.isEmpty()) {
             Ui.stat(mAct, mApps, "None yet",
                     "No other app on this phone is using Maxima as its transport",
                     "0", "ipc");
         } else {
             for (String pkg : approved) {
-                Ui.toggle(mAct, mApps, pkg, "Approved - tap to revoke", "allowed", "ipc",
+                Ui.toggle(mAct, mApps, appLabel(pkg), "Approved - tap to revoke", "allowed", "ipc",
                         () -> new AlertDialog.Builder(mAct)
                                 .setTitle("Revoke " + pkg + "?")
                                 .setMessage("It will no longer be able to send or receive "
@@ -126,6 +150,18 @@ public final class SettingsPage implements Page {
                                 })
                                 .show());
             }
+        }
+    }
+
+    /** The human app name for a package, falling back to the package id. */
+    private String appLabel(String pkg) {
+        try {
+            android.content.pm.ApplicationInfo ai =
+                    mAct.getPackageManager().getApplicationInfo(pkg, 0);
+            CharSequence l = mAct.getPackageManager().getApplicationLabel(ai);
+            return l == null ? pkg : l.toString();
+        } catch (Exception e) {
+            return pkg;
         }
     }
 

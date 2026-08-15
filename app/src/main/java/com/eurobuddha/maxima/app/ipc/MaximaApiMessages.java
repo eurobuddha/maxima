@@ -72,6 +72,11 @@ public final class MaximaApiMessages {
     public static final String EXTRA_CONNECTED = "connected";
     public static final String EXTRA_TIME = "timemilli";
     public static final String EXTRA_NAME = "name";
+    /** SEND option: route through the outbox (retry with backoff across
+     *  heartbeats) instead of a one-shot send. Requires EXTRA_TO to be a
+     *  contact's identity key. The reply carries the outbox EXTRA_MSGID and
+     *  EXTRA_RESULT "queued". */
+    public static final String EXTRA_RELIABLE = "reliable";
 
     // event names, matching classic
     public static final String EVENT_CONTACTS = "MAXIMACONTACTS";

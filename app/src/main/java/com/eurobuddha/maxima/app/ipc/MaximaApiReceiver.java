@@ -26,6 +26,9 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
     private static final String TAG = "MaximaApi";
     private static final String PREFS = "maxima_api_clients";
     private static final String APPROVED = "approved";
+    private static final String PENDING = "pending";
+    private static final String IPC_CHANNEL = "maxima_ipc";
+    private static final int NOTIF_ID_PENDING = 4210;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -87,11 +90,71 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         // Registration records the caller; APPROVAL is a user action in the UI.
         // Auto-approving here would let any installed app send as us.
         boolean approved = isApproved(ctx, pkg);
+
+        // Record the ask so the Settings screen can render an Approve button,
+        // and tell the user something asked. Without this, approval was
+        // unreachable: approve() existed but nothing ever surfaced a candidate.
+        if (!approved && !pendingPackages(ctx).contains(pkg)) {
+            Set<String> p = new HashSet<>(prefs(ctx).getStringSet(PENDING, new HashSet<>()));
+            p.add(pkg);
+            prefs(ctx).edit().putStringSet(PENDING, p).apply();
+            notifyPendingRequest(ctx, pkg);
+        }
+
+        // A register from a family app is also the "wake the transport" signal —
+        // a client can do nothing while node() is null, and it has no other way
+        // to start us (the service is deliberately unexported).
+        boolean starting = false;
+        if (MaximaService.node() == null) {
+            try {
+                MaximaService.start(ctx);
+                starting = true;
+            } catch (Exception e) {
+                Log.w(TAG, "could not start transport for " + pkg + ": " + e);
+            }
+        }
+
         Intent r = reply(pkg, cls, reqId);
         r.putExtra(MaximaApiMessages.EXTRA_ENABLED, approved);
         r.putExtra(MaximaApiMessages.EXTRA_RESULT,
-                approved ? "approved" : "pending - approve in the Maxima app");
+                approved ? (starting ? "approved - transport starting" : "approved")
+                         : "pending - approve in the Maxima app");
         ctx.sendBroadcast(r);
+    }
+
+    /** A heads-up that an app wants to use Maxima, tapping into the app. */
+    private void notifyPendingRequest(Context ctx, String pkg) {
+        try {
+            android.app.NotificationManager nm =
+                    ctx.getSystemService(android.app.NotificationManager.class);
+            if (nm == null) {
+                return;
+            }
+            if (nm.getNotificationChannel(IPC_CHANNEL) == null) {
+                nm.createNotificationChannel(new android.app.NotificationChannel(
+                        IPC_CHANNEL, "App connections",
+                        android.app.NotificationManager.IMPORTANCE_DEFAULT));
+            }
+            CharSequence label = pkg;
+            try {
+                android.content.pm.ApplicationInfo ai =
+                        ctx.getPackageManager().getApplicationInfo(pkg, 0);
+                label = ctx.getPackageManager().getApplicationLabel(ai);
+            } catch (Exception ignored) {
+            }
+            Intent open = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+            android.app.PendingIntent pi = android.app.PendingIntent.getActivity(ctx, 0,
+                    open, android.app.PendingIntent.FLAG_IMMUTABLE);
+            nm.notify(NOTIF_ID_PENDING, new android.app.Notification.Builder(ctx, IPC_CHANNEL)
+                    .setSmallIcon(com.eurobuddha.maxima.app.R.drawable.ic_stat_maxima)
+                    .setContentTitle(label + " wants to use Maxima")
+                    .setContentText("Approve or deny in Settings → Connected apps")
+                    .setContentIntent(pi)
+                    .setAutoCancel(true)
+                    .build());
+        } catch (Exception e) {
+            Log.w(TAG, "pending notification failed: " + e);
+        }
     }
 
     private void handleIdentity(Context ctx, String pkg, String cls, String reqId) {
@@ -154,12 +217,56 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         }
 
         // Off the broadcast thread - a send opens a socket.
+        //
+        // EXTRA_TO accepts three shapes, in decreasing order of resilience:
+        //   0x<identity pubkey>  a CONTACT's key -> sendToContact (multi-address
+        //                        failover, LAN-first) or, with EXTRA_RELIABLE,
+        //                        sendReliable (outbox + retry across heartbeats)
+        //   MAX#pub#mls          a permanent address -> resolved via MLS first
+        //   Mx...@host:port      a raw routing address -> one shot, one address
+        //
+        // Result contract: statusName UNKNOWN means the relay HELD the message
+        // for an offline peer (classic wire behaviour) - clients must render it
+        // as sent-pending, never as a failure.
         final byte[] data = payload;
+        final boolean reliable = intent.getBooleanExtra(MaximaApiMessages.EXTRA_RELIABLE, false);
         new Thread(() -> {
             Intent out = reply(pkg, cls, reqId);
             try {
+                String dest = to.trim();
+
+                // A bare identity key: use the contact book's addresses.
+                if (dest.startsWith("0x") && dest.indexOf('@') < 0) {
+                    com.eurobuddha.maxima.core.contacts.Contact c = node.contact(dest);
+                    if (c == null) {
+                        out.putExtra(MaximaApiMessages.EXTRA_ERROR, "not a contact: " + dest);
+                        ctx.sendBroadcast(out);
+                        return;
+                    }
+                    if (reliable) {
+                        String msgid = node.sendReliable(c, application, data);
+                        out.putExtra(MaximaApiMessages.EXTRA_RESULT, "queued");
+                        out.putExtra(MaximaApiMessages.EXTRA_MSGID, msgid);
+                        ctx.sendBroadcast(out);
+                        return;
+                    }
+                    com.eurobuddha.maxima.core.MaximaSender.Result res =
+                            node.sendToContact(c, application, data);
+                    out.putExtra(MaximaApiMessages.EXTRA_RESULT, res.statusName);
+                    if (!res.isOk()) {
+                        out.putExtra(MaximaApiMessages.EXTRA_ERROR, res.statusName);
+                    }
+                    ctx.sendBroadcast(out);
+                    return;
+                }
+
+                // A permanent MAX# address: resolve through the MLS first.
+                if (dest.startsWith("MAX#")) {
+                    dest = node.resolvePermanent(dest);
+                }
+
                 com.eurobuddha.maxima.core.MaximaSender.Result res =
-                        node.sendRaw(to, application, data);
+                        node.sendRaw(dest, application, data);
                 out.putExtra(MaximaApiMessages.EXTRA_RESULT, res.statusName);
                 if (!res.isOk()) {
                     out.putExtra(MaximaApiMessages.EXTRA_ERROR, res.statusName);
@@ -359,10 +466,24 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         return prefs(ctx).getStringSet(APPROVED, new HashSet<>()).contains(pkg);
     }
 
+    /** Packages that have asked to connect and await the user's verdict. */
+    public static java.util.Set<String> pendingPackages(Context ctx) {
+        return new HashSet<>(prefs(ctx).getStringSet(PENDING, new HashSet<>()));
+    }
+
     public static void approve(Context ctx, String pkg) {
         Set<String> s = new HashSet<>(prefs(ctx).getStringSet(APPROVED, new HashSet<>()));
         s.add(pkg);
-        prefs(ctx).edit().putStringSet(APPROVED, s).apply();
+        Set<String> p = new HashSet<>(prefs(ctx).getStringSet(PENDING, new HashSet<>()));
+        p.remove(pkg);
+        prefs(ctx).edit().putStringSet(APPROVED, s).putStringSet(PENDING, p).apply();
+    }
+
+    /** Refuse a pending request (the app may ask again; it will re-appear). */
+    public static void deny(Context ctx, String pkg) {
+        Set<String> p = new HashSet<>(prefs(ctx).getStringSet(PENDING, new HashSet<>()));
+        p.remove(pkg);
+        prefs(ctx).edit().putStringSet(PENDING, p).apply();
     }
 
     public static void revoke(Context ctx, String pkg) {
