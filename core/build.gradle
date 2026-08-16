@@ -68,6 +68,14 @@ tasks.register('keepaliveTest', JavaExec) {
     mainClass = 'com.eurobuddha.maxima.core.KeepaliveUnitTest'
 }
 
+tasks.register('maximaLoopTest', JavaExec) {
+    group = 'verification'
+    description = 'Assert the periodic Maxima loop guards short-circuit before any network call'
+    dependsOn 'parityClasses'
+    classpath = sourceSets.parity.runtimeClasspath
+    mainClass = 'com.eurobuddha.maxima.core.MaximaLoopTest'
+}
+
 tasks.register('generateVectors', JavaExec) {
     group = 'verification'
     description = 'Regenerate golden vectors from the reference minima.jar'

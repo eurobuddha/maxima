@@ -52,6 +52,18 @@ public final class MaximaNode {
     private final Mailbox mMailbox = new Mailbox();
     private final MlsStore mDirectory = new MlsStore();
 
+    // ---- Maxima maintenance loop, matching the reference cadence ----
+    /** The reference re-publishes to MLS and re-announces to every contact on a
+     *  20-min loop (MAXIMA_LOOP_DELAY), first firing 3 min after boot. We drive
+     *  the same from the heartbeat rather than a dedicated timer. */
+    private static final long MAXIMA_LOOP_MS = 20 * 60 * 1000L;
+    private static final long FIRST_LOOP_MS = 3 * 60 * 1000L;
+    /** Only re-resolve a contact via MLS if we have not heard from them for this
+     *  long — the reference's MAXIMA_CHECK_MLS 30-min threshold. */
+    private static final long MLS_STALE_MS = 30 * 60 * 1000L;
+    private final long mStartedAt = System.currentTimeMillis();
+    private volatile long mLastMaximaLoop;   // 0 until the first loop runs
+
     /** Tier 2 inbound listener. Null until {@link #startDirect}. */
     private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
     /** Proven public ip:port, or empty. Set only after external proof. */
@@ -1046,5 +1058,74 @@ public final class MaximaNode {
         flushOutbox();
         mRpc.expire();
         mDirectory.flushExpired();
+
+        // The periodic Maxima loop: re-publish + re-announce + re-resolve stale
+        // contacts, on the reference's cadence, INDEPENDENT of a host-set change.
+        // Classic does this every 20 min (first at 3 min) so a contact who moved
+        // hosts, or an MLS entry that expired, is refreshed even when nothing on
+        // our side changed. The heartbeat calls maintain() far more often than
+        // this; the time gate makes it fire on the reference schedule.
+        long nowT = System.currentTimeMillis();
+        long due = (mLastMaximaLoop == 0)
+                ? mStartedAt + FIRST_LOOP_MS
+                : mLastMaximaLoop + MAXIMA_LOOP_MS;
+        if (nowT >= due) {
+            mLastMaximaLoop = nowT;
+            maximaLoop();
+        }
+    }
+
+    /** One turn of the reference's MAXIMA_LOOP: re-publish our address to MLS and
+     *  re-announce to every contact (MAXIMA_REFRESH), then re-resolve contacts we
+     *  have not heard from recently (MAXIMA_CHECK_MLS). */
+    void maximaLoop() {
+        refreshContacts();      // publishToMls() + re-introduce to all contacts
+        checkStaleMls();
+    }
+
+    /**
+     * Re-resolve, via their MLS, the current address of every contact we have not
+     * heard from for {@link #MLS_STALE_MS} — the reference's MAXIMA_CHECK_MLS. A
+     * contact who moved hosts advertises the new address to their MLS; without
+     * this we would keep trying a dead address until they happen to message us.
+     *
+     * @return how many contacts got a fresh address
+     */
+    public int checkStaleMls() {
+        long now = System.currentTimeMillis();
+        int refreshed = 0;
+        for (Contact c : mContacts.values()) {
+            if (c.mls == null || c.mls.isEmpty()) {
+                continue;                       // no MLS server known for them
+            }
+            if (now - c.lastSeen < MLS_STALE_MS) {
+                continue;                       // heard from recently - not stale
+            }
+            try {
+                com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
+                        new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
+                                .resolve(c.mls, c.publicKey);
+                if (r.ok() && r.address != null && !r.address.isEmpty()
+                        && !r.address.equals(c.primaryAddress())) {
+                    // Freshest address first; keep the rest as fallbacks. Do NOT
+                    // bump lastSeen - an MLS lookup is not hearing from them, and
+                    // bumping it would stop us re-checking a still-moving contact.
+                    java.util.List<String> merged = new ArrayList<>();
+                    merged.add(r.address);
+                    for (String a : c.addresses) {
+                        if (!a.equals(r.address)) {
+                            merged.add(a);
+                        }
+                    }
+                    c.setAddresses(merged);
+                    saveContact(c);
+                    fireContacts(c, false);
+                    refreshed++;
+                }
+            } catch (Exception ignored) {
+                // Best effort; the next loop retries.
+            }
+        }
+        return refreshed;
     }
 }
