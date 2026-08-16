@@ -154,6 +154,7 @@ public final class RelayServer {
     private final AtomicLong mRelayed = new AtomicLong();
     private final AtomicLong mDropped = new AtomicLong();
     private final AtomicLong mStored = new AtomicLong();
+    private final AtomicLong mKeepalives = new AtomicLong();
 
     private volatile boolean mRunning;
     private ServerSocket mServer;
@@ -181,9 +182,19 @@ public final class RelayServer {
         final DataOutputStream out;
         volatile String routingKey;
         volatile long lastSeen = System.currentTimeMillis();
+        /** When we last WROTE anything down this socket. The reference drops a
+         *  peer it has not READ from in 10 min, and a peer reads from us only
+         *  when we write - so a quiet relay must write a keep-alive on this
+         *  cadence or a classic client drops us. Distinct from lastSeen (their
+         *  traffic to us): a client can be sending us data while never reading
+         *  from us, and would still drop us without this. */
+        volatile long lastWrite = System.currentTimeMillis();
         /** Every route this conn registered, so cleanup removes ALL of them. */
         final java.util.Set<String> routes =
                 java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+        /** cleanup() runs its body once even if two threads reach it. */
+        final java.util.concurrent.atomic.AtomicBoolean cleaned =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
 
         Conn(Socket zSocket) throws Exception {
             socket = zSocket;
@@ -195,6 +206,7 @@ public final class RelayServer {
 
         synchronized void write(byte[] zBody) throws Exception {
             Frame.write(out, zBody);
+            lastWrite = System.currentTimeMillis();
         }
 
         void close() {
@@ -386,6 +398,13 @@ public final class RelayServer {
     }
 
     private void cleanup(Conn zConn) {
+        // Idempotent: the sweep (maintain thread) and serve()'s finally can both
+        // reach here for the same Conn - closing the socket in the sweep makes
+        // serve()'s blocked read throw. Without this guard the per-source counter
+        // double-decrements and the connection cap silently loosens.
+        if (!zConn.cleaned.compareAndSet(false, true)) {
+            return;
+        }
         mConns.remove(zConn.id);
         mPerSource.computeIfPresent(zConn.sourceIp, (k, v) -> v <= 1 ? null : v - 1);
         // Remove EVERY route this conn held, not just the last. The old code
@@ -474,8 +493,19 @@ public final class RelayServer {
                 handleMaxima(zConn, payload);
                 return;
             }
+            case Frame.MSG_SINGLE_PING: {
+                // A connectivity probe - either the reference's fresh-socket
+                // reachability check (NIOManager.sendPingMessage) or a peer's
+                // keep-alive. Answer with a SINGLE_PONG greeting exactly as a
+                // classic node does; an unanswered probe makes the prober mark
+                // us unreachable. lastSeen was already stamped by serve().
+                zConn.write(Frame.singlePong(Greeting.commsOnly(
+                        mVersion, mPublicHost, mPort, mPeers.share())));
+                return;
+            }
             default:
-                // PING and everything else: ignore, as a classic node does.
+                // MSG_PING (ack), SINGLE_PONG and everything else: ignore, as a
+                // classic node does (an unknown type only logs there).
         }
     }
 
@@ -817,6 +847,58 @@ public final class RelayServer {
             m.entrySet().removeIf(e -> now - e.getValue().windowStart > 120_000);
         }
         mPeers.expire();
+        sweepConnections(now);
+    }
+
+    /**
+     * Keep-alive + black-hole reap for registered clients. This is the relay
+     * half of the fix: a registered client is never idle-reaped (reaping every
+     * quiet phone would be wrong), so without this a client that (a) reads
+     * nothing from us drops US after the reference's 10-min read-silence, and
+     * (b) a NAT-dropped socket becomes a black hole we keep pushing into.
+     *
+     * For every registered connection:
+     *  - if it has answered NOTHING for {@link Frame#SILENCE_DROP_MS} despite our
+     *    keep-alives, it is dead - reap it so its route stops black-holing pushes;
+     *  - else if we have not written to it for {@link Frame#KEEPALIVE_INTERVAL_MS},
+     *    send a SINGLE_PING so the client keeps reading from us (and the NAT
+     *    mapping stays warm). A write that throws means the socket is already
+     *    gone - reap immediately.
+     *
+     * Runs off the 30s maintain tick, finer than the 120s keep-alive cadence.
+     */
+    private void sweepConnections(long zNow) {
+        sweepConnections(zNow, Frame.KEEPALIVE_INTERVAL_MS, Frame.SILENCE_DROP_MS);
+    }
+
+    /** Thresholds are parameters so a test can drive the behaviour without
+     *  waiting minutes; production always uses the {@link Frame} constants. */
+    void sweepConnections(long zNow, long zKeepaliveMs, long zSilenceMs) {
+        for (Conn c : mConns.values()) {
+            if (c.routingKey == null) {
+                continue;   // unregistered: serve() already reaps it on idle
+            }
+            if (zNow - c.lastSeen > zSilenceMs) {
+                log("reaping silent client conn=" + c.id
+                        + " silent=" + (zNow - c.lastSeen) / 1000 + "s");
+                cleanup(c);
+                continue;
+            }
+            if (zNow - c.lastWrite > zKeepaliveMs) {
+                try {
+                    c.write(Frame.singlePing());
+                    mKeepalives.incrementAndGet();
+                } catch (Exception e) {
+                    log("keep-alive write failed conn=" + c.id + " -> reap");
+                    cleanup(c);
+                }
+            }
+        }
+    }
+
+    /** How many keep-alive SINGLE_PINGs we have sent (diagnostics / stats). */
+    public long keepalivesSent() {
+        return mKeepalives.get();
     }
 
     /** Flush any write-behind persistence. Called on the maintenance tick + shutdown. */
