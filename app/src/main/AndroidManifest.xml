@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:tools="http://schemas.android.com/tools" xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Needed to reach the Minima Core node app on Android 11+; without this
          a targeted setPackage() broadcast is silently dropped. -->
@@ -34,6 +34,13 @@
         android:name="com.eurobuddha.maxima.app.permission.USE_MAXIMA"
         android:protectionLevel="signature" />
     <uses-permission android:name="com.eurobuddha.maxima.app.permission.USE_MAXIMA" />
+    <!-- Maxima is the family's IPC transport hub: it must read the signature of
+         ANY companion app that calls it, to prove the caller is family-signed
+         before acting as the user's identity. On Android 11+ that requires
+         seeing the package - a <queries> list can't enumerate future companions,
+         so the hub legitimately needs broad visibility. (Not a Play app.) -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <application
         android:allowBackup="false"
