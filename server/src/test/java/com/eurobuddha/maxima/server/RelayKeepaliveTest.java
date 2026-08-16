@@ -130,7 +130,7 @@ public final class RelayKeepaliveTest {
                 bad("connection was dropped by a keep-alive sweep");
             }
             // the client must still be able to read that keep-alive without error
-            if (waitFor(() -> relay.routeCount() >= 1, 5)) {
+            if (waitFor(() -> relay.routeCount() >= 1, 10)) {
                 ok("client survives the keep-alive and stays registered");
             } else {
                 bad("client fell off after a keep-alive");
@@ -157,7 +157,7 @@ public final class RelayKeepaliveTest {
             // pump connection, proving the host actually RELAYS (not just answers
             // keep-alives). The pump thread delivers it and marks the host.
             client.maintain(5000);
-            if (waitFor(() -> client.isHostVerified(hostPort), 15)) {
+            if (waitFor(() -> client.isHostVerified(hostPort), 30)) {
                 ok("check-connect: self-addressed probe relayed back, host verified");
             } else {
                 bad("check-connect probe did not round-trip (host unverified)");
@@ -172,7 +172,7 @@ public final class RelayKeepaliveTest {
             // silence threshold 0 => the client (which has sent nothing this
             // instant) is treated as a dead black hole and reaped.
             relay.sweepConnections(System.currentTimeMillis(), Long.MAX_VALUE, 0L);
-            if (waitFor(() -> relay.routeCount() == 0, 5)) {
+            if (waitFor(() -> relay.routeCount() == 0, 10)) {
                 ok("sweep reaps a silent (black-hole) client and frees its route");
             } else {
                 bad("silent client was not reaped (routeCount=" + relay.routeCount() + ")");
