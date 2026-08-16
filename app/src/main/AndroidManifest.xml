@@ -112,6 +112,15 @@
                 <action android:name="com.eurobuddha.maxima.app.CONTACTS" />
                 <action android:name="com.eurobuddha.maxima.app.MEDIA" />
             </intent-filter>
+            <!-- Media PUT carries the payload as a content:// data URI. Android's
+                 intent resolution requires a <data> element for a broadcast that
+                 has a data URI, so WITHOUT this the put broadcast silently fails
+                 to match and is never delivered - the media IPC would hang until
+                 the client's timeout. (get has no data URI and matches above.) -->
+            <intent-filter>
+                <action android:name="com.eurobuddha.maxima.app.MEDIA" />
+                <data android:scheme="content" android:mimeType="*/*" />
+            </intent-filter>
         </receiver>
 
         <provider

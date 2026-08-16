@@ -448,6 +448,7 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
                     out.putExtra(MaximaApiMessages.EXTRA_RESULT, mf.encode());
                 }
             } catch (Exception e) {
+                Log.w(TAG, "media " + op + " failed: " + e);
                 out.putExtra(MaximaApiMessages.EXTRA_ERROR, String.valueOf(e.getMessage()));
             }
             ctx.sendBroadcast(out);
