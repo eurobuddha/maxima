@@ -627,9 +627,10 @@ public final class MaximaNode {
         for (String mls : targets) {
             try {
                 any |= new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
-                        .publish(mls, myAddresses(), readers);
+                        .publish(mls, myAddresses(), readers,
+                                SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
             } catch (Exception ignored) {
-                // best effort per server
+                // best effort per server - a slow relay must not hold up the rest
             }
         }
         return any;

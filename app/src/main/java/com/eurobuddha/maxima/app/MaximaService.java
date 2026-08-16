@@ -72,6 +72,9 @@ public final class MaximaService extends Service {
 
     /** One swarm-discovery round at a time; gossip runs off the pump thread. */
     private final AtomicBoolean mGossipBusy = new AtomicBoolean(false);
+    /** maintain() does blocking network; runs off the pump thread, guarded so a
+     *  slow pass never overlaps or stalls message delivery. */
+    private final AtomicBoolean mMaintainBusy = new AtomicBoolean(false);
 
     /** How many multi-homed relays the swarm tries to hold open at once. */
     private static final int RELAY_TARGET = 4;
@@ -302,11 +305,28 @@ public final class MaximaService extends Service {
                         }
                     }
                     if (System.currentTimeMillis() - lastMaintain > 60_000) {
-                        int before = node.pool().activeCount();
-                        node.maintain(20000);
-                        int after = node.pool().activeCount();
-                        if (after != before) {
-                            EventLog.add("relays " + before + " -> " + after);
+                        // maintain() does blocking network (attach, publish,
+                        // check-connect); run it OFF the pump thread so message
+                        // delivery is never stalled - the desktop node already
+                        // runs maintain on its own executor for the same reason.
+                        if (mMaintainBusy.compareAndSet(false, true)) {
+                            final MaximaNode mnode = node;
+                            Thread mt = new Thread(() -> {
+                                try {
+                                    int before = mnode.pool().activeCount();
+                                    mnode.maintain(20000);
+                                    int after = mnode.pool().activeCount();
+                                    if (after != before) {
+                                        EventLog.add("relays " + before + " -> " + after);
+                                    }
+                                } catch (Exception e) {
+                                    Log.w(TAG, "maintain: " + e);
+                                } finally {
+                                    mMaintainBusy.set(false);
+                                }
+                            }, "maxima-maintain");
+                            mt.setDaemon(true);
+                            mt.start();
                         }
                         // Write-behind: state changes are batched, so they must
                         // actually be flushed on the heartbeat.
@@ -381,7 +401,7 @@ public final class MaximaService extends Service {
                         // reconcile-dropped host doesn't carry a stale count back.
                         mPumpFails.keySet().retainAll(node.pool().activeHosts());
                         lastMaintain = System.currentTimeMillis();
-                        updateNotification(after + " relay(s) connected");
+                        updateNotification(node.pool().activeCount() + " relay(s) connected");
                     }
                     if (!any) {
                         Thread.sleep(200);

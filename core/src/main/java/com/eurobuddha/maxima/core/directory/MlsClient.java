@@ -37,6 +37,15 @@ public final class MlsClient {
     /** Publish our address(es) to a directory. */
     public boolean publish(String zMlsAddress, List<String> zMyAddresses,
                            List<String> zAllowedReaders) throws Exception {
+        return publish(zMlsAddress, zMyAddresses, zAllowedReaders,
+                MaximaSender.CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+    }
+
+    /** As {@link #publish(String, List, List)} but with caller-chosen socket
+     *  timeouts - a periodic fan-out to several relays must not hang on one. */
+    public boolean publish(String zMlsAddress, List<String> zMyAddresses,
+                           List<String> zAllowedReaders, int zConnectMs, int zReadMs)
+            throws Exception {
         if (zMyAddresses.isEmpty()) {
             return false;
         }
@@ -44,7 +53,8 @@ public final class MlsClient {
         for (String pk : zAllowedReaders) {
             set.addValidPublicKey(pk);
         }
-        MaximaSender.Result r = sendTo(zMlsAddress, MlsService.APP_SET, Codec.serialise(set));
+        MaximaSender.Result r = sendTo(zMlsAddress, MlsService.APP_SET,
+                Codec.serialise(set), zConnectMs, zReadMs);
         return r.isOk();
     }
 
