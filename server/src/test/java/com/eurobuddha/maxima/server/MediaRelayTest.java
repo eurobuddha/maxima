@@ -98,12 +98,25 @@ public final class MediaRelayTest {
 
             File aliceBlobs = Files.createTempDirectory("aliceblobs").toFile();
             MediaService aliceMedia = new MediaService(alice, new BlobStore(aliceBlobs));
+            long t0 = System.currentTimeMillis();
             MediaManifest mf = aliceMedia.publish(media, "image/jpeg");
+            long publishMs = System.currentTimeMillis() - t0;
 
             if (mf.chunkIds.size() == 3 && !mf.sources.isEmpty()) {
                 ok("published: 3 chunks, manifest lists " + mf.sources.size() + " source(s)");
             } else {
                 bad("publish shape: chunks=" + mf.chunkIds.size() + " src=" + mf.sources);
+            }
+
+            // The regression this whole fix targets: only ONE relay is attached
+            // but REPLICAS is 2. The old serial path would grind chunk-by-chunk;
+            // the new bounded path must return as soon as the single worker
+            // finishes - NOT sit on the 55s budget waiting for a 2nd relay that
+            // can never appear. Comfortably under the client's 90s latch.
+            if (publishMs < 20_000) {
+                ok("publish returned in " + publishMs + "ms (no budget stall on a single relay)");
+            } else {
+                bad("publish took " + publishMs + "ms - replication is stalling the client");
             }
 
             // the relay actually holds every chunk now

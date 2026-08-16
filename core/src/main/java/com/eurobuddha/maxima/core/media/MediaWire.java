@@ -31,13 +31,23 @@ public final class MediaWire {
     public static final String APP_GET = "**maxima_blob_get**";
     public static final String APP_HAS = "**maxima_blob_has**";
 
+    /**
+     * Short socket timeouts for blob traffic. The owner's own store is the source
+     * of truth, so a relay is redundancy - a slow or dead one must cost seconds,
+     * not the chat-grade 20s+20s, or a multi-chunk publish blows the client's
+     * budget. 8s comfortably covers a healthy transatlantic round trip.
+     */
+    public static final int BLOB_CONNECT_TIMEOUT_MS = 8000;
+    public static final int BLOB_READ_TIMEOUT_MS = 8000;
+
     private MediaWire() {
     }
 
     /** Park one chunk on a relay. Returns true when the relay confirmed the id. */
     public static boolean put(MaximaNode zNode, String zRelayAddr, byte[] zChunk) {
         try {
-            MaximaSender.Result r = zNode.sendRaw(zRelayAddr, APP_PUT, zChunk);
+            MaximaSender.Result r = zNode.sendRaw(zRelayAddr, APP_PUT, zChunk,
+                    BLOB_CONNECT_TIMEOUT_MS, BLOB_READ_TIMEOUT_MS);
             if (!r.isOk() || !r.hasPayload()) {
                 return false;
             }
@@ -53,7 +63,8 @@ public final class MediaWire {
     public static byte[] get(MaximaNode zNode, String zRelayAddr, String zChunkId) {
         try {
             MaximaSender.Result r = zNode.sendRaw(zRelayAddr, APP_GET,
-                    zChunkId.getBytes(StandardCharsets.UTF_8));
+                    zChunkId.getBytes(StandardCharsets.UTF_8),
+                    BLOB_CONNECT_TIMEOUT_MS, BLOB_READ_TIMEOUT_MS);
             if (r.isOk() && r.hasPayload()) {
                 byte[] chunk = r.replyData.getBytes();
                 // never accept bytes that do not hash to the id we asked for
@@ -71,7 +82,8 @@ public final class MediaWire {
     public static boolean has(MaximaNode zNode, String zRelayAddr, String zChunkId) {
         try {
             return zNode.sendRaw(zRelayAddr, APP_HAS,
-                    zChunkId.getBytes(StandardCharsets.UTF_8)).isOk();
+                    zChunkId.getBytes(StandardCharsets.UTF_8),
+                    BLOB_CONNECT_TIMEOUT_MS, BLOB_READ_TIMEOUT_MS).isOk();
         } catch (Exception e) {
             return false;
         }

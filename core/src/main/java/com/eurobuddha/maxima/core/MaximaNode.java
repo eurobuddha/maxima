@@ -915,6 +915,17 @@ public final class MaximaNode {
     /** Send an application message to an address, no reliability wrapper. */
     public MaximaSender.Result sendRaw(String zAddress, String zApplication, byte[] zData)
             throws Exception {
+        return sendRaw(zAddress, zApplication, zData,
+                MaximaSender.CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+    }
+
+    /**
+     * As {@link #sendRaw(String, String, byte[])} but with caller-chosen socket
+     * timeouts - blob replication uses a short leash (see {@code MediaWire.put}).
+     */
+    public MaximaSender.Result sendRaw(String zAddress, String zApplication, byte[] zData,
+                                       int zConnectTimeoutMs, int zReadTimeoutMs)
+            throws Exception {
         int at = zAddress.indexOf('@');
         int colon = zAddress.indexOf(':');
         MiniData routing = com.eurobuddha.maxima.core.identity.MxAddress
@@ -926,7 +937,8 @@ public final class MaximaNode {
                 mIdentity.publicKey(), mIdentity.keyPair().getPrivate(),
                 routing.getBytes(), zApplication, zData, System.currentTimeMillis());
 
-        return MaximaSender.send(host, port, built.unit, built.msgid);
+        return MaximaSender.send(host, port, built.unit, built.msgid,
+                zConnectTimeoutMs, zReadTimeoutMs);
     }
 
     /**

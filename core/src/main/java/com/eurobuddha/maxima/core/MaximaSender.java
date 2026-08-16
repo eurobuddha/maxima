@@ -170,12 +170,24 @@ public final class MaximaSender {
      */
     public static Result send(String zHost, int zPort, MaxTxPoW zUnit, MiniData zMsgid)
             throws Exception {
+        return send(zHost, zPort, zUnit, zMsgid, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+    }
+
+    /**
+     * As {@link #send(String, int, MaxTxPoW, MiniData)} but with caller-chosen
+     * socket timeouts. Chat wants the patient 20s default; blob replication uses
+     * a short leash so one slow/unreachable relay cannot stall a publish - the
+     * owner already holds every chunk, so a relay is redundancy, not a gate.
+     */
+    public static Result send(String zHost, int zPort, MaxTxPoW zUnit, MiniData zMsgid,
+                              int zConnectTimeoutMs, int zReadTimeoutMs)
+            throws Exception {
 
         byte[] body = Frame.body(Frame.MSG_MAXIMA_TXPOW, zUnit);
 
         try (Socket sock = new Socket()) {
-            sock.connect(new InetSocketAddress(zHost, zPort), CONNECT_TIMEOUT_MS);
-            sock.setSoTimeout(READ_TIMEOUT_MS);
+            sock.connect(new InetSocketAddress(zHost, zPort), zConnectTimeoutMs);
+            sock.setSoTimeout(zReadTimeoutMs);
             sock.setTcpNoDelay(true);
 
             DataOutputStream out = new DataOutputStream(sock.getOutputStream());
@@ -183,7 +195,7 @@ public final class MaximaSender {
 
             Frame.write(out, body);
 
-            long deadline = System.currentTimeMillis() + READ_TIMEOUT_MS;
+            long deadline = System.currentTimeMillis() + zReadTimeoutMs;
             while (System.currentTimeMillis() < deadline) {
                 byte[] rx;
                 try {
