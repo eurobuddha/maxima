@@ -103,6 +103,7 @@
                 <action android:name="com.eurobuddha.maxima.app.SUBSCRIBE" />
                 <action android:name="com.eurobuddha.maxima.app.IDENTITY" />
                 <action android:name="com.eurobuddha.maxima.app.CONTACTS" />
+                <action android:name="com.eurobuddha.maxima.app.MEDIA" />
             </intent-filter>
         </receiver>
 
