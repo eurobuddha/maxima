@@ -91,6 +91,32 @@ public final class MaximaLoopTest {
             bad("purgeOldHosts wrong: purged=" + purged + " left=" + left);
         }
 
+        // ---- MLS rotation decision (pure, no sockets) ----
+        long ROT = 12L * 60 * 60 * 1000;
+        long t = 1_000_000_000L;
+        // first adoption: empty current takes the candidate immediately
+        String[] a1 = MaximaNode.decideMls("", "", 0, t, "MxA@h1:9001", false, ROT);
+        // same candidate: no change
+        String[] a2 = MaximaNode.decideMls("MxA@h1:9001", "", t, t + 1000, "MxA@h1:9001", false, ROT);
+        // different candidate, too soon, current still alive: HOLD
+        String[] a3 = MaximaNode.decideMls("MxA@h1:9001", "", t, t + 1000, "MxB@h2:9001", false, ROT);
+        // different candidate after 12h: rotate, retain old
+        String[] a4 = MaximaNode.decideMls("MxA@h1:9001", "", t, t + ROT, "MxB@h2:9001", false, ROT);
+        // current host DEAD: rotate immediately even before 12h
+        String[] a5 = MaximaNode.decideMls("MxA@h1:9001", "", t, t + 1000, "MxB@h2:9001", true, ROT);
+        boolean rot =
+                a1[0].equals("MxA@h1:9001")
+                && a2[0].equals("MxA@h1:9001") && a2[1].isEmpty()
+                && a3[0].equals("MxA@h1:9001")                       // held
+                && a4[0].equals("MxB@h2:9001") && a4[1].equals("MxA@h1:9001")   // rotated, old kept
+                && a5[0].equals("MxB@h2:9001") && a5[1].equals("MxA@h1:9001");  // dead -> immediate
+        if (rot) {
+            ok("MLS rotation: adopt first, hold <12h, rotate at 12h or on a dead host, retain old");
+        } else {
+            bad("MLS rotation wrong: a1=" + a1[0] + " a3=" + a3[0]
+                    + " a4=" + a4[0] + "/" + a4[1] + " a5=" + a5[0] + "/" + a5[1]);
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

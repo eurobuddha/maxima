@@ -80,6 +80,15 @@ public final class MaximaNode {
     /** hostPort -> when we sent its outstanding check-connect probe. */
     private final Map<String, Long> mHostCheckSent = new ConcurrentHashMap<>();
 
+    // ---- MLS server rotation, matching the reference's 12h cadence ----
+    /** Our current Location Service, and the previous one we still publish to so
+     *  contacts holding the old address can still resolve us. The reference
+     *  rotates at most once / 12h (MLSService.newMLSNode). */
+    private volatile String mCurrentMls = "";
+    private volatile String mOldMls = "";
+    private volatile long mLastMlsRotate;
+    private static final long MLS_ROTATE_MS = 12L * 60 * 60 * 1000;
+
     /** Tier 2 inbound listener. Null until {@link #startDirect}. */
     private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
     /** Proven public ip:port, or empty. Set only after external proof. */
@@ -375,19 +384,84 @@ public final class MaximaNode {
 
     /**
      * The MLS we advertise to contacts - the pinned one if set, otherwise the
-     * first one a host offered us, exactly as classic falls back.
+     * STABLE current server chosen by {@link #updateMlsServers}. It no longer
+     * recomputes from the live host order on every call: that flip-flopped our
+     * advertised MLS whenever the host set reordered, stranding contacts who
+     * cached the previous one. Rotation is now bounded to once / 12h with the
+     * previous server retained.
      */
     public String mlsAddress() {
         if (!mStaticMls.isEmpty()) {
             return mStaticMls;
         }
+        if (mCurrentMls.isEmpty()) {
+            updateMlsServers();   // lazily adopt the first offer on first use
+        }
+        return mCurrentMls;
+    }
+
+    /**
+     * Choose and rotate our MLS server on the reference's schedule. Candidate =
+     * the pinned static MLS, else the first MLS a host offers. We adopt the first
+     * candidate immediately, but ROTATE to a different one only when the current
+     * server's host has dropped (its MLS is dead) or 12h have passed - and we
+     * keep the previous server as {@link #mOldMls} so contacts holding the old
+     * address still resolve us. Idempotent and cheap; safe to call often.
+     */
+    void updateMlsServers() {
+        if (!mStaticMls.isEmpty()) {
+            mCurrentMls = mStaticMls;
+            return;
+        }
+        String candidate = firstHostMls();
+        boolean currentDead = !mCurrentMls.isEmpty() && !mlsHostActive(mCurrentMls);
+        String[] next = decideMls(mCurrentMls, mOldMls, mLastMlsRotate,
+                System.currentTimeMillis(), candidate, currentDead, MLS_ROTATE_MS);
+        mCurrentMls = next[0];
+        mOldMls = next[1];
+        mLastMlsRotate = Long.parseLong(next[2]);
+    }
+
+    /**
+     * Pure rotation decision, factored out so it can be tested without sockets.
+     * Returns {@code [newCurrent, newOld, newLastRotateMillisAsString]}.
+     */
+    static String[] decideMls(String zCurrent, String zOld, long zLastRotate, long zNow,
+                              String zCandidate, boolean zCurrentDead, long zRotateMs) {
+        String current = zCurrent == null ? "" : zCurrent;
+        String old = zOld == null ? "" : zOld;
+        if (zCandidate == null || zCandidate.isEmpty()) {
+            return new String[]{current, old, Long.toString(zLastRotate)};   // nothing offered
+        }
+        if (current.isEmpty()) {
+            return new String[]{zCandidate, old, Long.toString(zNow)};       // first adoption
+        }
+        if (zCandidate.equals(current)) {
+            return new String[]{current, old, Long.toString(zLastRotate)};   // still valid
+        }
+        if (zCurrentDead || zNow - zLastRotate >= zRotateMs) {
+            return new String[]{zCandidate, current, Long.toString(zNow)};   // rotate, retain old
+        }
+        return new String[]{current, old, Long.toString(zLastRotate)};       // hold (too soon)
+    }
+
+    private String firstHostMls() {
         for (String h : mPool.activeHosts()) {
             HostConnection c = mPool.connection(h);
-            if (c != null && c.getTheirMlsAddress() != null) {
-                return c.getTheirMlsAddress();
+            String m = c == null ? null : c.getTheirMlsAddress();
+            if (m != null && !m.isEmpty()) {
+                return m;
             }
         }
         return "";
+    }
+
+    private boolean mlsHostActive(String zMls) {
+        int at = zMls.lastIndexOf('@');
+        if (at < 0) {
+            return false;
+        }
+        return mPool.activeHosts().contains(zMls.substring(at + 1));
     }
 
     /**
@@ -504,22 +578,35 @@ public final class MaximaNode {
         return r.address;
     }
 
-    /** Publish our address to our MLS. Classic does this on every refresh. */
+    /** Publish our address to our MLS - to BOTH the current server and the one
+     *  we most recently rotated away from, so a contact who cached the old
+     *  address still resolves us (the reference publishes to current + old). */
     public boolean publishToMls() {
-        String mls = mlsAddress();
-        if (mls.isEmpty() || myAddresses().isEmpty()) {
+        if (myAddresses().isEmpty()) {
             return false;
         }
-        try {
-            java.util.List<String> readers = new ArrayList<>();
-            for (Contact c : mContacts.values()) {
-                readers.add(c.publicKey);
+        updateMlsServers();
+        java.util.List<String> readers = new ArrayList<>();
+        for (Contact c : mContacts.values()) {
+            readers.add(c.publicKey);
+        }
+        boolean any = false;
+        java.util.Set<String> targets = new java.util.LinkedHashSet<>();
+        if (!mlsAddress().isEmpty()) {
+            targets.add(mlsAddress());
+        }
+        if (mOldMls != null && !mOldMls.isEmpty()) {
+            targets.add(mOldMls);
+        }
+        for (String mls : targets) {
+            try {
+                any |= new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
+                        .publish(mls, myAddresses(), readers);
+            } catch (Exception ignored) {
+                // best effort per server
             }
-            return new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
-                    .publish(mls, myAddresses(), readers);
-        } catch (Exception e) {
-            return false;
         }
+        return any;
     }
 
     // ---- classic: maxcontacts action:remove ----
@@ -1080,6 +1167,7 @@ public final class MaximaNode {
             refreshContacts();
         }
         auditHosts();
+        updateMlsServers();   // adopt/rotate our Location Service on schedule
         flushOutbox();
         mRpc.expire();
         mDirectory.flushExpired();
