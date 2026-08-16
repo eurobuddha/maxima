@@ -136,6 +136,21 @@ public final class RelayKeepaliveTest {
                 bad("client fell off after a keep-alive");
             }
 
+            // ---- 2b. client-side predicates on the real attached connection ----
+            // Assert with a sleep-bounded threshold rather than 0: the live pump
+            // stamps mLastInbound/mLastWrite, so "> 0 ms elapsed" races it. After
+            // a short quiet sleep, a small threshold is safely crossed while a
+            // huge one is not - and that is exactly what reconcile() relies on.
+            com.eurobuddha.maxima.core.net.HostConnection cc = client.pool().connection(hostPort);
+            Thread.sleep(60);
+            if (cc != null && cc.isAttached()
+                    && cc.isStale(30L) && !cc.isStale(Long.MAX_VALUE)
+                    && cc.needsKeepalive(30L) && !cc.needsKeepalive(Long.MAX_VALUE)) {
+                ok("client isStale/needsKeepalive track elapsed time correctly");
+            } else {
+                bad("client predicates wrong on the attached connection");
+            }
+
             // ---- 3. silence sweep REAPS a black-hole route ----
             // silence threshold 0 => the client (which has sent nothing this
             // instant) is treated as a dead black hole and reaped.

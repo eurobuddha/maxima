@@ -204,12 +204,35 @@ public final class HostPool {
         conn.close();
     }
 
-    /** Detach anything no longer attached, then refill. Call on a heartbeat. */
+    /**
+     * Keep every attachment alive, drop the dead ones, then refill. Call on a
+     * heartbeat. This is the client half of connection stickiness:
+     *
+     *  - a connection cleanly closed ({@code !isAttached}) is detached;
+     *  - a connection that has gone SILENT past {@link Frame#SILENCE_DROP_MS} is
+     *    a black hole (NAT dropped the mapping, no RST) even though the socket
+     *    still looks attached - detach it so a live relay replaces it. Before
+     *    this, {@code reconcile} only checked {@code isAttached()} (which flips
+     *    only on explicit close), so a black-holed host was never swapped out;
+     *  - a healthy but quiet connection gets a keep-alive so the HOST keeps
+     *    reading from us and does not drop us on its own 10-min read-silence.
+     *
+     * A refill after detaching is immediate (no waiting for the next tick).
+     */
     public int reconcile(int zTimeoutMs) {
         for (String h : new ArrayList<>(mActive.keySet())) {
             HostConnection c = mActive.get(h);
-            if (c == null || !c.isAttached()) {
+            if (c == null || !c.isAttached()
+                    || c.isStale(com.eurobuddha.maxima.core.net.Frame.SILENCE_DROP_MS)) {
                 detach(h);
+                continue;
+            }
+            if (c.needsKeepalive(com.eurobuddha.maxima.core.net.Frame.KEEPALIVE_INTERVAL_MS)) {
+                try {
+                    c.keepalive();
+                } catch (Exception e) {
+                    detach(h);   // the socket is already gone
+                }
             }
         }
         return fill(zTimeoutMs);

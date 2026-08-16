@@ -1021,15 +1021,25 @@ public final class MaximaNode {
 
     /** Periodic upkeep: relays, outbox, expiries. Drive from a heartbeat. */
     public void maintain(int zAttachTimeoutMs) {
-        int before = mPool.activeCount();
+        java.util.Set<String> before = new java.util.HashSet<>(mPool.activeHosts());
         mPool.reconcile(zAttachTimeoutMs);
         List<String> addrs = mPool.contactAddresses();
         mRpc.setMyAddresses(addrs);
 
-        // Relay set changed, so contacts hold stale addresses for us.
-        if (mPool.activeCount() != before) {
-            for (String h : mPool.activeHosts()) {
+        // Compare the host SET, not just its size: a black-hole host dropped and
+        // replaced by a live one leaves the count unchanged but our reachable
+        // address CHANGED, so contacts hold a stale address and must be told the
+        // new one (classic's MAXIMA_DISCONNECTED -> reassign-contacts flow). The
+        // old count-only check missed exactly this same-count swap.
+        java.util.Set<String> after = new java.util.HashSet<>(mPool.activeHosts());
+        if (!before.equals(after)) {
+            for (String h : after) {
                 fireHosts(h, true);
+            }
+            for (String h : before) {
+                if (!after.contains(h)) {
+                    fireHosts(h, false);   // a host we lost - apps can react
+                }
             }
             refreshContacts();
         }

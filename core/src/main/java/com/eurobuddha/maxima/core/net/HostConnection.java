@@ -68,6 +68,12 @@ public final class HostConnection implements Closeable {
      *  {@link #receive}. */
     private volatile long mLastInbound = System.currentTimeMillis();
 
+    /** When we last WROTE anything (ack or keep-alive) down this socket. The
+     *  host drops us if IT reads nothing from us for 10 min, and it reads only
+     *  when we write - so on a quiet link we must send a keep-alive on this
+     *  cadence. Updated by {@link #writeFrame}. */
+    private volatile long mLastWrite = System.currentTimeMillis();
+
     /**
      * A VERIFIED public endpoint of our own to claim in the greeting, or null
      * for the long-standing default (claim the dialled host:port, which is what
@@ -167,6 +173,13 @@ public final class HostConnection implements Closeable {
      *  must be serialised or two frames interleave into garbage. */
     private synchronized void writeFrame(byte[] zBody) throws Exception {
         Frame.write(mOut, zBody);
+        mLastWrite = System.currentTimeMillis();
+    }
+
+    /** True if we have not written to this host for {@code zIntervalMs} and
+     *  should send a keep-alive to keep it reading from us. */
+    public boolean needsKeepalive(long zIntervalMs) {
+        return mAttached && System.currentTimeMillis() - mLastWrite > zIntervalMs;
     }
 
     /**
