@@ -60,6 +60,14 @@ public final class HostConnection implements Closeable {
     private String mTheirMlsAddress;
     private boolean mAttached;
 
+    /** When we last read ANY frame from this host. Mirrors the reference's
+     *  per-peer read-clock (NIOClient.mLastMessageRead): a host that has gone
+     *  silent past {@link Frame#SILENCE_DROP_MS} is a dead black-hole even
+     *  though the socket still looks open, and must be dropped so the pool
+     *  re-attaches a live relay. Stamped on every completed read in
+     *  {@link #receive}. */
+    private volatile long mLastInbound = System.currentTimeMillis();
+
     /**
      * A VERIFIED public endpoint of our own to claim in the greeting, or null
      * for the long-standing default (claim the dialled host:port, which is what
@@ -139,6 +147,41 @@ public final class HostConnection implements Closeable {
         Frame.write(mOut, Frame.body(Frame.MSG_MAXIMA_CTRL, id));
 
         mAttached = true;
+        mLastInbound = System.currentTimeMillis();
+    }
+
+    /**
+     * Send a keep-alive down this host connection. A quiet NAT'd link is dropped
+     * by the far side after 10 min of read-silence (and by stateful NATs far
+     * sooner), so a caller drives this every {@link Frame#KEEPALIVE_INTERVAL_MS}.
+     * The host answers a SINGLE_PONG, which our {@link #receive} loop reads and
+     * stamps - giving us positive liveness. A write that throws means the socket
+     * is already dead; the caller detaches and re-attaches.
+     */
+    public void keepalive() throws Exception {
+        writeFrame(Frame.singlePing());
+    }
+
+    /** All post-attach writes go through here: keep-alive runs on the maintain
+     *  thread while acks run on the pump thread, so writes to the one socket
+     *  must be serialised or two frames interleave into garbage. */
+    private synchronized void writeFrame(byte[] zBody) throws Exception {
+        Frame.write(mOut, zBody);
+    }
+
+    /**
+     * True if this host has sent us nothing for longer than {@code zMaxSilenceMs}
+     * despite keep-alives - a black-hole socket that must be dropped. Only
+     * meaningful while attached.
+     */
+    public boolean isStale(long zMaxSilenceMs) {
+        return mAttached
+                && System.currentTimeMillis() - mLastInbound > zMaxSilenceMs;
+    }
+
+    /** Millis since we last read any frame from this host. */
+    public long silentFor() {
+        return System.currentTimeMillis() - mLastInbound;
     }
 
     /** Decode greeting / CTRL frames. Returns true if it was one of those. */
@@ -156,6 +199,19 @@ public final class HostConnection implements Closeable {
             if (ctrl.getType().getAsInt() == MaximaCTRLMessage.TYPE_MLS) {
                 mTheirMlsAddress = MaximaCTRLMessage.mlsAddressFrom(ctrl, mHost + ":" + mPort);
             }
+            return true;
+        }
+        // A host may probe US with a SINGLE_PING (the reference's reachability
+        // check). Answer it exactly as a classic node does, or the prober marks
+        // us unreachable. The reply is a comms-only greeting (no host claim; the
+        // peer already knows the address it dialled).
+        if (type == Frame.MSG_SINGLE_PING) {
+            writeFrame(Frame.singlePong(Greeting.commsOnly(mVersion, null, mPort)));
+            return true;
+        }
+        // Our own keep-alive's answer. Nothing to do - reading it already
+        // stamped mLastInbound, which is the whole point.
+        if (type == Frame.MSG_SINGLE_PONG) {
             return true;
         }
         return false;
@@ -242,6 +298,9 @@ public final class HostConnection implements Closeable {
             } catch (java.net.SocketTimeoutException e) {
                 return null;
             }
+            // Any completed read - even a skipped oversize frame - proves the
+            // host is alive. Stamp the read-clock exactly as the reference does.
+            mLastInbound = System.currentTimeMillis();
             if (rx == null || rx.length < 1) {
                 continue;
             }
@@ -273,7 +332,7 @@ public final class HostConnection implements Closeable {
     }
 
     private void ack(int zStatus) throws Exception {
-        Frame.write(mOut, Frame.ack(zStatus));
+        writeFrame(Frame.ack(zStatus));
     }
 
     /** Serialised size of our CTRL/TYPE_ID announcement, for diagnostics. */

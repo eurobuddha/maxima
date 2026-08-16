@@ -60,6 +60,14 @@ tasks.register('parityTest', JavaExec) {
     args = [file("${rootDir}/fixtures/golden-vectors.json").absolutePath]
 }
 
+tasks.register('keepaliveTest', JavaExec) {
+    group = 'verification'
+    description = 'Assert the keep-alive frame primitive matches the reference on the wire'
+    dependsOn 'parityClasses'
+    classpath = sourceSets.parity.runtimeClasspath
+    mainClass = 'com.eurobuddha.maxima.core.KeepaliveUnitTest'
+}
+
 tasks.register('generateVectors', JavaExec) {
     group = 'verification'
     description = 'Regenerate golden vectors from the reference minima.jar'

@@ -30,6 +30,31 @@ public final class Frame {
     public static final int MSG_PING = 8;
     public static final int MSG_MAXIMA_CTRL = 9;
     public static final int MSG_MAXIMA_TXPOW = 10;
+    /**
+     * Connectivity probe / reply (reference: NIOManager.sendPingMessage). A
+     * SINGLE_PING carries one MiniData (classic sends {@code ZERO_TXPOWID}); the
+     * receiver answers a SINGLE_PONG carrying a Greeting. It is our keep-alive
+     * primitive: the reference handler triggers no IBD, never disconnects, and
+     * tolerates a chainless sender (NIOMessage.java:1058-1107). Crucially,
+     * classic stamps its per-peer read-clock on EVERY inbound frame
+     * (NIOClient.java:400), and drops any peer silent &gt; 10 min - so sending
+     * one of these on a quiet connection is exactly what keeps a classic peer
+     * from dropping us. An unknown frame type only logs on the reference; it is
+     * never a disconnect (NIOMessage.java:1371-1374).
+     */
+    public static final int MSG_SINGLE_PING = 11;
+    public static final int MSG_SINGLE_PONG = 12;
+
+    // ---- Liveness cadence (one place; both roles share it) ----
+    /** Send a keep-alive down every held connection this often. Well under the
+     *  reference's 10-min read-silence disconnect AND common NAT idle timers. */
+    public static final long KEEPALIVE_INTERVAL_MS = 120_000;
+    /** A held connection silent (no inbound frame) longer than this is a dead
+     *  black-hole (NAT dropped the mapping, no RST) - reap it. ~4 missed
+     *  keep-alives; still inside the reference's 10-min tolerance. */
+    public static final long SILENCE_DROP_MS = 480_000;
+    /** How often the liveness sweep runs (keep-alive + stale check). */
+    public static final long LIVENESS_SWEEP_MS = 120_000;
 
     /** Reference: NIOClient.MAX_MESSAGE */
     public static final int MAX_FRAME = 256 * 1024 * 1024;
@@ -68,6 +93,24 @@ public final class Frame {
      */
     public static byte[] ack(int zStatus) {
         return body(MSG_PING, new MiniData(new byte[]{(byte) zStatus}));
+    }
+
+    /**
+     * A connectivity keep-alive. Payload mirrors the reference exactly: a single
+     * MiniData of {@code 0x00} (NIOManager.sendPingMessage sends ZERO_TXPOWID).
+     */
+    public static byte[] singlePing() {
+        return body(MSG_SINGLE_PING, new MiniData("0x00"));
+    }
+
+    /**
+     * The reply to a SINGLE_PING: a Greeting, exactly as the reference answers
+     * (NIOMessage.java:1105). Pass a comms-only greeting - a chainless node
+     * legitimately replies with topBlock -1 and the reference accepts it.
+     */
+    public static byte[] singlePong(
+            com.eurobuddha.maxima.core.msg.Greeting zGreeting) {
+        return body(MSG_SINGLE_PONG, zGreeting);
     }
 
     /** Write a complete frame (length prefix + body) to a stream. */
