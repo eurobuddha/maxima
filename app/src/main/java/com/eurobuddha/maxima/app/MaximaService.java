@@ -70,6 +70,9 @@ public final class MaximaService extends Service {
     private final java.util.Map<String, Integer> mPumpFails =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** One swarm-discovery round at a time; gossip runs off the pump thread. */
+    private final AtomicBoolean mGossipBusy = new AtomicBoolean(false);
+
     /** How many multi-homed relays the swarm tries to hold open at once. */
     private static final int RELAY_TARGET = 4;
 
@@ -325,42 +328,53 @@ public final class MaximaService extends Service {
                                 Log.w(TAG, "direct reachability tick: " + e);
                             }
                         }
-                        // SWARM DISCOVERY: adopt relays the ones we're attached to
-                        // gossip about (probe-first, capped), and - if Tier-2 has
-                        // proven us reachable - announce THIS node as a host so the
-                        // swarm grows with users. Remember everyone we're attached
-                        // to; prune ages out the ones that vanish.
-                        if (sGossip != null) {
-                            try {
-                                boolean reachable = sDirect != null
-                                        && sDirect.state() == com.eurobuddha.maxima.app
-                                            .direct.DirectReachability.State.ADVERTISED
-                                        && sDirect.publicAddress() != null
-                                        && !sDirect.publicAddress().isEmpty();
-                                if (reachable) {
-                                    sGossip.setSelfEndpoint(sDirect.publicAddress());
-                                    node.pool().setAdvertisedEndpoint(sDirect.publicAddress());
-                                    sGossip.announceNow(
-                                        com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
-                                } else {
-                                    sGossip.setSelfEndpoint(null);
+                        // SWARM DISCOVERY runs on its OWN thread: gossip.tick probes
+                        // unknown peers (up to ~6s each) and announceNow greets the
+                        // bootstrap relays (up to 5s each) - blocking those on the
+                        // pump thread would stall message delivery. The busy-flag
+                        // stops a slow round from piling up behind the 60s heartbeat.
+                        if (sGossip != null && mGossipBusy.compareAndSet(false, true)) {
+                            final MaximaNode gnode = node;
+                            Thread gt = new Thread(() -> {
+                                try {
+                                    boolean reachable = sDirect != null
+                                            && sDirect.state() == com.eurobuddha.maxima.app
+                                                .direct.DirectReachability.State.ADVERTISED
+                                            && sDirect.publicAddress() != null
+                                            && !sDirect.publicAddress().isEmpty();
+                                    if (reachable) {
+                                        String ep = sDirect.publicAddress();
+                                        sGossip.setSelfEndpoint(ep);
+                                        gnode.pool().setAdvertisedEndpoint(ep);
+                                        sGossip.announceNow(
+                                            com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
+                                    } else {
+                                        sGossip.setSelfEndpoint(null);
+                                    }
+                                    int learnedBefore = sGossip.learnedCount();
+                                    sGossip.tick(gnode);
+                                    if (sGossip.learnedCount() != learnedBefore) {
+                                        EventLog.add("discovered relay(s) via gossip - swarm now "
+                                                + sGossip.learnedCount() + " learned");
+                                    }
+                                    for (String a : gnode.myAddresses()) {
+                                        int at = a.indexOf('@');
+                                        if (at >= 0) {
+                                            SwarmStore.seen(MaximaService.this, a.substring(at + 1));
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    Log.w(TAG, "gossip tick: " + e);
+                                } finally {
+                                    mGossipBusy.set(false);
                                 }
-                                int learnedBefore = sGossip.learnedCount();
-                                sGossip.tick(node);
-                                if (sGossip.learnedCount() != learnedBefore) {
-                                    EventLog.add("discovered relay(s) via gossip - swarm now "
-                                            + sGossip.learnedCount() + " learned");
-                                }
-                            } catch (Exception e) {
-                                Log.w(TAG, "gossip tick: " + e);
-                            }
+                            }, "maxima-gossip");
+                            gt.setDaemon(true);
+                            gt.start();
                         }
-                        for (String a : node.myAddresses()) {
-                            int at = a.indexOf('@');
-                            if (at >= 0) {
-                                SwarmStore.seen(MaximaService.this, a.substring(at + 1));
-                            }
-                        }
+                        // Forget strike counts for relays no longer attached, so a
+                        // reconcile-dropped host doesn't carry a stale count back.
+                        mPumpFails.keySet().retainAll(node.pool().activeHosts());
                         lastMaintain = System.currentTimeMillis();
                         updateNotification(after + " relay(s) connected");
                     }
