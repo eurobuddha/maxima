@@ -27,14 +27,18 @@ public final class RelayStore {
      * Multi-homing means we do not depend on any single one.
      */
     /**
-     * Where a fresh install attaches.
+     * The bootstrap floor a fresh install attaches to and gossip discovers FROM.
      *
-     * Ours first, because they run this build and therefore answer mailbox,
-     * directory and witness requests; the trailing classic Minima nodes are
-     * fallbacks that can relay but know nothing of the extensions. Spread
-     * across four operators and four countries on purpose - a default list
-     * that all lands in one datacentre is a single point of failure wearing
-     * the costume of a decentralised one.
+     * These run this build, so they answer mailbox, directory, witness AND blob
+     * requests, and they gossip their verified peers - one live attachment seeds
+     * the whole swarm. Spread across operators and countries on purpose: a
+     * default list that all lands in one datacentre is a single point of failure
+     * wearing the costume of a decentralised one. Matches {@code Bootstrap.RELAYS}
+     * (core). Classic Minima nodes on :9001 are deliberately NOT here - they can
+     * relay a raw message but know nothing of the blob/mailbox/directory
+     * extensions, so as media/swarm hosts they are dead weight and only add
+     * connection noise. Discovery finds real relays; it does not need seeding
+     * with nodes that cannot serve.
      */
     public static final List<String> DEFAULTS = Arrays.asList(
             "95.179.179.181:9501",     // sally      - Amsterdam, NL
@@ -43,20 +47,26 @@ public final class RelayStore {
             "78.141.237.9:9501",       // openproject- London, GB
             "45.77.57.24:9501",        // vigilance  - London, GB
             "192.248.151.55:9501",     // megammr    - London, GB
-            "31.125.188.214:8001",     // the Pi     - residential, GB
-            "34.105.180.174:9001",     // classic Minima nodes below here
-            "168.138.15.32:9001",
-            "34.32.118.123:9001");
+            "31.125.188.214:8001");    // the Pi     - residential, GB
 
     private RelayStore() {
     }
 
+    /**
+     * The user-editable candidate list, with DEFAULTS as a permanent floor.
+     *
+     * DEFAULTS come first and are ALWAYS present: a stale or dead persisted set
+     * (e.g. an old build's hosts, or a relay that has since moved port) can never
+     * shadow the shipped fleet and strand the device with nothing live to seed
+     * discovery from. User additions follow, deduped.
+     */
     public static List<String> get(Context zCtx) {
-        Set<String> s = prefs(zCtx).getStringSet(KEY, null);
-        if (s == null || s.isEmpty()) {
-            return new ArrayList<>(DEFAULTS);
+        Set<String> merged = new LinkedHashSet<>(DEFAULTS);
+        Set<String> persisted = prefs(zCtx).getStringSet(KEY, null);
+        if (persisted != null) {
+            merged.addAll(persisted);
         }
-        return new ArrayList<>(s);
+        return new ArrayList<>(merged);
     }
 
     public static void add(Context zCtx, String zHostPort) {

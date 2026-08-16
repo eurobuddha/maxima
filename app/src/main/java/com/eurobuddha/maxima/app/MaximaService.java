@@ -17,6 +17,7 @@ import android.util.Log;
 import com.eurobuddha.maxima.core.MaximaNode;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,6 +60,22 @@ public final class MaximaService extends Service {
 
     private static volatile com.eurobuddha.maxima.core.media.MediaService sMedia;
 
+    /** Relay-swarm discovery: learns live relays from the ones we're attached to
+     *  (probe-before-adopt, capped) so the phone is never pinned to a static
+     *  list. Same client the desktop node and the relays already run. */
+    private static volatile com.eurobuddha.maxima.core.session.RelayGossipClient sGossip;
+
+    /** Consecutive pump failures per host — a host that keeps failing is dropped
+     *  so reconcile swaps in a live one instead of tight-looping on a dead one. */
+    private final java.util.Map<String, Integer> mPumpFails =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** How many multi-homed relays the swarm tries to hold open at once. */
+    private static final int RELAY_TARGET = 4;
+
+    /** Drop a host after this many consecutive pump failures. */
+    private static final int PUMP_FAIL_DROP = 3;
+
     /** The media publish/fetch service (self-hosted blobs), or null if not up. */
     public static com.eurobuddha.maxima.core.media.MediaService media() {
         return sMedia;
@@ -92,7 +109,12 @@ public final class MaximaService extends Service {
         createChannel();
 
         MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
-        sNode = new MaximaNode(id, "1.0.48", 3);
+        sNode = new MaximaNode(id, "1.0.48", RELAY_TARGET);
+        // Discovery client: seeded from the bootstrap floor, it adopts relays the
+        // swarm gossips about. Announcing (this phone AS a host) only kicks in if
+        // Tier-2 reachability proves an open port - wired in the pump loop.
+        sGossip = new com.eurobuddha.maxima.core.session.RelayGossipClient(
+                id, "1.0.48", 8);
 
         // Persistence, BEFORE anything reads or writes node state. Until now
         // the app ran memory-only, so every contact, every held mailbox item
@@ -224,9 +246,20 @@ public final class MaximaService extends Service {
         mPumpThread = new Thread(() -> {
             MaximaNode node = sNode;
             try {
-                List<String> relays = RelayStore.get(MaximaService.this);
+                // Seed candidates from the trusted floor + the swarm we remember
+                // from last time; gossip grows this at runtime. The pool scores
+                // and picks the best RELAY_TARGET; dead entries just age out.
+                java.util.LinkedHashSet<String> seed =
+                        new java.util.LinkedHashSet<>(RelayStore.get(MaximaService.this));
+                SwarmStore.prune(MaximaService.this);
+                seed.addAll(SwarmStore.recent(MaximaService.this));
+                List<String> relays = new ArrayList<>(seed);
                 EventLog.add("attaching to " + relays.size() + " candidate relay(s)");
                 int attached = node.start(relays, 30000);
+                for (String a : node.myAddresses()) {
+                    int at = a.indexOf('@');
+                    if (at >= 0) SwarmStore.seen(MaximaService.this, a.substring(at + 1));
+                }
                 updateNotification(attached + " relay(s) connected");
                 if (attached == 0) {
                     EventLog.add("NO RELAYS REACHED - check the relay list and connectivity");
@@ -243,8 +276,21 @@ public final class MaximaService extends Service {
                     for (String hp : node.pool().activeHosts()) {
                         try {
                             any |= node.pump(hp, 1500);
+                            mPumpFails.remove(hp);   // a good pump clears the count
                         } catch (Exception e) {
-                            Log.w(TAG, "pump error on " + hp + ": " + e);
+                            // A relay that greets then keeps failing (an old-protocol
+                            // node, a moved port) used to spin here forever. Drop it
+                            // after a few strikes so reconcile swaps in a live one -
+                            // this is what makes relay-switching automatic.
+                            int fails = mPumpFails.merge(hp, 1, Integer::sum);
+                            if (fails >= PUMP_FAIL_DROP) {
+                                node.pool().detach(hp);
+                                mPumpFails.remove(hp);
+                                EventLog.add("dropped dead relay " + hp
+                                        + " (" + fails + " strikes) - reconciling");
+                            } else {
+                                Log.w(TAG, "pump error on " + hp + ": " + e);
+                            }
                         }
                     }
                     if (System.currentTimeMillis() - lastMaintain > 60_000) {
@@ -277,6 +323,42 @@ public final class MaximaService extends Service {
                                 sDirect.tick();
                             } catch (Exception e) {
                                 Log.w(TAG, "direct reachability tick: " + e);
+                            }
+                        }
+                        // SWARM DISCOVERY: adopt relays the ones we're attached to
+                        // gossip about (probe-first, capped), and - if Tier-2 has
+                        // proven us reachable - announce THIS node as a host so the
+                        // swarm grows with users. Remember everyone we're attached
+                        // to; prune ages out the ones that vanish.
+                        if (sGossip != null) {
+                            try {
+                                boolean reachable = sDirect != null
+                                        && sDirect.state() == com.eurobuddha.maxima.app
+                                            .direct.DirectReachability.State.ADVERTISED
+                                        && sDirect.publicAddress() != null
+                                        && !sDirect.publicAddress().isEmpty();
+                                if (reachable) {
+                                    sGossip.setSelfEndpoint(sDirect.publicAddress());
+                                    node.pool().setAdvertisedEndpoint(sDirect.publicAddress());
+                                    sGossip.announceNow(
+                                        com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
+                                } else {
+                                    sGossip.setSelfEndpoint(null);
+                                }
+                                int learnedBefore = sGossip.learnedCount();
+                                sGossip.tick(node);
+                                if (sGossip.learnedCount() != learnedBefore) {
+                                    EventLog.add("discovered relay(s) via gossip - swarm now "
+                                            + sGossip.learnedCount() + " learned");
+                                }
+                            } catch (Exception e) {
+                                Log.w(TAG, "gossip tick: " + e);
+                            }
+                        }
+                        for (String a : node.myAddresses()) {
+                            int at = a.indexOf('@');
+                            if (at >= 0) {
+                                SwarmStore.seen(MaximaService.this, a.substring(at + 1));
                             }
                         }
                         lastMaintain = System.currentTimeMillis();
