@@ -197,3 +197,42 @@ Details that are easy to get wrong and are pinned by vectors:
 - **`:core` has zero runtime dependencies.** SHA3-256 comes from the JDK;
   Android below API 29 injects a Bouncy Castle digest via
   `Hashes.setSha3Supplier()`.
+
+## Limits & storage boundaries
+
+Maxima is **user-hosted**: your phone is the source of truth for the media it
+publishes, and a few relays hold replicas so it survives the phone sleeping. That
+makes the mesh redundant and censorship-resistant, but it is **not a storage
+locker** — it is bounded and best-effort by design. Anything that needs unlimited
+size or guaranteed always-on availability belongs on a **server host** (SFTP,
+IPFS, GitHub, WebDAV, …), which companion apps offer alongside the mesh.
+
+| Boundary | Value | Defined in | Notes |
+|---|---|---|---|
+| **Mesh media, per file** | **16 MB** | `MediaService.MAX_MESH_FILE_BYTES` | The honest, enforced limit. Rejected up front in `publish()` — no encrypt/replicate on oversize. Above this → use a server host. |
+| Media, absolute codec ceiling | 80 MB | `MediaCodec.MAX_MEDIA_BYTES` | Hard cap in the codec; the 16 MB mesh limit sits well under it. |
+| Chunk (ciphertext) | 192 KB | `MediaCodec.CHUNK_CIPHERTEXT` | Fits the 256 KB wire ceiling with envelope room (`SizeLimitTest` pins the margin). |
+| Wire package | 256 KB | `MaximaPackage.MAX_SIZE` | Peer replies `TOOBIG` above this. |
+| Phone's own media shelf | 512 MB | `MaximaService` `BlobStore` | Bounded so a companion app can't fill the phone; LRU-by-fetch eviction. |
+| Relay blob shelf | 1 GB (default) | `--blob 1024` | **Shared across all users**, LRU-by-fetch. Redundancy, not archival. |
+| Relay blob put rate | 60 chunks/min/source | `PER_SOURCE_BLOB_PUTS_PER_MIN` | Anti-flood. A big file can't replicate within the publish budget — hence the mesh cap. |
+| Publish replication budget | 55 s | `MediaService.PUBLISH_BUDGET_MS` | Publish returns after this even if incomplete; the owner is always a source. |
+| Mailbox (text + manifests, **never media**) | 7-day TTL, 8 MB/peer | relay | Media rides the blob shelf, not the mailbox. |
+
+**Why 16 MB and not 80 MB?** Three structural walls, none a tunable "just raise
+it": the per-source relay put-rate means a large file can't get a durable
+off-phone replica inside the publish budget; the relay blob shelf is small and
+**shared**, evicted least-recently-fetched first; and the owner's phone holds the
+whole file in heap while chunking and is the only guaranteed source once relays
+evict. 16 MB (photos, short clips) replicates durably and stays phone-friendly;
+larger media wants a server host.
+
+**Mesh vs server**, the yin/yang a companion app should surface at the point of
+choosing a destination:
+
+| | Maxima mesh | Server host |
+|---|---|---|
+| Per-file size | ≤ 16 MB | unlimited |
+| Availability | best-effort (your phone + relay replicas) | always-on |
+| Cost / trust | free, no central host | you run or pay a host |
+| Best for | photos, short clips, DMs | large video/audio, archival |
