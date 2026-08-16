@@ -523,13 +523,20 @@ public final class MaximaService extends Service {
         }
         if (gate) {
             int port = n.startDirect(0);   // idempotent
-            if (port > 0 && sLan != null) {
-                sLan.start(port);
+            if (port > 0) {
+                if (sLan != null) {
+                    sLan.start(port);
+                }
+                // Advertise our LAN ip:port so a same-LAN peer dials our phone
+                // directly for our hosted blobs (identity-keyed source in manifests).
+                String ip = siteLocalIp();
+                n.setLanAddress(ip.isEmpty() ? "" : ip + ":" + port);
             }
         } else {
             if (sLan != null) {
                 sLan.stop();
             }
+            n.setLanAddress("");   // off Wi-Fi: no LAN source
             // Only stop the listener if no direct address is advertised.
             // Guard on the ACTUAL invariant (is an address set) rather than the
             // state enum, which the other thread sets AFTER setDirectAddress -
@@ -542,6 +549,26 @@ public final class MaximaService extends Service {
 
     static String shortKey(String zHex) {
         return zHex.length() > 20 ? zHex.substring(0, 20) + "..." : zHex;
+    }
+
+    /** This device's site-local IPv4 (192.168/10./172.16-31) on the current
+     *  network, or "" if none — the address a same-LAN peer can dial us at. */
+    private static String siteLocalIp() {
+        try {
+            for (java.net.NetworkInterface ni :
+                    java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback()) {
+                    continue;
+                }
+                for (java.net.InetAddress a : java.util.Collections.list(ni.getInetAddresses())) {
+                    if (a instanceof java.net.Inet4Address && a.isSiteLocalAddress()) {
+                        return a.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     /** Send a chat message. Returns null on success, or an error to show. */

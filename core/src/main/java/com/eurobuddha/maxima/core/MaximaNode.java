@@ -56,6 +56,10 @@ public final class MaximaNode {
     private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
     /** Proven public ip:port, or empty. Set only after external proof. */
     private volatile String mDirectAddress = "";
+    /** Our LAN ip:port (site-local) while on Wi-Fi with the direct listener up.
+     *  Advertised as an identity-keyed source so a SAME-LAN peer dials our phone
+     *  directly for our hosted blobs. Empty off Wi-Fi. */
+    private volatile String mLanAddress = "";
     /** Our own hosted blobs, handed to the direct endpoint so a same-LAN peer can
      *  pull our profile/media from this phone directly. Set by the app at startup. */
     private volatile com.eurobuddha.maxima.core.store.BlobStore mLocalBlobs;
@@ -703,11 +707,37 @@ public final class MaximaNode {
      */
     public List<String> myAddresses() {
         List<String> out = new ArrayList<>();
-        String direct = directAddress();
-        if (!direct.isEmpty()) {
-            out.add(direct);
-        }
+        out.addAll(directAddresses());
         out.addAll(mPool.contactAddresses());
+        return out;
+    }
+
+    public void setLanAddress(String zIpPort) {
+        mLanAddress = zIpPort == null ? "" : zIpPort.trim();
+    }
+
+    /** LAN direct address (identity-keyed), or "" when off Wi-Fi. Same identity-key
+     *  form as {@link #directAddress()}: a direct link decrypts with the identity key. */
+    public String lanDirectAddress() {
+        return mLanAddress.isEmpty() ? "" : mIdentity.mxIdentity() + "@" + mLanAddress;
+    }
+
+    /**
+     * Addresses a peer can dial to reach our DirectEndpoint (proven-public first,
+     * then LAN) — the ONLY places our phone can serve its own hosted blobs. Relay
+     * addresses are excluded here: a relay only serves blobs it holds, and can't
+     * carry OUR blob response, so a relay-routed own address is a dead blob source.
+     */
+    public List<String> directAddresses() {
+        List<String> out = new ArrayList<>();
+        String pub = directAddress();
+        if (!pub.isEmpty()) {
+            out.add(pub);
+        }
+        String lan = lanDirectAddress();
+        if (!lan.isEmpty() && !lan.equals(pub)) {
+            out.add(lan);
+        }
         return out;
     }
 

@@ -96,12 +96,10 @@ public final class MediaService {
         //    background - the owner already holds every chunk (step 1).
         List<String> usedRelays = replicate(enc);
 
-        // 3. sources: our own address (direct fetch) first, then the replicas.
-        List<String> sources = new ArrayList<>();
-        String mine = ownAddress();
-        if (mine != null) {
-            sources.add(mine);
-        }
+        // 3. sources: our DIRECTLY-dialable addresses first (public + LAN — the
+        //    only places our own phone can serve these chunks, via DirectEndpoint),
+        //    then the relay replicas. A same-LAN viewer pulls straight from us.
+        List<String> sources = new ArrayList<>(mNode.directAddresses());
         sources.addAll(usedRelays);
 
         return new MediaManifest(enc.manifest.mime, enc.manifest.size,
@@ -243,14 +241,4 @@ public final class MediaService {
         return out;
     }
 
-    /** Our own reachable address to advertise as a direct source, or null. */
-    private String ownAddress() {
-        String direct = mNode.directAddress();
-        if (direct != null && !direct.isEmpty()) {
-            // A proven public endpoint - peers can dial us for chunks directly.
-            return direct;
-        }
-        List<String> mine = mNode.myAddresses();
-        return mine.isEmpty() ? null : mine.get(0);
-    }
 }
