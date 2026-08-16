@@ -74,27 +74,44 @@ We have all the primitives; none are exposed as a callable surface.
 | event | payload | status |
 |---|---|---|
 | `MAXIMA` | `from, to, time, timemilli, random, application, data, msgid` | **DONE** (our listener + IPC) |
-| `MAXIMACONTACTS` | contact list changed | **GAP** |
-| `MAXIMAHOSTS` | `{host, connected}` | **GAP** |
-
-Both gaps matter for a companion-app ecosystem: without them, an app using our
-transport cannot react to a contact appearing or a host dropping.
+| `MAXIMACONTACTS` | contact list changed | **DONE** (EventListener.onContactsChanged → IPC EVENT_CONTACTS) |
+| `MAXIMAHOSTS` | `{host, connected}` | **DONE** (EventListener.onHostsChanged → IPC EVENT_HOSTS, both connect and drop) |
 
 ## 6. Background behaviour
 
 | behaviour | classic | ours |
 |---|---|---|
-| main loop | 20 min | 60 s maintain + alarm heartbeat |
-| first loop after boot | 3 min | immediate |
-| refresh delay after MLS check | 60 s | n/a |
-| MLS staleness threshold | 30 min | not yet scheduled |
-| check-connected audit | 30 s | attach is synchronous |
-| MLS server rotation | max once / 12 h | **GAP** |
+| main loop | 20 min | **DONE** — 20-min gated Maxima loop (first at 3 min), on top of the 60 s maintain heartbeat |
+| first loop after boot | 3 min | **DONE** — FIRST_LOOP_MS = 3 min |
+| refresh delay after MLS check | 60 s | folded into refreshContacts() (publish + re-announce in one) |
+| MLS staleness threshold | 30 min | **DONE** — checkStaleMls() re-resolves contacts unseen > 30 min |
+| check-connected audit | 30 s | **DONE** — auditHosts() self-loopback probe, 30 s grace, drop non-relaying host |
+| MLS server rotation | max once / 12 h | **DONE** — stable current + retained old, rotate ≤ once/12 h or on a dead host |
 | MLS entry TTL | 24 h | **DONE** |
-| host purge when disconnected | 7 days | scored, not purged |
+| host purge when disconnected | 7 days | **DONE** — purgeOldHosts() forgets 7-day-dead relays (still scored while alive) |
 | poll stack | 256 then **cleared wholesale** | Outbox with backoff (better) |
 | max contacts | 30 | unlimited |
-| re-announce on host loss | targeted per contact | **DONE** |
+| re-announce on host loss | targeted per contact | **DONE** (host-SET change, not just count) |
+
+## 6b. Transport-liveness parity (the NIO layer under Maxima)
+
+The reference keeps a Maxima host connection alive at the NIO layer, not the
+Maxima layer — the original audit above never covered it, and its absence was
+what silently dropped a quiet classic ↔ our-node link after 10 minutes.
+
+| behaviour | classic | ours |
+|---|---|---|
+| read-silence disconnect | 10 min (`MAX_LASTREAD_CHECKER`, swept 2 min) | **DONE** — relay reaps a registered conn silent > 8 min; client detaches a stale host > 8 min |
+| peer keep-alive traffic | PING (tip) 180 s + PULSE 10 min | **DONE** — SINGLE_PING every ~120 s, both roles (a chainless node cannot honestly emit PING/PULSE; SINGLE_PING serves the same read-clock purpose) |
+| answer a reachability probe | SINGLE_PING → SINGLE_PONG | **DONE** — both relay and client answer with a comms-only greeting |
+| reconnect on drop | 5 s fast / 30 s × 3 | **DONE** — reconcile detaches dead/stale and refills immediately |
+| black-hole (no-RST) detection | via read-silence timer | **DONE** — the same silence timers, both roles (was absent: `isAttached()` only flipped on explicit close) |
+
+Our one deliberate divergence: classic's periodic keep-alive frames are chain
+gossip (a tip id / a recent-block list). We have no chain, so we cannot emit them
+honestly; `SINGLE_PING`/`SINGLE_PONG` achieves the same outcome — keep the peer's
+read-clock fresh and prove liveness — and the reference handles it with no IBD and
+no disconnect (`NIOMessage.java:1058-1107`). This is outcome-parity, not less.
 
 ## 7. Where classic's model is wrong for phones
 
@@ -120,10 +137,17 @@ consumer messenger has to solve first-contact, and classic's answer is
 
 ## 8. Gap summary — what to build
 
-**To reach classic parity:** `mlsinfo`, `removepermanent`, `MAXIMACONTACTS` and
-`MAXIMAHOSTS` events, the `maxcreate`/`maxsign`/`maxverify`/`maxencrypt`/
+**Connection-maintenance parity — DONE (0.4.11–0.4.18).** The whole
+keep-alive / liveness / reconnect / host-and-MLS-lifecycle set now matches or
+exceeds the reference (see §6 and §6b): transport keep-alive both roles,
+check-connect audit, scheduled 20-min loop, MLS staleness re-resolve, 12 h MLS
+rotation with retained old, 7-day host purge, and the MAXIMAHOSTS/MAXIMACONTACTS
+events.
+
+**Still to reach classic parity (command/utility surface, not connectivity):**
+`mlsinfo`, `removepermanent`, the `maxcreate`/`maxsign`/`maxverify`/`maxencrypt`/
 `maxdecrypt`/`maxmessage` utility surface, `send` by contact id, richer
-`hosts`/`list` output, MLS staleness scheduling and 12 h rotation.
+`hosts`/`list` output.
 
 **Already beyond classic:** store-and-forward mailbox, msgid dedup, replay
 window, retry with backoff, real end-to-end acks, multi-homing, reply-as-message
