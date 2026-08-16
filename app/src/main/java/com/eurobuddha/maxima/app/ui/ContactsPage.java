@@ -44,6 +44,14 @@ public final class ContactsPage implements Page {
     /** Only rebuild the contact rows when they actually changed. */
     private String mLastSignature = "";
 
+    /**
+     * How recently we must have heard from a contact to show them "online".
+     * Matches the reference's 30-min contact-staleness threshold: a reachable
+     * peer re-announces on the ~20-min Maxima loop, so 30 min keeps them green
+     * with margin, and a peer gone quiet fades to grey after it.
+     */
+    private static final long ONLINE_MS = 30 * 60 * 1000L;
+
     public ContactsPage(MainActivity zAct, View zView) {
         mAct = zAct;
         mView = zView;
@@ -99,7 +107,10 @@ public final class ContactsPage implements Page {
         List<Contact> cs = node.contacts();
         StringBuilder sig = new StringBuilder();
         for (Contact c : cs) {
-            sig.append(c.publicKey).append(c.name).append(c.primaryAddress()).append('|');
+            sig.append(c.publicKey).append(c.name).append(c.primaryAddress())
+                    // include the connectivity label so a row rebuilds when a
+                    // contact crosses online -> "3h" -> etc., but not every tick
+                    .append(statusLabel(c)).append('|');
         }
         mContactsLabel.setText("CONTACTS  ·  " + cs.size());
         mContactsEmpty.setVisibility(cs.isEmpty() ? View.VISIBLE : View.GONE);
@@ -123,8 +134,25 @@ public final class ContactsPage implements Page {
         ((TextView) v.findViewById(R.id.conv_preview)).setText(
                 addr == null ? "no address known - they have not replied yet"
                         : addr.substring(addr.indexOf('@') + 1));
-        ((TextView) v.findViewById(R.id.conv_time)).setText(
-                zContact.isClassic() ? "classic" : "");
+
+        // Connectivity indicator, like classic: a coloured dot + recency, driven
+        // by lastSeen. Green when we have heard from them within ONLINE_MS,
+        // otherwise grey with how long ago (or "offline" if never heard).
+        boolean online = zContact.lastSeen > 0
+                && System.currentTimeMillis() - zContact.lastSeen < ONLINE_MS;
+        TextView time = v.findViewById(R.id.conv_time);
+        time.setText("● " + statusLabel(zContact));
+        time.setTextColor(Ui.colour(mAct, online ? R.color.ux_success : R.color.ux_subtext));
+
+        // The "classic" tag moves to the pill badge so the time slot is free for
+        // connectivity; full peer-software detail stays in the long-press dialog.
+        TextView badge = v.findViewById(R.id.conv_badge);
+        if (zContact.isClassic()) {
+            badge.setText("classic");
+            badge.setVisibility(View.VISIBLE);
+        } else {
+            badge.setVisibility(View.GONE);
+        }
 
         v.setOnClickListener(x -> {
             Intent i = new Intent(mAct, ChatActivity.class);
@@ -136,6 +164,32 @@ public final class ContactsPage implements Page {
             return true;
         });
         return v;
+    }
+
+    /**
+     * The connectivity word next to the dot: "online" when heard from within
+     * ONLINE_MS, else how long ago ("20m", "3h", "2d"), or "offline" if we have
+     * never heard from them. lastSeen tracks the last accepted message from them
+     * (chat, RPC, or the contact-ctrl refresh), so it fades as a peer goes quiet.
+     */
+    private String statusLabel(Contact zContact) {
+        long ls = zContact.lastSeen;
+        if (ls <= 0) {
+            return "offline";
+        }
+        long d = System.currentTimeMillis() - ls;
+        if (d < ONLINE_MS) {
+            return "online";
+        }
+        long mins = d / 60000L;
+        if (mins < 60) {
+            return mins + "m";
+        }
+        long hours = mins / 60;
+        if (hours < 24) {
+            return hours + "h";
+        }
+        return (hours / 24) + "d";
     }
 
     private void details(Contact zContact) {

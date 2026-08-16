@@ -887,6 +887,19 @@ public final class MaximaNode {
             return;
         }
 
+        // Mark the sender seen NOW - any accepted inbound message is proof of
+        // life, which is what the contact list's connectivity indicator reads.
+        // Classic bumps a contact's lastseen only on a contact-ctrl refresh
+        // (~20-min loop); we also count chat/RPC so the dot tracks a live
+        // conversation, not just the last handshake. In-memory only: the UI
+        // polls these Contact objects directly, and the periodic contact-ctrl
+        // refresh persists lastSeen. (Self-addressed check-connect probes carry
+        // our own key as the sender, so they match no contact and are ignored.)
+        Contact seen = mContacts.get(Keys.norm(msg.mFrom.to0xString()));
+        if (seen != null) {
+            seen.lastSeen = System.currentTimeMillis();
+        }
+
         String app = msg.mApplication.toString();
 
         // Check-connect reply: our own self-addressed probe came back down a
