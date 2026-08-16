@@ -151,6 +151,23 @@ public final class RelayKeepaliveTest {
                 bad("client predicates wrong on the attached connection");
             }
 
+            // ---- 2c. check-connect: a self-addressed probe round-trips ----
+            // maintain() runs auditHosts(), which sends a probe to our own
+            // per-host key through the relay; the relay routes it back down our
+            // pump connection, proving the host actually RELAYS (not just answers
+            // keep-alives). The pump thread delivers it and marks the host.
+            client.maintain(5000);
+            if (waitFor(() -> client.isHostVerified(hostPort), 15)) {
+                ok("check-connect: self-addressed probe relayed back, host verified");
+            } else {
+                bad("check-connect probe did not round-trip (host unverified)");
+            }
+            if (relay.routeCount() >= 1) {
+                ok("a verified host is NOT dropped by the audit");
+            } else {
+                bad("verified host was dropped");
+            }
+
             // ---- 3. silence sweep REAPS a black-hole route ----
             // silence threshold 0 => the client (which has sent nothing this
             // instant) is treated as a dead black hole and reaped.

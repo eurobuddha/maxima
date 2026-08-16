@@ -64,6 +64,22 @@ public final class MaximaNode {
     private final long mStartedAt = System.currentTimeMillis();
     private volatile long mLastMaximaLoop;   // 0 until the first loop runs
 
+    // ---- check-connect: verify a host actually RELAYS, not just answers ----
+    /** Application tag of the self-addressed check-connect probe. Internal:
+     *  intercepted in {@link #handle} and never surfaced to app listeners. */
+    static final String CHECK_APP = "__maxchk";
+    /** Grace before an attached-but-unverified host is dropped — the reference's
+     *  MAXIMA_CHECK_CONNECTED 30s window. */
+    private static final long CHECK_GRACE_MS = 30_000L;
+    /** Tight socket timeout for a check-connect send so the heartbeat that drives
+     *  the audit never stalls on a dead host. */
+    private static final int CHECK_TIMEOUT_MS = 4000;
+    /** Hosts whose self-addressed probe came back — proven to relay TO us. */
+    private final java.util.Set<String> mHostVerified =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** hostPort -> when we sent its outstanding check-connect probe. */
+    private final Map<String, Long> mHostCheckSent = new ConcurrentHashMap<>();
+
     /** Tier 2 inbound listener. Null until {@link #startDirect}. */
     private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
     /** Proven public ip:port, or empty. Set only after external proof. */
@@ -786,6 +802,14 @@ public final class MaximaNode {
 
         String app = msg.mApplication.toString();
 
+        // Check-connect reply: our own self-addressed probe came back down a
+        // host, proving that host actually RELAYS to us (not just answers
+        // keep-alives). The payload names the host it was sent through. Internal
+        // - never surfaced to an app listener.
+        if (CHECK_APP.equals(app)) {
+            mHostVerified.add(new String(msg.mData.getBytes(), StandardCharsets.UTF_8));
+            return;
+        }
         if (ContactCtrl.APPLICATION.equals(app)) {
             handleContactCtrl(msg);
             return;
@@ -1055,6 +1079,7 @@ public final class MaximaNode {
             }
             refreshContacts();
         }
+        auditHosts();
         flushOutbox();
         mRpc.expire();
         mDirectory.flushExpired();
@@ -1072,6 +1097,68 @@ public final class MaximaNode {
         if (nowT >= due) {
             mLastMaximaLoop = nowT;
             maximaLoop();
+        }
+    }
+
+    /**
+     * Check-connect audit (the reference's MAXIMA_SENDCHKCONNECT /
+     * MAXIMA_CHECK_CONNECTED). Keep-alive proves a host's SOCKET is alive; this
+     * proves the host actually RELAYS a message addressed to us - a host can hold
+     * the socket and answer pings while silently dropping relayed traffic.
+     *
+     * For each attached host not yet verified: send a self-addressed probe
+     * through it (once), and if the probe has not come back within the grace
+     * window, detach the host so reconcile fills a working one. A verified host
+     * is never re-probed while it stays attached; a host that drops loses its
+     * verification and is re-probed on re-attach.
+     */
+    void auditHosts() {
+        java.util.List<String> active = mPool.activeHosts();
+        // Forget state for hosts no longer attached (re-attach re-verifies).
+        mHostVerified.retainAll(active);
+        mHostCheckSent.keySet().retainAll(active);
+        long now = System.currentTimeMillis();
+        for (String hp : active) {
+            if (mHostVerified.contains(hp)) {
+                continue;
+            }
+            Long sent = mHostCheckSent.get(hp);
+            if (sent == null) {
+                // Only record it as sent if the relay ACCEPTED it for relay; a
+                // failed send is our problem, not proof the host does not relay.
+                if (sendCheckConnect(hp)) {
+                    mHostCheckSent.put(hp, now);
+                }
+            } else if (now - sent > CHECK_GRACE_MS) {
+                // Accepted for relay, graced, never delivered back: this host is
+                // not relaying to us. Drop it; reconcile refills with a live one.
+                mPool.detach(hp);
+                mHostCheckSent.remove(hp);
+            }
+        }
+    }
+
+    /** Whether a host has passed its check-connect (proven to relay to us). */
+    public boolean isHostVerified(String zHostPort) {
+        return mHostVerified.contains(zHostPort);
+    }
+
+    /** Send a self-addressed check-connect probe through one host. The relay
+     *  routes it to our per-host key, which is registered only on THIS host, so
+     *  it can only arrive back down this host's connection. Returns true if the
+     *  relay accepted it for relay. */
+    private boolean sendCheckConnect(String zHostPort) {
+        HostConnection c = mPool.connection(zHostPort);
+        if (c == null || !c.isAttached()) {
+            return false;
+        }
+        try {
+            MaximaSender.Result r = sendRaw(c.contactAddress(), CHECK_APP,
+                    zHostPort.getBytes(StandardCharsets.UTF_8),
+                    CHECK_TIMEOUT_MS, CHECK_TIMEOUT_MS);
+            return r.isOk();
+        } catch (Exception e) {
+            return false;   // retry next tick
         }
     }
 
