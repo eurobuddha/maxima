@@ -9,6 +9,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Same-WiFi direct P2P: NSD/mDNS discovery needs a held MulticastLock on most
+         devices, or discovery silently receives nothing. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- specialUse, NOT dataSync: dataSync foreground services are capped at
          roughly 6h/day on Android 14/15, which kills an overnight connection. -->

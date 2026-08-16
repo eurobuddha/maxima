@@ -42,6 +42,9 @@ public final class LanDiscovery {
     private NsdManager mNsd;
     private NsdManager.RegistrationListener mReg;
     private NsdManager.DiscoveryListener mDisc;
+    // Without a held MulticastLock, NSD/mDNS silently receives no packets on most
+    // Android devices — discovery never fires and no LAN peer is ever found.
+    private android.net.wifi.WifiManager.MulticastLock mLock;
     private volatile boolean mRunning;
     private volatile String mServiceName = "";
 
@@ -73,6 +76,18 @@ public final class LanDiscovery {
             mNsd = (NsdManager) mCtx.getSystemService(Context.NSD_SERVICE);
             if (mNsd == null) {
                 return;
+            }
+            // Hold a MulticastLock for the lifetime of discovery, else mDNS packets
+            // are dropped by the Wi-Fi stack and onServiceFound never fires.
+            try {
+                android.net.wifi.WifiManager wifi = (android.net.wifi.WifiManager)
+                        mCtx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                if (wifi != null) {
+                    mLock = wifi.createMulticastLock("maxima-nsd");
+                    mLock.setReferenceCounted(false);
+                    mLock.acquire();
+                }
+            } catch (Exception ignored) {
             }
             register(zPort);
             // If discovery throws AFTER registration succeeded, unwind the
@@ -117,6 +132,13 @@ public final class LanDiscovery {
         mReg = null;
         mDisc = null;
         mResolved.clear();
+        try {
+            if (mLock != null && mLock.isHeld()) {
+                mLock.release();
+            }
+        } catch (Exception ignored) {
+        }
+        mLock = null;
     }
 
     // ---------------------------------------------------------------

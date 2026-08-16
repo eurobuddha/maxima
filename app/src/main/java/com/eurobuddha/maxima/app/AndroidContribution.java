@@ -97,6 +97,27 @@ public final class AndroidContribution implements ContributionPolicy {
         }
     }
 
+    /**
+     * On a local segment (Wi-Fi or Ethernet) where same-network peers can exist.
+     * This is what gates LAN direct discovery — independent of metered/contribution,
+     * since talking to a peer in the same room over the LAN costs no data and is
+     * about US reaching OUR contacts, not contributing to the network.
+     */
+    public boolean isLocalNetwork() {
+        try {
+            ConnectivityManager cm = mCtx.getSystemService(ConnectivityManager.class);
+            if (cm == null) {
+                return false;
+            }
+            NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null
+                    && (nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    || nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // ---- the policy ----
 
     @Override

@@ -508,8 +508,11 @@ public final class MaximaService extends Service {
      * phone on cellular has no LAN peers and its listener would be unreachable.
      */
     private void manageLanAndListener() {
-        boolean gate = AndroidContribution.isEnabled(this) && sPolicy != null
-                && sPolicy.isUnmetered();
+        // LAN direct discovery + the local listener run whenever we're on a local
+        // segment (Wi-Fi/Ethernet), regardless of the contribution/metered gate:
+        // reaching OUR OWN contacts in the same room costs no data and isn't a
+        // "serve others" duty. (Public UPnP/NAT mapping stays gated in DirectReachability.)
+        boolean gate = sPolicy != null && sPolicy.isLocalNetwork();
         MaximaNode n = sNode;
         if (n == null) {
             return;
