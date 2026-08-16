@@ -56,6 +56,9 @@ public final class MaximaNode {
     private volatile com.eurobuddha.maxima.core.net.DirectEndpoint mDirect;
     /** Proven public ip:port, or empty. Set only after external proof. */
     private volatile String mDirectAddress = "";
+    /** Our own hosted blobs, handed to the direct endpoint so a same-LAN peer can
+     *  pull our profile/media from this phone directly. Set by the app at startup. */
+    private volatile com.eurobuddha.maxima.core.store.BlobStore mLocalBlobs;
     /** Ephemeral LAN-discovered addresses: contact identity (norm) -> Mx@lanIp:port. */
     private final Map<String, String> mLanPeers = new ConcurrentHashMap<>();
 
@@ -650,7 +653,7 @@ public final class MaximaNode {
             return mDirect.port();
         }
         mDirect = new com.eurobuddha.maxima.core.net.DirectEndpoint(
-                mIdentity, mVersion, this::handle);
+                mIdentity, mVersion, this::handle, mLocalBlobs);
         return mDirect.start(zPort);
     }
 
@@ -664,6 +667,12 @@ public final class MaximaNode {
 
     public int directPort() {
         return mDirect == null ? -1 : mDirect.port();
+    }
+
+    /** Wire our own blob store so the direct endpoint can serve our hosted files
+     *  to same-LAN peers. Call before {@link #startDirect}. */
+    public void setLocalBlobs(com.eurobuddha.maxima.core.store.BlobStore zBlobs) {
+        mLocalBlobs = zBlobs;
     }
 
     /**

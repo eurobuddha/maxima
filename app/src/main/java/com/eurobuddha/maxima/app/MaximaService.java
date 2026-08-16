@@ -133,10 +133,14 @@ public final class MaximaService extends Service {
         // publishes (own BlobStore under files/media), and it fetches others'
         // media chunk-by-chunk via relays / direct. Bounded so the app can't
         // fill the phone; the owner's relays hold replicas for when we sleep.
-        sMedia = new com.eurobuddha.maxima.core.media.MediaService(sNode,
+        com.eurobuddha.maxima.core.store.BlobStore blobs =
                 new com.eurobuddha.maxima.core.store.BlobStore(
                         new java.io.File(getFilesDir(), "media"),
-                        512L * 1024 * 1024));
+                        512L * 1024 * 1024);
+        sMedia = new com.eurobuddha.maxima.core.media.MediaService(sNode, blobs);
+        // Hand the same store to the node so the direct endpoint can serve our own
+        // hosted blobs (e.g. our profile.json) to a same-LAN peer, no relay needed.
+        sNode.setLocalBlobs(blobs);
 
         com.eurobuddha.maxima.core.chat.ChatEngine chat =
                 new com.eurobuddha.maxima.core.chat.ChatEngine(sNode);

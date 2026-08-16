@@ -49,6 +49,9 @@ public final class DirectEndpoint {
     private final MaximaIdentity mIdentity;
     private final String mVersion;
     private final Sink mSink;
+    /** Our OWN hosted blobs, so a same-LAN peer can pull our profile/media
+     *  directly (no relay). GET/HAS are served; PUT is refused. Null = not wired. */
+    private final com.eurobuddha.maxima.core.store.BlobStore mBlobs;
 
     private volatile ServerSocket mServer;
     private volatile int mPort;
@@ -57,9 +60,15 @@ public final class DirectEndpoint {
     private final AtomicInteger mConns = new AtomicInteger();
 
     public DirectEndpoint(MaximaIdentity zIdentity, String zVersion, Sink zSink) {
+        this(zIdentity, zVersion, zSink, null);
+    }
+
+    public DirectEndpoint(MaximaIdentity zIdentity, String zVersion, Sink zSink,
+                          com.eurobuddha.maxima.core.store.BlobStore zBlobs) {
         mIdentity = zIdentity;
         mVersion = zVersion;
         mSink = zSink;
+        mBlobs = zBlobs;
     }
 
     /**
@@ -192,6 +201,19 @@ public final class DirectEndpoint {
                 } catch (Exception e) {
                     status = Frame.RESPONSE_FAIL;
                 }
+                if (status == Frame.RESPONSE_OK && holder[0] != null
+                        && holder[0].message != null && holder[0].message.mApplication != null
+                        && com.eurobuddha.maxima.core.media.MediaWire.isMediaApp(
+                                holder[0].message.mApplication.toString())) {
+                    // A blob request over the direct link: answer from OUR store with
+                    // the chunk (or UNKNOWN) on this socket — do NOT hand it to the
+                    // chat sink. This is what lets a same-LAN peer pull our profile
+                    // directly, no relay.
+                    serveBlob(out, holder[0].message.mApplication.toString(),
+                            holder[0].message.mData == null ? new byte[0]
+                                    : holder[0].message.mData.getBytes());
+                    continue;
+                }
                 writeFrame(out, Frame.ack(status));
                 if (status == Frame.RESPONSE_OK && holder[0] != null) {
                     // Dedup, replay window, chat, services all live behind the
@@ -208,6 +230,32 @@ public final class DirectEndpoint {
             mPerSource.computeIfPresent(zSource, (k, v) -> v <= 1 ? null : v - 1);
             mConns.decrementAndGet();
             close(zSocket);
+        }
+    }
+
+    /** Answer a direct blob request from our OWN store. GET returns the chunk (or
+     *  UNKNOWN); HAS acks presence; PUT is refused — a phone is not a shelf for
+     *  others. Bytes are ciphertext and the id is only learnable from a sealed
+     *  manifest, the same open-GET trust model relays use. */
+    private void serveBlob(DataOutputStream zOut, String zApp, byte[] zIdBytes) throws Exception {
+        if (mBlobs == null || com.eurobuddha.maxima.core.media.MediaWire.APP_PUT.equals(zApp)) {
+            writeFrame(zOut, Frame.ack(Frame.RESPONSE_UNKNOWN));
+            return;
+        }
+        String id = new String(zIdBytes, java.nio.charset.StandardCharsets.UTF_8);
+        if (com.eurobuddha.maxima.core.media.MediaWire.APP_HAS.equals(zApp)) {
+            boolean has;
+            try { has = mBlobs.has(id); } catch (Exception e) { has = false; }
+            writeFrame(zOut, Frame.ack(has ? Frame.RESPONSE_OK : Frame.RESPONSE_UNKNOWN));
+            return;
+        }
+        byte[] chunk;
+        try { chunk = mBlobs.get(id); } catch (Exception e) { chunk = null; }
+        if (chunk == null) {
+            writeFrame(zOut, Frame.ack(Frame.RESPONSE_UNKNOWN));
+        } else {
+            writeFrame(zOut, Frame.body(Frame.MSG_PING,
+                    new com.eurobuddha.maxima.core.codec.MiniData(chunk)));
         }
     }
 
