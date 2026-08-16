@@ -117,6 +117,45 @@ public final class MaximaLoopTest {
                     + " a4=" + a4[0] + "/" + a4[1] + " a5=" + a5[0] + "/" + a5[1]);
         }
 
+        // ---- internal-IP predicate, mirrored EXACTLY from classic ----
+        String[] internal = {"192.168.1.5", "192.248.151.55", "10.0.0.1", "172.16.0.1",
+                "100.64.0.1", "169.254.0.1", "198.18.0.1", "127.0.0.1", "0.0.0.0"};
+        String[] external = {"95.179.179.181", "65.109.31.226", "45.77.246.226",
+                "78.141.237.9", "31.125.188.214", "45.77.57.24"};
+        boolean ipok = true;
+        for (String h : internal) {
+            if (!MaximaNode.isInternalHost(h)) { ipok = false; bad("not flagged internal: " + h); }
+        }
+        for (String h : external) {
+            if (MaximaNode.isInternalHost(h)) { ipok = false; bad("wrongly internal: " + h); }
+        }
+        if (ipok) {
+            ok("isInternalHost matches classic's prefixes (192./172./100./198./10./127./169./0. internal)");
+        }
+        if (MaximaNode.isInternalAddress("MxKEY@192.168.1.5:9601")
+                && !MaximaNode.isInternalAddress("MxKEY@95.179.179.181:9501")) {
+            ok("isInternalAddress reads the host after '@'");
+        } else {
+            bad("isInternalAddress @-parse wrong");
+        }
+
+        // ---- a phone's LAN address never appears in the advertised set ----
+        MaximaNode addrNode = new MaximaNode(idFrom(31), "1.0.48", 1);
+        addrNode.setLanAddress("192.168.1.5:9601");
+        boolean inMy = false;
+        for (String a : addrNode.myAddresses()) {
+            if (a.contains("192.168.1.5")) { inMy = true; }
+        }
+        boolean inDirect = false;
+        for (String a : addrNode.directAddresses()) {
+            if (a.contains("192.168.1.5")) { inDirect = true; }
+        }
+        if (!inMy && inDirect) {
+            ok("LAN address is excluded from myAddresses() but kept in directAddresses() for blobs");
+        } else {
+            bad("LAN address leak: inMyAddresses=" + inMy + " inDirect=" + inDirect);
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

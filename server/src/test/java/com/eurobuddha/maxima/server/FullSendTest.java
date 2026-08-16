@@ -83,6 +83,12 @@ public final class FullSendTest {
     public static void main(String[] args) throws Exception {
         System.out.println("=== FULL SEND, in-process over loopback ===\n");
 
+        // Loopback: 127.0.0.1 is an internal IP, which the advertised-address
+        // filter rejects (mirroring classic, which never advertises an internal
+        // host). Classic tests on loopback with -allowallip; do the same here so
+        // contact addresses are published over 127.0.0.1.
+        com.eurobuddha.maxima.core.MaximaNode.ALLOW_ALL_IP = true;
+
         int port = freePort();
         String hostPort = "127.0.0.1:" + port;
         MaximaIdentity relayId = MaximaIdentity.fromPhrase(Bip39.generate(24));

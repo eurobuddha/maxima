@@ -814,17 +814,63 @@ public final class MaximaNode {
     }
 
     /**
-     * Every address we can be reached at, direct first.
+     * Every EXTERNALLY-REACHABLE address we can be reached at, direct first.
+     *
+     * This is what we hand to remote contacts, publish to MLS, show as "your
+     * address", and expose over IPC - so it must never contain our own LAN /
+     * site-local IP. A NAT'd phone has no routable address of its own; its
+     * reachable addresses are the relays it dialled out to (and a direct address
+     * only once it has been PROVEN public). This mirrors classic exactly, which
+     * advertises a connected OUTGOING host and refuses any internal-IP host
+     * (MaximaManager.java:515-573): we filter the advertised set through the same
+     * internal-IP predicate. The LAN direct address is deliberately excluded -
+     * it lives only in {@link #directAddresses()} for same-LAN blob serving.
      *
      * Direct leads because it is the cheapest path for a sender - no relay hop -
-     * and senders already race the list and fail over, so a direct address that
-     * dies costs them one timeout before they fall back to a relay.
+     * and senders already race the list and fail over.
      */
     public List<String> myAddresses() {
         List<String> out = new ArrayList<>();
-        out.addAll(directAddresses());
-        out.addAll(mPool.contactAddresses());
+        String pub = directAddress();               // proven-public direct only; NOT the LAN address
+        if (!pub.isEmpty() && !isInternalAddress(pub)) {
+            out.add(pub);
+        }
+        for (String a : mPool.contactAddresses()) {  // relays we dialled out to
+            if (!isInternalAddress(a)) {
+                out.add(a);
+            }
+        }
         return out;
+    }
+
+    /** Bypass the internal-IP filter, exactly as classic's {@code -allowallip}.
+     *  Off by default: a phone is always NAT'd, so a LAN address is never a
+     *  valid thing to advertise. */
+    public static volatile boolean ALLOW_ALL_IP = false;
+
+    /**
+     * Classic's internal-IP test, mirrored EXACTLY (MaximaManager.java:519-527):
+     * a naive dotted-decimal prefix match on the host, intentionally broad. A
+     * classic node refuses to adopt (and therefore never advertises) any host
+     * whose address starts with one of these, so neither do we.
+     */
+    public static boolean isInternalHost(String zHost) {
+        if (ALLOW_ALL_IP || zHost == null || zHost.isEmpty()) {
+            return false;
+        }
+        String h = zHost.trim();
+        return h.startsWith("127.") || h.startsWith("10.") || h.startsWith("100.")
+                || h.startsWith("0.") || h.startsWith("169.") || h.startsWith("172.")
+                || h.startsWith("198.") || h.startsWith("192.");
+    }
+
+    /** As {@link #isInternalHost} but for a full {@code Mx…@host:port} address. */
+    public static boolean isInternalAddress(String zMxAddress) {
+        if (zMxAddress == null) {
+            return false;
+        }
+        int at = zMxAddress.lastIndexOf('@');
+        return isInternalHost(at < 0 ? zMxAddress : zMxAddress.substring(at + 1));
     }
 
     public void setLanAddress(String zIpPort) {
@@ -978,7 +1024,7 @@ public final class MaximaNode {
         }
         String json = ContactCtrl.build(
                 mIdentity.publicKeyHex(),
-                mPool.contactAddresses(),
+                myAddresses(),   // externally-reachable, internal-IP-filtered set
                 mName, mIcon, "", mlsAddress(),
                 mCapabilities, zIntro);
 
