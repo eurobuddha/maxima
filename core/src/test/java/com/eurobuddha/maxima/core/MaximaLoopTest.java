@@ -68,6 +68,29 @@ public final class MaximaLoopTest {
             bad("maximaLoop threw: " + e);
         }
 
+        // ---- host purge: 7-day-dead records dropped, untried candidates kept ----
+        com.eurobuddha.maxima.core.session.HostPool pool =
+                new com.eurobuddha.maxima.core.session.HostPool(idFrom(9), "1.0.48", 3);
+        pool.addCandidate("203.0.113.1:9001");   // will be aged out
+        pool.addCandidate("203.0.113.2:9001");   // never tried (lastSeen 0) - kept
+        // age the first record 8 days into the past
+        for (com.eurobuddha.maxima.core.session.HostPool.HostRecord r : pool.knownByScore()) {
+            if (r.hostPort.equals("203.0.113.1:9001")) {
+                r.lastSeen = now - 8L * 24 * 60 * 60 * 1000;
+            }
+        }
+        int purged = pool.purgeOldHosts();
+        java.util.List<String> left = new java.util.ArrayList<>();
+        for (com.eurobuddha.maxima.core.session.HostPool.HostRecord r : pool.knownByScore()) {
+            left.add(r.hostPort);
+        }
+        if (purged == 1 && !left.contains("203.0.113.1:9001")
+                && left.contains("203.0.113.2:9001")) {
+            ok("purgeOldHosts drops a 7-day-dead host, keeps an untried candidate");
+        } else {
+            bad("purgeOldHosts wrong: purged=" + purged + " left=" + left);
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

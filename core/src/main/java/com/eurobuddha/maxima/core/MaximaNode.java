@@ -1168,6 +1168,7 @@ public final class MaximaNode {
     void maximaLoop() {
         refreshContacts();      // publishToMls() + re-introduce to all contacts
         checkStaleMls();
+        mPool.purgeOldHosts();  // reference deleteOldHosts: forget 7-day-dead relays
     }
 
     /**

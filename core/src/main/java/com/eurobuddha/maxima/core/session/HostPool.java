@@ -243,4 +243,37 @@ public final class HostPool {
             detach(h);
         }
     }
+
+    /** The reference deletes a Maxima host not seen for 7 days. */
+    private static final long HOST_PURGE_MS = 7L * 24 * 60 * 60 * 1000;
+
+    /**
+     * Forget known relays we have not successfully used for 7 days — the
+     * reference's deleteOldHosts. We SCORE relays rather than purge them (a churn
+     * -native design), but an unbounded score map is a slow leak and keeps
+     * re-trying a relay that has been gone for a week. Never drops an attached
+     * host, nor a never-tried candidate (lastSeen 0) - only a host we actually
+     * used and then lost long ago.
+     *
+     * @return how many records were purged
+     */
+    public int purgeOldHosts() {
+        long now = System.currentTimeMillis();
+        int removed = 0;
+        for (String h : new ArrayList<>(mKnown.keySet())) {
+            if (mActive.containsKey(h)) {
+                continue;   // never purge a live host
+            }
+            HostRecord r = mKnown.get(h);
+            if (r == null) {
+                continue;
+            }
+            long seen = Math.max(r.lastSeen, r.attachedAt);
+            if (seen > 0 && now - seen > HOST_PURGE_MS) {
+                mKnown.remove(h);
+                removed++;
+            }
+        }
+        return removed;
+    }
 }
