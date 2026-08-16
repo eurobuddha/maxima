@@ -103,19 +103,31 @@ public final class RelaySelfHealTest {
 
             String aliceReal = alice.myAddresses().get(0);
 
-            // Corrupt bob's cache of alice: a STALE, WRONG address, and forget her
-            // MLS entirely - so the ONLY way back is the shared relay's directory.
+            // Corrupt bob's cache of alice: a STALE, WRONG address.
             Contact ac = bob.contact(alice.identity().publicKeyHex());
-            ac.mls = "";
             ac.lastSeen = 0;                                   // ancient -> stale
             ac.setAddresses(Collections.singletonList("MxBOGUS@203.0.113.9:9999"));
-            if ("MxBOGUS@203.0.113.9:9999".equals(ac.primaryAddress())) {
-                ok("bob now holds a stale, wrong address for alice (and no MLS)");
+
+            // SECURITY: forget alice's own MLS, leaving only ONE reachable relay
+            // directory. A lone relay is NOT an authority on alice's key, so
+            // self-heal must NOT trust it (a single malicious relay could
+            // otherwise redirect our encryption to a key it controls). The bogus
+            // address must SURVIVE.
+            ac.mls = "";
+            bob.checkStaleMls();
+            Thread.sleep(3000);   // let any resolver pass complete
+            if ("MxBOGUS@203.0.113.9:9999".equals(
+                    bob.contact(alice.identity().publicKeyHex()).primaryAddress())) {
+                ok("a single relay directory is NOT trusted to redirect a contact (security)");
             } else {
-                bad("could not corrupt bob's cache");
+                bad("a single relay redirected the contact - trust is too broad");
             }
 
-            // Self-heal: bob re-resolves alice across every relay he can reach.
+            // CONTACT-VOUCHED: restore alice's OWN advertised MLS (the directory
+            // she published to and chose). A single answer from it is the classic
+            // trust model, and heals.
+            ac.mls = alice.mlsAddress();
+            ac.lastSeen = 0;
             int scheduled = bob.checkStaleMls();
             if (scheduled >= 1) {
                 ok("checkStaleMls scheduled the stale contact for re-resolution");
@@ -125,7 +137,7 @@ public final class RelaySelfHealTest {
             boolean healed = waitFor(() -> aliceReal.equals(
                     bob.contact(alice.identity().publicKeyHex()).primaryAddress()), 15);
             if (healed) {
-                ok("bob resolved alice's REAL current address from the relay directory");
+                ok("bob heals via the contact's own advertised MLS");
             } else {
                 bad("self-heal did not converge: bob has "
                         + bob.contact(alice.identity().publicKeyHex()).primaryAddress()

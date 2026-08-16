@@ -1447,28 +1447,49 @@ public final class MaximaNode {
         }
     }
 
-    /** Resolve a contact's current address from their cached MLS first, then
-     *  every reachable directory (they may have published to a relay we share).
-     *  Short-circuits on the first authoritative answer. */
-    private String resolveVia(Contact c, java.util.List<String> zDirs) {
-        java.util.LinkedHashSet<String> tries = new java.util.LinkedHashSet<>();
+    /**
+     * Resolve a contact's current address SAFELY. A resolved address carries the
+     * per-host key we then ENCRYPT to, so a directory that lies about it can make
+     * us encrypt a message to an attacker's key. We therefore trust two things:
+     *
+     *  1. The contact's OWN advertised MLS ({@code c.mls}) - the contact chose
+     *     that directory, so a single answer from it is the classic trust model.
+     *  2. Otherwise, a relay we merely happen to use is NOT an authority on the
+     *     contact's key, so a relay answer is accepted ONLY when at least two
+     *     INDEPENDENT relays AGREE on it. A single malicious/compromised relay in
+     *     our pool then cannot redirect our traffic to a key it controls.
+     *
+     * Requiring agreement also fixes the "fastest stale answer wins" race: a lone
+     * out-of-date directory can no longer overwrite a good address.
+     */
+    private String resolveVia(Contact c, java.util.List<String> zRelayDirs) {
         if (c.mls != null && !c.mls.isEmpty()) {
-            tries.add(c.mls);
+            String a = tryResolve(c.mls, c.publicKey);
+            if (a != null) {
+                return a;                       // contact-vouched directory
+            }
         }
-        tries.addAll(zDirs);
-        for (String dir : tries) {
-            try {
-                com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
-                        new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
-                                .resolve(dir, c.publicKey,
-                                        SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
-                if (r.ok() && r.address != null && !r.address.isEmpty()) {
-                    return r.address;
-                }
-            } catch (Exception ignored) {
-                // try the next directory
+        java.util.Map<String, Integer> votes = new java.util.LinkedHashMap<>();
+        for (String dir : zRelayDirs) {
+            if (dir.equals(c.mls)) {
+                continue;                       // already tried above
+            }
+            String a = tryResolve(dir, c.publicKey);
+            if (a != null && votes.merge(a, 1, Integer::sum) >= 2) {
+                return a;                       // >=2 independent relays agree
             }
         }
         return null;
+    }
+
+    private String tryResolve(String zDir, String zTargetKey) {
+        try {
+            com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
+                    new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
+                            .resolve(zDir, zTargetKey, SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
+            return r.ok() && r.address != null && !r.address.isEmpty() ? r.address : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
