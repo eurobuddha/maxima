@@ -131,6 +131,22 @@ public final class MediaRelayTest {
                 bad("chunks not all on the relay");
             }
 
+            // ---- the mesh per-file cap rejects oversize UP FRONT ----
+            byte[] tooBig = new byte[(int) MediaService.MAX_MESH_FILE_BYTES + 1];
+            long r0 = System.currentTimeMillis();
+            String capErr = null;
+            try {
+                aliceMedia.publish(tooBig, "video/mp4");
+            } catch (Exception ex) {
+                capErr = ex.getMessage();
+            }
+            long capMs = System.currentTimeMillis() - r0;
+            if (capErr != null && capErr.contains("16 MB") && capMs < 1000) {
+                ok("oversize rejected in " + capMs + "ms with guidance: \"" + capErr + "\"");
+            } else {
+                bad("oversize not rejected cleanly (err=" + capErr + " in " + capMs + "ms)");
+            }
+
             // ---- Alice goes offline; Bob fetches purely from the relay ----
             alice.stop();
             alicePump.interrupt();

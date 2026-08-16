@@ -32,6 +32,21 @@ public final class MediaService {
     public static final int REPLICAS = 2;
 
     /**
+     * The honest per-file ceiling for MESH publishing — well under the codec's
+     * 80 MB absolute ceiling. Three structural walls make larger files a bad fit
+     * for a user-hosted mesh (not a tunable "just raise it" limit):
+     *   - relay put rate is capped (anti-flood) — a big file can't replicate in
+     *     the publish budget, so it never gets a durable off-phone replica;
+     *   - the relay blob shelf is small and shared, evicted least-recently-fetched
+     *     first — the mesh is redundancy, not archival storage;
+     *   - the owner's phone holds the whole file in heap while chunking, and is
+     *     the only guaranteed source when relays evict.
+     * Above this, callers must steer the user to server hosting (unlimited,
+     * always-on). Enforced in {@link #publish} so it holds for every caller.
+     */
+    public static final long MAX_MESH_FILE_BYTES = 16L * 1024 * 1024;
+
+    /**
      * Overall wall-clock ceiling for the replication step, well under the IPC
      * client's 90s latch. Normal case returns in a few seconds once REPLICAS
      * confirm; this only bites when the mesh is degraded, and then we return
@@ -53,6 +68,15 @@ public final class MediaService {
      * a message. Blocking (network + crypto) — call off the main thread.
      */
     public MediaManifest publish(byte[] zPlain, String zMime) throws Exception {
+        // Reject oversize BEFORE any encrypt/chunk/replicate work: the mesh
+        // cannot durably host it, so fail in microseconds with a clear message
+        // instead of grinding into a client timeout. Callers steer to a server.
+        if (zPlain.length > MAX_MESH_FILE_BYTES) {
+            throw new IllegalArgumentException(
+                    "Maxima mesh supports files up to " + (MAX_MESH_FILE_BYTES >> 20)
+                    + " MB. This file is " + mib(zPlain.length)
+                    + " — host it on a server (SFTP/IPFS/GitHub) or compress it first.");
+        }
         MediaCodec.Encoded enc = MediaCodec.encrypt(zPlain, zMime);
 
         // 1. keep everything ourselves — we are the source of truth.
@@ -156,6 +180,12 @@ public final class MediaService {
         synchronized (confirmed) {
             return new ArrayList<>(confirmed);
         }
+    }
+
+    /** Human "12.3 MB" for an error message. */
+    private static String mib(long zBytes) {
+        double m = zBytes / (1024.0 * 1024.0);
+        return (m >= 10 ? Math.round(m) + "" : (Math.round(m * 10) / 10.0) + "") + " MB";
     }
 
     /** Fetch + verify + decrypt. Blocking — call off the main thread. */
