@@ -70,12 +70,22 @@ public final class MlsClient {
      * @param zTargetKey  the identity to resolve, uppercase 0x hex
      */
     public Resolved resolve(String zMlsAddress, String zTargetKey) throws Exception {
+        return resolve(zMlsAddress, zTargetKey,
+                MaximaSender.CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+    }
+
+    /** As {@link #resolve(String, String)} but with caller-chosen socket
+     *  timeouts - the self-heal tries several directories on a heartbeat and must
+     *  not block on a slow one. */
+    public Resolved resolve(String zMlsAddress, String zTargetKey, int zConnectMs, int zReadMs)
+            throws Exception {
         // Per-request nonce. Classic reuses one per session; a fresh one per
         // request is strictly stronger and costs nothing.
         String nonce = new MiniData(MaximaCrypto.randomBytes(16)).to0xString();
 
         MLSPacketGETReq req = new MLSPacketGETReq(zTargetKey, nonce);
-        MaximaSender.Result r = sendTo(zMlsAddress, MlsService.APP_GET, Codec.serialise(req));
+        MaximaSender.Result r = sendTo(zMlsAddress, MlsService.APP_GET,
+                Codec.serialise(req), zConnectMs, zReadMs);
 
         if (!r.isOk()) {
             return new Resolved(null, "directory replied " + r.statusName);
@@ -108,6 +118,12 @@ public final class MlsClient {
 
     private MaximaSender.Result sendTo(String zAddress, String zApplication, byte[] zData)
             throws Exception {
+        return sendTo(zAddress, zApplication, zData,
+                MaximaSender.CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+    }
+
+    private MaximaSender.Result sendTo(String zAddress, String zApplication, byte[] zData,
+                                       int zConnectMs, int zReadMs) throws Exception {
         if (!MxAddress.isValidContactAddress(zAddress)) {
             throw new IllegalArgumentException("Bad MLS address: " + zAddress);
         }
@@ -121,6 +137,6 @@ public final class MlsClient {
                 mIdentity.publicKey(), mIdentity.keyPair().getPrivate(),
                 routing.getBytes(), zApplication, zData, System.currentTimeMillis());
 
-        return MaximaSender.send(host, port, built.unit, built.msgid);
+        return MaximaSender.send(host, port, built.unit, built.msgid, zConnectMs, zReadMs);
     }
 }

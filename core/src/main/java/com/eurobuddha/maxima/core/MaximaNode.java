@@ -63,6 +63,13 @@ public final class MaximaNode {
     private static final long MLS_STALE_MS = 30 * 60 * 1000L;
     private final long mStartedAt = System.currentTimeMillis();
     private volatile long mLastMaximaLoop;   // 0 until the first loop runs
+    /** Guards the self-heal resolver so a slow pass never piles up or blocks the
+     *  heartbeat thread. */
+    private final java.util.concurrent.atomic.AtomicBoolean mResolveBusy =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** Short socket timeout for a directory lookup during self-heal - we may try
+     *  several, and must not hang on a slow one. */
+    private static final int SELFHEAL_TIMEOUT_MS = 5000;
 
     // ---- check-connect: verify a host actually RELAYS, not just answers ----
     /** Application tag of the self-addressed check-connect probe. Internal:
@@ -594,9 +601,11 @@ public final class MaximaNode {
         return r.address;
     }
 
-    /** Publish our address to our MLS - to BOTH the current server and the one
-     *  we most recently rotated away from, so a contact who cached the old
-     *  address still resolves us (the reference publishes to current + old). */
+    /** Publish our address to the directory - to our current MLS, the one we most
+     *  recently rotated away from, AND every relay we are attached to. Publishing
+     *  broadly is the rendezvous half of self-heal: a contact that shares ANY
+     *  relay with us can then resolve our current address there, even if it never
+     *  learned our specific MLS (the reference only publishes to current + old). */
     public boolean publishToMls() {
         if (myAddresses().isEmpty()) {
             return false;
@@ -614,6 +623,7 @@ public final class MaximaNode {
         if (mOldMls != null && !mOldMls.isEmpty()) {
             targets.add(mOldMls);
         }
+        targets.addAll(reachableDirectories());   // every attached relay's directory
         for (String mls : targets) {
             try {
                 any |= new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
@@ -1335,48 +1345,130 @@ public final class MaximaNode {
     }
 
     /**
-     * Re-resolve, via their MLS, the current address of every contact we have not
-     * heard from for {@link #MLS_STALE_MS} — the reference's MAXIMA_CHECK_MLS. A
-     * contact who moved hosts advertises the new address to their MLS; without
-     * this we would keep trying a dead address until they happen to message us.
+     * Self-heal stale contacts (the reference's MAXIMA_CHECK_MLS, made robust).
+     * For every contact we have not heard from for {@link #MLS_STALE_MS}, look up
+     * its CURRENT address again - not only via the one MLS it last advertised
+     * (which may be empty or itself stale), but across EVERY directory we can
+     * reach: their cached MLS first, then each relay we are attached to. Because
+     * we also publish ourselves to all those relays ({@link #publishToMls}), two
+     * nodes that share ANY relay converge without a manual re-add - closing the
+     * mutual-orphaning gap where both sides hold each other's old address.
      *
-     * @return how many contacts got a fresh address
+     * The network work runs off-thread (a slow directory must never stall the
+     * heartbeat), guarded so passes cannot pile up.
+     *
+     * @return how many stale contacts were scheduled for re-resolution
      */
     public int checkStaleMls() {
         long now = System.currentTimeMillis();
-        int refreshed = 0;
+        java.util.List<Contact> stale = new ArrayList<>();
         for (Contact c : mContacts.values()) {
-            if (c.mls == null || c.mls.isEmpty()) {
-                continue;                       // no MLS server known for them
+            if (now - c.lastSeen >= MLS_STALE_MS) {
+                stale.add(c);
             }
-            if (now - c.lastSeen < MLS_STALE_MS) {
-                continue;                       // heard from recently - not stale
+        }
+        if (stale.isEmpty()) {
+            return 0;
+        }
+        java.util.List<String> dirs = reachableDirectories();
+        // Nothing to query with (no relay, no cached MLS on any stale contact) -
+        // do not spin up a thread that can only fail.
+        boolean anyMls = false;
+        for (Contact c : stale) {
+            if (c.mls != null && !c.mls.isEmpty()) {
+                anyMls = true;
+                break;
             }
+        }
+        if (dirs.isEmpty() && !anyMls) {
+            return 0;
+        }
+        if (!mResolveBusy.compareAndSet(false, true)) {
+            return 0;   // a resolve pass is already running
+        }
+        Thread t = new Thread(() -> {
+            try {
+                resolveStale(stale, dirs);
+            } finally {
+                mResolveBusy.set(false);
+            }
+        }, "mls-selfheal");
+        t.setDaemon(true);
+        t.start();
+        return stale.size();
+    }
+
+    /** Every directory we can currently query: each attached relay's offered MLS,
+     *  plus our own current/old MLS. Deduped. */
+    private java.util.List<String> reachableDirectories() {
+        java.util.LinkedHashSet<String> dirs = new java.util.LinkedHashSet<>();
+        for (String h : mPool.activeHosts()) {
+            HostConnection hc = mPool.connection(h);
+            String m = hc == null ? null : hc.getTheirMlsAddress();
+            if (m != null && !m.isEmpty()) {
+                dirs.add(m);
+            }
+        }
+        if (!mlsAddress().isEmpty()) {
+            dirs.add(mlsAddress());
+        }
+        if (mOldMls != null && !mOldMls.isEmpty()) {
+            dirs.add(mOldMls);
+        }
+        return new ArrayList<>(dirs);
+    }
+
+    private void resolveStale(java.util.List<Contact> zStale, java.util.List<String> zDirs) {
+        for (Contact c : zStale) {
+            String fresh = resolveVia(c, zDirs);
+            if (fresh == null || fresh.equals(c.primaryAddress())) {
+                continue;
+            }
+            // Freshest address first; keep the rest as fallbacks. Do NOT bump
+            // lastSeen - a lookup is not hearing from them, and bumping it would
+            // stop us re-checking a still-moving contact.
+            java.util.List<String> merged = new ArrayList<>();
+            merged.add(fresh);
+            for (String a : c.addresses) {
+                if (!a.equals(fresh)) {
+                    merged.add(a);
+                }
+            }
+            c.setAddresses(merged);
+            saveContact(c);
+            fireContacts(c, false);
+            // Push our current info to them at the fresh address so THEIR cache of
+            // us updates too - this is what fixes mutual orphaning without a
+            // manual re-add on either side.
+            try {
+                introduce(fresh, false);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** Resolve a contact's current address from their cached MLS first, then
+     *  every reachable directory (they may have published to a relay we share).
+     *  Short-circuits on the first authoritative answer. */
+    private String resolveVia(Contact c, java.util.List<String> zDirs) {
+        java.util.LinkedHashSet<String> tries = new java.util.LinkedHashSet<>();
+        if (c.mls != null && !c.mls.isEmpty()) {
+            tries.add(c.mls);
+        }
+        tries.addAll(zDirs);
+        for (String dir : tries) {
             try {
                 com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
                         new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
-                                .resolve(c.mls, c.publicKey);
-                if (r.ok() && r.address != null && !r.address.isEmpty()
-                        && !r.address.equals(c.primaryAddress())) {
-                    // Freshest address first; keep the rest as fallbacks. Do NOT
-                    // bump lastSeen - an MLS lookup is not hearing from them, and
-                    // bumping it would stop us re-checking a still-moving contact.
-                    java.util.List<String> merged = new ArrayList<>();
-                    merged.add(r.address);
-                    for (String a : c.addresses) {
-                        if (!a.equals(r.address)) {
-                            merged.add(a);
-                        }
-                    }
-                    c.setAddresses(merged);
-                    saveContact(c);
-                    fireContacts(c, false);
-                    refreshed++;
+                                .resolve(dir, c.publicKey,
+                                        SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
+                if (r.ok() && r.address != null && !r.address.isEmpty()) {
+                    return r.address;
                 }
             } catch (Exception ignored) {
-                // Best effort; the next loop retries.
+                // try the next directory
             }
         }
-        return refreshed;
+        return null;
     }
 }
