@@ -37,6 +37,8 @@ public final class ContactCtrl {
     public static final String APPLICATION = "**maxima_contact_ctrl**";
 
     public static final String KEY_ADDRS = "mxaddrs";
+    /** Self-declared node kind (classic-invisible), e.g. "core" for a full node. */
+    public static final String KEY_KIND = "mxkind";
 
     private ContactCtrl() {
     }
@@ -45,6 +47,8 @@ public final class ContactCtrl {
      * Build an introduction / update.
      *
      * @param zIntro true asks the peer to reciprocate
+     * @param zKind  our node kind ("core", "" for a phone) - a classic-invisible
+     *               extradata key; empty/null is omitted
      */
     public static String build(String zPublicKeyHex,
                                List<String> zMyAddresses,
@@ -53,6 +57,7 @@ public final class ContactCtrl {
                                String zMinimaAddress,
                                String zMls,
                                Capabilities zCaps,
+                               String zKind,
                                boolean zIntro) {
 
         String primary = zMyAddresses.isEmpty() ? "" : zMyAddresses.get(0);
@@ -76,6 +81,9 @@ public final class ContactCtrl {
 
         if (!zCaps.isClassic()) {
             w.put(Capabilities.KEY, zCaps.encode());
+        }
+        if (zKind != null && !zKind.isEmpty()) {
+            w.put(KEY_KIND, zKind);
         }
         if (!extra.isEmpty()) {
             w.put(KEY_ADDRS, extra);
@@ -162,6 +170,7 @@ public final class ContactCtrl {
         c.checkBlock = m.getOrDefault("checkblock", "0");
         c.checkHash = m.getOrDefault("checkhash", "0x00");
         c.capabilities = Capabilities.decode(m.get(Capabilities.KEY));
+        c.kind = m.getOrDefault(KEY_KIND, "");
         c.lastSeen = System.currentTimeMillis();
 
         return new Parsed(c, delete, intro);

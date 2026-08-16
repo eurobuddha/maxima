@@ -110,7 +110,8 @@ public final class ContactsPage implements Page {
             sig.append(c.publicKey).append(c.name).append(c.primaryAddress())
                     // include the connectivity label so a row rebuilds when a
                     // contact crosses online -> "3h" -> etc., but not every tick
-                    .append(statusLabel(c)).append('|');
+                    .append(statusLabel(c))
+                    .append(peerPill(c)).append('|');   // repaint when the pill resolves
         }
         mContactsLabel.setText("CONTACTS  ·  " + cs.size());
         mContactsEmpty.setVisibility(cs.isEmpty() ? View.VISIBLE : View.GONE);
@@ -144,11 +145,16 @@ public final class ContactsPage implements Page {
         time.setText("● " + statusLabel(zContact));
         time.setTextColor(Ui.colour(mAct, online ? R.color.ux_success : R.color.ux_subtext));
 
-        // The "classic" tag moves to the pill badge so the time slot is free for
-        // connectivity; full peer-software detail stays in the long-press dialog.
+        // Peer-software pill. classic Maxima and a stock Minima Core node are NOT
+        // the same peer, so they get different pills: a full Core node advertises
+        // a real chain tip -> "core" (Minima orange); a chainless classic-Maxima
+        // peer with no extensions -> "classic" (muted); our own app -> none.
         TextView badge = v.findViewById(R.id.conv_badge);
-        if (zContact.isClassic()) {
-            badge.setText("classic");
+        String pill = peerPill(zContact);
+        if (pill != null) {
+            badge.setText(pill);
+            badge.setTextColor(Ui.colour(mAct,
+                    pill.equals("core") ? R.color.ux_accent : R.color.ux_subtext));
             badge.setVisibility(View.VISIBLE);
         } else {
             badge.setVisibility(View.GONE);
@@ -192,6 +198,32 @@ public final class ContactsPage implements Page {
         return (hours / 24) + "d";
     }
 
+    /**
+     * The peer-software pill, or null for our own Maxima app. A full Minima Core
+     * node advertises a real chain tip in its contact-ctrl (topblock/checkhash
+     * != 0), which our chainless app and chainless classic-Maxima relays never
+     * do - that is what tells a stock Core node apart from a classic peer.
+     */
+    private String peerPill(Contact c) {
+        // A node running our maxima that declares itself a core/full node.
+        if (c.kind != null && c.kind.equalsIgnoreCase("core")) {
+            return "core";
+        }
+        // A stock Minima Core node advertises a real chain tip; our app and
+        // chainless classic relays never do.
+        boolean hasChain =
+                (c.topBlock != null && !c.topBlock.isEmpty() && !c.topBlock.equals("0"))
+                || (c.checkHash != null && !c.checkHash.isEmpty()
+                        && !c.checkHash.equalsIgnoreCase("0x00"));
+        if (hasChain) {
+            return "core";
+        }
+        if (c.isClassic()) {
+            return "classic";
+        }
+        return null;
+    }
+
     private void details(Contact zContact) {
         StringBuilder sb = new StringBuilder();
         sb.append(zContact.publicKey).append("\n\nAddresses\n");
@@ -201,9 +233,11 @@ public final class ContactsPage implements Page {
         for (String a : zContact.addresses) {
             sb.append("  ").append(a).append('\n');
         }
-        sb.append("\nSoftware: ")
-                .append(zContact.isClassic() ? "classic Maxima - no delivery receipts, "
-                        + "no offline mailbox" : "Maxima with extensions");
+        String pill = peerPill(zContact);
+        sb.append("\nSoftware: ").append(
+                "core".equals(pill) ? "Minima Core node (full chain) - classic Maxima"
+                : "classic".equals(pill) ? "classic Maxima - no delivery receipts, no offline mailbox"
+                : "Maxima app - extensions (receipts, mailbox, media)");
         new AlertDialog.Builder(mAct)
                 .setTitle(zContact.name)
                 .setMessage(sb.toString())

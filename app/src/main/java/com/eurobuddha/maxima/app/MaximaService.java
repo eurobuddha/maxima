@@ -128,6 +128,7 @@ public final class MaximaService extends Service {
 
         sNode.setName(SeedStore.displayName(this));
         sNode.setStaticMls(MlsStore.get(this));
+        sNode.setNodeKind(ChatPrefs.nodeKind(this));   // "core" for an always-on node
 
         // The media layer: THIS phone is the source of truth for media it
         // publishes (own BlobStore under files/media), and it fetches others'

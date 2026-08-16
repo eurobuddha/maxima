@@ -53,7 +53,7 @@ public class DirectoryUnitTest {
         List<String> myAddrs = Arrays.asList(
                 "Mxprimary@1.2.3.4:9501", "Mxsecond@5.6.7.8:9501", "Mxthird@9.9.9.9:9501");
         String json = ContactCtrl.build(myKey, myAddrs, "Alice", "0x00",
-                "", "Mxmls@1.2.3.4:9501", Capabilities.phoneDefaults(), true);
+                "", "Mxmls@1.2.3.4:9501", Capabilities.phoneDefaults(), "", true);
         ContactCtrl.Parsed p = ContactCtrl.parse(json, myKey);
         if (p != null && !p.delete && p.intro) {
             ok("a built contact-ctrl parses back as a non-delete intro");
@@ -81,12 +81,22 @@ public class DirectoryUnitTest {
         // a classic contact (no caps blob) reads as classic
         String classicJson = ContactCtrl.build(myKey,
                 Collections.singletonList("Mxprimary@1.2.3.4:9501"),
-                "Bob", "0x00", "", "", Capabilities.none(), false);
+                "Bob", "0x00", "", "", Capabilities.none(), "", false);
         Contact classic = ContactCtrl.parse(classicJson, myKey).contact;
         if (classic.isClassic()) {
             ok("a contact with no capability blob reads as classic (automatic downgrade)");
         } else {
             bad("classic detection");
+        }
+        // node kind (mxkind) round-trips; absent reads as ""
+        String coreJson = ContactCtrl.build(myKey,
+                Collections.singletonList("Mxprimary@1.2.3.4:9501"),
+                "CoreNode", "0x00", "", "", Capabilities.phoneDefaults(), "core", true);
+        Contact core = ContactCtrl.parse(coreJson, myKey).contact;
+        if ("core".equals(core.kind) && "".equals(classic.kind)) {
+            ok("node kind mxkind round-trips (\"core\" set, absent reads as \"\")");
+        } else {
+            bad("node kind: core='" + core.kind + "' classic='" + classic.kind + "'");
         }
         // delete variant
         ContactCtrl.Parsed del = ContactCtrl.parse(ContactCtrl.buildDelete(myKey), myKey);

@@ -15,6 +15,7 @@ public final class ChatPrefs {
 
     private static final String PREFS = "maxima_chat";
     private static final String READ_RECEIPTS = "read_receipts";
+    private static final String NODE_KIND = "node_kind";
 
     private ChatPrefs() {
     }
@@ -28,6 +29,26 @@ public final class ChatPrefs {
         com.eurobuddha.maxima.core.chat.ChatEngine c = MaximaService.chat();
         if (c != null) {
             c.setSendReadReceipts(zOn);
+        }
+    }
+
+    /** Our declared node kind, advertised to contacts: "core" for an always-on
+     *  full node, "" for an ordinary phone. Default "". */
+    public static String nodeKind(Context zCtx) {
+        return prefs(zCtx).getString(NODE_KIND, "");
+    }
+
+    /** Set the node kind, apply it to the running node, and re-announce to
+     *  contacts so their lists relabel us. */
+    public static void setNodeKind(Context zCtx, String zKind) {
+        String k = zKind == null ? "" : zKind.trim();
+        prefs(zCtx).edit().putString(NODE_KIND, k).apply();
+        com.eurobuddha.maxima.core.MaximaNode n = MaximaService.node();
+        if (n != null) {
+            n.setNodeKind(k);
+            new Thread(() -> {
+                try { n.refreshContacts(); } catch (Exception ignored) { }
+            }, "kind-announce").start();
         }
     }
 

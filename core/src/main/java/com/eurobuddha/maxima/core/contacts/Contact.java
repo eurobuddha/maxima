@@ -30,6 +30,11 @@ public final class Contact {
     /** What they can do beyond classic. Empty set == a classic peer. */
     public Capabilities capabilities = Capabilities.none();
 
+    /** The peer's self-declared node kind: "core" (a full Minima/desktop node
+     *  running our maxima), "" for our phone app, absent for classic peers.
+     *  A classic-invisible extradata key, like {@link Capabilities}. */
+    public String kind = "";
+
     public long lastSeen;
 
     public Contact() {

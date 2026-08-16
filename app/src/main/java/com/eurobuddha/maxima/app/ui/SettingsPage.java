@@ -95,6 +95,16 @@ public final class SettingsPage implements Page {
                 "ON", "ticks");
 
         mSecurity.removeAllViews();
+        boolean isCore = "core".equals(ChatPrefs.nodeKind(mAct));
+        Ui.toggle(mAct, mSecurity, "Node type",
+                isCore ? "Advertised to contacts as an always-on core node (they show a 'core' pill)"
+                        : "Advertised to contacts as an ordinary phone",
+                isCore ? "core" : "phone", "nodekind", () -> {
+                    String next = "core".equals(ChatPrefs.nodeKind(mAct)) ? "" : "core";
+                    ChatPrefs.setNodeKind(mAct, next);
+                    EventLog.add("node type: " + (next.isEmpty() ? "phone" : "core"));
+                    render();
+                });
         boolean exempt = isBatteryExempt();
         Ui.state(mAct, mSecurity, "Battery exemption",
                 exempt ? "Android will let the connection stay up"

@@ -125,6 +125,10 @@ public final class MaximaNode {
      */
     private volatile String mStaticMls = "";
     private volatile Capabilities mCapabilities = Capabilities.phoneDefaults();
+    /** Our self-declared node kind, advertised in contact-ctrl ("core" for a
+     *  full/desktop node, "" for the phone app). Lets a peer's contact list
+     *  label us. */
+    private volatile String mNodeKind = "";
     private volatile String mIcon = "0x00";
 
     /**
@@ -336,6 +340,7 @@ public final class MaximaNode {
                 .put("mls", c.mls == null ? "" : c.mls)
                 .put("minimaaddress", c.minimaAddress == null ? "" : c.minimaAddress)
                 .put("caps", c.capabilities.encode())
+                .put("kind", c.kind == null ? "" : c.kind)
                 .put("lastseen", Long.toString(c.lastSeen))
                 .done();
     }
@@ -349,6 +354,7 @@ public final class MaximaNode {
         c.mls = m.getOrDefault("mls", "");
         c.minimaAddress = m.getOrDefault("minimaaddress", "");
         c.capabilities = Capabilities.decode(m.get("caps"));
+        c.kind = m.getOrDefault("kind", "");
         try {
             c.lastSeen = Long.parseLong(m.getOrDefault("lastseen", "0"));
         } catch (NumberFormatException ignored) {
@@ -366,6 +372,16 @@ public final class MaximaNode {
 
     public void setCapabilities(Capabilities zCaps) {
         mCapabilities = zCaps;
+    }
+
+    /** Declare our node kind (e.g. "core" for a full/desktop node). Advertised
+     *  to contacts so their list can label us; empty for the phone app. */
+    public void setNodeKind(String zKind) {
+        mNodeKind = zKind == null ? "" : zKind.trim();
+    }
+
+    public String nodeKind() {
+        return mNodeKind;
     }
 
     public Capabilities capabilities() {
@@ -1026,7 +1042,7 @@ public final class MaximaNode {
                 mIdentity.publicKeyHex(),
                 myAddresses(),   // externally-reachable, internal-IP-filtered set
                 mName, mIcon, "", mlsAddress(),
-                mCapabilities, zIntro);
+                mCapabilities, mNodeKind, zIntro);
 
         sendRaw(zPeerAddress, ContactCtrl.APPLICATION,
                 json.getBytes(StandardCharsets.UTF_8));

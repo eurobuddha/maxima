@@ -232,6 +232,16 @@ public final class Explain {
                         + "Minima Core does not use this yet - it has no Maxima "
                         + "layer of its own, which is the gap this app exists to "
                         + "fill.");
+
+        put("nodekind", "Node type",
+                "Tell your contacts what this device is.\n\n"
+                        + "phone - an ordinary handset. The default.\n\n"
+                        + "core - an always-on Minima Core / full node running "
+                        + "maxima. Set this on a machine you leave running: your "
+                        + "contacts then show it with a 'core' pill, so they can "
+                        + "tell it apart from a phone or a classic-Maxima peer.\n\n"
+                        + "It only changes the label others see; it does not change "
+                        + "how the transport works.");
     }
 
     private Explain() {
