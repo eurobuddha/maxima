@@ -32,10 +32,12 @@ public final class Contact {
 
     /** The peer's self-declared node kind: "core" (a full Minima/desktop node
      *  running our maxima), "" for our phone app, absent for classic peers.
-     *  A classic-invisible extradata key, like {@link Capabilities}. */
-    public String kind = "";
+     *  A classic-invisible extradata key, like {@link Capabilities}.
+     *  volatile: written by the pump/self-heal threads, read by the UI thread. */
+    public volatile String kind = "";
 
-    public long lastSeen;
+    /** volatile: bumped by the pump + self-heal threads, read by the UI poll. */
+    public volatile long lastSeen;
 
     public Contact() {
     }

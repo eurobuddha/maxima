@@ -330,6 +330,7 @@ public final class FullSendTest {
             }
 
         } finally {
+            com.eurobuddha.maxima.core.MaximaNode.ALLOW_ALL_IP = false;   // don't leak the global
             stop.countDown();
             if (alice != null) try { alice.stop(); } catch (Exception ignored) { }
             if (bob != null) try { bob.stop(); } catch (Exception ignored) { }

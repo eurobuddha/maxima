@@ -158,6 +158,7 @@ public final class RelaySelfHealTest {
             }
 
         } finally {
+            MaximaNode.ALLOW_ALL_IP = false;   // don't leak the global into other tests
             stop.countDown();
             try { alice.stop(); } catch (Exception ignored) { }
             try { bob.stop(); } catch (Exception ignored) { }

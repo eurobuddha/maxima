@@ -210,11 +210,14 @@ public final class ContactsPage implements Page {
             return "core";
         }
         // A stock Minima Core node advertises a real chain tip; our app and
-        // chainless classic relays never do.
-        boolean hasChain =
-                (c.topBlock != null && !c.topBlock.isEmpty() && !c.topBlock.equals("0"))
-                || (c.checkHash != null && !c.checkHash.isEmpty()
-                        && !c.checkHash.equalsIgnoreCase("0x00"));
+        // chainless classic relays never do. Parse it as a NUMBER > 0 - a plain
+        // "not 0x00" string check let a peer fake a "core" pill with junk.
+        boolean hasChain = false;
+        try {
+            hasChain = c.topBlock != null && Long.parseLong(c.topBlock.trim()) > 0;
+        } catch (NumberFormatException ignored) {
+            hasChain = false;
+        }
         if (hasChain) {
             return "core";
         }
