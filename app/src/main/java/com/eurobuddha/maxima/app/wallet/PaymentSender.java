@@ -76,6 +76,59 @@ public final class PaymentSender {
         return mWallet != null;
     }
 
+    public interface Arrival {
+        void onArrived(boolean zArrived);
+    }
+
+    /**
+     * Has a native-Minima coin of exactly {@code zAmount} landed at our wallet
+     * address? A present coin means the payment is on-chain (confirmed) - the
+     * honest, real-data signal for a received-payment "Confirmed" status.
+     * Matches by amount, so two identical concurrent amounts are indistinguishable
+     * (rare in a chat); best-effort, never throws.
+     */
+    public void hasIncomingCoin(final String zAmount, final Arrival zCb) {
+        final MaximaWallet w = mWallet;
+        if (w == null || zAmount == null || zAmount.isEmpty()) {
+            zCb.onArrived(false);
+            return;
+        }
+        mPub.coins(w.hexAddress(), new WalletPublisher.Cb() {
+            public void onResult(JSONObject r) {
+                boolean found = false;
+                try {
+                    MiniNumber want = new MiniNumber(zAmount);
+                    org.minima.utils.json.JSONObject full =
+                            (org.minima.utils.json.JSONObject) new org.minima.utils.json.parser
+                                    .JSONParser().parse(r.toString());
+                    org.minima.utils.json.JSONArray coins =
+                            (org.minima.utils.json.JSONArray) full.get("response");
+                    if (coins != null) {
+                        for (Object o : coins) {
+                            org.minima.utils.json.JSONObject c =
+                                    (org.minima.utils.json.JSONObject) o;
+                            String tok = String.valueOf(c.get("tokenid"));
+                            if (!"0x00".equals(tok)) {
+                                continue;
+                            }
+                            MiniNumber amt = new MiniNumber(String.valueOf(c.get("amount")));
+                            if (amt.isEqual(want)) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                zCb.onArrived(found);
+            }
+
+            public void onError(String m) {
+                zCb.onArrived(false);
+            }
+        });
+    }
+
     /** Release the worker thread and any bound node service. */
     public void close() {
         mIo.shutdownNow();

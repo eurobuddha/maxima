@@ -70,6 +70,52 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     /** Coalesced, for the same reason as the list: one send, N receipts. */
     private final Runnable mRender = this::render;
 
+    /** Poll, while the chat is open, for received payments whose funds have
+     *  landed on-chain, flipping their bubble from Pending to Confirmed. */
+    private final Runnable mPayWatch = new Runnable() {
+        @Override
+        public void run() {
+            watchPayments();
+            mHandler.postDelayed(this, 20_000);
+        }
+    };
+
+    private void watchPayments() {
+        if (mSender == null) {
+            return;
+        }
+        ChatEngine chat = MaximaService.chat();
+        if (chat == null) {
+            return;
+        }
+        for (ChatEngine.Entry e : chat.conversation(mConversation)) {
+            if (e.mine || !com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)) {
+                continue;   // we only watch payments received BY us
+            }
+            final String tx = com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body);
+            if (tx.isEmpty() || isPayConfirmed(tx)) {
+                continue;
+            }
+            mSender.hasIncomingCoin(
+                    com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body), arrived -> {
+                        if (arrived) {
+                            markPayConfirmed(tx);
+                            runOnUiThread(ChatActivity.this::render);
+                        }
+                    });
+        }
+    }
+
+    private boolean isPayConfirmed(String zTxid) {
+        return getSharedPreferences("maxima_pay_confirmed", MODE_PRIVATE)
+                .getBoolean(zTxid, false);
+    }
+
+    private void markPayConfirmed(String zTxid) {
+        getSharedPreferences("maxima_pay_confirmed", MODE_PRIVATE)
+                .edit().putBoolean(zTxid, true).apply();
+    }
+
     private void renderSoon() {
         mHandler.removeCallbacks(mRender);
         mHandler.postDelayed(mRender, 80);
@@ -733,6 +779,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             chat.markRead(mConversation);
         }
         render();
+        mHandler.postDelayed(mPayWatch, 3_000);
     }
 
     @Override
@@ -741,6 +788,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         ChatHub.setForeground("");
         ChatHub.unregister(this);
         mHandler.removeCallbacks(mRender);
+        mHandler.removeCallbacks(mPayWatch);
         ChatEngine chat = MaximaService.chat();
         if (chat != null) {
             chat.markRead(mConversation);
@@ -1185,6 +1233,16 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 bs, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         if (memo != null && !memo.isEmpty()) {
             sb.append('\n').append(memo);
+        }
+        // For a received payment, a live on-chain status: Pending until a coin
+        // of this amount lands at our wallet, then Confirmed.
+        if (!e.mine) {
+            String tx = com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body);
+            boolean confirmed = !tx.isEmpty() && isPayConfirmed(tx);
+            int st = sb.length();
+            sb.append('\n').append(confirmed ? "✓ Confirmed" : "⏳ Pending…");
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.82f), st, sb.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return sb;
     }
