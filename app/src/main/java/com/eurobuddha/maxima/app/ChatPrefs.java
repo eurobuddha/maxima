@@ -32,6 +32,40 @@ public final class ChatPrefs {
                 zMode == null ? "system" : zMode).apply();
     }
 
+    /** Advance the appearance System → Light → Dark → System and save it.
+     *  Returns the new value. Caller applies it via setDefaultNightMode. */
+    public static String cycleAppearance(Context zCtx) {
+        String cur = appearance(zCtx);
+        String next = "system".equals(cur) ? "light"
+                : "light".equals(cur) ? "dark" : "system";
+        setAppearance(zCtx, next);
+        return next;
+    }
+
+    /** The header icon for the current appearance: sun / moon / auto. */
+    public static int appearanceIcon(Context zCtx) {
+        switch (appearance(zCtx)) {
+            case "light":
+                return com.eurobuddha.maxima.app.R.drawable.ic_sun;
+            case "dark":
+                return com.eurobuddha.maxima.app.R.drawable.ic_moon;
+            default:
+                return com.eurobuddha.maxima.app.R.drawable.ic_theme;
+        }
+    }
+
+    /** Human label for a toast when cycling. */
+    public static String appearanceLabel(Context zCtx) {
+        switch (appearance(zCtx)) {
+            case "light":
+                return "Light";
+            case "dark":
+                return "Dark";
+            default:
+                return "System";
+        }
+    }
+
     /** The stored appearance as an {@code AppCompatDelegate.MODE_NIGHT_*} value. */
     public static int nightMode(Context zCtx) {
         switch (appearance(zCtx)) {

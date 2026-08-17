@@ -193,6 +193,14 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
         });
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
+        android.widget.ImageButton themeBtn = findViewById(R.id.btn_chat_theme);
+        themeBtn.setImageResource(com.eurobuddha.maxima.app.ChatPrefs.appearanceIcon(this));
+        themeBtn.setOnClickListener(v -> {
+            com.eurobuddha.maxima.app.ChatPrefs.cycleAppearance(this);
+            toast("Theme: " + com.eurobuddha.maxima.app.ChatPrefs.appearanceLabel(this));
+            androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(
+                    com.eurobuddha.maxima.app.ChatPrefs.nightMode(this));
+        });
         findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachSheet());
         findViewById(R.id.btn_chat_camera).setOnClickListener(v -> takePhoto());
         findViewById(R.id.btn_chat_video).setOnClickListener(v -> toast("Calls are coming soon"));

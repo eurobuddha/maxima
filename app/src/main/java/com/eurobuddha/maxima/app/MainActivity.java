@@ -90,6 +90,13 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         mDot = findViewById(R.id.status_dot);
         findViewById(R.id.btn_main_search).setOnClickListener(v -> showTab(0));
         findViewById(R.id.btn_main_more).setOnClickListener(v -> showTab(4));
+        android.widget.ImageButton themeBtn = findViewById(R.id.btn_main_theme);
+        themeBtn.setImageResource(ChatPrefs.appearanceIcon(this));
+        themeBtn.setOnClickListener(v -> {
+            ChatPrefs.cycleAppearance(this);
+            toast("Theme: " + ChatPrefs.appearanceLabel(this));
+            androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(ChatPrefs.nightMode(this));
+        });
 
         Sha3Provider.install();
         requestNotificationPermission();
