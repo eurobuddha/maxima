@@ -137,7 +137,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         android.graphics.Bitmap cached = mImageCache.get(id);
         if (cached != null) {
             view.setImageBitmap(cached);
-            view.setOnClickListener(v -> saveImage(id));
+            view.setOnClickListener(v -> openImage(id));
             return;
         }
         view.setImageResource(android.R.drawable.ic_menu_gallery);
@@ -187,6 +187,33 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             toast("Saved to Photos");
         } catch (Exception e) {
             toast("Save failed");
+        }
+    }
+
+    /** Tap a photo to open it full-screen in the system viewer (pinch-zoom,
+     *  share, save all come for free there). We write the decoded bitmap to our
+     *  own cache and hand it out through the existing FileProvider. */
+    private void openImage(String id) {
+        android.graphics.Bitmap b = mImageCache.get(id);
+        if (b == null) {
+            return;
+        }
+        try {
+            java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "view.jpg");
+            try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
+            }
+            android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                    this, "com.eurobuddha.maxima.app.payloads", f);
+            android.content.Intent i = new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "image/jpeg");
+            i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(i);
+        } catch (Exception e) {
+            toast("Could not open image");
         }
     }
 
@@ -595,19 +622,26 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         boolean media = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body);
         final String copyText = media
                 ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body) : e.body;
+        final boolean haveImage = media && mImageCache.containsKey(e.id);
         final List<String> items = new ArrayList<>();
         if (copyText != null && !copyText.isEmpty()) {
             items.add("Copy");
         }
+        if (haveImage) {
+            items.add("Save photo");
+        }
         items.add("Info");
         new AlertDialog.Builder(this)
                 .setItems(items.toArray(new String[0]), (d, which) -> {
-                    if ("Copy".equals(items.get(which))) {
+                    String choice = items.get(which);
+                    if ("Copy".equals(choice)) {
                         android.content.ClipboardManager cm =
                                 getSystemService(android.content.ClipboardManager.class);
                         cm.setPrimaryClip(
                                 android.content.ClipData.newPlainText("message", copyText));
                         toast("Copied");
+                    } else if ("Save photo".equals(choice)) {
+                        saveImage(e.id);
                     } else {
                         showMessageInfo(e);
                     }
