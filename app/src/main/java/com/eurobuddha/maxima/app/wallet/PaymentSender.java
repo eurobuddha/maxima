@@ -72,6 +72,18 @@ public final class PaymentSender {
         return mWallet != null;
     }
 
+    /** Release the worker thread and any bound node service. */
+    public void close() {
+        mIo.shutdownNow();
+        if (mNode != null) {
+            try {
+                mNode.onDestroy();
+            } catch (Exception ignored) {
+                // best-effort teardown
+            }
+        }
+    }
+
     /** Run once the wallet has opened (immediately if it already has). Runs on a
      *  worker thread; hop to the UI thread yourself if needed. */
     public void whenReady(Runnable zR) {

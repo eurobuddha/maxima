@@ -668,6 +668,15 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (mSender != null) {
+            mSender.close();
+            mSender = null;
+        }
+    }
+
     // ---------------------------------------------------------------
 
     private void render() {
