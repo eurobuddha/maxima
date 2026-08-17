@@ -230,7 +230,63 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (req != PICK_PHOTO || res != RESULT_OK || data == null || data.getData() == null) {
             return;
         }
-        final android.net.Uri uri = data.getData();
+        promptCaption(data.getData());
+    }
+
+    /** Preview the picked photo and let the sender add a caption before it goes.
+     *  The data layer already carries captions - this is just the UI for one. */
+    private void promptCaption(final android.net.Uri uri) {
+        new Thread(() -> {
+            android.graphics.Bitmap preview = null;
+            try {
+                byte[] jpeg = readScaledJpeg(uri, 600);
+                preview = android.graphics.BitmapFactory
+                        .decodeByteArray(jpeg, 0, jpeg.length);
+            } catch (Exception ignored) {
+                // no preview - still let them caption and send
+            }
+            final android.graphics.Bitmap thumb = preview;
+            runOnUiThread(() -> showCaptionDialog(uri, thumb));
+        }, "chat-preview").start();
+    }
+
+    private void showCaptionDialog(final android.net.Uri uri, android.graphics.Bitmap thumb) {
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(14), dp(18), 0);
+        if (thumb != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(thumb);
+            iv.setAdjustViewBounds(true);
+            iv.setMaxHeight(dp(240));
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            android.widget.LinearLayout.LayoutParams lp =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(12);
+            iv.setLayoutParams(lp);
+            box.addView(iv);
+        }
+        final EditText cap = new EditText(this);
+        cap.setHint("Add a caption…");
+        cap.setHintTextColor(getResources().getColor(R.color.ux_subtext));
+        cap.setTextColor(getResources().getColor(R.color.ux_text));
+        cap.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        cap.setMaxLines(4);
+        box.addView(cap);
+        new AlertDialog.Builder(this)
+                .setTitle("Send photo")
+                .setView(box)
+                .setPositiveButton("Send",
+                        (d, w) -> sendPhoto(uri, cap.getText().toString().trim()))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void sendPhoto(final android.net.Uri uri, final String caption) {
         final ChatEngine chat = MaximaService.chat();
         final MaximaNode node = MaximaService.node();
         if (chat == null || node == null) {
@@ -248,9 +304,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             try {
                 byte[] jpeg = readScaledJpeg(uri, 1400);
                 if (g != null) {
-                    chat.sendGroupMedia(g.id, jpeg, "image/jpeg", "");
+                    chat.sendGroupMedia(g.id, jpeg, "image/jpeg", caption);
                 } else {
-                    chat.sendMedia(c, jpeg, "image/jpeg", "");
+                    chat.sendMedia(c, jpeg, "image/jpeg", caption);
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> toast("Photo failed: " + e.getMessage()));
