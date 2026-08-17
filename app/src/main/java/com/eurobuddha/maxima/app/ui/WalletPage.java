@@ -298,8 +298,13 @@ public final class WalletPage implements Page {
         ImageView iv = new ImageView(mAct);
         int px = dp(40);
         if (agg.isMinima()) {
+            // The real Minima logo mark (media kit), white on the dark coin disc.
             iv.setBackgroundResource(R.drawable.coin_minima_bg);
-            iv.setImageBitmap(Identicon.minima(px, Color.WHITE));
+            iv.setImageResource(R.drawable.ic_minima_mark);
+            iv.setColorFilter(Color.WHITE);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int pad = Math.round(px * 0.26f);
+            iv.setPadding(pad, pad, pad, pad);
         } else {
             Bitmap b = Identicon.forToken(agg.tokenid, px);
             RoundedBitmapDrawable d = RoundedBitmapDrawableFactory.create(mAct.getResources(), b);
