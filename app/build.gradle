@@ -10,8 +10,8 @@ android {
         applicationId "com.eurobuddha.maxima.app"
         minSdk 28
         targetSdk 35
-        versionCode 476
-        versionName "0.4.76"
+        versionCode 477
+        versionName "0.4.77"
     }
 
     signingConfigs {
@@ -56,6 +56,7 @@ android {
 
 dependencies {
     implementation project(':core')
+    implementation project(':server')   // RelayRuntime — the phone can run a full relay when charging
     implementation files('libs/minimaapi.aar')
     implementation libs.appcompat
     implementation 'androidx.core:core:1.13.1'

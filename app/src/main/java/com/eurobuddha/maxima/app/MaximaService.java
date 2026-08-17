@@ -54,6 +54,7 @@ public final class MaximaService extends Service {
     private static volatile com.eurobuddha.maxima.core.chat.ChatEngine sChat;
     private static volatile com.eurobuddha.maxima.app.direct.DirectReachability sDirect;
     private static volatile com.eurobuddha.maxima.app.direct.LanDiscovery sLan;
+    private static volatile com.eurobuddha.maxima.app.relay.RelayHost sRelay;
     private final AtomicBoolean mPumping = new AtomicBoolean(false);
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
@@ -101,6 +102,10 @@ public final class MaximaService extends Service {
 
     public static com.eurobuddha.maxima.app.direct.DirectReachability direct() {
         return sDirect;
+    }
+
+    public static com.eurobuddha.maxima.app.relay.RelayHost relay() {
+        return sRelay;
     }
 
     @Override
@@ -230,6 +235,8 @@ public final class MaximaService extends Service {
         sDirect = new com.eurobuddha.maxima.app.direct.DirectReachability(
                 this, sNode, sPolicy);
         sLan = new com.eurobuddha.maxima.app.direct.LanDiscovery(this, sNode);
+        // The phone as a full forwarding relay — self-gated to charging + >=60% + Wi-Fi.
+        sRelay = new com.eurobuddha.maxima.app.relay.RelayHost(this, sNode, sPolicy);
 
         EventLog.add("identity " + id.mxIdentity().substring(0, 20) + "...");
         EventLog.add("contributing: " + sPolicy.describe().split("\\n")[0]);
@@ -373,6 +380,14 @@ public final class MaximaService extends Service {
                                 Log.w(TAG, "direct reachability tick: " + e);
                             }
                         }
+                        // Full-relay mode: self-gated to charging + >=60% + Wi-Fi.
+                        if (sRelay != null) {
+                            try {
+                                sRelay.tick();
+                            } catch (Exception e) {
+                                Log.w(TAG, "relay tick: " + e);
+                            }
+                        }
                         // SWARM DISCOVERY runs on its OWN thread: gossip.tick probes
                         // unknown peers (up to ~6s each) and announceNow greets the
                         // bootstrap relays (up to 5s each) - blocking those on the
@@ -498,6 +513,10 @@ public final class MaximaService extends Service {
         com.eurobuddha.maxima.app.direct.DirectReachability d = sDirect;
         if (d != null) {
             d.shutdown();
+        }
+        com.eurobuddha.maxima.app.relay.RelayHost rh = sRelay;
+        if (rh != null) {
+            rh.shutdown();
         }
         com.eurobuddha.maxima.core.chat.ChatEngine ch = sChat;
         if (ch != null) {
