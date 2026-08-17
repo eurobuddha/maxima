@@ -76,7 +76,7 @@
             android:paddingEnd="7dp"
             android:paddingTop="1dp"
             android:paddingBottom="1dp"
-            android:textColor="@color/ux_bubble_out_text"
+            android:textColor="@color/ux_on_accent"
             android:textSize="11sp"
             android:textStyle="bold"
             android:visibility="gone" />

@@ -65,21 +65,31 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        ((android.widget.FrameLayout) findViewById(R.id.main_glow))
-                .addView(com.eurobuddha.maxima.app.ui.Ui.glowStrip(this));
 
-        // targetSdk 35 is edge-to-edge, so the shell must inset itself or the
-        // header sits under the clock and the tabs under the nav bar.
+        // targetSdk 35 is edge-to-edge. Extend the dark app bar UP into the
+        // status bar (so the header colour fills the top, WhatsApp-style, not a
+        // pale strip), and inset the sides + bottom on the shell.
         View root = findViewById(R.id.root);
+        final View appbar = findViewById(R.id.main_appbar);
+        final int barTop = appbar.getPaddingTop();
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
-            Insets bars = insets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime());
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(bars.left, 0, bars.right, bars.bottom);
+            appbar.setPadding(appbar.getPaddingLeft(), barTop + bars.top,
+                    appbar.getPaddingRight(), appbar.getPaddingBottom());
             return WindowInsetsCompat.CONSUMED;
         });
+        getWindow().setStatusBarColor(getColor(R.color.ux_header));
+        androidx.core.view.WindowInsetsControllerCompat wic =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), root);
+        if (wic != null) {
+            wic.setAppearanceLightStatusBars(false);
+        }
 
         mPill = findViewById(R.id.status_pill);
         mDot = findViewById(R.id.status_dot);
+        findViewById(R.id.btn_main_search).setOnClickListener(v -> showTab(0));
+        findViewById(R.id.btn_main_more).setOnClickListener(v -> showTab(4));
 
         Sha3Provider.install();
         requestNotificationPermission();

@@ -7,59 +7,44 @@
     android:background="@color/ux_bg"
     android:orientation="vertical">
 
-    <!-- Header: who we are, and the one fact that matters most - whether the
-         transport is actually connected. -->
+    <!-- WhatsApp-style top bar: app name, live status, search, overflow. -->
     <LinearLayout
+        android:id="@+id/main_appbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/ux_card"
+        android:background="@color/ux_header"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="16dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="14dp"
         android:paddingBottom="12dp">
 
-        <LinearLayout
+        <TextView
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="maxima"
-                android:textColor="@color/ux_accent"
-                android:textSize="24sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/brand_sub"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:letterSpacing="0.15"
-                android:text="DECENTRALISED COMMS LAYER"
-                android:textColor="@color/ux_subtext"
-                android:textSize="9sp" />
-        </LinearLayout>
+            android:fontFamily="@font/manrope_extrabold"
+            android:text="Maxima"
+            android:textColor="@color/ux_on_header"
+            android:textSize="22sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:background="@drawable/header_pill"
             android:gravity="center_vertical"
-            android:background="@drawable/pill"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
 
             <View
                 android:id="@+id/status_dot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:layout_marginEnd="7dp"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:layout_marginEnd="6dp"
                 android:background="@drawable/status_dot" />
 
             <TextView
@@ -67,28 +52,45 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="starting…"
-                android:textColor="@color/ux_subtext"
+                android:textColor="@color/ux_on_header"
                 android:textSize="11sp" />
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btn_main_search"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Search"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_search"
+            app:tint="@color/ux_on_header" />
+
+        <ImageButton
+            android:id="@+id/btn_main_more"
+            android:layout_width="36dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="More"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_more"
+            app:tint="@color/ux_on_header" />
     </LinearLayout>
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/ux_card"
+        android:background="@color/ux_header"
         app:tabGravity="fill"
-        app:tabIndicatorColor="@color/ux_accent"
+        app:tabIndicatorColor="@color/ux_on_header"
         app:tabIndicatorFullWidth="false"
         app:tabMode="fixed"
-        app:tabSelectedTextColor="@color/ux_accent"
-        app:tabTextColor="@color/ux_subtext" />
-
-    <!-- Signature accent glow filled in code (Ui.glowStrip). -->
-    <FrameLayout
-        android:id="@+id/main_glow"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        app:tabSelectedTextColor="@color/ux_on_header"
+        app:tabTextColor="#99FFFFFF" />
 
     <androidx.viewpager.widget.ViewPager
         android:id="@+id/pager"
