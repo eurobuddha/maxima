@@ -125,6 +125,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         send.setOnClickListener(v -> send());
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
         findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachPhoto());
+        findViewById(R.id.btn_chat_pay).setOnClickListener(v -> payContact());
 
         // The signature accent glow under the header.
         ((android.widget.FrameLayout) findViewById(R.id.chat_glow))
@@ -133,6 +134,30 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         // The send button springs in only when there's something to send
         // (FreezePeach's composer), so an empty composer is calm.
         wireSendReveal(send);
+
+        initPayments();
+    }
+
+    /** For a 1:1 chat, warm the wallet and share our receive address so the
+     *  contact can pay us without pasting anything (mirrors FreezePeach). */
+    private void initPayments() {
+        ChatEngine chat = MaximaService.chat();
+        if (chat == null || chat.group(mConversation) != null) {
+            return;   // payments are one-to-one for now
+        }
+        mSender = new com.eurobuddha.maxima.app.wallet.PaymentSender(this);
+        mSender.whenReady(() -> {
+            String my = mSender.myAddress();
+            ChatEngine c = MaximaService.chat();
+            MaximaNode node = MaximaService.node();
+            if (my == null || c == null || node == null) {
+                return;
+            }
+            Contact contact = node.contact(mConversation);
+            if (contact != null) {
+                c.shareWalletAddress(contact, my);   // off-main (whenReady runs on a worker)
+            }
+        });
     }
 
     /** Hide the send button until the user has typed, then overshoot it in. */
@@ -176,6 +201,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private static final int PICK_PHOTO = 71;
     private static final int TAKE_PHOTO = 72;
     private android.net.Uri mCaptureUri;
+    private com.eurobuddha.maxima.app.wallet.PaymentSender mSender;
 
     /** Decoded chat images, by message id — the WOTS-free path: fetch once. */
     private final java.util.Map<String, android.graphics.Bitmap> mImageCache =
@@ -280,6 +306,110 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 runOnUiThread(() -> toast("Could not open image"));
             }
         }, "chat-open-image").start();
+    }
+
+    /** Send Minima to this contact from inside the chat. */
+    private void payContact() {
+        final ChatEngine chat = MaximaService.chat();
+        final MaximaNode node = MaximaService.node();
+        if (chat == null || node == null) {
+            toast("Transport not running");
+            return;
+        }
+        if (chat.group(mConversation) != null) {
+            toast("Payments are one-to-one for now");
+            return;
+        }
+        final Contact contact = node.contact(mConversation);
+        if (contact == null) {
+            toast("Not in your contacts");
+            return;
+        }
+        final String to = chat.walletAddress(mConversation);
+        if (to == null || to.isEmpty()) {
+            toast("No wallet address yet — ask them to open this chat");
+            return;
+        }
+        if (mSender == null) {
+            mSender = new com.eurobuddha.maxima.app.wallet.PaymentSender(this);
+        }
+
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        final EditText amt = new EditText(this);
+        amt.setHint("Amount (MINIMA)");
+        amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        amt.setTextColor(getColor(R.color.ux_text));
+        amt.setHintTextColor(getColor(R.color.ux_subtext));
+        box.addView(amt);
+        final EditText memo = new EditText(this);
+        memo.setHint("Note (optional)");
+        memo.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        memo.setTextColor(getColor(R.color.ux_text));
+        memo.setHintTextColor(getColor(R.color.ux_subtext));
+        box.addView(memo);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Pay " + Names.of(node, chat, mConversation))
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Send", (d, w) -> {
+                    String amtStr = amt.getText().toString().trim();
+                    final String note = memo.getText().toString().trim();
+                    final org.minima.objects.base.MiniNumber amount;
+                    try {
+                        amount = new org.minima.objects.base.MiniNumber(amtStr);
+                    } catch (Exception e) {
+                        toast("Bad amount");
+                        return;
+                    }
+                    if (!amount.isMore(org.minima.objects.base.MiniNumber.ZERO)) {
+                        toast("Amount must be more than zero");
+                        return;
+                    }
+                    confirmPay(chat, contact, to, amount, note);
+                })
+                .show();
+    }
+
+    private void confirmPay(final ChatEngine chat, final Contact contact, final String to,
+                            final org.minima.objects.base.MiniNumber amount, final String note) {
+        new AlertDialog.Builder(this)
+                .setTitle("Send " + amount.toString() + " MINIMA?")
+                .setMessage("To " + contact.name + "\n\nThis signs and broadcasts a real "
+                        + "transaction and cannot be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Confirm", (d, w) -> {
+                    toast("Sending payment…");
+                    mSender.send(to, amount, new com.eurobuddha.maxima.app.wallet.PaymentSender.Cb() {
+                        @Override
+                        public void onProgress(String zStep) {
+                            runOnUiThread(() -> toast(zStep));
+                        }
+
+                        @Override
+                        public void onSent(String zTxid) {
+                            // Reflect it into the chat on this worker thread (a
+                            // network deliver), then refresh the UI.
+                            chat.sendPayment(contact, amount.toString(), "0x00",
+                                    "MINIMA", note, zTxid);
+                            mLastSendWasMine = true;
+                            runOnUiThread(() -> {
+                                render();
+                                toast("Payment sent");
+                            });
+                        }
+
+                        @Override
+                        public void onError(String zMessage) {
+                            runOnUiThread(() -> toast(zMessage));
+                        }
+                    });
+                })
+                .show();
     }
 
     private void attachPhoto() {
