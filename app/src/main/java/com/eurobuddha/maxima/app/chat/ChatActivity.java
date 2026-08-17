@@ -121,9 +121,56 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
         });
 
-        findViewById(R.id.btn_chat_send).setOnClickListener(v -> send());
+        final View send = findViewById(R.id.btn_chat_send);
+        send.setOnClickListener(v -> send());
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
         findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachPhoto());
+
+        // The signature accent glow under the header.
+        ((android.widget.FrameLayout) findViewById(R.id.chat_glow))
+                .addView(com.eurobuddha.maxima.app.ui.Ui.glowStrip(this));
+
+        // The send button springs in only when there's something to send
+        // (FreezePeach's composer), so an empty composer is calm.
+        wireSendReveal(send);
+    }
+
+    /** Hide the send button until the user has typed, then overshoot it in. */
+    private void wireSendReveal(final View zSend) {
+        boolean empty = mInput.getText().toString().trim().isEmpty();
+        zSend.setAlpha(empty ? 0f : 1f);
+        zSend.setScaleX(empty ? 0.6f : 1f);
+        zSend.setScaleY(empty ? 0.6f : 1f);
+        zSend.setVisibility(empty ? View.INVISIBLE : View.VISIBLE);
+        mInput.addTextChangedListener(new android.text.TextWatcher() {
+            boolean shown = !empty;
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                boolean has = s.toString().trim().length() > 0;
+                if (has == shown) {
+                    return;
+                }
+                shown = has;
+                if (has) {
+                    zSend.setVisibility(View.VISIBLE);
+                    zSend.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(160)
+                            .setInterpolator(new android.view.animation
+                                    .OvershootInterpolator(1.5f)).start();
+                } else {
+                    zSend.animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setDuration(120)
+                            .withEndAction(() -> zSend.setVisibility(View.INVISIBLE)).start();
+                }
+            }
+
+            @Override
+            public void beforeTextChanged(CharSequence c, int a, int b, int d) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence c, int a, int b, int d) {
+            }
+        });
     }
 
     private static final int PICK_PHOTO = 71;
