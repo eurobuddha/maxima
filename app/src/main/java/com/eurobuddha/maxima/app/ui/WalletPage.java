@@ -919,7 +919,7 @@ public final class WalletPage implements Page {
         mTokenList.setOrientation(LinearLayout.VERTICAL);
         mBalancePane.addView(mTokenList, marginBottom(dp(6)));
 
-        mBalancePane.addView(sectionLabel("SENDS REMAINING"));
+        mBalancePane.addView(sectionLabel("keyuses"));
         LinearLayout sends = card();
         LinearLayout sr = new LinearLayout(mAct);
         sr.setOrientation(LinearLayout.HORIZONTAL);
@@ -935,8 +935,6 @@ public final class WalletPage implements Page {
         LinearLayout st = new LinearLayout(mAct);
         st.setOrientation(LinearLayout.VERTICAL);
         st.addView(label("SIGNATURES USED"));
-        mUses = sub("…");
-        st.addView(mUses);
         TextView hint = sub("Long-press to adjust");
         hint.setPadding(0, dp(4), 0, 0);
         st.addView(hint);
