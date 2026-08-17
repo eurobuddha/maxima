@@ -833,11 +833,26 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (e.mine) {
             sb.append("\n\nStatus: ").append(stateWord(e.state));
         }
-        new AlertDialog.Builder(this)
+        // A payment carries a transaction id - show it IN FULL (it is the only
+        // way to look the payment up on-chain), never shortened.
+        final String txid = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
+                ? com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body) : "";
+        if (!txid.isEmpty()) {
+            sb.append("\n\nTransaction:\n").append(txid);
+        }
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
                 .setTitle("Message")
                 .setMessage(sb.toString())
-                .setPositiveButton("Close", null)
-                .show();
+                .setPositiveButton("Close", null);
+        if (!txid.isEmpty()) {
+            b.setNeutralButton("Copy tx id", (d, w) -> {
+                android.content.ClipboardManager cm =
+                        getSystemService(android.content.ClipboardManager.class);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("txid", txid));
+                toast("Transaction id copied");
+            });
+        }
+        b.show();
     }
 
     private static String stateWord(String zState) {
@@ -929,6 +944,30 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return 0xCC0A1F12;       // dark ink
     }
 
+    /** The two-line payment card text: a small direction line, then a big bold
+     *  amount, then an optional memo. */
+    private CharSequence paymentText(ChatEngine.Entry e) {
+        String amt = com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body);
+        String tok = com.eurobuddha.maxima.core.chat.ChatPay.tokenName(e.body);
+        String memo = com.eurobuddha.maxima.core.chat.ChatPay.memo(e.body);
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+        int hs = sb.length();
+        sb.append(e.mine ? "↑  You sent" : "↓  You received");
+        sb.setSpan(new android.text.style.RelativeSizeSpan(0.82f), hs, sb.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.append('\n');
+        int bs = sb.length();
+        sb.append(amt).append(' ').append(tok);
+        sb.setSpan(new android.text.style.RelativeSizeSpan(1.35f), bs, sb.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                bs, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (memo != null && !memo.isEmpty()) {
+            sb.append('\n').append(memo);
+        }
+        return sb;
+    }
+
     /** A rendered row: a date separator, or a message. */
     private static final class Row {
         static final int DATE = 0, MSG = 1;
@@ -977,33 +1016,46 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         h.row.setPadding(dp(12), r.firstInCluster ? dp(7) : dp(1), dp(12), dp(1));
         // Tail on the LAST bubble of a run (nearest the timestamp, WhatsApp-
         // style); the rest fully rounded so a run reads as one group.
-        int bg = e.mine
-                ? (r.lastInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
-                : (r.lastInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
-        h.bubble.setBackgroundResource(bg);
-        // Dark ink on the green sent bubble; theme text on the grey received one.
-        h.body.setTextColor(getColor(
-                e.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text));
-
-        // In a group, name the sender once at the top of their run.
-        if (!e.mine && e.isGroup() && r.firstInCluster) {
-            h.who.setVisibility(View.VISIBLE);
-            h.who.setText(Names.contact(MaximaService.node(), e.sender));
-        } else {
+        boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body);
+        if (pay) {
+            // A payment reads as its own accent card - money is not chat.
+            h.bubble.setBackgroundResource(R.drawable.bubble_pay);
             h.who.setVisibility(View.GONE);
-        }
-
-        if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
-            String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
-            h.body.setText(cap);
-            h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
-            h.image.setVisibility(View.VISIBLE);
-            bindImage(h.image, e.body, e.id);
-        } else {
             h.image.setVisibility(View.GONE);
             h.image.setImageDrawable(null);
             h.body.setVisibility(View.VISIBLE);
-            h.body.setText(e.body);
+            h.body.setText(paymentText(e));
+            h.body.setTextColor(getColor(R.color.ux_on_accent));
+            h.body.setTextIsSelectable(false);
+        } else {
+            int bg = e.mine
+                    ? (r.lastInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
+                    : (r.lastInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
+            h.bubble.setBackgroundResource(bg);
+            // Dark ink on the green sent bubble; theme text on the grey received one.
+            h.body.setTextColor(getColor(
+                    e.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text));
+
+            // In a group, name the sender once at the top of their run.
+            if (!e.mine && e.isGroup() && r.firstInCluster) {
+                h.who.setVisibility(View.VISIBLE);
+                h.who.setText(Names.contact(MaximaService.node(), e.sender));
+            } else {
+                h.who.setVisibility(View.GONE);
+            }
+
+            if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
+                String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+                h.body.setText(cap);
+                h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
+                h.image.setVisibility(View.VISIBLE);
+                bindImage(h.image, e.body, e.id);
+            } else {
+                h.image.setVisibility(View.GONE);
+                h.image.setImageDrawable(null);
+                h.body.setVisibility(View.VISIBLE);
+                h.body.setText(e.body);
+            }
         }
 
         // Timestamp + ticks only on the last of a run (iMessage-style).
@@ -1015,7 +1067,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.meta.setTextColor(sentMetaColour(e.state));
             } else {
                 h.meta.setText(stamp);
-                h.meta.setTextColor(getColor(R.color.ux_subtext));
+                // On the orange payment card, grey is unreadable - use dark ink.
+                h.meta.setTextColor(pay ? 0xCC0A1F12 : getColor(R.color.ux_subtext));
             }
         } else {
             h.meta.setVisibility(View.GONE);

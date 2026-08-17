@@ -15,6 +15,7 @@ import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.ui.Avatars;
 import com.eurobuddha.maxima.core.chat.ChatEngine;
 import com.eurobuddha.maxima.core.chat.ChatMedia;
+import com.eurobuddha.maxima.core.chat.ChatPay;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -120,7 +121,9 @@ public final class ChatNotifier {
                         .build();
                 people.put(e.sender, p);
             }
-            style.addMessage(ChatMedia.preview(e.body), e.time, p);
+            String line = ChatPay.isPayment(e.body)
+                    ? ChatPay.preview(e.body) : ChatMedia.preview(e.body);
+            style.addMessage(line, e.time, p);
         }
 
         Intent open = new Intent(zCtx, ChatActivity.class);
