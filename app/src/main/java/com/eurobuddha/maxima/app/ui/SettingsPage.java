@@ -95,6 +95,18 @@ public final class SettingsPage implements Page {
                 "ON", "ticks");
 
         mSecurity.removeAllViews();
+        String appear = ChatPrefs.appearance(mAct);
+        String appearWord = "light".equals(appear) ? "Light"
+                : "dark".equals(appear) ? "Dark" : "System";
+        Ui.toggle(mAct, mSecurity, "Appearance",
+                "System follows your phone; tap to cycle System → Light → Dark",
+                appearWord, "appearance", () -> {
+                    String next = "system".equals(appear) ? "light"
+                            : "light".equals(appear) ? "dark" : "system";
+                    ChatPrefs.setAppearance(mAct, next);
+                    androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(
+                            ChatPrefs.nightMode(mAct));
+                });
         boolean isCore = "core".equals(ChatPrefs.nodeKind(mAct));
         Ui.toggle(mAct, mSecurity, "Node type",
                 isCore ? "Advertised to contacts as an always-on core node (they show a 'core' pill)"

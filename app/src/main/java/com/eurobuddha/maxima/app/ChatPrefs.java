@@ -16,8 +16,32 @@ public final class ChatPrefs {
     private static final String PREFS = "maxima_chat";
     private static final String READ_RECEIPTS = "read_receipts";
     private static final String NODE_KIND = "node_kind";
+    private static final String APPEARANCE = "appearance";
 
     private ChatPrefs() {
+    }
+
+    /** Appearance preference as a stored word: "system" (default), "light" or
+     *  "dark". "system" follows the phone's light/dark setting. */
+    public static String appearance(Context zCtx) {
+        return prefs(zCtx).getString(APPEARANCE, "system");
+    }
+
+    public static void setAppearance(Context zCtx, String zMode) {
+        prefs(zCtx).edit().putString(APPEARANCE,
+                zMode == null ? "system" : zMode).apply();
+    }
+
+    /** The stored appearance as an {@code AppCompatDelegate.MODE_NIGHT_*} value. */
+    public static int nightMode(Context zCtx) {
+        switch (appearance(zCtx)) {
+            case "light":
+                return androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO;
+            case "dark":
+                return androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES;
+            default:
+                return androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
+        }
     }
 
     public static boolean readReceipts(Context zCtx) {

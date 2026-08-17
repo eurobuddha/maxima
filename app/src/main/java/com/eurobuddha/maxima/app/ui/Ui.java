@@ -1,9 +1,13 @@
 package com.eurobuddha.maxima.app.ui;
 
 import android.app.Activity;
+import android.content.Context;
+import android.graphics.drawable.GradientDrawable;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.OvershootInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -74,6 +78,60 @@ public final class Ui {
 
     public static int dp(Activity zAct, int zDp) {
         return Math.round(zDp * zAct.getResources().getDisplayMetrics().density);
+    }
+
+    public static int dpc(Context zCtx, float zDp) {
+        return Math.round(zDp * zCtx.getResources().getDisplayMetrics().density);
+    }
+
+    /** Same colour at a different opacity (0..255 in the top byte). */
+    public static int alpha(int zArgb, int zAlpha) {
+        return (zArgb & 0x00FFFFFF) | (zAlpha << 24);
+    }
+
+    /**
+     * FreezePeach's signature accent glow: a centre-bright fading line with a
+     * soft bloom beneath it, stacked under a header so the chrome has a subtle
+     * edge of light instead of a flat hairline.
+     */
+    public static View glowStrip(Context zCtx) {
+        int accent = zCtx.getColor(R.color.ux_accent);
+        int glow = zCtx.getColor(R.color.ux_accent_glow);
+        LinearLayout col = new LinearLayout(zCtx);
+        col.setOrientation(LinearLayout.VERTICAL);
+        View line = new View(zCtx);
+        line.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{alpha(accent, 0), accent, alpha(accent, 0)}));
+        col.addView(line, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpc(zCtx, 1.5f)));
+        View bloom = new View(zCtx);
+        bloom.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{glow, alpha(glow, 0)}));
+        col.addView(bloom, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpc(zCtx, 8)));
+        return col;
+    }
+
+    /**
+     * Press physics: a subtle scale-down on touch that springs back with an
+     * overshoot. Returns false so the view's own click handling is untouched.
+     */
+    public static void press(final View zView) {
+        zView.setOnTouchListener((view, ev) -> {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(90).start();
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.animate().scaleX(1f).scaleY(1f).setDuration(150)
+                            .setInterpolator(new OvershootInterpolator(2f)).start();
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        });
     }
 
     public static int colour(Activity zAct, int zRes) {

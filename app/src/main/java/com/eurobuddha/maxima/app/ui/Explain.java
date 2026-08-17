@@ -196,6 +196,11 @@ public final class Explain {
                         + "update to everyone you have - they hold the old one until "
                         + "then.");
 
+        put("appearance", "Appearance",
+                "Light, dark, or follow the phone. \"System\" tracks your device's "
+                        + "light/dark setting automatically; Light and Dark force one "
+                        + "regardless. It is a look, nothing about it leaves this phone.");
+
         put("seed", "Seed phrase",
                 "24 words that ARE your identity. Your Maxima key is derived from "
                         + "them, so restoring the phrase anywhere reproduces exactly "
