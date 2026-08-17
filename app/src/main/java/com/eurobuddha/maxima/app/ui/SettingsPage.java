@@ -3,9 +3,11 @@ package com.eurobuddha.maxima.app.ui;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -24,44 +26,27 @@ import com.eurobuddha.maxima.core.MaximaNode;
 
 import java.util.Set;
 
-/** Who you are, and what you are allowing. */
+/** Who you are, and what you are allowing — greyscale, on the shared {@link Kit}. */
 public final class SettingsPage implements Page {
 
     private final MainActivity mAct;
     private final View mView;
-    private final EditText mName;
-    private final TextView mKey;
-    private final LinearLayout mPrivacy;
-    private final LinearLayout mSecurity;
-    private final LinearLayout mApps;
-    private final TextView mAbout;
+    private final LinearLayout mBox;
+    private final Kit k;
+
+    private EditText mName;
+    private TextView mKeyValue;
+    private LinearLayout mPrivacy;
+    private final TextView[] mAppearSeg = new TextView[3];
+    private LinearLayout mPower;
+    private LinearLayout mApps;
 
     public SettingsPage(MainActivity zAct, View zView) {
         mAct = zAct;
         mView = zView;
-        mName = zView.findViewById(R.id.name_field);
-        mKey = zView.findViewById(R.id.identity_key);
-        mPrivacy = zView.findViewById(R.id.settings_privacy);
-        mSecurity = zView.findViewById(R.id.settings_security);
-        mApps = zView.findViewById(R.id.apps_container);
-        mAbout = zView.findViewById(R.id.about);
-
-        mName.setText(SeedStore.displayName(mAct));
-        zView.findViewById(R.id.q_name).setOnClickListener(v -> Explain.show(mAct, "name"));
-        zView.findViewById(R.id.q_ipc).setOnClickListener(v -> Explain.show(mAct, "ipc"));
-        zView.findViewById(R.id.btn_set_name).setOnClickListener(v -> setName());
-        zView.findViewById(R.id.btn_phrase).setOnClickListener(v -> showPhrase());
-        zView.findViewById(R.id.btn_restore).setOnClickListener(v -> restore());
-        zView.findViewById(R.id.btn_battery).setOnClickListener(v -> requestBatteryExemption());
-
-        mAbout.setText("Maxima is a comms layer, not a service. There is no company "
-                + "in the middle: your messages go from your device to theirs, "
-                + "through whichever independent hosts are carrying traffic.\n\n"
-                + "It speaks the same protocol as Minima's classic Maxima, so a "
-                + "classic node can relay for you and you can message classic "
-                + "users - they just will not send you delivery receipts, because "
-                + "classic cannot.\n\n"
-                + "No account, no phone number, no server holding your history.");
+        mBox = zView.findViewById(R.id.settings_root);
+        k = new Kit(zAct);
+        buildUi();
     }
 
     @Override
@@ -77,105 +62,123 @@ public final class SettingsPage implements Page {
     @Override
     public void render() {
         MaximaNode node = MaximaService.node();
-        mKey.setText(node == null ? "" : node.identity().publicKeyHex());
+        mKeyValue.setText(node == null ? "…" : node.identity().publicKeyHex());
 
+        // Privacy.
         mPrivacy.removeAllViews();
         boolean rr = ChatPrefs.readReceipts(mAct);
-        Ui.toggle(mAct, mPrivacy, "Read receipts",
+        mPrivacy.addView(k.switchRow("Read receipts",
                 rr ? "Contacts are told when you read their message"
                         : "Contacts see delivery only, never when you read",
-                rr ? "ON" : "off", "readreceipts", () -> {
-                    boolean now = !ChatPrefs.readReceipts(mAct);
-                    ChatPrefs.setReadReceipts(mAct, now);
-                    EventLog.add("read receipts " + (now ? "on" : "off"));
+                rr, checked -> {
+                    ChatPrefs.setReadReceipts(mAct, checked);
+                    EventLog.add("read receipts " + (checked ? "on" : "off"));
                     render();
-                });
-        Ui.stat(mAct, mPrivacy, "Delivery receipts",
-                "Always on. The second tick is the transport doing its job.",
-                "ON", "ticks");
+                }));
+        mPrivacy.addView(k.divider());
+        mPrivacy.addView(k.kv("Delivery receipts",
+                "Always on — the second tick is the transport doing its job",
+                "ON", k.col(R.color.ux_success)));
 
-        mSecurity.removeAllViews();
-        String appear = ChatPrefs.appearance(mAct);
-        String appearWord = "light".equals(appear) ? "Light"
-                : "dark".equals(appear) ? "Dark" : "System";
-        Ui.toggle(mAct, mSecurity, "Appearance",
-                "System follows your phone; tap to cycle System → Light → Dark",
-                appearWord, "appearance", () -> {
-                    String next = "system".equals(appear) ? "light"
-                            : "light".equals(appear) ? "dark" : "system";
-                    ChatPrefs.setAppearance(mAct, next);
-                    androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(
-                            ChatPrefs.nightMode(mAct));
-                });
+        // Appearance segmented highlight.
+        setAppearSeg(ChatPrefs.appearance(mAct));
+
+        // Node & power.
+        mPower.removeAllViews();
         boolean isCore = "core".equals(ChatPrefs.nodeKind(mAct));
-        Ui.toggle(mAct, mSecurity, "Node type",
-                isCore ? "Advertised to contacts as an always-on core node (they show a 'core' pill)"
-                        : "Advertised to contacts as an ordinary phone",
-                isCore ? "core" : "phone", "nodekind", () -> {
-                    String next = "core".equals(ChatPrefs.nodeKind(mAct)) ? "" : "core";
-                    ChatPrefs.setNodeKind(mAct, next);
-                    EventLog.add("node type: " + (next.isEmpty() ? "phone" : "core"));
+        mPower.addView(k.switchRow("Run as core node",
+                isCore ? "Shown to contacts as an always-on core node"
+                        : "Shown to contacts as an ordinary phone",
+                isCore, checked -> {
+                    ChatPrefs.setNodeKind(mAct, checked ? "core" : "");
+                    EventLog.add("node type: " + (checked ? "core" : "phone"));
                     render();
-                });
+                }));
+        mPower.addView(k.divider());
         boolean exempt = isBatteryExempt();
-        Ui.state(mAct, mSecurity, "Battery exemption",
+        mPower.addView(k.kvPill("Battery exemption",
                 exempt ? "Android will let the connection stay up"
-                        : "Android may kill the connection - expect missed messages",
-                exempt ? "granted" : "NOT SET",
-                Ui.colour(mAct, exempt ? R.color.ux_success : R.color.ux_pending),
-                "battery");
-        Ui.stat(mAct, mSecurity, "Seed phrase",
-                "24 words that are your identity AND a Minima wallet seed",
-                "24 words", "seed");
+                        : "Android may kill the connection — expect missed messages",
+                exempt ? "granted" : "not set", exempt ? Kit.OK : Kit.WARN));
+        if (!exempt) {
+            TextView fix = k.ghostButton("Fix battery settings");
+            LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+            fp.topMargin = k.dp(10);
+            mPower.addView(fix, fp);
+            fix.setOnClickListener(v -> requestBatteryExemption());
+        }
 
+        // Apps (IPC).
         mApps.removeAllViews();
         Set<String> pending = MaximaApiReceiver.pendingPackages(mAct);
         Set<String> approved = MaximaApiReceiver.approvedPackages(mAct);
-
-        // Requests first: an app asked to use Maxima as its transport and is
-        // waiting on the user. Approval is ALWAYS an explicit user action here -
-        // REGISTER only records the ask.
+        boolean firstApp = true;
         for (String pkg : pending) {
-            Ui.toggle(mAct, mApps, appLabel(pkg) + " — WANTS ACCESS",
-                    "Tap to approve or deny " + pkg, "pending", "ipc",
-                    () -> new AlertDialog.Builder(mAct)
-                            .setTitle("Let " + appLabel(pkg) + " use Maxima?")
-                            .setMessage(pkg + " wants to send and receive messages "
-                                    + "through your Maxima identity, on its own "
-                                    + "application channel.")
-                            .setNegativeButton("Deny", (d, w) -> {
-                                MaximaApiReceiver.deny(mAct, pkg);
-                                render();
-                            })
-                            .setPositiveButton("Approve", (d, w) -> {
-                                MaximaApiReceiver.approve(mAct, pkg);
-                                render();
-                            })
-                            .show());
-        }
-
-        if (approved.isEmpty() && pending.isEmpty()) {
-            Ui.stat(mAct, mApps, "None yet",
-                    "No other app on this phone is using Maxima as its transport",
-                    "0", "ipc");
-        } else {
-            for (String pkg : approved) {
-                Ui.toggle(mAct, mApps, appLabel(pkg), "Approved - tap to revoke", "allowed", "ipc",
-                        () -> new AlertDialog.Builder(mAct)
-                                .setTitle("Revoke " + pkg + "?")
-                                .setMessage("It will no longer be able to send or receive "
-                                        + "through your identity.")
-                                .setNegativeButton("Cancel", null)
-                                .setPositiveButton("Revoke", (d, w) -> {
-                                    MaximaApiReceiver.revoke(mAct, pkg);
-                                    render();
-                                })
-                                .show());
+            if (!firstApp) {
+                mApps.addView(k.divider());
             }
+            mApps.addView(appRow(appLabel(pkg), pkg + " wants access", "pending", Kit.WARN,
+                    () -> approveSheet(pkg)));
+            firstApp = false;
+        }
+        for (String pkg : approved) {
+            if (!firstApp) {
+                mApps.addView(k.divider());
+            }
+            mApps.addView(appRow(appLabel(pkg), "Approved — tap to revoke", "allowed", Kit.OK,
+                    () -> revokeDialog(pkg)));
+            firstApp = false;
+        }
+        if (pending.isEmpty() && approved.isEmpty()) {
+            mApps.addView(k.kv("None yet",
+                    "No other app on this phone is using Maxima as its transport", "0", 0));
         }
     }
 
-    /** The human app name for a package, falling back to the package id. */
+    private View appRow(String label, String hint, String pill, int kind, Runnable onTap) {
+        LinearLayout row = k.kvPill(label, hint, pill, kind);
+        row.setBackground(k.ripple());
+        row.setOnClickListener(v -> onTap.run());
+        return row;
+    }
+
+    private void approveSheet(String pkg) {
+        new AlertDialog.Builder(mAct)
+                .setTitle("Let " + appLabel(pkg) + " use Maxima?")
+                .setMessage(pkg + " wants to send and receive messages through your Maxima "
+                        + "identity, on its own application channel.")
+                .setNegativeButton("Deny", (d, w) -> {
+                    MaximaApiReceiver.deny(mAct, pkg);
+                    render();
+                })
+                .setPositiveButton("Approve", (d, w) -> {
+                    MaximaApiReceiver.approve(mAct, pkg);
+                    render();
+                })
+                .show();
+    }
+
+    private void revokeDialog(String pkg) {
+        new AlertDialog.Builder(mAct)
+                .setTitle("Revoke " + pkg + "?")
+                .setMessage("It will no longer be able to send or receive through your identity.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Revoke", (d, w) -> {
+                    MaximaApiReceiver.revoke(mAct, pkg);
+                    render();
+                })
+                .show();
+    }
+
+    private String appVersion() {
+        try {
+            return mAct.getPackageManager()
+                    .getPackageInfo(mAct.getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     private String appLabel(String pkg) {
         try {
             android.content.pm.ApplicationInfo ai =
@@ -188,8 +191,9 @@ public final class SettingsPage implements Page {
     }
 
     // ---------------------------------------------------------------
+    // Actions
+    // ---------------------------------------------------------------
 
-    /** Classic: maxima action:setname. Contacts hold the old one until told. */
     private void setName() {
         String n = mName.getText().toString().trim();
         if (n.isEmpty()) {
@@ -206,18 +210,14 @@ public final class SettingsPage implements Page {
         mAct.toast("Name set to " + n);
     }
 
-    /**
-     * The phrase is a spendable wallet seed, so showing it is a deliberate act
-     * with a warning attached, not a casual screen.
-     */
     private void showPhrase() {
         new AlertDialog.Builder(mAct)
                 .setTitle("Show seed phrase?")
-                .setMessage("This phrase is ALSO a Minima wallet seed. Anyone who sees it "
-                        + "can restore your identity AND spend any funds sent to it.\n\n"
-                        + "Make sure nobody is looking.")
+                .setMessage("These 24 words ARE your identity and a spendable Minima wallet seed. "
+                        + "Anyone who sees them controls both. Never share, screenshot, or type "
+                        + "them into another app.\n\nMake sure nobody is looking.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Show", (d, w) -> {
+                .setPositiveButton("Reveal", (d, w) -> {
                     String phrase = SeedStore.revealPhrase(mAct);
                     new AlertDialog.Builder(mAct)
                             .setTitle("Write these down, offline")
@@ -228,7 +228,7 @@ public final class SettingsPage implements Page {
                                 ClipboardManager cm =
                                         mAct.getSystemService(ClipboardManager.class);
                                 cm.setPrimaryClip(ClipData.newPlainText("seed", phrase));
-                                mAct.toast("Copied - clear your clipboard afterwards");
+                                mAct.toast("Copied — clear your clipboard afterwards");
                             })
                             .setNegativeButton("Close", null)
                             .show();
@@ -245,15 +245,6 @@ public final class SettingsPage implements Page {
         }
     }
 
-    /**
-     * Restore an existing Minima seed phrase, replacing this install's identity.
-     *
-     * This is the path back from a reinstall: the seed lives Keystore-encrypted
-     * on-device and does NOT survive uninstall, so the 24 words are the only
-     * portable backup. Pasting them here reproduces the exact same Maxima
-     * identity (and the same address a Minima node would derive), so contacts
-     * can reach you again.
-     */
     private void restore() {
         final EditText input = new EditText(mAct);
         input.setHint("paste your 24 words, separated by spaces");
@@ -262,15 +253,14 @@ public final class SettingsPage implements Page {
         input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        int pad = Ui.dp(mAct, 16);
+        int pad = k.dp(16);
         input.setPadding(pad, pad, pad, pad);
 
         new AlertDialog.Builder(mAct)
                 .setTitle("Restore a seed phrase")
-                .setMessage("This REPLACES the identity on this phone with the one "
-                        + "your words derive. Any contacts and chats stored here now "
-                        + "are cleared - your restored identity re-establishes its own. "
-                        + "Make sure these are the right words.")
+                .setMessage("This REPLACES the identity on this phone with the one your words "
+                        + "derive. Any contacts and chats stored here are cleared and the transport "
+                        + "restarts. Make sure these are the right words.")
                 .setView(input)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Restore", (d, w) -> {
@@ -280,13 +270,10 @@ public final class SettingsPage implements Page {
                         return;
                     }
                     try {
-                        // Validates every word (throws on an unknown one) and
-                        // saves the phrase encrypted. Checksum is a warning only:
-                        // a node-generated phrase legitimately has none.
                         SeedStore.ImportResult r = SeedStore.importPhrase(mAct, phrase);
                         String warn = r.checksumValid ? ""
-                                : "\n\nNote: no BIP39 checksum - normal for a phrase "
-                                + "generated by a Minima node. Restored anyway.";
+                                : "\n\nNote: no BIP39 checksum — normal for a phrase generated by "
+                                + "a Minima node. Restored anyway.";
                         new AlertDialog.Builder(mAct)
                                 .setTitle("Restored")
                                 .setCancelable(false)
@@ -301,20 +288,14 @@ public final class SettingsPage implements Page {
                 .show();
     }
 
-    /**
-     * Restart the service so it reloads the restored seed, wiping the old
-     * identity's local node/chat state in the gap so nothing carries over.
-     */
     private void applyRestoredIdentity() {
         mAct.stopService(new Intent(mAct, MaximaService.class));
-        // Give onDestroy time to flush and release its files before we wipe,
-        // then start fresh - onCreate reads the newly-stored phrase.
-        mSecurity.postDelayed(() -> {
+        mView.postDelayed(() -> {
             wipeDir(new java.io.File(mAct.getFilesDir(), "node"));
             wipeDir(new java.io.File(mAct.getFilesDir(), "chat"));
             MaximaService.start(mAct);
             mName.setText(SeedStore.displayName(mAct));
-            mAct.toast("Identity restored - reconnecting");
+            mAct.toast("Identity restored — reconnecting");
         }, 1500);
     }
 
@@ -347,5 +328,157 @@ public final class SettingsPage implements Page {
         } catch (Exception e) {
             mAct.toast("Could not open battery settings");
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Layout
+    // ---------------------------------------------------------------
+
+    private void setAppearSeg(String appearance) {
+        int on = "light".equals(appearance) ? 1 : "dark".equals(appearance) ? 2 : 0;
+        for (int i = 0; i < 3; i++) {
+            boolean sel = i == on;
+            mAppearSeg[i].setBackgroundResource(sel ? R.drawable.seg_thumb : 0);
+            mAppearSeg[i].setTextColor(k.col(sel ? R.color.ux_text : R.color.ux_subtext));
+        }
+    }
+
+    private void chooseAppearance(String value) {
+        ChatPrefs.setAppearance(mAct, value);
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(ChatPrefs.nightMode(mAct));
+        setAppearSeg(value);
+    }
+
+    private void buildUi() {
+        // Your name.
+        mBox.addView(k.sectionLabel("Your name"));
+        LinearLayout nameCard = k.card();
+        LinearLayout nameRow = new LinearLayout(mAct);
+        nameRow.setOrientation(LinearLayout.HORIZONTAL);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        nameRow.setPadding(0, k.dp(6), 0, k.dp(6));
+        mName = new EditText(mAct);
+        mName.setText(SeedStore.displayName(mAct));
+        mName.setSingleLine(true);
+        mName.setBackgroundResource(R.drawable.field_pill);
+        mName.setPadding(k.dp(14), k.dp(12), k.dp(14), k.dp(12));
+        mName.setTextColor(k.col(R.color.ux_text));
+        mName.setTextSize(14);
+        mName.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
+        nameRow.addView(mName, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView setBtn = k.primaryButton("Set");
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
+        sp.leftMargin = k.dp(9);
+        nameRow.addView(setBtn, sp);
+        setBtn.setOnClickListener(v -> setName());
+        nameCard.addView(nameRow);
+        LinearLayout keyField = k.copyField("Identity key", "…", "Identity key copied");
+        mKeyValue = (TextView) keyField.getChildAt(1);
+        nameCard.addView(keyField);
+        mBox.addView(nameCard, k.mb(k.dp(4)));
+
+        // Privacy.
+        mBox.addView(k.sectionLabel("Privacy"));
+        LinearLayout privCard = k.card();
+        mPrivacy = new LinearLayout(mAct);
+        mPrivacy.setOrientation(LinearLayout.VERTICAL);
+        privCard.addView(mPrivacy);
+        mBox.addView(privCard, k.mb(k.dp(4)));
+
+        // Appearance (segmented).
+        mBox.addView(k.sectionLabel("Appearance"));
+        LinearLayout appCard = k.card();
+        LinearLayout seg = new LinearLayout(mAct);
+        seg.setOrientation(LinearLayout.HORIZONTAL);
+        seg.setBackgroundResource(R.drawable.seg_track);
+        int s4 = k.dp(4);
+        seg.setPadding(s4, s4, s4, s4);
+        LinearLayout.LayoutParams segLp = new LinearLayout.LayoutParams(-1, -2);
+        segLp.topMargin = k.dp(6);
+        segLp.bottomMargin = k.dp(6);
+        String[] labels = {"System", "Light", "Dark"};
+        String[] values = {"system", "light", "dark"};
+        for (int i = 0; i < 3; i++) {
+            final String val = values[i];
+            TextView s = new TextView(mAct);
+            s.setText(labels[i]);
+            s.setGravity(Gravity.CENTER);
+            s.setTextSize(13);
+            s.setTypeface(Typeface.DEFAULT_BOLD);
+            s.setPadding(0, k.dp(8), 0, k.dp(8));
+            s.setOnClickListener(v -> chooseAppearance(val));
+            mAppearSeg[i] = s;
+            seg.addView(s, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        appCard.addView(seg, segLp);
+        mBox.addView(appCard, k.mb(k.dp(4)));
+
+        // Node & power.
+        mBox.addView(k.sectionLabel("Node & power"));
+        LinearLayout powerCard = k.card();
+        mPower = new LinearLayout(mAct);
+        mPower.setOrientation(LinearLayout.VERTICAL);
+        powerCard.addView(mPower);
+        mBox.addView(powerCard, k.mb(k.dp(4)));
+
+        // Keys & security.
+        mBox.addView(k.sectionLabel("Keys & security"));
+        LinearLayout secCard = k.card();
+        secCard.addView(k.kv("Seed phrase",
+                "24 words that are your identity AND a Minima wallet seed", "24 words",
+                k.col(R.color.ux_subtext)));
+        TextView show = k.dangerButton("Show seed phrase");
+        LinearLayout.LayoutParams shp = new LinearLayout.LayoutParams(-1, -2);
+        shp.topMargin = k.dp(6);
+        shp.bottomMargin = k.dp(8);
+        secCard.addView(show, shp);
+        show.setOnClickListener(v -> showPhrase());
+        TextView restore = k.ghostButton("Restore a seed phrase");
+        secCard.addView(restore);
+        restore.setOnClickListener(v -> restore());
+        mBox.addView(secCard, k.mb(k.dp(4)));
+
+        // Apps (IPC).
+        LinearLayout appsHead = new LinearLayout(mAct);
+        appsHead.setOrientation(LinearLayout.HORIZONTAL);
+        appsHead.setGravity(Gravity.CENTER_VERTICAL);
+        appsHead.addView(k.sectionLabel("Apps using Maxima"),
+                new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView q = new TextView(mAct);
+        q.setText("?");
+        q.setTextSize(13);
+        q.setTypeface(Typeface.DEFAULT_BOLD);
+        q.setTextColor(k.col(R.color.ux_subtext));
+        q.setPadding(k.dp(10), k.dp(4), k.dp(6), k.dp(4));
+        q.setBackground(k.ripple());
+        q.setOnClickListener(v -> Explain.show(mAct, "ipc"));
+        appsHead.addView(q);
+        mBox.addView(appsHead);
+        LinearLayout appsCard = k.card();
+        mApps = new LinearLayout(mAct);
+        mApps.setOrientation(LinearLayout.VERTICAL);
+        appsCard.addView(mApps);
+        mBox.addView(appsCard, k.mb(k.dp(4)));
+
+        // About.
+        mBox.addView(k.sectionLabel("About"));
+        LinearLayout aboutCard = k.card();
+        TextView about = new TextView(mAct);
+        about.setText("Maxima is a comms layer, not a service. Your messages go from your device "
+                + "to theirs, through whichever independent hosts are carrying traffic. No account, "
+                + "no phone number, no server holding your history.");
+        about.setTextSize(12);
+        about.setLineSpacing(k.dp(2), 1f);
+        about.setTextColor(k.col(R.color.ux_subtext));
+        about.setPadding(0, k.dp(4), 0, k.dp(2));
+        aboutCard.addView(about);
+        TextView ver = new TextView(mAct);
+        ver.setText("Version " + appVersion());
+        ver.setTextSize(12);
+        ver.setTypeface(k.manrope(Typeface.BOLD));
+        ver.setTextColor(k.col(R.color.ux_text));
+        ver.setPadding(0, k.dp(8), 0, k.dp(2));
+        aboutCard.addView(ver);
+        mBox.addView(aboutCard, k.mb(k.dp(12)));
     }
 }
