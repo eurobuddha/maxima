@@ -399,7 +399,15 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                             pending[0] = chat.beginPayment(contact, amount.toString(),
                                     "MINIMA", note, zTxid);
                             mLastSendWasMine = true;
-                            runOnUiThread(ChatActivity.this::render);
+                            // Signing just burned one key-use; surface it so the
+                            // count is visible even from the chat.
+                            final String uses = mSender.usesLine();
+                            runOnUiThread(() -> {
+                                render();
+                                if (!uses.isEmpty()) {
+                                    toast(uses);
+                                }
+                            });
                         }
 
                         @Override

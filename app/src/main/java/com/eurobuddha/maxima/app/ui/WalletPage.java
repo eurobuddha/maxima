@@ -52,6 +52,10 @@ public final class WalletPage implements Page {
     private TextView mBackend;
     private TextView mBalance;
     private TextView mUses;
+    private TextView mUsesBig;
+
+    /** Winternitz one-time-signature budget for key #1000. */
+    private static final int KEY_TOTAL = 262144;
     private EditText mSendTo;
     private EditText mSendAmt;
     private TextView mSendStatus;
@@ -78,7 +82,7 @@ public final class WalletPage implements Page {
             mWallet = w;
             mAct.runOnUiThread(() -> {
                 mAddr.setText(w.mxAddress());
-                mUses.setText("key uses: " + w.uses(mAct) + " / 262144");
+                renderUses(w);
                 render();
             });
             // Make pre-existing funds spendable via the gateway: register our
@@ -112,6 +116,7 @@ public final class WalletPage implements Page {
         if (w == null || w.hexAddress() == null) {
             return;
         }
+        renderUses(w);   // re-read the key-use count live (mTick, ~2s)
         mPub.balance(w.hexAddress(), new WalletPublisher.Cb() {
             public void onResult(JSONObject r) {
                 mBalance.setText(balanceText(r));
@@ -121,6 +126,13 @@ public final class WalletPage implements Page {
                 mBalance.setText("balance unavailable: " + m);
             }
         });
+    }
+
+    /** The prominent key-use figure: signatures spent, and how many remain. */
+    private void renderUses(MaximaWallet w) {
+        int used = w.uses(mAct);
+        mUsesBig.setText(String.valueOf(used));
+        mUses.setText((KEY_TOTAL - used) + " of " + KEY_TOTAL + " signatures left");
     }
 
     private void renderBackend() {
@@ -203,7 +215,7 @@ public final class WalletPage implements Page {
                                     mSendStatus.setText("Sent ⛏ (mining)");
                                     mSendTo.setText("");
                                     mSendAmt.setText("");
-                                    mUses.setText("key uses: " + w.uses(mAct) + " / 262144");
+                                    renderUses(w);
                                     render();
                                 });
                             }
@@ -225,6 +237,20 @@ public final class WalletPage implements Page {
     // ---------------------------------------------------------------
 
     private void buildUi() {
+        // key-uses card FIRST - the finite one-time-signature budget is the
+        // wallet's life, so it is front and centre and ticks live.
+        LinearLayout kc = card();
+        kc.addView(label("KEY USES"));
+        mUsesBig = new TextView(mAct);
+        mUsesBig.setText("…");
+        mUsesBig.setTextSize(30);
+        mUsesBig.setTypeface(Typeface.DEFAULT_BOLD);
+        mUsesBig.setTextColor(mAct.getResources().getColor(R.color.ux_accent, mAct.getTheme()));
+        kc.addView(mUsesBig);
+        mUses = sub("of " + KEY_TOTAL + " signatures");
+        kc.addView(mUses);
+        mBox.addView(kc, pad());
+
         // receive card
         LinearLayout rc = card();
         rc.addView(label("RECEIVE"));
@@ -238,8 +264,6 @@ public final class WalletPage implements Page {
             }
         });
         rc.addView(mAddr);
-        mUses = sub("key uses: …");
-        rc.addView(mUses);
         mBackend = sub("");
         rc.addView(mBackend);
         mBox.addView(rc, pad());
