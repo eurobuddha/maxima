@@ -101,6 +101,20 @@
             android:paddingBottom="8dp"
             android:scrollbars="vertical" />
 
+        <!-- Shown only on a thread with no messages yet. -->
+        <TextView
+            android:id="@+id/chat_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp"
+            android:lineSpacingExtra="4dp"
+            android:textColor="@color/ux_subtext"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
         <!-- Jump-to-latest, shown only when scrolled up the history. -->
         <TextView
             android:id="@+id/btn_scroll_bottom"

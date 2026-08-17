@@ -52,6 +52,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private TextView mTitle;
     private TextView mAvatar;
     private TextView mScrollBottom;
+    private TextView mEmpty;
     private Adapter mAdapter;
     /** Sending always scrolls to your own message, even from up the history. */
     private boolean mLastSendWasMine;
@@ -107,6 +108,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 .setSupportsChangeAnimations(false);   // don't flash a bubble on a tick change
 
         mScrollBottom = findViewById(R.id.btn_scroll_bottom);
+        mEmpty = findViewById(R.id.chat_empty);
         mScrollBottom.setOnClickListener(v -> {
             if (!mRows.isEmpty()) {
                 mList.smoothScrollToPosition(mRows.size() - 1);
@@ -532,6 +534,16 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             mRows.add(r);
         }
         mMsgCount = conv.size();
+        if (conv.isEmpty()) {
+            mEmpty.setText(g != null
+                    ? "This is the start of the “" + name + "” group.\n\nSay something."
+                    : "This is the start of your conversation with " + name
+                    + ".\n\nMessages are end-to-end encrypted - only the two of you "
+                    + "can read them.");
+            mEmpty.setVisibility(View.VISIBLE);
+        } else {
+            mEmpty.setVisibility(View.GONE);
+        }
         mAdapter.notifyDataSetChanged();
         if (!mRows.isEmpty() && (atBottom || (grew && mLastSendWasMine))) {
             mList.scrollToPosition(mRows.size() - 1);
