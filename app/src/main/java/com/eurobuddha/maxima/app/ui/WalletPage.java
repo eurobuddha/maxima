@@ -15,6 +15,7 @@ import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.wallet.MaximaWallet;
 import com.eurobuddha.maxima.app.wallet.NodeLink;
 import com.eurobuddha.maxima.app.wallet.WalletPublisher;
+import com.eurobuddha.wallet.CoinAggregator;
 import com.eurobuddha.wallet.CoinSelector;
 import com.eurobuddha.wallet.TxnFactory;
 
@@ -117,15 +118,116 @@ public final class WalletPage implements Page {
             return;
         }
         renderUses(w);   // re-read the key-use count live (mTick, ~2s)
-        mPub.balance(w.hexAddress(), new WalletPublisher.Cb() {
+        // The page re-renders every ~2s (mTick); the key-use count is a cheap
+        // disk read but balance/coins are network, so throttle those to ~5s -
+        // the cached figures keep showing between fetches.
+        long now = System.currentTimeMillis();
+        if (now - mLastFetch < 5_000) {
+            return;
+        }
+        mLastFetch = now;
+        // Two sources, combined into the four-field breakdown: `balance` gives
+        // confirmed/unconfirmed; `coins` (via CoinAggregator) gives the true
+        // SPENDABLE - because our coins are RETURN SIGNEDBY(pubkey), the node's
+        // own `sendable` flag understates and must not be trusted.
+        final String hex = w.hexAddress();
+        mPub.balance(hex, new WalletPublisher.Cb() {
             public void onResult(JSONObject r) {
-                mBalance.setText(balanceText(r));
+                try {
+                    org.json.JSONArray arr = r.optJSONArray("response");
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            JSONObject t = arr.getJSONObject(i);
+                            if ("0x00".equals(t.optString("tokenid"))) {
+                                mConfMinima = t.optString("confirmed", "0");
+                                mUnconfMinima = t.optString("unconfirmed", "0");
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                paintBalance();
             }
 
             public void onError(String m) {
-                mBalance.setText("balance unavailable: " + m);
+                paintBalance();
             }
         });
+        mPub.coins(hex, new WalletPublisher.Cb() {
+            public void onResult(JSONObject r) {
+                try {
+                    org.minima.utils.json.JSONObject full =
+                            (org.minima.utils.json.JSONObject) new org.minima.utils.json.parser
+                                    .JSONParser().parse(r.toString());
+                    org.minima.utils.json.JSONArray coins =
+                            (org.minima.utils.json.JSONArray) full.get("response");
+                    String spend = "0";
+                    for (CoinAggregator.Agg a : CoinAggregator.aggregate(coins)) {
+                        if (a.isMinima()) {
+                            spend = a.displayTotal.toString();
+                        }
+                    }
+                    mSpendMinima = spend;
+                } catch (Exception ignored) {
+                }
+                paintBalance();
+            }
+
+            public void onError(String m) {
+                paintBalance();
+            }
+        });
+    }
+
+    private volatile long mLastFetch;
+
+    // Cached MINIMA figures, painted together into the four-field card.
+    private volatile String mConfMinima = "0";
+    private volatile String mUnconfMinima = "0";
+    private volatile String mSpendMinima = "0";
+
+    /** Sendable / Confirmed / Pending / Locked, family-parity. Sendable is the
+     *  SIGNEDBY-aware spendable; Locked = max(0, confirmed − sendable). */
+    private void paintBalance() {
+        try {
+            java.math.BigDecimal conf = bd(mConfMinima);
+            java.math.BigDecimal spend = bd(mSpendMinima);
+            java.math.BigDecimal locked = conf.subtract(spend);
+            if (locked.signum() < 0) {
+                locked = java.math.BigDecimal.ZERO;
+            }
+            String s = "MINIMA\n"
+                    + "  Sendable    " + tidy(mSpendMinima) + "\n"
+                    + "  Confirmed   " + tidy(mConfMinima) + "\n"
+                    + "  Pending     " + tidy(mUnconfMinima) + "\n"
+                    + "  Locked      " + tidy(locked.toPlainString());
+            mBalance.setText(s);
+        } catch (Exception e) {
+            mBalance.setText("Sendable  " + tidy(mSpendMinima));
+        }
+    }
+
+    private static java.math.BigDecimal bd(String s) {
+        try {
+            return new java.math.BigDecimal(s);
+        } catch (Exception e) {
+            return java.math.BigDecimal.ZERO;
+        }
+    }
+
+    /** Strip trailing zeros / dangling point, matching the family's tidyAmount. */
+    private static String tidy(String amt) {
+        if (amt == null || amt.isEmpty()) {
+            return "0";
+        }
+        if (!amt.contains(".")) {
+            return amt;
+        }
+        String s = amt.replaceAll("0+$", "");
+        if (s.endsWith(".")) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s.isEmpty() ? "0" : s;
     }
 
     /** The prominent key-use figure: signatures spent, and how many remain. */
@@ -299,25 +401,6 @@ public final class WalletPage implements Page {
         mBox.addView(sc, pad());
     }
 
-    private String balanceText(JSONObject r) {
-        try {
-            org.json.JSONArray arr = r.optJSONArray("response");
-            if (arr == null || arr.length() == 0) {
-                return "0";
-            }
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject t = arr.getJSONObject(i);
-                String name = "0x00".equals(t.optString("tokenid"))
-                        ? "MINIMA" : t.opt("token").toString();
-                sb.append(name).append(":  ")
-                        .append(t.optString("confirmed", "0")).append('\n');
-            }
-            return sb.toString().trim();
-        } catch (Exception e) {
-            return r.toString();
-        }
-    }
 
     private void post(Runnable r) {
         mAct.runOnUiThread(r);
