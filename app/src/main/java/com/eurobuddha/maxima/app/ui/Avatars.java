@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.app.ui;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.drawable.GradientDrawable;
 import android.widget.TextView;
 
@@ -50,5 +54,29 @@ public final class Avatars {
         bg.setColor(colour(zKey));
         zAvatar.setBackground(bg);
         zAvatar.setTextColor(0xFFFFFFFF);
+    }
+
+    /**
+     * The same avatar as a round bitmap, for surfaces that take an image rather
+     * than a view - notification {@code Person} icons, most of all. {@code zPx}
+     * is the pixel diameter.
+     */
+    public static Bitmap bitmap(String zKey, String zName, int zPx) {
+        Bitmap bmp = Bitmap.createBitmap(zPx, zPx, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        Paint disc = new Paint(Paint.ANTI_ALIAS_FLAG);
+        disc.setColor(colour(zKey));
+        float r = zPx / 2f;
+        c.drawCircle(r, r, r, disc);
+        Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        text.setColor(Color.WHITE);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setFakeBoldText(true);
+        text.setTextSize(zPx * 0.44f);
+        // Centre the glyph on the disc's vertical middle.
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float baseline = r - (fm.ascent + fm.descent) / 2f;
+        c.drawText(Ui.initial(zName), r, baseline, text);
+        return bmp;
     }
 }

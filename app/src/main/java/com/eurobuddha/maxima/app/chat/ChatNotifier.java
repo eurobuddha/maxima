@@ -1,6 +1,5 @@
 package com.eurobuddha.maxima.app.chat;
 
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -8,8 +7,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
+import androidx.core.graphics.drawable.IconCompat;
+
 import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.ui.Avatars;
 import com.eurobuddha.maxima.core.chat.ChatEngine;
+import com.eurobuddha.maxima.core.chat.ChatMedia;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Inbound chat, surfaced to the user.
@@ -56,20 +67,61 @@ public final class ChatNotifier {
     }
 
     /**
-     * Show (or update) the notification for a conversation.
+     * Post (or update) a conversation's notification as a WhatsApp-style
+     * threaded message stack: each new line under the right sender, with that
+     * sender's colour-per-identity avatar, all under the one conversation.
      *
-     * @param zConversation peer public key, or group id
-     * @param zTitle        who it is from, as the user would recognise them
-     * @param zText         the newest line
-     * @param zCount        unread in this conversation, shown when above one
+     * Android keeps no history for us, so we rebuild the stack each time from
+     * the engine: the inbound messages that arrived since the thread was last
+     * read (the honest "new" set), oldest first, capped so a flood stays sane.
      */
-    public static void show(Context zCtx, String zConversation, String zTitle,
-                            String zText, int zCount) {
+    private static void postConversation(Context zCtx, ChatEngine zChat,
+                                         com.eurobuddha.maxima.core.MaximaNode zNode,
+                                         String zConversation) {
         NotificationManager nm = zCtx.getSystemService(NotificationManager.class);
         if (nm == null) {
             return;
         }
         createChannel(zCtx);
+
+        boolean group = zChat.group(zConversation) != null;
+        long since = zChat.lastRead(zConversation);
+        List<ChatEngine.Entry> conv = zChat.conversation(zConversation);
+        Collections.sort(conv, (a, b) -> Long.compare(a.time, b.time));
+        List<ChatEngine.Entry> fresh = new ArrayList<>();
+        for (ChatEngine.Entry e : conv) {
+            if (!e.mine && e.time > since) {
+                fresh.add(e);
+            }
+        }
+        if (fresh.isEmpty()) {
+            return;   // caught up - nothing to shout about
+        }
+        if (fresh.size() > 8) {
+            fresh = fresh.subList(fresh.size() - 8, fresh.size());
+        }
+
+        Person me = new Person.Builder().setName("You").build();
+        NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(me);
+        if (group) {
+            style.setConversationTitle(Names.of(zNode, zChat, zConversation));
+            style.setGroupConversation(true);
+        }
+        Map<String, Person> people = new HashMap<>();
+        for (ChatEngine.Entry e : fresh) {
+            Person p = people.get(e.sender);
+            if (p == null) {
+                String who = Names.contact(zNode, e.sender);
+                p = new Person.Builder()
+                        .setName(who)
+                        .setKey(e.sender)
+                        .setIcon(IconCompat.createWithBitmap(
+                                Avatars.bitmap(e.sender, who, 128)))
+                        .build();
+                people.put(e.sender, p);
+            }
+            style.addMessage(ChatMedia.preview(e.body), e.time, p);
+        }
 
         Intent open = new Intent(zCtx, ChatActivity.class);
         open.putExtra(ChatActivity.EXTRA_CONVERSATION, zConversation);
@@ -77,22 +129,19 @@ public final class ChatNotifier {
         // conversations and every notification opens the same thread.
         open.setAction("open:" + zConversation);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
         PendingIntent pi = PendingIntent.getActivity(zCtx, idFor(zConversation), open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                ? new Notification.Builder(zCtx, CHANNEL_ID)
-                : new Notification.Builder(zCtx);
-
-        b.setContentTitle(zTitle)
-                .setContentText(zText)
-                .setStyle(new Notification.BigTextStyle().bigText(zText))
+        NotificationCompat.Builder b = new NotificationCompat.Builder(zCtx, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_maxima)
+                .setStyle(style)
                 .setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setWhen(fresh.get(fresh.size() - 1).time)
                 .setContentIntent(pi);
-        if (zCount > 1) {
-            b.setNumber(zCount);
+        if (!group) {
+            b.setLargeIcon(Avatars.bitmap(zConversation,
+                    Names.of(zNode, zChat, zConversation), 128));
         }
         try {
             nm.notify(idFor(zConversation), b.build());
@@ -124,10 +173,6 @@ public final class ChatNotifier {
         if (zEntry.mine || ChatHub.isForeground(conv)) {
             return;
         }
-        String title = Names.of(zNode, zChat, conv);
-        String text = zEntry.isGroup()
-                ? Names.contact(zNode, zEntry.sender) + ": " + com.eurobuddha.maxima.core.chat.ChatMedia.preview(zEntry.body)
-                : com.eurobuddha.maxima.core.chat.ChatMedia.preview(zEntry.body);
-        show(zCtx, conv, title, text, zChat.unread(conv));
+        postConversation(zCtx, zChat, zNode, conv);
     }
 }
