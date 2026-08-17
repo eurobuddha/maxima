@@ -918,17 +918,15 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return getColor(R.color.ux_subtext);
     }
 
-    /** Meta colour for a SENT bubble - must read on the green fill. Read is the
-     *  blue double-tick, failed is red; everything else is dark ink so the
-     *  timestamp and single ticks stay legible on green. */
+    /** Meta colour for a SENT bubble - it sits ON the green fill, so it must be
+     *  dark ink to stay readable (blue read-ticks are invisible on green). The
+     *  read/delivered/failed state is carried by the tick GLYPH itself
+     *  (✓ / ✓✓ / ✗), not by colour. */
     private int sentMetaColour(String zState) {
         if (Receipt.FAILED.equals(zState)) {
-            return getColor(R.color.ux_error);
+            return 0xE0731105;   // dark red-brown, still legible on green
         }
-        if (Receipt.READ.equals(zState)) {
-            return getColor(R.color.ux_tick_read);
-        }
-        return 0xC00A1F12;   // dark ink at ~75% alpha
+        return 0xCC0A1F12;       // dark ink
     }
 
     /** A rendered row: a date separator, or a message. */
