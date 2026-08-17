@@ -575,9 +575,62 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             if (bmp == null) {
                 throw new Exception("could not read image");
             }
+            // Rotate the pixels to match the source's EXIF orientation, then
+            // re-encode - otherwise the tag is lost and the photo ships sideways.
+            bmp = applyExifOrientation(bmp, all);
             java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
             bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, bos);
             return bos.toByteArray();
+        }
+    }
+
+    /** Apply the JPEG's EXIF orientation to the decoded bitmap so it is upright.
+     *  Best-effort: on any failure the original bitmap is returned unchanged. */
+    private static android.graphics.Bitmap applyExifOrientation(
+            android.graphics.Bitmap zBmp, byte[] zJpeg) {
+        try {
+            androidx.exifinterface.media.ExifInterface exif =
+                    new androidx.exifinterface.media.ExifInterface(
+                            new java.io.ByteArrayInputStream(zJpeg));
+            int o = exif.getAttributeInt(
+                    androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                    androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL);
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            switch (o) {
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90:
+                    m.postRotate(90);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180:
+                    m.postRotate(180);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270:
+                    m.postRotate(270);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+                    m.postScale(-1f, 1f);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL:
+                    m.postScale(1f, -1f);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSPOSE:
+                    m.postRotate(90);
+                    m.postScale(-1f, 1f);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSVERSE:
+                    m.postRotate(270);
+                    m.postScale(-1f, 1f);
+                    break;
+                default:
+                    return zBmp;   // normal / undefined - nothing to do
+            }
+            android.graphics.Bitmap rotated = android.graphics.Bitmap.createBitmap(
+                    zBmp, 0, 0, zBmp.getWidth(), zBmp.getHeight(), m, true);
+            if (rotated != zBmp) {
+                zBmp.recycle();
+            }
+            return rotated;
+        } catch (Exception e) {
+            return zBmp;
         }
     }
 
