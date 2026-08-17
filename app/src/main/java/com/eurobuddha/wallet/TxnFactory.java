@@ -517,9 +517,15 @@ public class TxnFactory {
             }
         }
 
-        //Change output — back to our own change address (does not keep state; storeState=false).
+        //Change output — back to the address the INPUTS came from (does not keep
+        //state; storeState=false). NOT getReceiveAddress() (key index 0): this
+        //wallet operates at a single key index (Maxima uses 1000), and change
+        //must land where the wallet actually looks and can spend it from - the
+        //input index - or it strands the change at an untracked index-0 address.
         if (change.isMore(MiniNumber.ZERO)) {
-            MiniData chgaddr = mWallet.getReceiveAddress().getAddressData();
+            int changeIndex = distinctKeyIndex.isEmpty()
+                    ? 0 : distinctKeyIndex.get(0);
+            MiniData chgaddr = mWallet.getAddress(changeIndex).getAddressData();
             Coin changecoin = new Coin(Coin.COINID_OUTPUT, chgaddr, change, Token.TOKENID_MINIMA, false);
             if (!minima) {
                 changecoin.resetTokenID(zTokenID);
