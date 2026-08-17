@@ -1,28 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The family palette, byte-identical to apks/utxo, apks/atomix and
-     apks/wallet. Maxima is a member of that family and must not invent its
-     own colours. -->
+<!-- Maxima's OWN palette (deliberately diverged from the utxo/atomix/wallet
+     family, with the user's sign-off) so it can be a proper messenger: a
+     premium light + dark system adapted from FreezePeach's "Ink" (light) and
+     "Onyx Electric" (dark) design language.
+
+     This file is the LIGHT ("Ink") palette; res/values-night/colors.xml holds
+     the DARK ("Onyx Electric") one. Because everything reads @color/ux_*, the
+     app follows the system light/dark setting for free.
+
+     Brand note: the accent stays Bitcoin-orange (Maxima's identity), while the
+     SENT chat bubble is WhatsApp-green - orange chrome + green bubbles. -->
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="ux_bg">#FF0A0A0F</color>
-    <color name="ux_card">#FF15151F</color>
-    <color name="ux_card2">#FF1F1F2B</color>
+    <color name="ux_bg">#FFF7F6F3</color>
+    <color name="ux_card">#FFFFFFFF</color>
+    <color name="ux_card2">#FFEFEDE8</color>
     <color name="ux_accent">#FFF7931A</color>
-    <color name="ux_text">#FFFFFFFF</color>
-    <color name="ux_subtext">#FF9A9AA8</color>
-    <color name="ux_input">#FF1F1F2B</color>
-    <color name="ux_success">#FF2ECC71</color>
-    <color name="ux_error">#FFE74C3C</color>
-    <color name="ux_pending">#FFE6A23C</color>
+    <color name="ux_accent_glow">#1AF7931A</color>
+    <color name="ux_on_accent">#FF16100A</color>
+    <color name="ux_text">#FF1A1712</color>
+    <color name="ux_subtext">#FF9C948A</color>
+    <color name="ux_input">#FFEEEBE5</color>
+    <color name="ux_success">#FF1F9E5A</color>
+    <color name="ux_error">#FFD93A2B</color>
+    <color name="ux_pending">#FFCA8A2E</color>
     <color name="ux_banner">#33F7931A</color>
-    <color name="ux_selected">#33F7931A</color>
-    <color name="ux_divider">#FF2A2A38</color>
+    <color name="ux_selected">#22F7931A</color>
+    <color name="ux_divider">#12000000</color>
+    <color name="ux_press">#14000000</color>
+    <color name="ux_scrim">#66000000</color>
 
-    <!-- Chat only: the two bubbles and the read tick. -->
-    <color name="ux_bubble_in">#FF1F1F2B</color>
-    <color name="ux_bubble_out">#FF2E2413</color>
-    <color name="ux_tick_read">#FF4FA3F7</color>
+    <!-- Chat only: the two bubbles, their text, and the read tick. -->
+    <color name="ux_bubble_in">#FFEEEBE5</color>
+    <color name="ux_bubble_in_text">#FF1A1712</color>
+    <color name="ux_bubble_out">#FF25D366</color>
+    <color name="ux_bubble_out_text">#FF0A1F12</color>
+    <color name="ux_tick_read">#FF34B7F1</color>
+
     <color name="ic_launcher_background">#16111F</color>
 </resources>

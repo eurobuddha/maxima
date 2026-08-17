@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Maxima's DARK palette ("Onyx Electric", adapted from FreezePeach). The
+     light ("Ink") palette lives in res/values/colors.xml. Every ux_* token is
+     redefined here so the dark values never inherit a light one; the app picks
+     this file whenever the phone (or the in-app Appearance setting) is dark. -->
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="ux_bg">#FF090A0D</color>
+    <color name="ux_card">#FF12141A</color>
+    <color name="ux_card2">#FF181C24</color>
+    <color name="ux_accent">#FFF7931A</color>
+    <color name="ux_accent_glow">#2AF7931A</color>
+    <color name="ux_on_accent">#FF16100A</color>
+    <color name="ux_text">#FFEDEFF3</color>
+    <color name="ux_subtext">#FF7B828F</color>
+    <color name="ux_input">#FF181C24</color>
+    <color name="ux_success">#FF2ECC71</color>
+    <color name="ux_error">#FFFF5C5C</color>
+    <color name="ux_pending">#FFE6A23C</color>
+    <color name="ux_banner">#33F7931A</color>
+    <color name="ux_selected">#33F7931A</color>
+    <color name="ux_divider">#14FFFFFF</color>
+    <color name="ux_press">#1FFFFFFF</color>
+    <color name="ux_scrim">#B3000000</color>
+
+    <!-- Chat only: the two bubbles, their text, and the read tick. -->
+    <color name="ux_bubble_in">#FF181C24</color>
+    <color name="ux_bubble_in_text">#FFEDEFF3</color>
+    <color name="ux_bubble_out">#FF25D366</color>
+    <color name="ux_bubble_out_text">#FF0A1F12</color>
+    <color name="ux_tick_read">#FF34B7F1</color>
+
+    <color name="ic_launcher_background">#16111F</color>
+</resources>
