@@ -10,8 +10,8 @@ android {
         applicationId "com.eurobuddha.maxima.app"
         minSdk 28
         targetSdk 35
-        versionCode 438
-        versionName "0.4.38"
+        versionCode 439
+        versionName "0.4.39"
     }
 
     signingConfigs {

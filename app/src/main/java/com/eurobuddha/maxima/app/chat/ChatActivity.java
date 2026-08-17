@@ -174,51 +174,65 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private void saveImage(String id) {
-        android.graphics.Bitmap b = mImageCache.get(id);
+        final android.graphics.Bitmap b = mImageCache.get(id);
         if (b == null) {
             return;
         }
-        try {
-            android.content.ContentValues cv = new android.content.ContentValues();
-            cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,
-                    "maxima-" + System.currentTimeMillis() + ".jpg");
-            cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-            android.net.Uri uri = getContentResolver().insert(
-                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
-            try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
-                b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
+        // MediaStore insert + JPEG compress + stream write is disk I/O - off the
+        // main thread, or a big photo can ANR.
+        new Thread(() -> {
+            try {
+                android.content.ContentValues cv = new android.content.ContentValues();
+                cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+                        "maxima-" + System.currentTimeMillis() + ".jpg");
+                cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                android.net.Uri uri = getContentResolver().insert(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+                try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
+                }
+                runOnUiThread(() -> toast("Saved to Photos"));
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Save failed"));
             }
-            toast("Saved to Photos");
-        } catch (Exception e) {
-            toast("Save failed");
-        }
+        }, "chat-save-image").start();
     }
 
     /** Tap a photo to open it full-screen in the system viewer (pinch-zoom,
      *  share, save all come for free there). We write the decoded bitmap to our
      *  own cache and hand it out through the existing FileProvider. */
     private void openImage(String id) {
-        android.graphics.Bitmap b = mImageCache.get(id);
+        final android.graphics.Bitmap b = mImageCache.get(id);
         if (b == null) {
             return;
         }
-        try {
-            java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
-            dir.mkdirs();
-            java.io.File f = new java.io.File(dir, "view.jpg");
-            try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
-                b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
+        // Compress + write the cache file off the main thread; only the launch
+        // itself has to be back on it.
+        new Thread(() -> {
+            try {
+                java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+                dir.mkdirs();
+                java.io.File f = new java.io.File(dir, "view.jpg");
+                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
+                }
+                final android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                        this, "com.eurobuddha.maxima.app.payloads", f);
+                runOnUiThread(() -> {
+                    try {
+                        android.content.Intent i = new android.content.Intent(
+                                android.content.Intent.ACTION_VIEW);
+                        i.setDataAndType(uri, "image/jpeg");
+                        i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        toast("Could not open image");
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Could not open image"));
             }
-            android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
-                    this, "com.eurobuddha.maxima.app.payloads", f);
-            android.content.Intent i = new android.content.Intent(
-                    android.content.Intent.ACTION_VIEW);
-            i.setDataAndType(uri, "image/jpeg");
-            i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(i);
-        } catch (Exception e) {
-            toast("Could not open image");
-        }
+        }, "chat-open-image").start();
     }
 
     private void attachPhoto() {
@@ -252,7 +266,17 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             android.content.Intent i = new android.content.Intent(
                     android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
             i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, mCaptureUri);
+            // FLAG_GRANT_WRITE only covers the intent's DATA uri, not one passed
+            // in an extra - so the output uri must be granted to the camera app
+            // explicitly, or OEM camera apps that don't self-grant get a
+            // SecurityException and the capture silently returns nothing.
             i.addFlags(android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            for (android.content.pm.ResolveInfo ri : getPackageManager()
+                    .queryIntentActivities(i,
+                            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)) {
+                grantUriPermission(ri.activityInfo.packageName, mCaptureUri,
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            }
             startActivityForResult(i, TAKE_PHOTO);
         } catch (Exception e) {
             toast("No camera available");
