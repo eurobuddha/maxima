@@ -323,6 +323,32 @@ public class ChatTest {
                     + " total=" + u1.totalUnread());
         }
 
+        // clearConversation forgets a thread's history on this device - and it
+        // must stay forgotten across a restart, not resurrect from the store.
+        int had = u1.conversation(them).size();
+        int removed = u1.clearConversation(them);
+        if (removed == had && u1.conversation(them).isEmpty() && u1.unread(them) == 0) {
+            ok("clearConversation empties the thread and its unread count");
+        } else {
+            bad("clearConversation left state: removed=" + removed + " had=" + had
+                    + " left=" + u1.conversation(them).size());
+        }
+        // Other conversations are untouched.
+        if (!u1.conversation(quiet).isEmpty()) {
+            ok("clearConversation leaves other conversations alone");
+        } else {
+            bad("clearConversation wiped an unrelated conversation");
+        }
+        com.eurobuddha.maxima.core.chat.ChatEngine u3 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        u3.setStore(new com.eurobuddha.maxima.core.store.FileStore(udir));
+        if (u3.conversation(them).isEmpty()) {
+            ok("a cleared conversation stays cleared after a restart");
+        } else {
+            bad("cleared conversation came back on restart: "
+                    + u3.conversation(them).size());
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

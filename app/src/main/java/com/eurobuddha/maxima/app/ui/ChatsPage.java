@@ -63,6 +63,10 @@ public final class ChatsPage implements Page {
         mSearch = zView.findViewById(R.id.chats_search);
         mList.setAdapter(mAdapter);
         mList.setOnItemClickListener((p, v, pos, id) -> open(mRows.get(pos).key));
+        mList.setOnItemLongClickListener((p, v, pos, id) -> {
+            rowMenu(mRows.get(pos));
+            return true;
+        });
         zView.findViewById(R.id.btn_new_group).setOnClickListener(v -> newGroup());
         mSearch.addTextChangedListener(new android.text.TextWatcher() {
             @Override
@@ -186,6 +190,48 @@ public final class ChatsPage implements Page {
     }
 
     // ---------------------------------------------------------------
+
+    /** Long-press a conversation: mark read, or clear its history on this phone. */
+    private void rowMenu(final Row row) {
+        ChatEngine chat = MaximaService.chat();
+        if (chat == null) {
+            return;
+        }
+        final List<String> items = new ArrayList<>();
+        if (row.unread > 0) {
+            items.add("Mark as read");
+        }
+        items.add("Clear messages");
+        new AlertDialog.Builder(mAct)
+                .setTitle(row.name)
+                .setItems(items.toArray(new String[0]), (d, which) -> {
+                    String choice = items.get(which);
+                    if ("Mark as read".equals(choice)) {
+                        chat.markRead(row.key);
+                        render();
+                    } else {
+                        confirmClear(row);
+                    }
+                })
+                .show();
+    }
+
+    private void confirmClear(final Row row) {
+        new AlertDialog.Builder(mAct)
+                .setTitle("Clear this chat?")
+                .setMessage("Delete every message with " + row.name + " on THIS phone. "
+                        + "It won't unsend anything or leave a group - the thread just "
+                        + "starts empty again. This can't be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Clear", (d, w) -> {
+                    ChatEngine chat = MaximaService.chat();
+                    if (chat != null) {
+                        chat.clearConversation(row.key);
+                        render();
+                    }
+                })
+                .show();
+    }
 
     /** Create a group. We are its only admin - see Explain "groups". */
     private void newGroup() {

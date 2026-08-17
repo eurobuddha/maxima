@@ -362,6 +362,31 @@ public final class ChatEngine {
     }
 
     /**
+     * Forget a conversation's history on THIS device. Removes every message that
+     * belongs to it (the same match {@link #conversation} uses) and its read
+     * mark. It does not tell the other side, unsend anything, or dissolve a
+     * group - the roster survives so the thread can simply start fresh. Returns
+     * how many messages were removed.
+     */
+    public int clearConversation(String zPeerOrGroup) {
+        if (zPeerOrGroup == null || zPeerOrGroup.isEmpty()) {
+            return 0;
+        }
+        int n = 0;
+        for (Entry e : new ArrayList<>(mMessages.values())) {
+            if (zPeerOrGroup.equalsIgnoreCase(e.peer) || zPeerOrGroup.equals(e.groupId)) {
+                mMessages.remove(e.id);
+                mStore.remove(C_MESSAGES, e.id);
+                n++;
+            }
+        }
+        String k = key(zPeerOrGroup);
+        mLastRead.remove(k);
+        mStore.remove(C_READ, k);
+        return n;
+    }
+
+    /**
      * How many inbound messages in this conversation arrived after we last read
      * it. Counted from the message list rather than kept as a counter, so it
      * cannot drift out of step with what is actually on screen.
