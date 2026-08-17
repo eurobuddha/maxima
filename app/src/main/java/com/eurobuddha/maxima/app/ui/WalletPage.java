@@ -14,6 +14,7 @@ import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.wallet.MaximaWallet;
 import com.eurobuddha.maxima.app.wallet.NodeLink;
+import com.eurobuddha.maxima.app.wallet.WalletLedger;
 import com.eurobuddha.maxima.app.wallet.WalletPublisher;
 import com.eurobuddha.wallet.CoinAggregator;
 import com.eurobuddha.wallet.CoinSelector;
@@ -55,6 +56,7 @@ public final class WalletPage implements Page {
     private TextView mUses;
     private TextView mUsesBig;
     private TextView mSeedSource;
+    private LinearLayout mHistory;
 
     /** Winternitz one-time-signature budget for key #1000. */
     private static final int KEY_TOTAL = 262144;
@@ -121,6 +123,7 @@ public final class WalletPage implements Page {
     @Override
     public void render() {
         renderBackend();
+        renderHistory();
         MaximaWallet w = mWallet;
         if (w == null || w.hexAddress() == null) {
             return;
@@ -321,6 +324,9 @@ public final class WalletPage implements Page {
                 mPub.publish(built.getTxnImportCommand(), built.getID(),
                         built.getTxnPostCommand(), new WalletPublisher.Cb() {
                             public void onResult(JSONObject r) {
+                                com.eurobuddha.maxima.app.wallet.WalletLedger.add(
+                                        mAct, true, amount.toString(), "MINIMA",
+                                        to, built.getID());
                                 post(() -> {
                                     mSendStatus.setText("Sent ⛏ (mining)");
                                     mSendTo.setText("");
@@ -423,6 +429,42 @@ public final class WalletPage implements Page {
         wc.addView(rev);
         mBox.addView(wc, pad());
         renderSeedSource();
+
+        // history card
+        LinearLayout hc = card();
+        hc.addView(label("HISTORY"));
+        mHistory = new LinearLayout(mAct);
+        mHistory.setOrientation(LinearLayout.VERTICAL);
+        hc.addView(mHistory);
+        mBox.addView(hc, pad());
+        renderHistory();
+    }
+
+    /** Payments made/received through this app, newest first. */
+    private void renderHistory() {
+        if (mHistory == null) {
+            return;
+        }
+        mHistory.removeAllViews();
+        java.util.List<WalletLedger.Row> rows = WalletLedger.list(mAct);
+        if (rows.isEmpty()) {
+            mHistory.addView(sub("No payments yet"));
+            return;
+        }
+        java.text.SimpleDateFormat fmt =
+                new java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.UK);
+        int shown = 0;
+        for (WalletLedger.Row r : rows) {
+            if (shown++ >= 40) {
+                break;
+            }
+            TextView t = mono((r.sent ? "↑ " : "↓ ") + tidy(r.amount) + " " + r.token
+                    + (r.who.isEmpty() ? "" : "  ·  " + r.who)
+                    + "  ·  " + fmt.format(new java.util.Date(r.time)));
+            t.setTextColor(mAct.getResources().getColor(
+                    r.sent ? R.color.ux_text : R.color.ux_success, mAct.getTheme()));
+            mHistory.addView(t);
+        }
     }
 
     private void renderSeedSource() {

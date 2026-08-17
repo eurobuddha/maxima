@@ -158,6 +158,15 @@ public final class MaximaService extends Service {
                 if (!e.mine) {
                     com.eurobuddha.maxima.app.chat.ChatNotifier.onInbound(
                             MaximaService.this, chat, e, node);
+                    // A received payment goes into the wallet history too.
+                    if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)) {
+                        com.eurobuddha.maxima.app.wallet.WalletLedger.add(
+                                MaximaService.this, false,
+                                com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body),
+                                com.eurobuddha.maxima.core.chat.ChatPay.tokenName(e.body),
+                                com.eurobuddha.maxima.app.chat.Names.contact(node, e.sender),
+                                com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body));
+                    }
                 }
                 com.eurobuddha.maxima.app.chat.ChatHub.dispatchMessage(e);
             }

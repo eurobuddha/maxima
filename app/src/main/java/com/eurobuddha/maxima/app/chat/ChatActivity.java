@@ -417,6 +417,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                             if (pending[0] != null) {
                                 chat.completePayment(contact, pending[0]);
                             }
+                            com.eurobuddha.maxima.app.wallet.WalletLedger.add(
+                                    ChatActivity.this, true, amount.toString(), "MINIMA",
+                                    contact.name, zTxid);
                             runOnUiThread(() -> {
                                 render();
                                 toast("Payment sent");
