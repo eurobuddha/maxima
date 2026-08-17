@@ -125,6 +125,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private static final int PICK_PHOTO = 71;
+    private static final int TAKE_PHOTO = 72;
+    private android.net.Uri mCaptureUri;
 
     /** Decoded chat images, by message id — the WOTS-free path: fetch once. */
     private final java.util.Map<String, android.graphics.Bitmap> mImageCache =
@@ -218,15 +220,50 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private void attachPhoto() {
+        new AlertDialog.Builder(this)
+                .setItems(new String[]{"Take photo", "Photo library"}, (d, which) -> {
+                    if (which == 0) {
+                        takePhoto();
+                    } else {
+                        pickPhoto();
+                    }
+                })
+                .show();
+    }
+
+    private void pickPhoto() {
         android.content.Intent i = new android.content.Intent(
                 android.content.Intent.ACTION_GET_CONTENT);
         i.setType("image/*");
         startActivityForResult(android.content.Intent.createChooser(i, "Send photo"), PICK_PHOTO);
     }
 
+    /** Capture straight from the camera into our own cache, via the existing
+     *  FileProvider, then caption + send it like any other photo. */
+    private void takePhoto() {
+        try {
+            java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "capture.jpg");
+            mCaptureUri = androidx.core.content.FileProvider.getUriForFile(
+                    this, "com.eurobuddha.maxima.app.payloads", f);
+            android.content.Intent i = new android.content.Intent(
+                    android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, mCaptureUri);
+            i.addFlags(android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(i, TAKE_PHOTO);
+        } catch (Exception e) {
+            toast("No camera available");
+        }
+    }
+
     @Override
     protected void onActivityResult(int req, int res, android.content.Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == TAKE_PHOTO && res == RESULT_OK && mCaptureUri != null) {
+            promptCaption(mCaptureUri);
+            return;
+        }
         if (req != PICK_PHOTO || res != RESULT_OK || data == null || data.getData() == null) {
             return;
         }
