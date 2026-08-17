@@ -134,16 +134,17 @@
             android:textColorHint="@color/ux_subtext"
             android:textSize="15sp" />
 
-        <Button
+        <ImageButton
             android:id="@+id/btn_chat_send"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
             android:layout_marginStart="8dp"
-            android:background="@drawable/btn_primary"
+            android:background="@drawable/btn_send_circle"
+            android:contentDescription="Send"
+            android:padding="11dp"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_send"
             android:stateListAnimator="@null"
-            android:text="Send"
-            android:textAllCaps="false"
-            android:textColor="#FF16100A"
-            android:textStyle="bold" />
+            android:tint="#FF16100A" />
     </LinearLayout>
 </LinearLayout>
