@@ -590,6 +590,62 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 .show();
     }
 
+    /** Long-press a message: copy its text, or see when it was sent + its state. */
+    private void showMessageMenu(ChatEngine.Entry e) {
+        boolean media = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body);
+        final String copyText = media
+                ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body) : e.body;
+        final List<String> items = new ArrayList<>();
+        if (copyText != null && !copyText.isEmpty()) {
+            items.add("Copy");
+        }
+        items.add("Info");
+        new AlertDialog.Builder(this)
+                .setItems(items.toArray(new String[0]), (d, which) -> {
+                    if ("Copy".equals(items.get(which))) {
+                        android.content.ClipboardManager cm =
+                                getSystemService(android.content.ClipboardManager.class);
+                        cm.setPrimaryClip(
+                                android.content.ClipData.newPlainText("message", copyText));
+                        toast("Copied");
+                    } else {
+                        showMessageInfo(e);
+                    }
+                })
+                .show();
+    }
+
+    private void showMessageInfo(ChatEngine.Entry e) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(e.mine ? "You" : Names.contact(MaximaService.node(), e.sender)).append('\n');
+        sb.append(new SimpleDateFormat("d MMM yyyy, HH:mm", Locale.UK)
+                .format(new Date(e.time)));
+        if (e.mine) {
+            sb.append("\n\nStatus: ").append(stateWord(e.state));
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Message")
+                .setMessage(sb.toString())
+                .setPositiveButton("Close", null)
+                .show();
+    }
+
+    private static String stateWord(String zState) {
+        if (Receipt.FAILED.equals(zState)) {
+            return "Failed to send";
+        }
+        if (Receipt.READ.equals(zState)) {
+            return "Read";
+        }
+        if (Receipt.DELIVERED.equals(zState)) {
+            return "Delivered";
+        }
+        if (Receipt.SENT.equals(zState)) {
+            return "Sent (relay took it)";
+        }
+        return "Sending…";
+    }
+
     private void toast(String zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
     }
@@ -691,6 +747,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     private void bindMessage(MsgVH h, Row r) {
         ChatEngine.Entry e = r.entry;
+        h.bubble.setOnLongClickListener(v -> {
+            showMessageMenu(e);
+            return true;
+        });
         h.row.setGravity(e.mine ? Gravity.END : Gravity.START);
         // Tight within a cluster; a clear gap starting each new run.
         h.row.setPadding(dp(12), r.firstInCluster ? dp(7) : dp(1), dp(12), dp(1));
