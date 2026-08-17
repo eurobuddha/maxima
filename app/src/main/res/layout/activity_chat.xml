@@ -7,48 +7,46 @@
     android:background="@color/ux_bg"
     android:orientation="vertical">
 
-    <!-- Our own header. The theme has no action bar, so setTitle() would show
-         nothing at all - and on this screen the subtitle (their address, or the
-         member count) is not decoration: an address that changes is the thing
-         most likely to explain a failed send. -->
+    <!-- WhatsApp-style app bar: back, avatar, name over presence, then video /
+         call / overflow. On the header colour, everything is on_header. -->
     <LinearLayout
+        android:id="@+id/chat_appbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/ux_card"
+        android:background="@color/ux_header"
         android:gravity="center_vertical"
         android:minHeight="56dp"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="8dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:paddingStart="2dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
 
         <ImageButton
             android:id="@+id/btn_chat_back"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Back"
-            android:padding="9dp"
+            android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_back"
-            app:tint="@color/ux_text" />
+            app:tint="@color/ux_on_header" />
 
         <TextView
             android:id="@+id/chat_avatar"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="2dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
             android:gravity="center"
             android:textColor="#FFFFFFFF"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:textStyle="bold" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="10dp"
             android:orientation="vertical">
 
             <TextView
@@ -56,43 +54,61 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
+                android:fontFamily="@font/manrope_bold"
                 android:singleLine="true"
-                android:textColor="@color/ux_text"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textColor="@color/ux_on_header"
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/chat_subtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:alpha="0.85"
                 android:ellipsize="middle"
                 android:singleLine="true"
-                android:textColor="@color/ux_subtext"
-                android:textSize="11sp" />
+                android:textColor="@color/ux_on_header"
+                android:textSize="11.5sp" />
         </LinearLayout>
 
         <ImageButton
+            android:id="@+id/btn_chat_video"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Video call"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_videocall"
+            app:tint="@color/ux_on_header" />
+
+        <ImageButton
+            android:id="@+id/btn_chat_call"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Voice call"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_call"
+            app:tint="@color/ux_on_header" />
+
+        <ImageButton
             android:id="@+id/btn_chat_info"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="38dp"
+            android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Details"
-            android:padding="10dp"
+            android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_more"
-            app:tint="@color/ux_text" />
+            app:tint="@color/ux_on_header" />
     </LinearLayout>
-
-    <!-- Signature accent glow filled in code (Ui.glowStrip). -->
-    <FrameLayout
-        android:id="@+id/chat_glow"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:background="@drawable/chat_wallpaper">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/messages"
@@ -101,9 +117,8 @@
             android:clipToPadding="false"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
-            android:scrollbars="vertical" />
+            android:scrollbars="none" />
 
-        <!-- Shown only on a thread with no messages yet. -->
         <TextView
             android:id="@+id/chat_empty"
             android:layout_width="match_parent"
@@ -117,83 +132,107 @@
             android:textSize="14sp"
             android:visibility="gone" />
 
-        <!-- Jump-to-latest, shown only when scrolled up the history. -->
-        <TextView
+        <ImageButton
             android:id="@+id/btn_scroll_bottom"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_gravity="bottom|end"
             android:layout_margin="14dp"
             android:background="@drawable/fab_circle"
+            android:contentDescription="Jump to latest"
             android:elevation="4dp"
-            android:gravity="center"
-            android:text="⌄"
-            android:textColor="@color/ux_text"
-            android:textSize="22sp"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_arrow_down"
+            app:tint="@color/ux_text"
             android:visibility="gone" />
     </FrameLayout>
 
+    <!-- Composer: an emoji/field/attach/camera pill + a round send/mic FAB. -->
     <LinearLayout
+        android:id="@+id/chat_composer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@color/ux_bg"
         android:gravity="bottom"
         android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
+        android:paddingStart="7dp"
+        android:paddingEnd="7dp"
         android:paddingTop="6dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="8dp">
 
-        <ImageButton
-            android:id="@+id/btn_chat_attach"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Attach photo"
-            android:padding="10dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_attach"
-            app:tint="@color/ux_subtext" />
-
-        <ImageButton
-            android:id="@+id/btn_chat_pay"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="2dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Send Minima"
-            android:padding="10dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_wallet"
-            app:tint="@color/ux_accent" />
-
-        <EditText
-            android:id="@+id/chat_input"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:background="@drawable/input"
-            android:hint="Message"
-            android:importantForAutofill="no"
-            android:inputType="textCapSentences|textMultiLine"
-            android:maxLines="5"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="11dp"
-            android:paddingBottom="11dp"
-            android:textColor="@color/ux_text"
-            android:textColorHint="@color/ux_subtext"
-            android:textSize="15sp" />
+            android:background="@drawable/input_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp">
+
+            <ImageButton
+                android:id="@+id/btn_chat_emoji"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Emoji"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_emoji"
+                app:tint="@color/ux_subtext" />
+
+            <EditText
+                android:id="@+id/chat_input"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
+                android:hint="Message"
+                android:importantForAutofill="no"
+                android:inputType="textCapSentences|textMultiLine"
+                android:maxLines="5"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/ux_text"
+                android:textColorHint="@color/ux_subtext"
+                android:textSize="15sp" />
+
+            <ImageButton
+                android:id="@+id/btn_chat_attach"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Attach"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_attach"
+                app:tint="@color/ux_subtext" />
+
+            <ImageButton
+                android:id="@+id/btn_chat_camera"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Camera"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_camera"
+                app:tint="@color/ux_subtext" />
+        </LinearLayout>
 
         <ImageButton
             android:id="@+id/btn_chat_send"
             android:layout_width="46dp"
             android:layout_height="46dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:background="@drawable/btn_send_circle"
             android:contentDescription="Send"
             android:padding="12dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_send"
+            android:src="@drawable/ic_mic"
             android:stateListAnimator="@null"
             app:tint="@color/ux_on_accent" />
     </LinearLayout>

@@ -51,7 +51,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private TextView mSubtitle;
     private TextView mTitle;
     private TextView mAvatar;
-    private TextView mScrollBottom;
+    private View mScrollBottom;
     private TextView mEmpty;
     private Adapter mAdapter;
     /** Sending always scrolls to your own message, even from up the history. */
@@ -132,12 +132,29 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }
 
         View root = findViewById(R.id.chat_root);
+        final View appbar = findViewById(R.id.chat_appbar);
+        final View composer = findViewById(R.id.chat_composer);
+        final int barTop = appbar.getPaddingTop();          // XML base
+        final int compBottom = composer.getPaddingBottom();  // XML base
+        // Extend the dark app bar UP into the status bar, and keep the composer
+        // above the nav bar / keyboard - so the header colour fills the top like
+        // WhatsApp, not a pale strip above it.
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
-            Insets bars = insets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime());
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, 0, bars.right, 0);
+            appbar.setPadding(appbar.getPaddingLeft(), barTop + bars.top,
+                    appbar.getPaddingRight(), appbar.getPaddingBottom());
+            composer.setPadding(composer.getPaddingLeft(), composer.getPaddingTop(),
+                    composer.getPaddingRight(), compBottom + Math.max(bars.bottom, ime.bottom));
             return WindowInsetsCompat.CONSUMED;
         });
+        getWindow().setStatusBarColor(getColor(R.color.ux_header));
+        androidx.core.view.WindowInsetsControllerCompat wic =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), root);
+        if (wic != null) {
+            wic.setAppearanceLightStatusBars(false);   // dark header → light status icons
+        }
 
         mList = findViewById(R.id.messages);
         mInput = findViewById(R.id.chat_input);
@@ -167,18 +184,30 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
         });
 
-        final View send = findViewById(R.id.btn_chat_send);
-        send.setOnClickListener(v -> send());
+        final android.widget.ImageButton send = findViewById(R.id.btn_chat_send);
+        send.setOnClickListener(v -> {
+            if (mInput.getText().toString().trim().length() > 0) {
+                send();
+            } else {
+                toast("Voice notes are coming soon");
+            }
+        });
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
-        findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachPhoto());
-        findViewById(R.id.btn_chat_pay).setOnClickListener(v -> payContact());
+        findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachSheet());
+        findViewById(R.id.btn_chat_camera).setOnClickListener(v -> takePhoto());
+        findViewById(R.id.btn_chat_video).setOnClickListener(v -> toast("Calls are coming soon"));
+        findViewById(R.id.btn_chat_call).setOnClickListener(v -> toast("Calls are coming soon"));
+        findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> {
+            mInput.requestFocus();
+            android.view.inputmethod.InputMethodManager imm =
+                    getSystemService(android.view.inputmethod.InputMethodManager.class);
+            if (imm != null) {
+                imm.showSoftInput(mInput, 0);
+            }
+        });
 
-        // The signature accent glow under the header.
-        ((android.widget.FrameLayout) findViewById(R.id.chat_glow))
-                .addView(com.eurobuddha.maxima.app.ui.Ui.glowStrip(this));
-
-        // The send button springs in only when there's something to send
-        // (FreezePeach's composer), so an empty composer is calm.
+        // The FAB shows a mic when the field is empty and the send plane once
+        // there's text (WhatsApp), swapping with a small punch.
         wireSendReveal(send);
 
         initPayments();
@@ -206,32 +235,27 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         });
     }
 
-    /** Hide the send button until the user has typed, then overshoot it in. */
-    private void wireSendReveal(final View zSend) {
-        boolean empty = mInput.getText().toString().trim().isEmpty();
-        zSend.setAlpha(empty ? 0f : 1f);
-        zSend.setScaleX(empty ? 0.6f : 1f);
-        zSend.setScaleY(empty ? 0.6f : 1f);
-        zSend.setVisibility(empty ? View.INVISIBLE : View.VISIBLE);
+    /** Swap the FAB glyph: mic when the field is empty, send plane when there's
+     *  text - with a small scale-punch on the change (WhatsApp). */
+    private void wireSendReveal(final android.widget.ImageButton zSend) {
+        boolean startText = mInput.getText().toString().trim().length() > 0;
+        zSend.setImageResource(startText ? R.drawable.ic_send : R.drawable.ic_mic);
         mInput.addTextChangedListener(new android.text.TextWatcher() {
-            boolean shown = !empty;
+            boolean hasText = startText;
 
             @Override
             public void afterTextChanged(android.text.Editable s) {
                 boolean has = s.toString().trim().length() > 0;
-                if (has == shown) {
+                if (has == hasText) {
                     return;
                 }
-                shown = has;
-                if (has) {
-                    zSend.setVisibility(View.VISIBLE);
-                    zSend.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(160)
-                            .setInterpolator(new android.view.animation
-                                    .OvershootInterpolator(1.5f)).start();
-                } else {
-                    zSend.animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setDuration(120)
-                            .withEndAction(() -> zSend.setVisibility(View.INVISIBLE)).start();
-                }
+                hasText = has;
+                zSend.setImageResource(has ? R.drawable.ic_send : R.drawable.ic_mic);
+                zSend.animate().scaleX(1.18f).scaleY(1.18f).setDuration(90)
+                        .withEndAction(() -> zSend.animate().scaleX(1f).scaleY(1f)
+                                .setDuration(130).setInterpolator(
+                                        new android.view.animation.OvershootInterpolator(2.2f))
+                                .start()).start();
             }
 
             @Override
@@ -263,7 +287,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             view.setOnClickListener(v -> openImage(id));
             return;
         }
-        view.setImageResource(android.R.drawable.ic_menu_gallery);
+        view.setImageResource(R.drawable.ic_photo);
         if (!mImageFetching.add(id)) {
             return;   // already fetching
         }
@@ -487,11 +511,24 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 .show();
     }
 
-    private void attachPhoto() {
+    /** The attach "+" sheet: gallery, and (1:1 only) a payment - the camera has
+     *  its own button in the bar now, WhatsApp-style. */
+    private void attachSheet() {
+        ChatEngine chat = MaximaService.chat();
+        MaximaNode node = MaximaService.node();
+        boolean canPay = chat != null && node != null
+                && chat.group(mConversation) == null
+                && node.contact(mConversation) != null;
+        final List<String> items = new ArrayList<>();
+        items.add("Photo library");
+        if (canPay) {
+            items.add("Send payment");
+        }
         new AlertDialog.Builder(this)
-                .setItems(new String[]{"Take photo", "Photo library"}, (d, which) -> {
-                    if (which == 0) {
-                        takePhoto();
+                .setItems(items.toArray(new String[0]), (d, which) -> {
+                    String c = items.get(which);
+                    if ("Send payment".equals(c)) {
+                        payContact();
                     } else {
                         pickPhoto();
                     }
@@ -1307,11 +1344,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             h.body.setTextColor(getColor(R.color.ux_on_accent));
             h.body.setTextIsSelectable(false);
         } else {
+            // WhatsApp tails the FIRST bubble of a run on its top-outer corner.
             int bg = e.mine
-                    ? (r.lastInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
-                    : (r.lastInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
+                    ? (r.firstInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
+                    : (r.firstInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
             h.bubble.setBackgroundResource(bg);
-            // Dark ink on the green sent bubble; theme text on the grey received one.
+            // Light ink on the charcoal sent bubble; theme text on the received one.
             h.body.setTextColor(getColor(
                     e.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text));
 
