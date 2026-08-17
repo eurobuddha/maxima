@@ -10,8 +10,8 @@ android {
         applicationId "com.eurobuddha.maxima.app"
         minSdk 28
         targetSdk 35
-        versionCode 484
-        versionName "0.4.84"
+        versionCode 485
+        versionName "0.4.85"
     }
 
     signingConfigs {
@@ -63,6 +63,7 @@ dependencies {
     implementation libs.material
     implementation 'androidx.recyclerview:recyclerview:1.3.2'   // chat message list
     implementation 'androidx.exifinterface:exifinterface:1.3.7'  // honour photo orientation
+    implementation 'androidx.biometric:biometric:1.1.0'          // app lock: fingerprint / device PIN
     // WorkManager is the resurrection belt when the OS kills our service.
     implementation 'androidx.work:work-runtime:2.9.1'
     // Android < API 29 has no SHA3-256 in its default provider; :core takes a

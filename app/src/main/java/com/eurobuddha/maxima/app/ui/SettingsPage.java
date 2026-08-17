@@ -79,6 +79,14 @@ public final class SettingsPage implements Page {
         mPrivacy.addView(k.kv("Delivery receipts",
                 "Always on — the second tick is the transport doing its job",
                 "ON", k.col(R.color.ux_success)));
+        mPrivacy.addView(k.divider());
+        boolean lockOn = com.eurobuddha.maxima.app.AppLock.isEnabled(mAct);
+        mPrivacy.addView(k.switchRow("App lock",
+                lockOn ? "Fingerprint or device PIN to open Maxima"
+                        : (com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)
+                                ? "Require fingerprint or device PIN to open Maxima"
+                                : "Set a screen lock on this device to use this"),
+                lockOn, checked -> toggleAppLock(checked)));
 
         // Appearance segmented highlight.
         setAppearSeg(ChatPrefs.appearance(mAct));
@@ -168,6 +176,33 @@ public final class SettingsPage implements Page {
                     render();
                 })
                 .show();
+    }
+
+    private void toggleAppLock(boolean zWant) {
+        if (zWant && !com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)) {
+            mAct.toast("Set a fingerprint or screen lock on this device first");
+            render();
+            return;
+        }
+        com.eurobuddha.maxima.app.AppLock.authenticate(mAct,
+                zWant ? "Turn on app lock" : "Turn off app lock",
+                "Confirm it's you",
+                new com.eurobuddha.maxima.app.AppLock.Callback() {
+                    public void onSuccess() {
+                        com.eurobuddha.maxima.app.AppLock.setEnabled(mAct, zWant);
+                        mAct.toast(zWant ? "App lock on" : "App lock off");
+                        render();
+                    }
+
+                    public void onError(String zMessage) {
+                        mAct.toast(zMessage);
+                        render();
+                    }
+
+                    public void onCancelled() {
+                        render();
+                    }
+                });
     }
 
     private String appVersion() {
