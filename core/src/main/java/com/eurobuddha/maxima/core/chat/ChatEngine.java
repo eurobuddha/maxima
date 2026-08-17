@@ -645,9 +645,46 @@ public final class ChatEngine {
     }
 
     /**
-     * Record a payment WE made to a contact and tell them about it, so it shows
-     * as a payment bubble on both sides. The transaction is already built and
-     * posted by the caller (the wallet); this only reflects it into the chat.
+     * Record an OUTGOING payment locally the instant it is signed (txid known),
+     * as a pending bubble - so the sender sees it immediately instead of waiting
+     * for the ~3-min broadcast round-trip. It is NOT sent to the peer yet: call
+     * {@link #completePayment} once the broadcast is accepted, or
+     * {@link #failPayment} if the broadcast fails (so the peer is never told of a
+     * payment that did not go out).
+     */
+    public Entry beginPayment(Contact zTo, String zAmount, String zTokenName,
+                              String zMemo, String zTxid) {
+        String id = newId();
+        String body = ChatPay.wrap(zAmount, zTokenName, zTxid, zMemo);
+        Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",
+                Keys.norm(mNode.identity().publicKeyHex()), body,
+                System.currentTimeMillis(), true, Receipt.QUEUED);
+        record(e);
+        return e;
+    }
+
+    /** The broadcast was accepted: tell the peer, so the payment bubble appears
+     *  on their side too, and let the receipt/resend machinery confirm it. */
+    public boolean completePayment(Contact zTo, Entry zEntry) {
+        ChatMessage cm = ChatMessage.payment(zEntry.id, ChatPay.amount(zEntry.body), "",
+                ChatPay.tokenName(zEntry.body), ChatPay.memo(zEntry.body),
+                ChatPay.txid(zEntry.body));
+        boolean ok = deliver(zTo, cm);
+        setState(zEntry, ok ? Receipt.SENT : Receipt.FAILED);
+        return ok;
+    }
+
+    /** The broadcast failed: mark the local bubble failed; the peer was never
+     *  told, so nothing to retract. */
+    public void failPayment(Entry zEntry) {
+        setState(zEntry, Receipt.FAILED);
+    }
+
+    /**
+     * Record a payment WE made to a contact and tell them about it in one step.
+     * Kept for callers that already know the broadcast succeeded; the compose
+     * flow uses {@link #beginPayment}/{@link #completePayment} for instant local
+     * feedback.
      */
     public Entry sendPayment(Contact zTo, String zAmount, String zTokenId,
                              String zTokenName, String zMemo, String zTxid) {

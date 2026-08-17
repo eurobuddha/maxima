@@ -383,7 +383,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         + "transaction and cannot be undone.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Confirm", (d, w) -> {
-                    toast("Sending payment…");
+                    toast("Signing payment…");
+                    final ChatEngine.Entry[] pending = new ChatEngine.Entry[1];
                     mSender.send(to, amount, new com.eurobuddha.maxima.app.wallet.PaymentSender.Cb() {
                         @Override
                         public void onProgress(String zStep) {
@@ -391,12 +392,23 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         }
 
                         @Override
-                        public void onSent(String zTxid) {
-                            // Reflect it into the chat on this worker thread (a
-                            // network deliver), then refresh the UI.
-                            chat.sendPayment(contact, amount.toString(), "0x00",
+                        public void onBuilt(String zTxid) {
+                            // Signed - show the sender a pending bubble at once,
+                            // before the broadcast round-trip. Not sent to the
+                            // peer yet.
+                            pending[0] = chat.beginPayment(contact, amount.toString(),
                                     "MINIMA", note, zTxid);
                             mLastSendWasMine = true;
+                            runOnUiThread(ChatActivity.this::render);
+                        }
+
+                        @Override
+                        public void onSent(String zTxid) {
+                            // Broadcast accepted - now tell the peer (worker
+                            // thread: a network deliver), then refresh.
+                            if (pending[0] != null) {
+                                chat.completePayment(contact, pending[0]);
+                            }
                             runOnUiThread(() -> {
                                 render();
                                 toast("Payment sent");
@@ -405,7 +417,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
                         @Override
                         public void onError(String zMessage) {
-                            runOnUiThread(() -> toast(zMessage));
+                            if (pending[0] != null) {
+                                chat.failPayment(pending[0]);
+                            }
+                            runOnUiThread(() -> {
+                                render();
+                                toast(zMessage);
+                            });
                         }
                     });
                 })

@@ -28,7 +28,11 @@ public final class PaymentSender {
     public interface Cb {
         void onProgress(String zStep);
 
-        /** @param zTxid the transaction id, for the in-chat payment record */
+        /** Fired the instant the transaction is signed (txid known), BEFORE the
+         *  broadcast round-trip - so the sender can show a pending bubble now. */
+        void onBuilt(String zTxid);
+
+        /** The broadcast was accepted. @param zTxid the transaction id. */
         void onSent(String zTxid);
 
         void onError(String zMessage);
@@ -164,6 +168,9 @@ public final class PaymentSender {
                 final TxnFactory.BuiltTxn built = factory.buildSend(inputs, zTo, zAmount,
                         TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
                         "mxw" + System.currentTimeMillis());
+                // Signed: the txid is fixed now, so the sender can show a pending
+                // bubble immediately instead of waiting for the broadcast.
+                zCb.onBuilt(built.getID());
 
                 zCb.onProgress("Publishing via " + mPub.backendName() + "…");
                 mPub.publish(built.getTxnImportCommand(), built.getID(),
