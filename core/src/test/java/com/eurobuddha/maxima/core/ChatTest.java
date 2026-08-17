@@ -418,6 +418,21 @@ public class ChatTest {
             bad("wallet address lost on restart: " + u4.walletAddress(payer));
         }
 
+        // resendUndelivered must iterate the message set safely and skip
+        // everything already DELIVERED/received (u1 holds only inbound messages
+        // here, so nothing is eligible) - a guard against CME / NPE over the map
+        // and against resending the wrong side's messages.
+        try {
+            int re = u1.resendUndelivered();
+            if (re == 0) {
+                ok("resendUndelivered picks nothing when there is nothing undelivered");
+            } else {
+                bad("resendUndelivered re-sent " + re + " with no eligible messages");
+            }
+        } catch (Exception ex) {
+            bad("resendUndelivered threw: " + ex);
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

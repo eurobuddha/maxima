@@ -332,6 +332,17 @@ public final class MaximaService extends Service {
                         // actually be flushed on the heartbeat.
                         if (sChat != null) {
                             sChat.flushState();
+                            // Re-deliver anything the two-tick receipt hasn't
+                            // confirmed - the fix for messages/payments lost to
+                            // a half-open relay socket.
+                            try {
+                                int re = sChat.resendUndelivered();
+                                if (re > 0) {
+                                    EventLog.add("re-sent " + re + " undelivered");
+                                }
+                            } catch (Exception e) {
+                                Log.w(TAG, "resend: " + e);
+                            }
                         }
                         // Tier 2 listener + LAN discovery under a LIGHT gate:
                         // contribution on and unmetered Wi-Fi. This runs the

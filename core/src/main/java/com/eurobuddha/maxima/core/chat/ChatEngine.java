@@ -556,6 +556,80 @@ public final class ChatEngine {
         return e;
     }
 
+    /** Re-deliver our own messages that a delivery receipt has not confirmed.
+     *
+     * Chat delivery is otherwise fire-and-forget: a message sent into a
+     * half-open relay socket is silently lost, and a payment (reflected only
+     * after its tx mines) lands when the socket is coldest. The two-tick receipt
+     * is the ONLY proof of delivery, so anything still short of DELIVERED after
+     * a settle window is re-sent on the heartbeat until the receipt arrives.
+     * The receiver dedups by id, so a resend is harmless.
+     *
+     * Bounded: only messages older than {@code RESEND_SETTLE_MS} (so we do not
+     * race the first attempt) and younger than {@code RESEND_MAX_AGE_MS} (so we
+     * do not resend history forever) are retried. Returns how many were re-sent.
+     */
+    public int resendUndelivered() {
+        long now = System.currentTimeMillis();
+        int n = 0;
+        for (Entry e : new ArrayList<>(mMessages.values())) {
+            if (!e.mine) {
+                continue;
+            }
+            if (Receipt.DELIVERED.equals(e.state) || Receipt.READ.equals(e.state)) {
+                continue;
+            }
+            long age = now - e.time;
+            if (age < RESEND_SETTLE_MS || age > RESEND_MAX_AGE_MS) {
+                continue;
+            }
+            if (redeliver(e)) {
+                n++;
+                if (Receipt.FAILED.equals(e.state)) {
+                    setState(e, Receipt.SENT);   // it went somewhere this time
+                }
+            }
+        }
+        return n;
+    }
+
+    private static final long RESEND_SETTLE_MS = 45_000L;
+    private static final long RESEND_MAX_AGE_MS = 24L * 60 * 60 * 1000;
+
+    /** Rebuild an entry's wire message and send it again, to the members who
+     *  have not receipted it (group) or the peer (1:1). */
+    private boolean redeliver(Entry e) {
+        if (e.isGroup()) {
+            Group g = mGroups.get(e.groupId);
+            if (g == null) {
+                return false;
+            }
+            ChatMessage cm = ChatMessage.groupText(e.id, e.groupId, e.body);
+            boolean any = false;
+            for (String m : g.others(mNode.identity().publicKeyHex())) {
+                if (e.deliveredBy.contains(Keys.norm(m))) {
+                    continue;   // this member already confirmed
+                }
+                Contact c = mNode.contact(m);
+                if (c != null && deliver(c, cm)) {
+                    any = true;
+                }
+            }
+            return any;
+        }
+        Contact c = mNode.contact(e.peer);
+        if (c == null) {
+            return false;
+        }
+        // Media rides inside a text body, so text() covers text and media; a
+        // payment keeps its own type. Same id → the receiver dedups.
+        ChatMessage cm = ChatPay.isPayment(e.body)
+                ? ChatMessage.payment(e.id, ChatPay.amount(e.body), "",
+                        ChatPay.tokenName(e.body), ChatPay.memo(e.body), ChatPay.txid(e.body))
+                : ChatMessage.text(e.id, e.body);
+        return deliver(c, cm);
+    }
+
     /** The wallet receive address a contact shared, or "" if we have none. */
     public String walletAddress(String zPeer) {
         return mWalletAddr.getOrDefault(Keys.norm(zPeer), "");
