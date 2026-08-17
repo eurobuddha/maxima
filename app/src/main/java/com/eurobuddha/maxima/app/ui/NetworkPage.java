@@ -3,6 +3,8 @@ package com.eurobuddha.maxima.app.ui;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
@@ -19,6 +21,9 @@ import com.eurobuddha.maxima.app.MaximaService;
 import com.eurobuddha.maxima.app.MlsStore;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.RelayStore;
+import com.eurobuddha.maxima.app.direct.DirectReachability;
+import com.eurobuddha.maxima.app.net.ConnectionFinder;
+import com.eurobuddha.maxima.app.relay.RelayHost;
 import com.eurobuddha.maxima.core.MaximaNode;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
@@ -51,6 +56,7 @@ public final class NetworkPage implements Page {
     private LinearLayout mDirect;
     private TextView mMlsText;
     private TextView mLog;
+    private TextView mAutoBtn;
 
     public NetworkPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -81,7 +87,19 @@ public final class NetworkPage implements Page {
         }
 
         int hosts = node.pool().activeCount();
-        mNodeSub.setText(hosts + (hosts == 1 ? " connected host" : " connected hosts"));
+        DirectReachability dr = MaximaService.direct();
+        boolean directNow = dr != null && dr.state() == DirectReachability.State.ADVERTISED;
+        AndroidContribution pol0 = MaximaService.policy();
+        boolean wifiNow = pol0 != null && pol0.isLocalNetwork();
+        if (!ConnectionFinder.isRunning()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(hosts).append(hosts == 1 ? " host" : " hosts");
+            sb.append(" · ").append(wifiNow ? "Wi-Fi" : "mobile data");
+            if (directNow) {
+                sb.append(" · directly reachable");
+            }
+            mNodeSub.setText(sb.toString());
+        }
         setPill(hosts > 0 ? "Reachable" : "Offline", hosts > 0 ? Kit.OK : Kit.BAD);
 
         // ---- transport figures ----
@@ -100,21 +118,32 @@ public final class NetworkPage implements Page {
         // ---- hosts ----
         renderHostList(node);
 
-        // ---- contribution ----
+        // ---- help the network (one switch, automatic tiers, suggest the fix) ----
         AndroidContribution pol = MaximaService.policy();
         mContrib.removeAllViews();
+        mContribNote.setVisibility(View.GONE);
         if (pol != null) {
-            String[] lines = pol.describe().split("\n");
-            mContribNote.setText(lines.length > 1 ? lines[1].trim() : pol.describe());
             boolean on = AndroidContribution.isEnabled(mAct);
-            mContrib.addView(k.switchRow("Contributing",
-                    on ? "This phone is helping carry the network"
-                            : "This phone is taking only",
+            mContrib.addView(k.switchRow("Help the network",
+                    "Automatically does the most it safely can",
                     on, checked -> {
                         AndroidContribution.setEnabled(mAct, checked);
-                        EventLog.add("contribution " + (checked ? "enabled" : "disabled"));
+                        EventLog.add("help the network " + (checked ? "on" : "off"));
                         render();
                     }));
+
+            RelayHost rh = MaximaService.relay();
+            boolean relayOn = rh != null && rh.state() == RelayHost.State.RUNNING;
+            mContrib.addView(tierRow("Contributing", "mailbox & lookups", on));
+            mContrib.addView(tierRow("Directly reachable", "peers reach you", directNow));
+            mContrib.addView(tierRow("Relay ⚡", "carrying others' traffic", relayOn));
+
+            View fix = helpFix(on, directNow, relayOn, dr, rh);
+            if (fix != null) {
+                mContrib.addView(fix);
+            }
+
+            mContrib.addView(k.divider());
             boolean wifi = AndroidContribution.unmeteredOnly(mAct);
             mContrib.addView(k.switchRow("Wi-Fi only",
                     wifi ? "Heavy duties pause on mobile data"
@@ -124,7 +153,6 @@ public final class NetworkPage implements Page {
                         EventLog.add("heavy duties " + (checked ? "wifi only" : "any network"));
                         render();
                     }));
-            mContrib.addView(k.divider());
             mContrib.addView(k.kv("Witness + directory",
                     "Answering lookups and signing delivery evidence",
                     on ? "on" : "off", on ? k.col(R.color.ux_success) : k.col(R.color.ux_subtext)));
@@ -132,7 +160,7 @@ public final class NetworkPage implements Page {
                     on ? "on" : "off", on ? k.col(R.color.ux_success) : k.col(R.color.ux_subtext)));
             mContrib.addView(k.kv("Counters", node.tier1().contributionSummary(), "", 0));
         } else {
-            mContrib.addView(k.sub("Contribution policy starting…"));
+            mContrib.addView(k.sub("Starting…"));
         }
 
         // ---- MLS ----
@@ -420,6 +448,161 @@ public final class NetworkPage implements Page {
     // Layout
     // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // Auto-connect + Help-the-network
+    // ---------------------------------------------------------------
+
+    private void autoConnect() {
+        if (ConnectionFinder.isRunning()) {
+            return;
+        }
+        mAutoBtn.setText("Working…");
+        mAutoBtn.setClickable(false);
+        ConnectionFinder.run(mAct, mAct, new ConnectionFinder.Listener() {
+            @Override
+            public void onStep(String zPlain) {
+                mNodeSub.setText(zPlain);
+            }
+
+            @Override
+            public void onDone(int zHosts, boolean zAny) {
+                // Also try to go directly reachable now.
+                DirectReachability d = MaximaService.direct();
+                if (d != null) {
+                    mNodeSub.setText("Opening a direct port…");
+                    d.reprobe();
+                }
+                mAutoBtn.setText("Auto-connect");
+                mAutoBtn.setClickable(true);
+                mAct.toast(zAny
+                        ? "Connected through " + zHosts + (zHosts == 1 ? " host" : " hosts")
+                        : "No relay reachable right now");
+                render();
+            }
+        });
+    }
+
+    private View tierRow(String label, String sub, boolean on) {
+        LinearLayout row = new LinearLayout(mAct);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, k.dp(8), 0, k.dp(8));
+        View dot = new View(mAct);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(k.col(on ? R.color.ux_success : R.color.ux_subtext));
+        if (!on) {
+            g.setAlpha(110);
+        }
+        dot.setBackground(g);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(k.dp(8), k.dp(8));
+        dlp.rightMargin = k.dp(11);
+        row.addView(dot, dlp);
+        TextView t = new TextView(mAct);
+        t.setText(label + "  ·  " + sub);
+        t.setTextSize(13);
+        t.setTextColor(k.col(on ? R.color.ux_text : R.color.ux_subtext));
+        if (on) {
+            t.setTypeface(Typeface.DEFAULT_BOLD);
+        }
+        row.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
+        if (on) {
+            TextView now = new TextView(mAct);
+            now.setText("NOW");
+            now.setTextSize(9);
+            now.setTypeface(Typeface.DEFAULT_BOLD);
+            now.setLetterSpacing(0.06f);
+            now.setTextColor(k.col(R.color.ux_success));
+            row.addView(now);
+        }
+        return row;
+    }
+
+    /** The diagnose-and-suggest-the-fix block, or null when nothing to suggest. */
+    private View helpFix(boolean on, boolean directOn, boolean relayOn,
+                         DirectReachability d, RelayHost rh) {
+        if (!on) {
+            return null;   // the switch itself is the action
+        }
+        if (!directOn) {
+            DirectReachability.Blocker b = d == null ? null : d.blocker();
+            int port = d == null ? -1 : d.suggestedPort();
+            if (b == DirectReachability.Blocker.NEEDS_WIFI) {
+                return fixBlock("Connect to Wi-Fi to become reachable",
+                        "Direct isn't possible on mobile/carrier networks.",
+                        "Open Wi-Fi settings", this::openWifi);
+            }
+            if (b == DirectReachability.Blocker.NEEDS_CHARGING) {
+                return fixBlock("Plug in to go directly reachable",
+                        "It'll start on its own once charging.", null, null);
+            }
+            if (b == DirectReachability.Blocker.ROUTER_NO_PORT) {
+                return fixBlock("Your router didn't open a port",
+                        "Enable UPnP/NAT-PMP in your router, or forward TCP "
+                                + (port > 0 ? port : "?") + " to this phone.", null, null);
+            }
+            return null;
+        }
+        if (!relayOn) {
+            RelayHost.Blocker b = rh == null ? null : rh.blocker();
+            if (b == RelayHost.Blocker.NEEDS_WIFI) {
+                return fixBlock("Relay needs Wi-Fi",
+                        "On mobile data the phone stays a client.",
+                        "Open Wi-Fi settings", this::openWifi);
+            }
+            if (b == RelayHost.Blocker.NEEDS_CHARGING) {
+                return fixBlock("Plug in to relay for others",
+                        "The phone forwards traffic once it's charging.", null, null);
+            }
+            if (b == RelayHost.Blocker.NEEDS_BATTERY) {
+                int pct = MaximaService.policy() == null ? 0 : MaximaService.policy().batteryPercent();
+                return fixBlock("Charge above " + RelayHost.START_BATTERY + "% to relay",
+                        "Now " + pct + "%. It'll start on its own.", null, null);
+            }
+            return null;
+        }
+        return fixBlock("You're relaying for others",
+                "Others' traffic runs through your phone. It stands down when you unplug.", null, null);
+    }
+
+    private View fixBlock(String title, String body, String actionLabel, Runnable action) {
+        LinearLayout box = new LinearLayout(mAct);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundResource(R.drawable.field_pill);
+        box.setPadding(k.dp(14), k.dp(12), k.dp(14), k.dp(12));
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
+        bp.topMargin = k.dp(12);
+        box.setLayoutParams(bp);
+        TextView t = new TextView(mAct);
+        t.setText(title);
+        t.setTextSize(13);
+        t.setTypeface(k.manrope(Typeface.BOLD));
+        t.setTextColor(k.col(R.color.ux_text));
+        box.addView(t);
+        TextView b = new TextView(mAct);
+        b.setText(body);
+        b.setTextSize(12);
+        b.setTextColor(k.col(R.color.ux_subtext));
+        b.setPadding(0, k.dp(3), 0, 0);
+        box.addView(b);
+        if (actionLabel != null && action != null) {
+            TextView btn = k.ghostButton(actionLabel);
+            LinearLayout.LayoutParams abp = new LinearLayout.LayoutParams(-2, -2);
+            abp.topMargin = k.dp(10);
+            btn.setOnClickListener(v -> action.run());
+            box.addView(btn, abp);
+        }
+        return box;
+    }
+
+    private void openWifi() {
+        try {
+            mAct.startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
+        } catch (Exception e) {
+            mAct.toast("Couldn't open Wi-Fi settings");
+        }
+    }
+
     private void addStat(String key, String hint, String value, int colorOr0, String explainKey) {
         LinearLayout row = k.kv(key, hint, value, colorOr0);
         row.setBackground(k.ripple());
@@ -451,7 +634,7 @@ public final class NetworkPage implements Page {
         LinearLayout hcol = new LinearLayout(mAct);
         hcol.setOrientation(LinearLayout.VERTICAL);
         TextView hn = new TextView(mAct);
-        hn.setText("Your node");
+        hn.setText("Connection");
         hn.setTextSize(16);
         hn.setTypeface(k.manrope(Typeface.BOLD));
         hn.setTextColor(k.col(R.color.ux_text));
@@ -463,7 +646,11 @@ public final class NetworkPage implements Page {
         mPillHolder.setGravity(Gravity.CENTER);
         hrow.addView(mPillHolder);
         hero.addView(hrow);
-        hero.setOnClickListener(v -> Explain.show(mAct, "status"));
+        mAutoBtn = k.primaryButton("Auto-connect");
+        LinearLayout.LayoutParams abp = new LinearLayout.LayoutParams(-1, -2);
+        abp.topMargin = k.dp(12);
+        mAutoBtn.setOnClickListener(v -> autoConnect());
+        hero.addView(mAutoBtn, abp);
         mBox.addView(hero, k.mb(k.dp(4)));
 
         // Transport.
@@ -499,8 +686,8 @@ public final class NetworkPage implements Page {
         manageBtn.setOnClickListener(v -> manageHosts());
         mBox.addView(hCard, k.mb(k.dp(4)));
 
-        // Contribution.
-        mBox.addView(k.sectionLabel("What this phone gives back"));
+        // Help the network.
+        mBox.addView(k.sectionLabel("Help the network"));
         LinearLayout cCard = k.card();
         mContribNote = k.sub("");
         mContribNote.setPadding(0, k.dp(2), 0, k.dp(6));
