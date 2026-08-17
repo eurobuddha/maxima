@@ -349,6 +349,75 @@ public class ChatTest {
                     + u3.conversation(them).size());
         }
 
+        // ---- in-chat payments (TYPE_ADDRESS / TYPE_PAYMENT) ----
+        // ChatPay body round-trips, and a plain message is never mistaken for one.
+        String payBody = com.eurobuddha.maxima.core.chat.ChatPay.wrap(
+                "10.5", "MINIMA", "0xTXID", "lunch money");
+        if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(payBody)
+                && com.eurobuddha.maxima.core.chat.ChatPay.amount(payBody).equals("10.5")
+                && com.eurobuddha.maxima.core.chat.ChatPay.tokenName(payBody).equals("MINIMA")
+                && com.eurobuddha.maxima.core.chat.ChatPay.txid(payBody).equals("0xTXID")
+                && com.eurobuddha.maxima.core.chat.ChatPay.memo(payBody).equals("lunch money")
+                && !com.eurobuddha.maxima.core.chat.ChatPay.isPayment("hello p")) {
+            ok("ChatPay body round-trips and plain text is not a payment");
+        } else {
+            bad("ChatPay round trip broken: " + payBody);
+        }
+
+        // The two new wire types survive encode/decode.
+        ChatMessage addrMsg = ChatMessage.decode(ChatMessage.address("MxWALLET123").encode());
+        ChatMessage payMsg = ChatMessage.decode(
+                ChatMessage.payment("0xP", "3", "0x00", "MINIMA", "hi", "0xTX").encode());
+        if (addrMsg.type == ChatMessage.TYPE_ADDRESS && addrMsg.address.equals("MxWALLET123")
+                && payMsg.type == ChatMessage.TYPE_PAYMENT && payMsg.amount.equals("3")
+                && payMsg.tokenName.equals("MINIMA") && payMsg.txid.equals("0xTX")) {
+            ok("TYPE_ADDRESS and TYPE_PAYMENT round-trip on the wire");
+        } else {
+            bad("payment wire round trip broken");
+        }
+
+        // An old peer that predates these types must ignore them, not crash -
+        // ChatMessage.decode of any type just fills fields; the engine's switch
+        // has a default that drops unknown types.
+        ChatMessage unknown = ChatMessage.decode("{\"t\":99,\"body\":\"from the future\"}");
+        if (unknown.type == 99) {
+            ok("an unknown future type decodes without throwing");
+        } else {
+            bad("unknown type not preserved: " + unknown.type);
+        }
+
+        // Inbound address is captured silently (no message), inbound payment
+        // shows as a payment entry in the thread.
+        String payer = "0x" + "EF".repeat(32);
+        u1.onInbound(inbound(payer, id.publicKeyHex(),
+                ChatMessage.address("MxPAYME999").encode()));
+        if (u1.walletAddress(payer).equals("MxPAYME999") && u1.conversation(payer).isEmpty()) {
+            ok("an address share is captured silently, with no bubble");
+        } else {
+            bad("address share wrong: addr=" + u1.walletAddress(payer)
+                    + " msgs=" + u1.conversation(payer).size());
+        }
+        u1.onInbound(inbound(payer, id.publicKeyHex(),
+                ChatMessage.payment("0xPAY9", "7", "0x00", "MINIMA", "thanks", "0xTXX").encode()));
+        java.util.List<com.eurobuddha.maxima.core.chat.ChatEngine.Entry> pconv =
+                u1.conversation(payer);
+        if (pconv.size() == 1
+                && com.eurobuddha.maxima.core.chat.ChatPay.isPayment(pconv.get(0).body)
+                && com.eurobuddha.maxima.core.chat.ChatPay.amount(pconv.get(0).body).equals("7")) {
+            ok("an inbound payment lands as a payment entry in the thread");
+        } else {
+            bad("inbound payment wrong: " + pconv.size());
+        }
+        // The captured wallet address survives a restart.
+        com.eurobuddha.maxima.core.chat.ChatEngine u4 =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(node);
+        u4.setStore(new com.eurobuddha.maxima.core.store.FileStore(udir));
+        if (u4.walletAddress(payer).equals("MxPAYME999")) {
+            ok("a shared wallet address persists across a restart");
+        } else {
+            bad("wallet address lost on restart: " + u4.walletAddress(payer));
+        }
+
         System.out.println();
         System.out.println("=====================================");
         System.out.println("  PASSED: " + pass + "   FAILED: " + fail);

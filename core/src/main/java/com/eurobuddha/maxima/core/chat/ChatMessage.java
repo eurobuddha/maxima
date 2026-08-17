@@ -40,6 +40,11 @@ public final class ChatMessage {
     public static final int TYPE_GROUP_TEXT = 2;
     public static final int TYPE_ROSTER = 3;
     public static final int TYPE_RECEIPT = 4;
+    /** Silent control: the sender's WALLET receive address, so a contact can be
+     *  paid without pasting an address. Never shown as a message. */
+    public static final int TYPE_ADDRESS = 5;
+    /** A payment made to this contact, shown in-thread as a payment bubble. */
+    public static final int TYPE_PAYMENT = 6;
 
     public int type;
     /** Message id, chosen by the sender; receipts refer back to it. */
@@ -53,6 +58,14 @@ public final class ChatMessage {
     public String ref = "";
     /** For a receipt: {@link Receipt}. */
     public String state = "";
+    /** For TYPE_ADDRESS: the sender's Mx wallet receive address. */
+    public String address = "";
+    /** For TYPE_PAYMENT. */
+    public String amount = "";
+    public String tokenId = "";
+    public String tokenName = "";
+    public String memo = "";
+    public String txid = "";
 
     public static ChatMessage text(String zId, String zBody) {
         ChatMessage m = new ChatMessage();
@@ -90,6 +103,26 @@ public final class ChatMessage {
         return m;
     }
 
+    public static ChatMessage address(String zAddress) {
+        ChatMessage m = new ChatMessage();
+        m.type = TYPE_ADDRESS;
+        m.address = zAddress;
+        return m;
+    }
+
+    public static ChatMessage payment(String zId, String zAmount, String zTokenId,
+                                      String zTokenName, String zMemo, String zTxid) {
+        ChatMessage m = new ChatMessage();
+        m.type = TYPE_PAYMENT;
+        m.id = zId;
+        m.amount = zAmount;
+        m.tokenId = zTokenId;
+        m.tokenName = zTokenName;
+        m.memo = zMemo;
+        m.txid = zTxid;
+        return m;
+    }
+
     public String encode() {
         Json.Writer w = new Json.Writer().putRaw("t", Integer.toString(type));
         if (!id.isEmpty()) w.put("id", id);
@@ -100,6 +133,12 @@ public final class ChatMessage {
         if (!admin.isEmpty()) w.put("admin", admin);
         if (!ref.isEmpty()) w.put("ref", ref);
         if (!state.isEmpty()) w.put("state", state);
+        if (!address.isEmpty()) w.put("addr", address);
+        if (!amount.isEmpty()) w.put("amt", amount);
+        if (!tokenId.isEmpty()) w.put("tok", tokenId);
+        if (!tokenName.isEmpty()) w.put("tokname", tokenName);
+        if (!memo.isEmpty()) w.put("memo", memo);
+        if (!txid.isEmpty()) w.put("txid", txid);
         return w.done();
     }
 
@@ -118,6 +157,12 @@ public final class ChatMessage {
         c.admin = m.getOrDefault("admin", "");
         c.ref = m.getOrDefault("ref", "");
         c.state = m.getOrDefault("state", "");
+        c.address = m.getOrDefault("addr", "");
+        c.amount = m.getOrDefault("amt", "");
+        c.tokenId = m.getOrDefault("tok", "");
+        c.tokenName = m.getOrDefault("tokname", "");
+        c.memo = m.getOrDefault("memo", "");
+        c.txid = m.getOrDefault("txid", "");
         String mem = m.getOrDefault("members", "");
         for (String s : mem.split(",")) {
             if (!s.trim().isEmpty()) {

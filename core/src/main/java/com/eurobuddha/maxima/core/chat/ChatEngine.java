@@ -124,6 +124,16 @@ public final class ChatEngine {
     private static final String C_GROUPS = "chat_groups";
     private static final String C_MESSAGES = "chat_messages";
     private static final String C_READ = "chat_read";
+    private static final String C_WALLET = "chat_wallet";
+
+    /**
+     * A contact's shared WALLET receive address, keyed by their identity pubkey.
+     * A contact's Maxima identity address is not their wallet address (the
+     * wallet is a separate key), so to pay someone from a chat we need them to
+     * tell us where. Persisted so it survives a restart and you can pay without
+     * waiting for them to re-announce.
+     */
+    private final Map<String, String> mWalletAddr = new ConcurrentHashMap<>();
 
     /**
      * When each conversation was last read by US.
@@ -179,6 +189,11 @@ public final class ChatEngine {
                 mLastRead.put(e.getKey(), Long.parseLong(e.getValue().trim()));
             } catch (Exception ex) {
                 System.err.println("[chat] bad read mark " + e.getKey() + ": " + ex);
+            }
+        }
+        for (Map.Entry<String, String> e : mStore.all(C_WALLET).entrySet()) {
+            if (e.getValue() != null && !e.getValue().isEmpty()) {
+                mWalletAddr.put(Keys.norm(e.getKey()), e.getValue());
             }
         }
         for (Map.Entry<String, String> e : mStore.all(C_MESSAGES).entrySet()) {
@@ -541,6 +556,39 @@ public final class ChatEngine {
         return e;
     }
 
+    /** The wallet receive address a contact shared, or "" if we have none. */
+    public String walletAddress(String zPeer) {
+        return mWalletAddr.getOrDefault(Keys.norm(zPeer), "");
+    }
+
+    /** Tell a contact our wallet receive address so they can pay us. Silent -
+     *  no message, no receipt; just deliver the control record. */
+    public void shareWalletAddress(Contact zTo, String zAddress) {
+        if (zTo == null || zAddress == null || zAddress.isEmpty()) {
+            return;
+        }
+        deliver(zTo, ChatMessage.address(zAddress));
+    }
+
+    /**
+     * Record a payment WE made to a contact and tell them about it, so it shows
+     * as a payment bubble on both sides. The transaction is already built and
+     * posted by the caller (the wallet); this only reflects it into the chat.
+     */
+    public Entry sendPayment(Contact zTo, String zAmount, String zTokenId,
+                             String zTokenName, String zMemo, String zTxid) {
+        String id = newId();
+        String body = ChatPay.wrap(zAmount, zTokenName, zTxid, zMemo);
+        Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",
+                Keys.norm(mNode.identity().publicKeyHex()), body,
+                System.currentTimeMillis(), true, Receipt.QUEUED);
+        record(e);
+        ChatMessage cm = ChatMessage.payment(id, zAmount, zTokenId, zTokenName, zMemo, zTxid);
+        boolean ok = deliver(zTo, cm);
+        setState(e, ok ? Receipt.SENT : Receipt.FAILED);
+        return e;
+    }
+
     /**
      * Send to a group by fanning out a separate sealed copy to every member.
      *
@@ -656,8 +704,39 @@ public final class ChatEngine {
             case ChatMessage.TYPE_RECEIPT:
                 handleReceipt(from, cm);
                 return true;
+            case ChatMessage.TYPE_ADDRESS:
+                handleAddress(from, cm);
+                return true;
+            case ChatMessage.TYPE_PAYMENT:
+                handlePayment(from, cm);
+                return true;
             default:
                 return true;
+        }
+    }
+
+    /** A contact told us their wallet receive address. Store it silently - it
+     *  is not a message, it is how we know where to pay them. */
+    private void handleAddress(String zFrom, ChatMessage zMsg) {
+        if (zMsg.address == null || zMsg.address.isEmpty()) {
+            return;
+        }
+        String k = Keys.norm(zFrom);
+        if (!zMsg.address.equals(mWalletAddr.get(k))) {
+            mWalletAddr.put(k, zMsg.address);
+            mStore.put(C_WALLET, k, zMsg.address);
+        }
+    }
+
+    /** A contact paid us. Show it in-thread as a payment bubble (carried in the
+     *  body exactly like media), and receipt it like any message. */
+    private void handlePayment(String zFrom, ChatMessage zMsg) {
+        String body = ChatPay.wrap(zMsg.amount, zMsg.tokenName, zMsg.txid, zMsg.memo);
+        Entry e = new Entry(zMsg.id, zFrom, "", zFrom, body,
+                System.currentTimeMillis(), false, Receipt.DELIVERED);
+        if (record(e)) {
+            fire(e);
+            sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
         }
     }
 
