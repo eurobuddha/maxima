@@ -255,8 +255,26 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
     }
 
+    /** A one-shot receiver for the next QR scan (e.g. the wallet Send sheet). */
+    public interface ScanSink {
+        void onScan(String zContents);
+    }
+
+    private ScanSink mScanSink;
+
     /** Launch the QR scanner; the result routes to ContactsPage.onScanned. */
     public void scanQr() {
+        launchScanner();
+    }
+
+    /** Launch the scanner and deliver the NEXT result to {@code zSink} instead of
+     *  ContactsPage — used by the wallet Send sheet to fill its address field. */
+    public void scanQr(ScanSink zSink) {
+        mScanSink = zSink;
+        launchScanner();
+    }
+
+    private void launchScanner() {
         com.journeyapps.barcodescanner.ScanOptions o =
                 new com.journeyapps.barcodescanner.ScanOptions();
         o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
@@ -270,6 +288,13 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
             com.journeyapps.barcodescanner.ScanOptions> mScanLauncher =
             registerForActivityResult(new com.journeyapps.barcodescanner.ScanContract(), result -> {
                 if (result == null || result.getContents() == null) {
+                    mScanSink = null;
+                    return;
+                }
+                if (mScanSink != null) {
+                    ScanSink s = mScanSink;
+                    mScanSink = null;
+                    s.onScan(result.getContents());
                     return;
                 }
                 for (Page p : mPages) {
