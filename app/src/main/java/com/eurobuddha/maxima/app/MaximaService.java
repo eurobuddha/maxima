@@ -588,7 +588,10 @@ public final class MaximaService extends Service {
             return;
         }
         if (gate) {
-            int port = n.startDirect(0);   // idempotent
+            // Manual-forward mode pins the listener to a fixed port so a hand-made
+            // router rule survives restarts; otherwise bind any free port.
+            int want = ManualForward.enabled(this) ? ManualForward.port(this) : 0;
+            int port = n.startDirect(want);   // idempotent
             if (port > 0) {
                 if (sLan != null) {
                     sLan.start(port);

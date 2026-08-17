@@ -18,6 +18,7 @@ import com.eurobuddha.maxima.app.AndroidContribution;
 import com.eurobuddha.maxima.app.EventLog;
 import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.MaximaService;
+import com.eurobuddha.maxima.app.ManualForward;
 import com.eurobuddha.maxima.app.MlsStore;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.RelayStore;
@@ -244,6 +245,12 @@ public final class NetworkPage implements Page {
         if (advertised && !d.publicAddress().isEmpty()) {
             mDirect.addView(k.copyField("Public address", d.publicAddress(), "Address copied"));
         }
+        TextView mf = k.ghostButton(ManualForward.enabled(mAct)
+                ? "Manual forward · on" : "Set up manual port-forward");
+        LinearLayout.LayoutParams mfp = new LinearLayout.LayoutParams(-1, -2);
+        mfp.topMargin = k.dp(10);
+        mf.setOnClickListener(v -> showManualForward());
+        mDirect.addView(mf, mfp);
     }
 
     // ---------------------------------------------------------------
@@ -546,19 +553,15 @@ public final class NetworkPage implements Page {
             }
             if (b == DirectReachability.Blocker.ROUTER_NO_PORT) {
                 String ip = MaximaService.localIp();
-                String where = ip.isEmpty() ? "this phone" : ip;
                 return fixBlock("Your router didn't open a port",
-                        "Enable UPnP/NAT-PMP in your router, or add a manual rule: forward TCP "
-                                + (port > 0 ? port : "?") + " to " + where
-                                + (ip.isEmpty() ? "" : " (this phone) — tap to copy the IP."),
-                        ip.isEmpty() ? null : "Copy IP",
-                        ip.isEmpty() ? null : () -> {
-                            ((android.content.ClipboardManager) mAct.getSystemService(
-                                    android.content.Context.CLIPBOARD_SERVICE))
-                                    .setPrimaryClip(android.content.ClipData.newPlainText(
-                                            "maxima-lan-ip", ip));
-                            mAct.toast("Copied " + ip);
-                        });
+                        "Enable UPnP/NAT-PMP in your router, or forward a port by hand"
+                                + (ip.isEmpty() ? "." : " to " + ip + " (this phone)."),
+                        "Set up manual forward", this::showManualForward);
+            }
+            if (b == DirectReachability.Blocker.NEEDS_PUBLIC_IP) {
+                return fixBlock("Enter your public IP",
+                        "Manual forward is on — add your public IP so Maxima can advertise it.",
+                        "Set up manual forward", this::showManualForward);
             }
             return null;
         }
@@ -612,6 +615,77 @@ public final class NetworkPage implements Page {
             box.addView(btn, abp);
         }
         return box;
+    }
+
+    private void showManualForward() {
+        LinearLayout body = new LinearLayout(mAct);
+        body.setOrientation(LinearLayout.VERTICAL);
+        String lan = MaximaService.localIp();
+        int port = ManualForward.port(mAct);
+        body.addView(k.sub("If your router won't open a port automatically, add a rule on it that "
+                + "forwards a TCP port to this phone — then enter your public IP so Maxima can prove "
+                + "and advertise it. The port is pinned so the rule survives restarts."));
+        body.addView(k.copyField("Forward to this phone",
+                lan.isEmpty() ? "—" : lan + ":" + port, "Copied"));
+
+        final EditText portF = k.field("Port to forward");
+        portF.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        portF.setText(String.valueOf(port));
+        body.addView(portF, k.mb(k.dp(9)));
+        LinearLayout.LayoutParams pfp = (LinearLayout.LayoutParams) portF.getLayoutParams();
+        pfp.topMargin = k.dp(10);
+        final EditText ipF = k.field("Your public IP (see whatismyip.com)");
+        ipF.setText(ManualForward.publicIp(mAct));
+        body.addView(ipF, k.mb(k.dp(9)));
+
+        TextView enable = k.primaryButton("Enable & verify");
+        body.addView(enable, k.mb(k.dp(8)));
+        TextView off = k.ghostButton("Turn manual off");
+        body.addView(off);
+
+        BottomSheetDialog d = k.sheet("Manual port-forward", body);
+        enable.setOnClickListener(v -> {
+            String ip = ipF.getText().toString().trim();
+            int p;
+            try {
+                p = Integer.parseInt(portF.getText().toString().trim());
+            } catch (NumberFormatException e) {
+                mAct.toast("Enter a port");
+                return;
+            }
+            if (p <= 0 || p >= 65536) {
+                mAct.toast("Port must be 1–65535");
+                return;
+            }
+            if (!com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(ip)) {
+                mAct.toast("Enter a valid public IP");
+                return;
+            }
+            ManualForward.set(mAct, true, ip, p);
+            applyManualRebind();
+            mAct.toast("Verifying " + ip + ":" + p + "…");
+            d.dismiss();
+            render();
+        });
+        off.setOnClickListener(v -> {
+            ManualForward.setEnabled(mAct, false);
+            applyManualRebind();
+            mAct.toast("Manual forward off");
+            d.dismiss();
+            render();
+        });
+    }
+
+    /** Rebind the direct listener to the (new) pinned/ephemeral port, then re-prove. */
+    private void applyManualRebind() {
+        MaximaNode n = MaximaService.node();
+        if (n != null) {
+            n.stopDirect();   // next heartbeat re-binds on the correct port
+        }
+        final DirectReachability dr = MaximaService.direct();
+        if (dr != null) {
+            mView.postDelayed(dr::reprobe, 1200);
+        }
     }
 
     private void openWifi() {

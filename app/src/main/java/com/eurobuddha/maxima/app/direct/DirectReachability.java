@@ -8,6 +8,7 @@ import android.net.RouteInfo;
 
 import com.eurobuddha.maxima.app.AndroidContribution;
 import com.eurobuddha.maxima.app.EventLog;
+import com.eurobuddha.maxima.app.ManualForward;
 import com.eurobuddha.maxima.core.MaximaNode;
 import com.eurobuddha.maxima.core.net.Probe;
 import com.eurobuddha.maxima.core.portmap.PortMapper;
@@ -49,7 +50,7 @@ public final class DirectReachability {
     public enum State { OFF, MAPPING, PROBING, ADVERTISED }
 
     /** Why direct is not currently advertised — drives a plain-language suggestion. */
-    public enum Blocker { NONE, CONTRIB_OFF, NEEDS_WIFI, NEEDS_CHARGING, ROUTER_NO_PORT }
+    public enum Blocker { NONE, CONTRIB_OFF, NEEDS_WIFI, NEEDS_CHARGING, ROUTER_NO_PORT, NEEDS_PUBLIC_IP }
 
     /** Re-prove from scratch at most this often, to catch a silently-changed WAN IP. */
     private static final long REPROVE_INTERVAL_MS = 20 * 60 * 1000;
@@ -221,6 +222,13 @@ public final class DirectReachability {
             return;
         }
 
+        // Manual port-forward mode: the user opened the port by hand and told us
+        // their public IP; skip the router negotiation and just prove + advertise.
+        if (ManualForward.enabled(mCtx)) {
+            attemptManual(gen);
+            return;
+        }
+
         // 2. ask the router for a public mapping of that port
         mState = State.MAPPING;
         mDetail = "asking the router for a public port…";
@@ -278,7 +286,49 @@ public final class DirectReachability {
         refreshContacts();
     }
 
+    /** Manual mode: prove the user's forwarded public IP:port, then advertise it. */
+    private void attemptManual(int gen) {
+        String ip = ManualForward.publicIp(mCtx);
+        int extPort = ManualForward.port(mCtx);
+        if (ip.isEmpty() || !PortMapper.isPublic(ip)) {
+            mState = State.OFF;
+            mBlocker = Blocker.NEEDS_PUBLIC_IP;
+            mDetail = "enter your public IP for the manual forward";
+            return;
+        }
+        mState = State.PROBING;
+        mDetail = "verifying " + ip + ":" + extPort + " from outside…";
+        boolean reachable = proveReachable(extPort);
+        if (mStopping || gen != mGen || !gatesPass()) {
+            mState = State.OFF;
+            mDetail = "network changed during verification (staying Tier 1)";
+            return;
+        }
+        if (!reachable) {
+            mState = State.OFF;
+            mBlocker = Blocker.ROUTER_NO_PORT;
+            mDetail = ip + ":" + extPort + " wasn't reachable — check the forward rule";
+            return;
+        }
+        mPublicAddress = ip + ":" + extPort;
+        mNode.setDirectAddress(mPublicAddress);
+        mProvenAtMs = System.currentTimeMillis();
+        mBlocker = Blocker.NONE;
+        mState = State.ADVERTISED;
+        mDetail = "reachable at " + mPublicAddress + " (manual forward)";
+        EventLog.add("DIRECT reachable at " + mPublicAddress + " (manual)");
+        refreshContacts();
+    }
+
     private void renewIfDue() {
+        // Manual mode has no router lease — just re-prove periodically.
+        if (ManualForward.enabled(mCtx)) {
+            if (System.currentTimeMillis() - mProvenAtMs > REPROVE_INTERVAL_MS) {
+                withdraw("periodic re-verification");
+                attempt();
+            }
+            return;
+        }
         if (mMapping == null) {
             mState = State.OFF;
             return;
@@ -391,7 +441,8 @@ public final class DirectReachability {
         if (!mPolicy.isUnmetered()) {
             return false;
         }
-        if (mState == State.OFF && !mPolicy.isCharging()) {
+        // Manual mode is cheap (no router negotiation), so it doesn't need charging.
+        if (!ManualForward.enabled(mCtx) && mState == State.OFF && !mPolicy.isCharging()) {
             return false;
         }
         return true;
@@ -404,7 +455,7 @@ public final class DirectReachability {
         if (!mPolicy.isUnmetered()) {
             return Blocker.NEEDS_WIFI;
         }
-        if (mState == State.OFF && !mPolicy.isCharging()) {
+        if (!ManualForward.enabled(mCtx) && mState == State.OFF && !mPolicy.isCharging()) {
             return Blocker.NEEDS_CHARGING;
         }
         return Blocker.NONE;
