@@ -6,46 +6,64 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.LayerDrawable;
 import android.widget.TextView;
 
 /**
- * Identity avatars: a person's initial on a hue-hashed disc, ringed with a faint
- * accent halo - FreezePeach's avatar look, so the same contact wears the same
- * colour everywhere (list, chat header, group roster) and is recognisable at a
- * glance. No profile photos: nobody has to host your face. The colour is derived
- * deterministically from the identity so it is stable across sessions and devices.
+ * Identity avatars: a person's initial on a hue-hashed disc, so the same contact
+ * wears the same colour everywhere (list, chat header, group roster) and is
+ * recognisable at a glance. No profile photos: nobody has to host your face. The
+ * colour is derived deterministically from the identity so it is stable across
+ * sessions and devices.
+ *
+ * The palette is a set of MUTED, desaturated tones that sit inside the greyscale
+ * design language (no bright/garish hues, no coloured ring) while still giving
+ * each identity a distinct, recognisable colour.
  */
 public final class Avatars {
 
     private Avatars() {
     }
 
-    /** FreezePeach's curated 10-hue palette - legible with white text on any
-     *  ground, and deliberately free of muddy green/yellow (which would clash
-     *  with the green send bubble). */
-    private static final int[] TONES = {
-            0xFF4C82FF, 0xFF6C6CF0, 0xFF9B6CFF, 0xFFC964D8, 0xFFE8618F,
-            0xFFFF6B6B, 0xFFF2954B, 0xFF2BAEB0, 0xFF3EB6E8, 0xFF7E8AA0
-    };
+    /** A pool of 30 muted, evenly-spaced hues. Generated (not hand-picked) so
+     *  contacts spread across the wheel and each gets a distinct, stable colour;
+     *  saturation/lightness are kept low so the discs stay calm inside the
+     *  all-greyscale design and read white text cleanly. */
+    private static final int POOL = 30;
 
-    /** The faint ring around every avatar: Bitcoin-orange accent at ~70% alpha. */
-    private static final int RING = 0xB3F7931A;
+    /** A hairline inset edge for a touch of depth — faint translucent black,
+     *  not the old accent ring. */
+    private static final int EDGE = 0x1A000000;
 
-    /** Stable colour for an identity key - mirrors FreezePeach's picker: for a
-     *  hex pubkey take chars 2..6, else hash the string. */
+    /** Stable colour for an identity key. Minima public keys are DER-encoded and
+     *  share a constant prefix (30819F30…), so an early slice collides for every
+     *  contact — hash the WHOLE key instead so each identity gets a distinct tone.
+     *  String.hashCode is deterministic, so the colour is stable across devices. */
     public static int colour(String zKey) {
-        int v;
-        if (zKey != null && zKey.length() >= 6) {
-            try {
-                v = Integer.parseInt(zKey.substring(2, 6), 16);
-            } catch (Exception e) {
-                v = zKey.hashCode();
-            }
-        } else {
-            v = zKey == null ? 0 : zKey.hashCode();
-        }
-        return TONES[Math.abs(v) % TONES.length];
+        int v = (zKey == null || zKey.isEmpty()) ? 0 : zKey.hashCode();
+        int idx = Math.floorMod(v, POOL);
+        // Spread hue across the wheel; nudge saturation/lightness slightly per
+        // index so neighbours differ a touch more, staying muted throughout.
+        float hue = (idx * 360f) / POOL;
+        float sat = 0.32f + (idx % 3) * 0.03f;      // 0.32–0.38
+        float light = 0.42f + (idx % 2) * 0.03f;    // 0.42–0.45
+        return hsl(hue, sat, light);
+    }
+
+    /** HSL (h 0-360, s/l 0-1) → opaque ARGB int. */
+    private static int hsl(float h, float s, float l) {
+        float c = (1 - Math.abs(2 * l - 1)) * s;
+        float hp = h / 60f;
+        float x = c * (1 - Math.abs(hp % 2 - 1));
+        float r = 0, g = 0, b = 0;
+        if (hp < 1) { r = c; g = x; }
+        else if (hp < 2) { r = x; g = c; }
+        else if (hp < 3) { g = c; b = x; }
+        else if (hp < 4) { g = x; b = c; }
+        else if (hp < 5) { r = x; b = c; }
+        else { r = c; b = x; }
+        float m = l - c / 2;
+        return Color.rgb(Math.round((r + m) * 255),
+                Math.round((g + m) * 255), Math.round((b + m) * 255));
     }
 
     private static int dp(float zDp) {
@@ -61,25 +79,17 @@ public final class Avatars {
      */
     public static void apply(TextView zAvatar, String zKey, String zName) {
         zAvatar.setText(Ui.initial(zName));
-        zAvatar.setBackground(ringed(colour(zKey)));
+        zAvatar.setBackground(disc(colour(zKey)));
         zAvatar.setTextColor(0xFFFFFFFF);
     }
 
-    /** An oval hue disc set inside a hairline accent ring, with a small gap. */
-    private static Drawable ringed(int zDisc) {
-        GradientDrawable ring = new GradientDrawable();
-        ring.setShape(GradientDrawable.OVAL);
-        ring.setColor(Color.TRANSPARENT);
-        ring.setStroke(dp(1.5f), RING);
-
+    /** A plain muted hue disc with a hairline inset edge — no accent ring. */
+    private static Drawable disc(int zDisc) {
         GradientDrawable disc = new GradientDrawable();
         disc.setShape(GradientDrawable.OVAL);
         disc.setColor(zDisc);
-
-        LayerDrawable ld = new LayerDrawable(new Drawable[]{ring, disc});
-        int gap = dp(3);
-        ld.setLayerInset(1, gap, gap, gap, gap);
-        return ld;
+        disc.setStroke(dp(1f), EDGE);
+        return disc;
     }
 
     /**
