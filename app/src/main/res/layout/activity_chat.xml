@@ -87,17 +87,15 @@
         android:layout_height="1dp"
         android:background="@color/ux_divider" />
 
-    <ListView
+    <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/messages"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
-        android:divider="@null"
-        android:dividerHeight="0dp"
         android:paddingTop="8dp"
         android:paddingBottom="8dp"
-        android:stackFromBottom="true" />
+        android:scrollbars="vertical" />
 
     <LinearLayout
         android:layout_width="match_parent"

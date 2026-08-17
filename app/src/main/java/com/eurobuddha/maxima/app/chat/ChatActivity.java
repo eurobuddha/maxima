@@ -6,10 +6,8 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.BaseAdapter;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -18,6 +16,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.eurobuddha.maxima.app.MaximaService;
 import com.eurobuddha.maxima.app.R;
@@ -46,7 +46,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     public static final String EXTRA_CONVERSATION = "conversation";
 
     private String mConversation = "";
-    private ListView mList;
+    private RecyclerView mList;
     private EditText mInput;
     private TextView mSubtitle;
     private TextView mTitle;
@@ -54,8 +54,14 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private Adapter mAdapter;
     /** Sending always scrolls to your own message, even from up the history. */
     private boolean mLastSendWasMine;
-    private final List<ChatEngine.Entry> mEntries = new ArrayList<>();
+    /** The rendered rows: date separators interleaved with messages. */
+    private final List<Row> mRows = new ArrayList<>();
+    /** Message count last render, to detect real growth vs a state-only redraw. */
+    private int mMsgCount;
     private final SimpleDateFormat mTime = new SimpleDateFormat("HH:mm", Locale.UK);
+
+    /** Cluster consecutive messages from one sender within this window. */
+    private static final long CLUSTER_GAP_MS = 5 * 60 * 1000;
 
     private final android.os.Handler mHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
@@ -91,9 +97,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mTitle = findViewById(R.id.chat_title);
         mAvatar = findViewById(R.id.chat_avatar);
         findViewById(R.id.btn_chat_back).setOnClickListener(v -> finish());
+        LinearLayoutManager lm = new LinearLayoutManager(this);
+        lm.setStackFromEnd(true);   // a short thread sits at the bottom, like a chat
+        mList.setLayoutManager(lm);
         mAdapter = new Adapter();
         mList.setAdapter(mAdapter);
-        mList.setTranscriptMode(ListView.TRANSCRIPT_MODE_NORMAL);
+        ((androidx.recyclerview.widget.SimpleItemAnimator) mList.getItemAnimator())
+                .setSupportsChangeAnimations(false);   // don't flash a bubble on a tick change
 
         findViewById(R.id.btn_chat_send).setOnClickListener(v -> send());
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
@@ -264,7 +274,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             if (chat != null) {
                 chat.markRead(previous);
             }
-            mEntries.clear();
+            mRows.clear();
+            mMsgCount = 0;
             mAdapter.notifyDataSetChanged();
         }
         ChatHub.setForeground(mConversation);
@@ -350,17 +361,79 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         // the newest message on every receipt drags the user out of the history
         // they are scrolled back reading, which a burst of group ticks would do
         // several times a second.
-        boolean atBottom = mEntries.isEmpty()
-                || mList.getLastVisiblePosition() >= mEntries.size() - 1;
-        boolean grew = conv.size() > mEntries.size();
+        LinearLayoutManager lm = (LinearLayoutManager) mList.getLayoutManager();
+        boolean atBottom = mRows.isEmpty()
+                || (lm != null && lm.findLastVisibleItemPosition() >= mRows.size() - 1);
+        boolean grew = conv.size() > mMsgCount;
 
-        mEntries.clear();
-        mEntries.addAll(conv);
+        // Rebuild the row list: a date separator whenever the day changes, and
+        // per-message cluster flags (a run from one sender within CLUSTER_GAP_MS
+        // is drawn as one group - tail + timestamp only on the last of the run).
+        mRows.clear();
+        long lastDay = Long.MIN_VALUE;
+        for (int i = 0; i < conv.size(); i++) {
+            ChatEngine.Entry e = conv.get(i);
+            long day = dayStart(e.time);
+            if (day != lastDay) {
+                mRows.add(Row.date(dayLabel(e.time)));
+                lastDay = day;
+            }
+            ChatEngine.Entry prev = i > 0 ? conv.get(i - 1) : null;
+            ChatEngine.Entry next = i < conv.size() - 1 ? conv.get(i + 1) : null;
+            Row r = Row.msg(e);
+            r.firstInCluster = !sameCluster(prev, e);
+            r.lastInCluster = !sameCluster(e, next);
+            mRows.add(r);
+        }
+        mMsgCount = conv.size();
         mAdapter.notifyDataSetChanged();
-        if (!mEntries.isEmpty() && (atBottom || grew && mLastSendWasMine)) {
-            mList.setSelection(mEntries.size() - 1);
+        if (!mRows.isEmpty() && (atBottom || (grew && mLastSendWasMine))) {
+            mList.scrollToPosition(mRows.size() - 1);
         }
         mLastSendWasMine = false;
+    }
+
+    /** Two messages cluster if the same sender sent them close in time on the
+     *  same day (a date separator between them already breaks the day). */
+    private static boolean sameCluster(ChatEngine.Entry a, ChatEngine.Entry b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.mine == b.mine
+                && a.sender.equals(b.sender)
+                && dayStart(a.time) == dayStart(b.time)
+                && b.time - a.time < CLUSTER_GAP_MS;
+    }
+
+    private static long dayStart(long zMillis) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(zMillis);
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        c.set(java.util.Calendar.MINUTE, 0);
+        c.set(java.util.Calendar.SECOND, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
+    }
+
+    /** "Today" / "Yesterday" / weekday (within a week) / a date. */
+    private String dayLabel(long zMillis) {
+        long today = dayStart(System.currentTimeMillis());
+        long day = dayStart(zMillis);
+        long days = (today - day) / (24L * 60 * 60 * 1000);
+        if (days == 0) {
+            return "Today";
+        }
+        if (days == 1) {
+            return "Yesterday";
+        }
+        if (days > 1 && days < 7) {
+            return new SimpleDateFormat("EEEE", Locale.UK).format(new Date(zMillis));
+        }
+        return new SimpleDateFormat("d MMM yyyy", Locale.UK).format(new Date(zMillis));
+    }
+
+    private int dp(int zDp) {
+        return Math.round(zDp * getResources().getDisplayMetrics().density);
     }
 
     private void send() {
@@ -541,73 +614,132 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return getColor(R.color.ux_subtext);
     }
 
-    private final class Adapter extends BaseAdapter {
+    /** A rendered row: a date separator, or a message. */
+    private static final class Row {
+        static final int DATE = 0, MSG = 1;
+        final int type;
+        final ChatEngine.Entry entry;
+        final String date;
+        boolean firstInCluster, lastInCluster;
 
-        @Override
-        public int getCount() {
-            return mEntries.size();
+        private Row(int t, ChatEngine.Entry e, String d) {
+            type = t;
+            entry = e;
+            date = d;
+        }
+        static Row date(String d) { return new Row(DATE, null, d); }
+        static Row msg(ChatEngine.Entry e) { return new Row(MSG, e, null); }
+    }
+
+    private static final class DateVH extends RecyclerView.ViewHolder {
+        final TextView pill;
+        DateVH(View v, TextView p) { super(v); pill = p; }
+    }
+
+    private static final class MsgVH extends RecyclerView.ViewHolder {
+        final LinearLayout row, bubble;
+        final TextView who, body, meta;
+        final android.widget.ImageView image;
+        MsgVH(View v) {
+            super(v);
+            row = v.findViewById(R.id.bubble_row);
+            bubble = v.findViewById(R.id.bubble);
+            who = v.findViewById(R.id.bubble_sender);
+            body = v.findViewById(R.id.bubble_body);
+            meta = v.findViewById(R.id.bubble_meta);
+            image = v.findViewById(R.id.bubble_image);
+        }
+    }
+
+    private void bindMessage(MsgVH h, Row r) {
+        ChatEngine.Entry e = r.entry;
+        h.row.setGravity(e.mine ? Gravity.END : Gravity.START);
+        // Tight within a cluster; a clear gap starting each new run.
+        h.row.setPadding(dp(12), r.firstInCluster ? dp(7) : dp(1), dp(12), dp(1));
+        // Tail only on the first bubble of a run; the rest fully rounded.
+        int bg = e.mine
+                ? (r.firstInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
+                : (r.firstInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
+        h.bubble.setBackgroundResource(bg);
+
+        // In a group, name the sender once at the top of their run.
+        if (!e.mine && e.isGroup() && r.firstInCluster) {
+            h.who.setVisibility(View.VISIBLE);
+            h.who.setText(Names.contact(MaximaService.node(), e.sender));
+        } else {
+            h.who.setVisibility(View.GONE);
         }
 
-        @Override
-        public Object getItem(int i) {
-            return mEntries.get(i);
+        if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
+            String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+            h.body.setText(cap);
+            h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
+            h.image.setVisibility(View.VISIBLE);
+            bindImage(h.image, e.body, e.id);
+        } else {
+            h.image.setVisibility(View.GONE);
+            h.image.setImageDrawable(null);
+            h.body.setVisibility(View.VISIBLE);
+            h.body.setText(e.body);
         }
 
-        @Override
-        public long getItemId(int i) {
-            return i;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            View v = convertView;
-            if (v == null) {
-                v = LayoutInflater.from(ChatActivity.this)
-                        .inflate(R.layout.item_message, parent, false);
-            }
-            ChatEngine.Entry e = mEntries.get(position);
-
-            LinearLayout row = v.findViewById(R.id.bubble_row);
-            LinearLayout bubble = v.findViewById(R.id.bubble);
-            TextView who = v.findViewById(R.id.bubble_sender);
-            TextView body = v.findViewById(R.id.bubble_body);
-            TextView meta = v.findViewById(R.id.bubble_meta);
-
-            row.setGravity(e.mine ? Gravity.END : Gravity.START);
-            bubble.setBackgroundResource(e.mine ? R.drawable.bubble_out : R.drawable.bubble_in);
-
-            // In a group you must know who is talking; in 1:1 it is noise.
-            if (!e.mine && e.isGroup()) {
-                who.setVisibility(View.VISIBLE);
-                who.setText(Names.contact(MaximaService.node(), e.sender));
-            } else {
-                who.setVisibility(View.GONE);
-            }
-
-            android.widget.ImageView image = v.findViewById(R.id.bubble_image);
-            if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
-                // A media message: caption as text (if any), image below.
-                String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
-                body.setText(cap);
-                body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
-                image.setVisibility(View.VISIBLE);
-                bindImage(image, e.body, e.id);
-            } else {
-                image.setVisibility(View.GONE);
-                image.setImageDrawable(null);
-                body.setVisibility(View.VISIBLE);
-                body.setText(e.body);
-            }
-
+        // Timestamp + ticks only on the last of a run (iMessage-style).
+        if (r.lastInCluster) {
+            h.meta.setVisibility(View.VISIBLE);
             String stamp = mTime.format(new Date(e.time));
             if (e.mine) {
-                meta.setText(stamp + "  " + ticks(e.state));
-                meta.setTextColor(tickColour(e.state));
+                h.meta.setText(stamp + "  " + ticks(e.state));
+                h.meta.setTextColor(tickColour(e.state));
             } else {
-                meta.setText(stamp);
-                meta.setTextColor(getColor(R.color.ux_subtext));
+                h.meta.setText(stamp);
+                h.meta.setTextColor(getColor(R.color.ux_subtext));
             }
-            return v;
+        } else {
+            h.meta.setVisibility(View.GONE);
+        }
+    }
+
+    private final class Adapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+
+        @Override
+        public int getItemViewType(int position) {
+            return mRows.get(position).type;
+        }
+
+        @Override
+        public int getItemCount() {
+            return mRows.size();
+        }
+
+        @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            if (viewType == Row.DATE) {
+                LinearLayout wrap = new LinearLayout(ChatActivity.this);
+                wrap.setLayoutParams(new RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                wrap.setGravity(Gravity.CENTER_HORIZONTAL);
+                wrap.setPadding(0, dp(10), 0, dp(6));
+                TextView pill = new TextView(ChatActivity.this);
+                pill.setBackgroundResource(R.drawable.pill);
+                pill.setPadding(dp(12), dp(3), dp(12), dp(3));
+                pill.setTextSize(11);
+                pill.setTextColor(getColor(R.color.ux_subtext));
+                wrap.addView(pill);
+                return new DateVH(wrap, pill);
+            }
+            View v = LayoutInflater.from(ChatActivity.this)
+                    .inflate(R.layout.item_message, parent, false);
+            return new MsgVH(v);
+        }
+
+        @Override
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+            Row r = mRows.get(position);
+            if (r.type == Row.DATE) {
+                ((DateVH) holder).pill.setText(r.date);
+            } else {
+                bindMessage((MsgVH) holder, r);
+            }
         }
     }
 }
