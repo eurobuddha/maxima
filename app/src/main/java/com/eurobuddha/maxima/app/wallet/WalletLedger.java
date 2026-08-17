@@ -29,6 +29,8 @@ public final class WalletLedger {
         public String token = "MINIMA";
         public String who = "";
         public String txid = "";
+        /** Token id (0x hex); 0x00 for native Minima. Older rows default to Minima. */
+        public String tokenid = "0x00";
     }
 
     private WalletLedger() {
@@ -37,6 +39,13 @@ public final class WalletLedger {
     /** Record one payment. Best-effort: a ledger write must never break a send. */
     public static void add(Context zCtx, boolean zSent, String zAmount, String zToken,
                            String zWho, String zTxid) {
+        add(zCtx, zSent, zAmount, zToken, zWho, zTxid, "0x00");
+    }
+
+    /** As {@link #add}, also recording the token id so history can label
+     *  non-Minima payments and open the right token. */
+    public static void add(Context zCtx, boolean zSent, String zAmount, String zToken,
+                           String zWho, String zTxid, String zTokenid) {
         try {
             JSONObject o = new JSONObject();
             o.put("t", System.currentTimeMillis());
@@ -45,6 +54,7 @@ public final class WalletLedger {
             o.put("tk", zToken == null ? "MINIMA" : zToken);
             o.put("w", zWho == null ? "" : zWho);
             o.put("x", zTxid == null ? "" : zTxid);
+            o.put("ti", zTokenid == null || zTokenid.isEmpty() ? "0x00" : zTokenid);
             JSONArray prev = load(zCtx);
             JSONArray next = new JSONArray();
             next.put(o);
@@ -71,6 +81,7 @@ public final class WalletLedger {
                 r.token = o.optString("tk", "MINIMA");
                 r.who = o.optString("w", "");
                 r.txid = o.optString("x", "");
+                r.tokenid = o.optString("ti", "0x00");
                 out.add(r);
             }
         } catch (Exception ignored) {
