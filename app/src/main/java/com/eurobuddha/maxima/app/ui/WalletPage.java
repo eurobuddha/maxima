@@ -54,6 +54,7 @@ public final class WalletPage implements Page {
     private TextView mBalance;
     private TextView mUses;
     private TextView mUsesBig;
+    private TextView mSeedSource;
 
     /** Winternitz one-time-signature budget for key #1000. */
     private static final int KEY_TOTAL = 262144;
@@ -76,14 +77,21 @@ public final class WalletPage implements Page {
         }
         mPub = new WalletPublisher(zAct, mNode);
 
-        // Heavy: seed -> WOTS address walk. Once, off-main.
+        openWallet();
+    }
+
+    /** Open (or re-open, after a seed change) the wallet off-main: derive the
+     *  address, refresh the UI, and re-register the script for gateway tracking. */
+    private void openWallet() {
         mIo.execute(() -> {
             MaximaWallet w = MaximaWallet.open(mAct);
             w.ensureAddress();
             mWallet = w;
+            mLastFetch = 0;   // force a fresh balance fetch for the (maybe new) address
             mAct.runOnUiThread(() -> {
                 mAddr.setText(w.mxAddress());
                 renderUses(w);
+                renderBackend();
                 render();
             });
             // Make pre-existing funds spendable via the gateway: register our
@@ -399,6 +407,74 @@ public final class WalletPage implements Page {
         mSendStatus = sub("");
         sc.addView(mSendStatus);
         mBox.addView(sc, pad());
+
+        // wallet-seed card
+        LinearLayout wc = card();
+        wc.addView(label("WALLET SEED"));
+        mSeedSource = sub("…");
+        wc.addView(mSeedSource);
+        Button imp = new Button(mAct);
+        imp.setText("Import a phrase");
+        imp.setOnClickListener(v -> importSeed());
+        wc.addView(imp);
+        Button rev = new Button(mAct);
+        rev.setText("Use Maxima seed");
+        rev.setOnClickListener(v -> revertSeed());
+        wc.addView(rev);
+        mBox.addView(wc, pad());
+        renderSeedSource();
+    }
+
+    private void renderSeedSource() {
+        mSeedSource.setText(MaximaWallet.hasCustomPhrase(mAct)
+                ? "Independent imported phrase — separate address & key-use budget"
+                : "Maxima identity seed · key #1000 (one phrase backs chat, comms and wallet)");
+    }
+
+    private void importSeed() {
+        final EditText input = new EditText(mAct);
+        input.setHint("12 / 24-word seed phrase");
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        input.setMinLines(2);
+        new androidx.appcompat.app.AlertDialog.Builder(mAct)
+                .setTitle("Import a wallet seed")
+                .setMessage("This replaces the Maxima wallet's seed with the phrase you enter — "
+                        + "its address and funds change.\n\n⚠ ONLY import a seed whose key #1000 "
+                        + "has NOT signed on another wallet or node. Reusing a one-time signing "
+                        + "key can expose it and lose funds. An imported seed starts with a fresh "
+                        + "key-use count; re-importing the same phrase returns to its own count.")
+                .setView(input)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Import", (d, w) -> {
+                    String phrase = input.getText().toString().trim();
+                    if (phrase.isEmpty()) {
+                        mAct.toast("No phrase entered");
+                        return;
+                    }
+                    MaximaWallet.setCustomPhrase(mAct, phrase);
+                    mAct.toast("Importing wallet seed…");
+                    openWallet();
+                })
+                .show();
+    }
+
+    private void revertSeed() {
+        if (!MaximaWallet.hasCustomPhrase(mAct)) {
+            mAct.toast("Already using the Maxima seed");
+            return;
+        }
+        new androidx.appcompat.app.AlertDialog.Builder(mAct)
+                .setTitle("Use the Maxima seed?")
+                .setMessage("Switch the wallet back to your Maxima identity seed (key #1000). "
+                        + "The imported wallet is not deleted — re-import its phrase to return to it.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Use Maxima seed", (d, w) -> {
+                    MaximaWallet.setCustomPhrase(mAct, null);
+                    mAct.toast("Back to the Maxima seed…");
+                    openWallet();
+                })
+                .show();
     }
 
 

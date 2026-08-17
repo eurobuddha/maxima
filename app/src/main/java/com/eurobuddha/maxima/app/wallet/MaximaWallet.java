@@ -63,10 +63,38 @@ public final class MaximaWallet {
      * Maxima seed. Heavy on first address derivation — construct off-main.
      */
     public static MaximaWallet open(Context zCtx) {
-        KeyUses uses = new PrefsKeyUses(zCtx, USES_NAMESPACE);
         String custom = customPhrase(zCtx);
         MiniData seed = canonicalSeed(zCtx, custom);
+        KeyUses uses = new PrefsKeyUses(zCtx, namespaceFor(zCtx, custom, seed));
         return new MaximaWallet(new WalletCore(seed, uses));
+    }
+
+    /**
+     * The key-use counter namespace for the ACTIVE seed - FUND-CRITICAL.
+     *
+     * The default Maxima seed keeps the legacy {@link #USES_NAMESPACE} ("v3"),
+     * so its already-accumulated count is preserved untouched (never reset to 0,
+     * which would reuse spent one-time keys). Each IMPORTED seed instead gets its
+     * own namespace fingerprinted from its seed bytes, so two different seeds can
+     * never share a counter - each imported seed has its own fresh 0/262144
+     * budget, and re-importing the SAME seed returns to the SAME counter (the
+     * fingerprint is deterministic), so it can never reuse a leaf.
+     */
+    private static String namespaceFor(Context zCtx, String zCustom, MiniData zSeed) {
+        if (zCustom == null || zCustom.isEmpty()) {
+            return USES_NAMESPACE;   // default Maxima seed: legacy counter, preserved
+        }
+        // 8 hex of the seed hash (the seed is already SHA3-256 of the phrase, so
+        // its prefix is a stable, non-reversible fingerprint). App-private.
+        String hex = zSeed.to0xString();   // 0x + 64 hex
+        String fp = hex.length() >= 10 ? hex.substring(2, 10) : "unknown";
+        return USES_NAMESPACE + "_" + fp;
+    }
+
+    /** The active counter namespace, for callers that need to read/label it. */
+    public static String activeNamespace(Context zCtx) {
+        String custom = customPhrase(zCtx);
+        return namespaceFor(zCtx, custom, canonicalSeed(zCtx, custom));
     }
 
     /**
@@ -116,9 +144,10 @@ public final class MaximaWallet {
         return mCore;
     }
 
-    /** Signatures consumed so far on our key (the sacred counter). */
+    /** Signatures consumed so far on our key (the sacred counter), read from the
+     *  ACTIVE seed's namespace. */
     public int uses(Context zCtx) {
-        return new PrefsKeyUses(zCtx, USES_NAMESPACE).currentUses(KEY_INDEX);
+        return new PrefsKeyUses(zCtx, activeNamespace(zCtx)).currentUses(KEY_INDEX);
     }
 
     // ---------------------------------------------------------------
