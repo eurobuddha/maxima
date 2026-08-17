@@ -347,11 +347,23 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (g != null) {
             mSubtitle.setText(g.size() + " member(s)"
                     + (g.isAdmin(node.identity().publicKeyHex()) ? "  ·  you are an admin" : ""));
+            mSubtitle.setTextColor(getColor(R.color.ux_subtext));
         } else {
             Contact c = node.contact(mConversation);
-            mSubtitle.setText(c == null
-                    ? "not in your contacts"
-                    : (c.primaryAddress() == null ? "no known address" : c.primaryAddress()));
+            String presence = c == null ? "" : com.eurobuddha.maxima.app.ui.Presence.of(c.lastSeen);
+            if (c == null) {
+                mSubtitle.setText("not in your contacts");
+                mSubtitle.setTextColor(getColor(R.color.ux_subtext));
+            } else if (!presence.isEmpty()) {
+                mSubtitle.setText(presence);
+                mSubtitle.setTextColor(getColor(
+                        com.eurobuddha.maxima.app.ui.Presence.online(c.lastSeen)
+                                ? R.color.ux_success : R.color.ux_subtext));
+            } else {
+                mSubtitle.setText(c.primaryAddress() == null
+                        ? "no address yet" : "not reached yet");
+                mSubtitle.setTextColor(getColor(R.color.ux_subtext));
+            }
         }
 
         List<ChatEngine.Entry> conv = chat.conversation(mConversation);
