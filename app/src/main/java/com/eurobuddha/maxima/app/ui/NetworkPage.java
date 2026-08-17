@@ -167,8 +167,16 @@ public final class NetworkPage implements Page {
         String mls = node.mlsAddress();
         if (mls.isEmpty()) {
             mMlsText.setText("None — no host has offered one yet.");
+            mMlsText.setOnClickListener(null);
         } else {
-            mMlsText.setText((node.isStaticMls() ? "Pinned:  " : "From host:  ") + mls);
+            mMlsText.setText(mls);
+            final String mlsVal = mls;
+            mMlsText.setOnClickListener(x -> {
+                ((android.content.ClipboardManager) mAct.getSystemService(
+                        android.content.Context.CLIPBOARD_SERVICE))
+                        .setPrimaryClip(android.content.ClipData.newPlainText("maxima-mls", mlsVal));
+                mAct.toast("Location address copied");
+            });
         }
 
         // ---- direct reachability ----
@@ -713,9 +721,15 @@ public final class NetworkPage implements Page {
         LinearLayout mCard = k.card();
         mMlsText = new TextView(mAct);
         mMlsText.setTextSize(12);
+        mMlsText.setTypeface(Typeface.MONOSPACE);
         mMlsText.setTextColor(k.col(R.color.ux_text));
-        mMlsText.setPadding(0, k.dp(4), 0, k.dp(4));
-        mCard.addView(mMlsText);
+        mMlsText.setBackgroundResource(R.drawable.field_pill);
+        int mtp = k.dp(12);
+        mMlsText.setPadding(mtp, mtp, mtp, mtp);
+        mMlsText.setClickable(true);
+        LinearLayout.LayoutParams mtlp = new LinearLayout.LayoutParams(-1, -2);
+        mtlp.bottomMargin = k.dp(8);
+        mCard.addView(mMlsText, mtlp);
         TextView mlsBtn = k.ghostButton("Location settings");
         mCard.addView(mlsBtn);
         mlsBtn.setOnClickListener(v -> pinMls());
