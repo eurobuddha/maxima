@@ -88,6 +88,11 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
 
         mPill = findViewById(R.id.status_pill);
         mDot = findViewById(R.id.status_dot);
+        try {
+            String v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            ((TextView) findViewById(R.id.main_version)).setText("v" + v);
+        } catch (Exception ignored) {
+        }
         findViewById(R.id.btn_main_search).setOnClickListener(v -> showTab(0));
         findViewById(R.id.btn_main_more).setOnClickListener(v -> showTab(4));
         android.widget.ImageButton themeBtn = findViewById(R.id.btn_main_theme);
