@@ -330,7 +330,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }
         String name = Names.of(node, chat, mConversation);
         mTitle.setText(name);
-        mAvatar.setText(com.eurobuddha.maxima.app.ui.Ui.initial(name));
+        com.eurobuddha.maxima.app.ui.Avatars.apply(mAvatar, mConversation, name);
 
         Group g = chat.group(mConversation);
         if (g != null) {

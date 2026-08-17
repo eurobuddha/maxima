@@ -243,7 +243,7 @@ public final class ChatsPage implements Page {
                 v = LayoutInflater.from(mAct).inflate(R.layout.item_conversation, parent, false);
             }
             Row r = mRows.get(position);
-            ((TextView) v.findViewById(R.id.conv_avatar)).setText(Ui.initial(r.name));
+            Avatars.apply(v.findViewById(R.id.conv_avatar), r.key, r.name);
             ((TextView) v.findViewById(R.id.conv_name)).setText(r.name);
             ((TextView) v.findViewById(R.id.conv_preview)).setText(r.preview);
             ((TextView) v.findViewById(R.id.conv_time)).setText(r.time);

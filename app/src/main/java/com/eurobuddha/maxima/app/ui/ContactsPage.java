@@ -129,7 +129,7 @@ public final class ContactsPage implements Page {
     private View row(Contact zContact) {
         View v = LayoutInflater.from(mAct)
                 .inflate(R.layout.item_conversation, mContacts, false);
-        ((TextView) v.findViewById(R.id.conv_avatar)).setText(Ui.initial(zContact.name));
+        Avatars.apply(v.findViewById(R.id.conv_avatar), zContact.publicKey, zContact.name);
         ((TextView) v.findViewById(R.id.conv_name)).setText(zContact.name);
         String addr = zContact.primaryAddress();
         ((TextView) v.findViewById(R.id.conv_preview)).setText(
