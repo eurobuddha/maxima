@@ -28,6 +28,7 @@
 
     <!-- the single interactive "accent" is dark grey (FAB, badge, controls) -->
     <color name="ux_accent">#FF2A2E33</color>
+    <color name="ux_accent_press">#FF3B4049</color>
     <color name="ux_accent_glow">#142A2E33</color>
     <color name="ux_on_accent">#FFFFFFFF</color>
     <color name="ux_banner">#14000000</color>

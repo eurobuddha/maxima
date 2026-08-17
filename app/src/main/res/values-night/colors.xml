@@ -23,6 +23,7 @@
 
     <!-- in dark, the accent inverts to light grey so controls (FAB/badge) pop -->
     <color name="ux_accent">#FFE9E9EB</color>
+    <color name="ux_accent_press">#FFCFCFD3</color>
     <color name="ux_accent_glow">#22FFFFFF</color>
     <color name="ux_on_accent">#FF23262B</color>
     <color name="ux_banner">#1AFFFFFF</color>

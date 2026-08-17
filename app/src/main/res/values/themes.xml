@@ -3,6 +3,7 @@
         <item name="android:windowBackground">@color/ux_bg</item>
         <item name="android:textColor">@color/ux_text</item>
         <item name="colorPrimary">@color/ux_accent</item>
+        <item name="colorOnPrimary">@color/ux_on_accent</item>
         <!-- Manrope (the Minima brand font) app-wide. -->
         <item name="android:fontFamily">@font/manrope</item>
         <item name="fontFamily">@font/manrope</item>
