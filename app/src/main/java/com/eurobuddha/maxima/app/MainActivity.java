@@ -65,6 +65,8 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        ((android.widget.FrameLayout) findViewById(R.id.main_glow))
+                .addView(com.eurobuddha.maxima.app.ui.Ui.glowStrip(this));
 
         // targetSdk 35 is edge-to-edge, so the shell must inset itself or the
         // header sits under the clock and the tabs under the nav bar.

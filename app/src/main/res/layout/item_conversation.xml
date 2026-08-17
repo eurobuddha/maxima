@@ -14,11 +14,10 @@
          inventing one would imply a server holding it. -->
     <TextView
         android:id="@+id/conv_avatar"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:background="@drawable/avatar"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
         android:gravity="center"
-        android:textColor="@color/ux_accent"
+        android:textColor="#FFFFFFFF"
         android:textSize="17sp"
         android:textStyle="bold" />
 
@@ -36,18 +35,18 @@
             android:ellipsize="end"
             android:singleLine="true"
             android:textColor="@color/ux_text"
-            android:textSize="15sp"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/conv_preview"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="3dp"
             android:ellipsize="end"
             android:singleLine="true"
             android:textColor="@color/ux_subtext"
-            android:textSize="13sp" />
+            android:textSize="14sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -60,23 +59,24 @@
             android:id="@+id/conv_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:fontFamily="monospace"
             android:textColor="@color/ux_subtext"
-            android:textSize="11sp" />
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/conv_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:layout_marginTop="4dp"
-            android:background="@drawable/pill"
+            android:layout_marginTop="5dp"
+            android:background="@drawable/badge_unread"
             android:minWidth="22dp"
             android:gravity="center"
             android:paddingStart="7dp"
             android:paddingEnd="7dp"
             android:paddingTop="1dp"
             android:paddingBottom="1dp"
-            android:textColor="@color/ux_accent"
+            android:textColor="@color/ux_bubble_out_text"
             android:textSize="11sp"
             android:textStyle="bold"
             android:visibility="gone" />
