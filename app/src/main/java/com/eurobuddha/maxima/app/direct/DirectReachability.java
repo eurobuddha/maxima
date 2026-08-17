@@ -48,6 +48,9 @@ public final class DirectReachability {
 
     public enum State { OFF, MAPPING, PROBING, ADVERTISED }
 
+    /** Why direct is not currently advertised — drives a plain-language suggestion. */
+    public enum Blocker { NONE, CONTRIB_OFF, NEEDS_WIFI, NEEDS_CHARGING, ROUTER_NO_PORT }
+
     /** Re-prove from scratch at most this often, to catch a silently-changed WAN IP. */
     private static final long REPROVE_INTERVAL_MS = 20 * 60 * 1000;
 
@@ -61,6 +64,7 @@ public final class DirectReachability {
     private final ExecutorService mRefresh = Executors.newSingleThreadExecutor(daemon("direct-refresh"));
 
     private volatile State mState = State.OFF;
+    private volatile Blocker mBlocker = Blocker.NONE;
     private volatile String mPublicAddress = "";
     private volatile String mDetail = "not started";
     private volatile boolean mStopping;
@@ -91,9 +95,57 @@ public final class DirectReachability {
         return mDetail;
     }
 
+    /** Why direct is not advertised right now (NONE when advertised). */
+    public Blocker blocker() {
+        return mBlocker;
+    }
+
+    /** The internal port a manual router forward should target. */
+    public int suggestedPort() {
+        return mListenPort;
+    }
+
+    /** The mechanism that opened the port ("natpmp"/"upnp"), or "" if not mapped. */
+    public String via() {
+        PortMapper.Mapping m = mMapping;
+        return m == null ? "" : m.via;
+    }
+
+    /** The public external port, or -1 if not mapped. */
+    public int externalPort() {
+        PortMapper.Mapping m = mMapping;
+        return m == null ? -1 : m.externalPort;
+    }
+
     /** Heartbeat entry. Returns immediately; the work runs on the state thread. */
     public void tick() {
         submit(this::doTick);
+    }
+
+    /**
+     * User-initiated "try now": run map → prove → advertise immediately, bypassing
+     * the charging-to-start gate (still needs Wi-Fi + contribution). Safe to call
+     * from any thread; the work runs on the state thread.
+     */
+    public void reprobe() {
+        mGen++;
+        submit(() -> {
+            if (mStopping) {
+                return;
+            }
+            if (!AndroidContribution.isEnabled(mCtx)) {
+                mBlocker = Blocker.CONTRIB_OFF;
+                mDetail = gateReason();
+                return;
+            }
+            if (!mPolicy.isUnmetered()) {
+                mBlocker = Blocker.NEEDS_WIFI;
+                mDetail = gateReason();
+                return;
+            }
+            withdraw("manual re-check");
+            attempt();
+        });
     }
 
     /**
@@ -131,6 +183,7 @@ public final class DirectReachability {
             if (mState != State.OFF) {
                 withdraw("conditions no longer met");
             }
+            mBlocker = gateBlocker();
             mDetail = gateReason();
             return;
         }
@@ -175,6 +228,7 @@ public final class DirectReachability {
         PortMapper.Mapping m = mMapper.map(mListenPort);
         if (m == null) {
             mState = State.OFF;
+            mBlocker = Blocker.ROUTER_NO_PORT;
             mDetail = "this network has no forwardable public port (staying Tier 1)";
             return;
         }
@@ -208,6 +262,7 @@ public final class DirectReachability {
             mMapper.release(m);
             mMapping = null;
             mState = State.OFF;
+            mBlocker = Blocker.ROUTER_NO_PORT;
             mDetail = "mapped a port but it was not reachable (staying Tier 1)";
             return;
         }
@@ -216,6 +271,7 @@ public final class DirectReachability {
         mPublicAddress = m.externalIp + ":" + m.externalPort;
         mNode.setDirectAddress(mPublicAddress);
         mProvenAtMs = System.currentTimeMillis();
+        mBlocker = Blocker.NONE;
         mState = State.ADVERTISED;
         mDetail = "reachable at " + mPublicAddress + " via " + m.via;
         EventLog.add("DIRECT reachable at " + mPublicAddress + " (" + m.via + ")");
@@ -339,6 +395,19 @@ public final class DirectReachability {
             return false;
         }
         return true;
+    }
+
+    private Blocker gateBlocker() {
+        if (!AndroidContribution.isEnabled(mCtx)) {
+            return Blocker.CONTRIB_OFF;
+        }
+        if (!mPolicy.isUnmetered()) {
+            return Blocker.NEEDS_WIFI;
+        }
+        if (mState == State.OFF && !mPolicy.isCharging()) {
+            return Blocker.NEEDS_CHARGING;
+        }
+        return Blocker.NONE;
     }
 
     private String gateReason() {
