@@ -189,6 +189,8 @@ public final class RelayServer {
          *  traffic to us): a client can be sending us data while never reading
          *  from us, and would still drop us without this. */
         volatile long lastWrite = System.currentTimeMillis();
+        /** When we last re-drained held mail to this conn (periodic delivery). */
+        volatile long lastDrain;
         /** Every route this conn registered, so cleanup removes ALL of them. */
         final java.util.Set<String> routes =
                 java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
@@ -891,10 +893,26 @@ public final class RelayServer {
                 } catch (Exception e) {
                     log("keep-alive write failed conn=" + c.id + " -> reap");
                     cleanup(c);
+                    continue;
                 }
+            }
+            // Periodically re-deliver held mail to a still-attached client.
+            // drainMailbox only fired on a FRESH route registration, so mail
+            // that arrived while the client stayed attached (its socket briefly
+            // half-dead, then healthy) was never pushed - it waited for a
+            // reconnect that swarm relay-switching may send elsewhere. Re-draining
+            // here on a slow cadence closes that gap; the client dedups by msgid,
+            // and an empty mailbox makes this a cheap no-op.
+            if (zNow - c.lastDrain > DRAIN_INTERVAL_MS) {
+                c.lastDrain = zNow;
+                drainMailbox(c, c.routingKey);
             }
         }
     }
+
+    /** How often to re-push held mail to an attached client (slow: mail that is
+     *  already delivered is deduped, so this only matters when mail is waiting). */
+    private static final long DRAIN_INTERVAL_MS = 90_000;
 
     /** How many keep-alive SINGLE_PINGs we have sent (diagnostics / stats). */
     public long keepalivesSent() {
