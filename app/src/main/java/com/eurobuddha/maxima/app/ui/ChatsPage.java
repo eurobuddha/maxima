@@ -45,8 +45,12 @@ public final class ChatsPage implements Page {
     private final View mView;
     private final ListView mList;
     private final TextView mEmpty;
+    private final EditText mSearch;
+    /** Everything render() built; {@link #mRows} is this filtered by the search box. */
+    private final List<Row> mAll = new ArrayList<>();
     private final List<Row> mRows = new ArrayList<>();
     private final Adapter mAdapter = new Adapter();
+    private String mQuery = "";
 
     private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
     private final SimpleDateFormat mDay = new SimpleDateFormat("d MMM", Locale.UK);
@@ -56,9 +60,25 @@ public final class ChatsPage implements Page {
         mView = zView;
         mList = zView.findViewById(R.id.conversations);
         mEmpty = zView.findViewById(R.id.chats_empty);
+        mSearch = zView.findViewById(R.id.chats_search);
         mList.setAdapter(mAdapter);
         mList.setOnItemClickListener((p, v, pos, id) -> open(mRows.get(pos).key));
         zView.findViewById(R.id.btn_new_group).setOnClickListener(v -> newGroup());
+        mSearch.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                mQuery = s.toString().trim().toLowerCase(Locale.UK);
+                applyFilter();
+            }
+        });
     }
 
     @Override
@@ -116,13 +136,33 @@ public final class ChatsPage implements Page {
             }
         }
 
+        mAll.clear();
+        mAll.addAll(rows);
+        applyFilter();
+    }
+
+    /** Show {@link #mAll} filtered by the search box, and the right empty text. */
+    private void applyFilter() {
         mRows.clear();
-        mRows.addAll(rows);
+        if (mQuery.isEmpty()) {
+            mRows.addAll(mAll);
+        } else {
+            for (Row r : mAll) {
+                if (r.name.toLowerCase(Locale.UK).contains(mQuery)
+                        || r.preview.toLowerCase(Locale.UK).contains(mQuery)) {
+                    mRows.add(r);
+                }
+            }
+        }
         mAdapter.notifyDataSetChanged();
 
-        mEmpty.setVisibility(rows.isEmpty() ? View.VISIBLE : View.GONE);
-        mEmpty.setText("No conversations yet.\n\nGo to Contacts, paste someone's "
-                + "Mx…@host:port address and introduce yourself. Or send them yours.");
+        mEmpty.setVisibility(mRows.isEmpty() ? View.VISIBLE : View.GONE);
+        if (!mQuery.isEmpty()) {
+            mEmpty.setText("No chats match “" + mSearch.getText() + "”.");
+        } else {
+            mEmpty.setText("No conversations yet.\n\nGo to Contacts, paste someone's "
+                    + "Mx…@host:port address and introduce yourself. Or send them yours.");
+        }
     }
 
     private static Row blank(String zKey, String zName) {
