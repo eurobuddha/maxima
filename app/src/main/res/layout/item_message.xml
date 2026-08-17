@@ -17,10 +17,10 @@
         android:layout_height="wrap_content"
         android:maxWidth="300dp"
         android:orientation="vertical"
-        android:paddingStart="13dp"
-        android:paddingEnd="13dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="6dp">
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="7dp">
 
         <TextView
             android:id="@+id/bubble_sender"
@@ -47,16 +47,18 @@
             android:id="@+id/bubble_body"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/ux_text"
+            android:lineSpacingMultiplier="1.12"
+            android:textColor="@color/ux_bubble_in_text"
             android:textIsSelectable="true"
-            android:textSize="15sp" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/bubble_meta"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:layout_marginTop="2dp"
-            android:textSize="10sp" />
+            android:layout_marginTop="3dp"
+            android:fontFamily="monospace"
+            android:textSize="11sp" />
     </LinearLayout>
 </LinearLayout>

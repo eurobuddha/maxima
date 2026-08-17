@@ -871,6 +871,19 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return getColor(R.color.ux_subtext);
     }
 
+    /** Meta colour for a SENT bubble - must read on the green fill. Read is the
+     *  blue double-tick, failed is red; everything else is dark ink so the
+     *  timestamp and single ticks stay legible on green. */
+    private int sentMetaColour(String zState) {
+        if (Receipt.FAILED.equals(zState)) {
+            return getColor(R.color.ux_error);
+        }
+        if (Receipt.READ.equals(zState)) {
+            return getColor(R.color.ux_tick_read);
+        }
+        return 0xC00A1F12;   // dark ink at ~75% alpha
+    }
+
     /** A rendered row: a date separator, or a message. */
     private static final class Row {
         static final int DATE = 0, MSG = 1;
@@ -917,11 +930,15 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         h.row.setGravity(e.mine ? Gravity.END : Gravity.START);
         // Tight within a cluster; a clear gap starting each new run.
         h.row.setPadding(dp(12), r.firstInCluster ? dp(7) : dp(1), dp(12), dp(1));
-        // Tail only on the first bubble of a run; the rest fully rounded.
+        // Tail on the LAST bubble of a run (nearest the timestamp, WhatsApp-
+        // style); the rest fully rounded so a run reads as one group.
         int bg = e.mine
-                ? (r.firstInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
-                : (r.firstInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
+                ? (r.lastInCluster ? R.drawable.bubble_out : R.drawable.bubble_out_mid)
+                : (r.lastInCluster ? R.drawable.bubble_in : R.drawable.bubble_in_mid);
         h.bubble.setBackgroundResource(bg);
+        // Dark ink on the green sent bubble; theme text on the grey received one.
+        h.body.setTextColor(getColor(
+                e.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text));
 
         // In a group, name the sender once at the top of their run.
         if (!e.mine && e.isGroup() && r.firstInCluster) {
@@ -950,7 +967,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             String stamp = mTime.format(new Date(e.time));
             if (e.mine) {
                 h.meta.setText(stamp + "  " + ticks(e.state));
-                h.meta.setTextColor(tickColour(e.state));
+                h.meta.setTextColor(sentMetaColour(e.state));
             } else {
                 h.meta.setText(stamp);
                 h.meta.setTextColor(getColor(R.color.ux_subtext));

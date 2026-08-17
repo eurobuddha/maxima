@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sent, mid/last of a cluster: fully rounded, no tail. -->
+<!-- Sent, mid of a run: WhatsApp-green, fully rounded so a run reads as one group. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/ux_bubble_out" />
-    <corners android:radius="16dp" />
-    <stroke android:width="1dp" android:color="#33F7931A" />
+    <corners android:radius="19dp" />
 </shape>
