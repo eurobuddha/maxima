@@ -4,62 +4,89 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.widget.TextView;
 
 /**
- * Identity avatars: a person's initial on a circle whose colour is derived
- * deterministically from their identity, so the same contact wears the same
+ * Identity avatars: a person's initial on a hue-hashed disc, ringed with a faint
+ * accent halo - FreezePeach's avatar look, so the same contact wears the same
  * colour everywhere (list, chat header, group roster) and is recognisable at a
- * glance - the Telegram/Google-Contacts approach, and the "rich colour-per-
- * identity initials" the messenger uses instead of profile photos (nobody has
- * to host your face).
- *
- * Scope note: the app CHROME still uses the family palette in colors.xml. These
- * tones are used ONLY for the avatar circle - a curated, dark-theme-harmonised
- * set, not new UI colours - so the family look is untouched.
+ * glance. No profile photos: nobody has to host your face. The colour is derived
+ * deterministically from the identity so it is stable across sessions and devices.
  */
 public final class Avatars {
 
     private Avatars() {
     }
 
-    /** A curated palette that reads well on the #0A0A0F ground. Avatar-only. */
+    /** FreezePeach's curated 10-hue palette - legible with white text on any
+     *  ground, and deliberately free of muddy green/yellow (which would clash
+     *  with the green send bubble). */
     private static final int[] TONES = {
-            0xFFE17076, 0xFFEDA86C, 0xFFA695E7, 0xFF7BC862, 0xFF6EC9CB, 0xFF65AADD,
-            0xFFEE7AAE, 0xFFD4A055, 0xFF7E85D8, 0xFF5EC199, 0xFFC86F9E, 0xFF66B37A
+            0xFF4C82FF, 0xFF6C6CF0, 0xFF9B6CFF, 0xFFC964D8, 0xFFE8618F,
+            0xFFFF6B6B, 0xFFF2954B, 0xFF2BAEB0, 0xFF3EB6E8, 0xFF7E8AA0
     };
 
-    /** Stable colour for an identity key. */
+    /** The faint ring around every avatar: Bitcoin-orange accent at ~70% alpha. */
+    private static final int RING = 0xB3F7931A;
+
+    /** Stable colour for an identity key - mirrors FreezePeach's picker: for a
+     *  hex pubkey take chars 2..6, else hash the string. */
     public static int colour(String zKey) {
-        if (zKey == null || zKey.isEmpty()) {
-            return TONES[0];
+        int v;
+        if (zKey != null && zKey.length() >= 6) {
+            try {
+                v = Integer.parseInt(zKey.substring(2, 6), 16);
+            } catch (Exception e) {
+                v = zKey.hashCode();
+            }
+        } else {
+            v = zKey == null ? 0 : zKey.hashCode();
         }
-        int h = 0;
-        for (int i = 0; i < zKey.length(); i++) {
-            h = h * 31 + zKey.charAt(i);
-        }
-        return TONES[Math.floorMod(h, TONES.length)];
+        return TONES[Math.abs(v) % TONES.length];
+    }
+
+    private static int dp(float zDp) {
+        return Math.round(zDp * android.content.res.Resources.getSystem()
+                .getDisplayMetrics().density);
     }
 
     /**
      * Paint an avatar TextView: the identity's initial (white) on its
-     * identity-coloured circle. {@code zKey} drives the colour (the stable
-     * identity pubkey / group id); {@code zName} drives the letter.
+     * identity-coloured disc, inside a faint accent ring. {@code zKey} drives
+     * the colour (the stable identity pubkey / group id); {@code zName} drives
+     * the letter.
      */
     public static void apply(TextView zAvatar, String zKey, String zName) {
         zAvatar.setText(Ui.initial(zName));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(colour(zKey));
-        zAvatar.setBackground(bg);
+        zAvatar.setBackground(ringed(colour(zKey)));
         zAvatar.setTextColor(0xFFFFFFFF);
+    }
+
+    /** An oval hue disc set inside a hairline accent ring, with a small gap. */
+    private static Drawable ringed(int zDisc) {
+        GradientDrawable ring = new GradientDrawable();
+        ring.setShape(GradientDrawable.OVAL);
+        ring.setColor(Color.TRANSPARENT);
+        ring.setStroke(dp(1.5f), RING);
+
+        GradientDrawable disc = new GradientDrawable();
+        disc.setShape(GradientDrawable.OVAL);
+        disc.setColor(zDisc);
+
+        LayerDrawable ld = new LayerDrawable(new Drawable[]{ring, disc});
+        int gap = dp(3);
+        ld.setLayerInset(1, gap, gap, gap, gap);
+        return ld;
     }
 
     /**
      * The same avatar as a round bitmap, for surfaces that take an image rather
-     * than a view - notification {@code Person} icons, most of all. {@code zPx}
-     * is the pixel diameter.
+     * than a view - notification {@code Person} icons, most of all. Disc only:
+     * the system masks large icons to a circle, which would clip a ring.
+     * {@code zPx} is the pixel diameter.
      */
     public static Bitmap bitmap(String zKey, String zName, int zPx) {
         Bitmap bmp = Bitmap.createBitmap(zPx, zPx, Bitmap.Config.ARGB_8888);
@@ -72,8 +99,7 @@ public final class Avatars {
         text.setColor(Color.WHITE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setFakeBoldText(true);
-        text.setTextSize(zPx * 0.44f);
-        // Centre the glyph on the disc's vertical middle.
+        text.setTextSize(zPx * 0.42f);
         Paint.FontMetrics fm = text.getFontMetrics();
         float baseline = r - (fm.ascent + fm.descent) / 2f;
         c.drawText(Ui.initial(zName), r, baseline, text);
