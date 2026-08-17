@@ -51,6 +51,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private TextView mSubtitle;
     private TextView mTitle;
     private TextView mAvatar;
+    private TextView mScrollBottom;
     private Adapter mAdapter;
     /** Sending always scrolls to your own message, even from up the history. */
     private boolean mLastSendWasMine;
@@ -104,6 +105,19 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mList.setAdapter(mAdapter);
         ((androidx.recyclerview.widget.SimpleItemAnimator) mList.getItemAnimator())
                 .setSupportsChangeAnimations(false);   // don't flash a bubble on a tick change
+
+        mScrollBottom = findViewById(R.id.btn_scroll_bottom);
+        mScrollBottom.setOnClickListener(v -> {
+            if (!mRows.isEmpty()) {
+                mList.smoothScrollToPosition(mRows.size() - 1);
+            }
+        });
+        mList.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView rv, int dx, int dy) {
+                updateScrollFab();
+            }
+        });
 
         findViewById(R.id.btn_chat_send).setOnClickListener(v -> send());
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
@@ -403,6 +417,18 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             mList.scrollToPosition(mRows.size() - 1);
         }
         mLastSendWasMine = false;
+        mList.post(this::updateScrollFab);
+    }
+
+    /** Show the jump-to-latest button only while scrolled up the history. */
+    private void updateScrollFab() {
+        LinearLayoutManager lm = (LinearLayoutManager) mList.getLayoutManager();
+        if (lm == null || mScrollBottom == null) {
+            return;
+        }
+        boolean atBottom = mRows.isEmpty()
+                || lm.findLastVisibleItemPosition() >= mRows.size() - 1;
+        mScrollBottom.setVisibility(atBottom ? View.GONE : View.VISIBLE);
     }
 
     /** Two messages cluster if the same sender sent them close in time on the
