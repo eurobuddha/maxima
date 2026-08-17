@@ -150,6 +150,16 @@ public final class MaximaWallet {
         return new PrefsKeyUses(zCtx, activeNamespace(zCtx)).currentUses(KEY_INDEX);
     }
 
+    /**
+     * Reconcile the active seed's key-use counter UPWARD to at least {@code zN}
+     * - raise-only. For correcting a counter that under-reports real signatures
+     * so a later signature cannot reuse a spent one-time leaf. Lands in exactly
+     * the namespace {@link #uses} reads and {@link #open} signs under.
+     */
+    public static void setUsesAtLeast(Context zCtx, int zN) {
+        new PrefsKeyUses(zCtx, activeNamespace(zCtx)).raiseTo(KEY_INDEX, zN);
+    }
+
     // ---------------------------------------------------------------
     // custom wallet phrase (optional compartmentalisation)
     // ---------------------------------------------------------------

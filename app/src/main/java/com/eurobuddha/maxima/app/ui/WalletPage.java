@@ -241,6 +241,43 @@ public final class WalletPage implements Page {
         return s.isEmpty() ? "0" : s;
     }
 
+    /** Reconcile the key-use counter UPWARD (raise-only) - for correcting a
+     *  counter that under-reports how many times this key has really signed. */
+    private void adjustUses() {
+        MaximaWallet w = mWallet;
+        final int cur = w == null ? 0 : w.uses(mAct);
+        final EditText input = new EditText(mAct);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        input.setText("10");
+        new androidx.appcompat.app.AlertDialog.Builder(mAct)
+                .setTitle("Set key-use count")
+                .setMessage("Currently " + cur + ". Set this to AT LEAST the number of times this "
+                        + "seed's key #1000 has ever signed, anywhere.\n\n⚠ You can only raise it. "
+                        + "Setting it too LOW would reuse a one-time signing key and could lose "
+                        + "funds, so a value at or below the current count is ignored.")
+                .setView(input)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Set", (d, wc) -> {
+                    int n;
+                    try {
+                        n = Integer.parseInt(input.getText().toString().trim());
+                    } catch (Exception e) {
+                        mAct.toast("Enter a number");
+                        return;
+                    }
+                    if (n <= cur) {
+                        mAct.toast("Ignored - can only raise above " + cur);
+                        return;
+                    }
+                    MaximaWallet.setUsesAtLeast(mAct, n);
+                    if (mWallet != null) {
+                        renderUses(mWallet);
+                    }
+                    mAct.toast("Key-use count set to " + n);
+                })
+                .show();
+    }
+
     /** The prominent key-use figure: signatures spent, and how many remain. */
     private void renderUses(MaximaWallet w) {
         int used = w.uses(mAct);
@@ -365,6 +402,11 @@ public final class WalletPage implements Page {
         kc.addView(mUsesBig);
         mUses = sub("of " + KEY_TOTAL + " signatures");
         kc.addView(mUses);
+        // Long-press to reconcile the counter (raise-only) if it under-reports.
+        kc.setOnLongClickListener(v -> {
+            adjustUses();
+            return true;
+        });
         mBox.addView(kc, pad());
 
         // receive card

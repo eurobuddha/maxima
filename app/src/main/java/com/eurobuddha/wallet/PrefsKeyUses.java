@@ -66,6 +66,29 @@ public class PrefsKeyUses implements KeyUses {
         return Math.max(a, b);
     }
 
+    /**
+     * Reconcile the counter UPWARD to at least {@code zValue} - raise-only, never
+     * lower. Used to correct a counter that under-reports how many times this
+     * key has actually signed (anywhere), so the next {@link #reserveNextUse}
+     * cannot re-issue an already-spent one-time leaf. Lowering is refused because
+     * it is the one dangerous direction (it would reuse a leaf and expose the
+     * key). Returns the resulting count. Persisted to both mirrors with commit().
+     */
+    public synchronized int raiseTo(int zKeyIndex, int zValue) {
+        int cur = currentUses(zKeyIndex);
+        if (zValue <= cur) {
+            return cur;   // never lower
+        }
+        boolean okA = mMirrorA.edit().putInt(key(zKeyIndex), zValue).commit();
+        boolean okB = mMirrorB.edit().putInt(key(zKeyIndex), zValue).commit();
+        if (!okA || !okB) {
+            throw new IllegalStateException(
+                "KeyUses: failed to persist raiseTo for key " + zKeyIndex
+                    + " (mirrorA=" + okA + ", mirrorB=" + okB + ")");
+        }
+        return zValue;
+    }
+
     @Override
     public synchronized int reserveNextUse(int zKeyIndex) {
         int n = currentUses(zKeyIndex);
