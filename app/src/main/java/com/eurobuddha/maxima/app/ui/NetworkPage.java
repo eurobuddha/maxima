@@ -537,9 +537,20 @@ public final class NetworkPage implements Page {
                         "It'll start on its own once charging.", null, null);
             }
             if (b == DirectReachability.Blocker.ROUTER_NO_PORT) {
+                String ip = MaximaService.localIp();
+                String where = ip.isEmpty() ? "this phone" : ip;
                 return fixBlock("Your router didn't open a port",
-                        "Enable UPnP/NAT-PMP in your router, or forward TCP "
-                                + (port > 0 ? port : "?") + " to this phone.", null, null);
+                        "Enable UPnP/NAT-PMP in your router, or add a manual rule: forward TCP "
+                                + (port > 0 ? port : "?") + " to " + where
+                                + (ip.isEmpty() ? "" : " (this phone) — tap to copy the IP."),
+                        ip.isEmpty() ? null : "Copy IP",
+                        ip.isEmpty() ? null : () -> {
+                            ((android.content.ClipboardManager) mAct.getSystemService(
+                                    android.content.Context.CLIPBOARD_SERVICE))
+                                    .setPrimaryClip(android.content.ClipData.newPlainText(
+                                            "maxima-lan-ip", ip));
+                            mAct.toast("Copied " + ip);
+                        });
             }
             return null;
         }

@@ -108,6 +108,12 @@ public final class MaximaService extends Service {
         return sRelay;
     }
 
+    /** This phone's local Wi-Fi/LAN IPv4 (e.g. 192.168.1.42), or "" — the
+     *  destination a manual router port-forward rule points at. */
+    public static String localIp() {
+        return siteLocalIp();
+    }
+
     @Override
     public IBinder onBind(Intent intent) {
         return null;
