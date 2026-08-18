@@ -4,9 +4,10 @@ plugins {
     id 'org.beryx.runtime' version '1.13.1'
 }
 
-// A fresh artifact line. macOS jpackage requires a major version >= 1, so start
-// the packaged app at 1.0.0 (independent of the relay protocol version).
-version = '1.0.1'
+// A fresh artifact line. macOS jpackage requires a major version >= 1
+// (independent of the relay protocol version). 1.1.0 adds the windowed chat
+// client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
+version = '1.1.0'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
@@ -64,8 +65,10 @@ runtime {
         installerName = 'MaximaNode'
         appVersion = project.version
 
-        // JVM args the launched app runs with (tray + macOS menu-bar accessory).
-        jvmArgs = ['-Djava.awt.headless=false', '-Dapple.awt.UIElement=true']
+        // JVM args the launched app runs with. The default is now the windowed
+        // chat client, so do NOT force the macOS menu-bar-accessory flag (it hides
+        // the Dock icon); relay mode still shows its tray icon regardless.
+        jvmArgs = ['-Djava.awt.headless=false']
 
         if (os.macOsX) {
             installerType = 'dmg'

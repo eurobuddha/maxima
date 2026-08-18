@@ -1,3 +1,24 @@
+# The desktop app — chat client + set-and-forget relay
+
+> **Two personalities, one binary, one identity seed.** As of desktop 1.1.0 the
+> app has two modes, chosen automatically at launch:
+>
+> - **Windowed chat client** (default, on any machine with a display) — a full
+>   Maxima messenger with the phone's five tabs (Chats, Contacts, Wallet,
+>   Network, Settings) and its greyscale look and feel. Backed by the same
+>   `:core` `MaximaNode` + `ChatEngine` the Android app runs in `MaximaService`
+>   (`desktop/.../ui/DesktopNode`), rendered in pure Swing (`Theme`, `DKit`,
+>   `MaximaWindow`, and the five `*Panel` classes). Photos in chat are supported
+>   (attach + inline render off the self-hosted media mesh). The Wallet tab shows
+>   the seed-backed identity honestly — a desktop install bundles no Minima node
+>   yet, so it never shows a fake balance.
+> - **Relay + tray** (headless boxes, or `--relay` / `MAXIMA_RELAY=1`) — the
+>   set-and-forget forwarding relay described below, unchanged.
+>
+> Both share the machine's identity seed under the data dir, so the desktop is
+> one identity whether it is chatting or relaying. The rest of this document
+> describes the relay personality.
+
 # The desktop node — set-and-forget relays for everyone
 
 More relays is the whole ballgame: decentralisation is bottlenecked on relay
