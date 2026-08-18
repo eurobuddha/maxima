@@ -955,6 +955,14 @@ public final class NetworkPage implements Page {
         cCard.addView(mContrib);
         mBox.addView(cCard, k.mb(k.dp(4)));
 
+        // Direct reachability (above Location service).
+        mBox.addView(k.sectionLabel("Direct reachability · a public address when possible"));
+        LinearLayout dCard = k.card();
+        mDirect = new LinearLayout(mAct);
+        mDirect.setOrientation(LinearLayout.VERTICAL);
+        dCard.addView(mDirect);
+        mBox.addView(dCard, k.mb(k.dp(4)));
+
         // Location service.
         mBox.addView(k.sectionLabel("Location service · finds you when you move"));
         LinearLayout mCard = k.card();
@@ -973,14 +981,6 @@ public final class NetworkPage implements Page {
         mCard.addView(mlsBtn);
         mlsBtn.setOnClickListener(v -> pinMls());
         mBox.addView(mCard, k.mb(k.dp(4)));
-
-        // Direct reachability.
-        mBox.addView(k.sectionLabel("Direct reachability · a public address when possible"));
-        LinearLayout dCard = k.card();
-        mDirect = new LinearLayout(mAct);
-        mDirect.setOrientation(LinearLayout.VERTICAL);
-        dCard.addView(mDirect);
-        mBox.addView(dCard, k.mb(k.dp(4)));
 
         // Event log.
         LinearLayout logHead = new LinearLayout(mAct);
