@@ -57,7 +57,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.setBorder(new EmptyBorder(20, 22, 22, 22));
         buildScaffold();
 
-        JScrollPane sp = new JScrollPane(holder(k.centered(mBody, 720)),
+        JScrollPane sp = new JScrollPane(new DKit.ScrollableColumn(k.centered(mBody, 720)),
                 ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
                 ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         sp.setBorder(null);

@@ -300,6 +300,28 @@ public final class DKit {
         }
     }
 
+    /**
+     * The scroll view for a page: holds a top-anchored body and FORCES its width to
+     * the scroll viewport's width. Without this, a long child (a WrapText key/address)
+     * inflates the view's preferred width and — with the horizontal scrollbar off —
+     * the content is clipped at the window's right edge instead of wrapping to it.
+     * Tracks width (no horizontal overflow), not height (grows → vertical scroll).
+     */
+    public static final class ScrollableColumn extends JPanel implements javax.swing.Scrollable {
+        public ScrollableColumn(JComponent body) {
+            super(new java.awt.BorderLayout());
+            setOpaque(false);
+            add(body, java.awt.BorderLayout.NORTH);
+        }
+        public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) { return 16; }
+        public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d) {
+            return o == javax.swing.SwingConstants.VERTICAL ? r.height : r.width;
+        }
+        public boolean getScrollableTracksViewportWidth() { return true; }
+        public boolean getScrollableTracksViewportHeight() { return false; }
+    }
+
     /** A panel that paints a rounded, anti-aliased filled background. */
     public static final class RoundPanel extends JPanel {
         private Color fill;
