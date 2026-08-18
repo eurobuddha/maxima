@@ -9,6 +9,8 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -19,25 +21,31 @@ import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 
 /**
- * The desktop chat window — a left navigation rail (Chats, Contacts, Wallet,
- * Network, Settings) and a card-switched content area, painted from the shared
- * {@link Theme} to match the phone's five tabs and greyscale look. A 2-second
- * heartbeat refreshes the visible tab, exactly like the Android {@code MainActivity}.
+ * The desktop chat window — a faithful recreation of the phone shell: a top app
+ * bar ("Maxima" + version + live status pill + theme toggle) and a fixed 5-tab
+ * strip over the five pages, all painted from the shared {@link Theme}. No left
+ * rail. The window reflows from full-screen down to ~360px; panels that care about
+ * width implement {@link Responsive} and are told the content width on every resize
+ * and tab switch. A 2-second heartbeat refreshes the visible tab, like the phone's
+ * {@code MainActivity}.
  */
 public final class MaximaWindow {
 
-    /** Every tab is a panel that can repaint itself from current node state. */
+    /** Every tab is a page that can repaint itself from current node state. */
     public interface Tab {
         String label();
         JComponent view();
-        /** Rebuild from current state (called on show + on the 2s heartbeat). */
         void refresh();
+    }
+
+    /** Panels that reflow implement this to receive the live content width. */
+    public interface Responsive {
+        void onWidth(int contentWidth);
     }
 
     private final JFrame mFrame;
@@ -48,10 +56,14 @@ public final class MaximaWindow {
     private final CardLayout mCards = new CardLayout();
     private final JPanel mContent = new JPanel(mCards);
     private final List<Tab> mTabs = new ArrayList<>();
-    private final List<NavItem> mNav = new ArrayList<>();
+    private TabStrip mStrip;
     private int mSelected = 0;
+
     private final Timer mBeat;
     private final Runnable mChangeHook;
+
+    private JLabel mStatusText;
+    private StatusDot mStatusDot;
 
     public MaximaWindow(DesktopNode zNode, Theme zTheme) {
         mNode = zNode;
@@ -60,14 +72,13 @@ public final class MaximaWindow {
 
         mFrame = new JFrame("Maxima");
         mFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        mFrame.setMinimumSize(new Dimension(960, 640));
-        mFrame.setSize(1100, 720);
+        mFrame.setMinimumSize(new Dimension(360, 560));   // phone-narrow floor
+        mFrame.setSize(1040, 720);
         mFrame.setLocationRelativeTo(null);
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(t.bg);
 
-        // Build the five tabs.
         mTabs.add(new ChatsPanel(mNode, t));
         mTabs.add(new ContactsPanel(mNode, t));
         mTabs.add(new WalletPanel(mNode, t));
@@ -79,46 +90,46 @@ public final class MaximaWindow {
         }
         mContent.setBackground(t.bg);
 
-        root.add(buildRail(), BorderLayout.WEST);
+        // Header block: app bar + tab strip, both on the header color.
+        JPanel header = new JPanel();
+        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        header.setBackground(t.header);
+        header.add(buildAppBar());
+        String[] labels = new String[mTabs.size()];
+        for (int i = 0; i < mTabs.size(); i++) labels[i] = mTabs.get(i).label();
+        mStrip = new TabStrip(labels, t, this::select);
+        header.add(mStrip);
+
+        root.add(header, BorderLayout.NORTH);
         root.add(mContent, BorderLayout.CENTER);
         mFrame.setContentPane(root);
 
+        // Responsive: tell the visible panel the content width on resize.
+        mContent.addComponentListener(new ComponentAdapter() {
+            public void componentResized(ComponentEvent e) { pushWidth(); }
+        });
+
         select(0);
 
-        // Heartbeat: refresh the visible tab every 2s (mirrors the phone).
         mBeat = new Timer(2000, e -> {
-            Tab vis = mTabs.get(mSelected);
-            try { vis.refresh(); } catch (Exception ignored) { }
-            for (NavItem n : mNav) { n.repaint(); }
+            try { mTabs.get(mSelected).refresh(); } catch (Exception ignored) { }
+            refreshStatus();
         });
         mBeat.start();
 
-        // Node change events also nudge the visible tab immediately.
         mChangeHook = () -> SwingUtilities.invokeLater(() -> {
             try { mTabs.get(mSelected).refresh(); } catch (Exception ignored) { }
-            for (NavItem n : mNav) { n.repaint(); }
+            refreshStatus();
         });
         mNode.addChangeListener(mChangeHook);
     }
 
-    public void show() {
-        mFrame.setVisible(true);
-    }
+    public void show() { mFrame.setVisible(true); }
+    public JFrame frame() { return mFrame; }
+    public DesktopNode node() { return mNode; }
 
-    public JFrame frame() {
-        return mFrame;
-    }
-
-    public DesktopNode node() {
-        return mNode;
-    }
-
-    /** Rebuild the whole window under a new light/dark palette, preserving the
-     *  frame geometry. The node is reused, so no reconnect. */
+    /** Rebuild the whole window under a new palette, preserving geometry; no reconnect. */
     public void switchTheme(Theme.Mode m) {
-        // Tear down THIS window's heartbeat + change hook before building the new
-        // one, or every toggle leaks a live 2s timer and listener firing on a
-        // disposed frame.
         mBeat.stop();
         mNode.removeChangeListener(mChangeHook);
         MaximaWindow w = new MaximaWindow(mNode, new Theme(m));
@@ -128,139 +139,192 @@ public final class MaximaWindow {
         mFrame.dispose();
     }
 
-    // ---- rail ----
+    // ---- app bar ----
 
-    private JComponent buildRail() {
-        JPanel rail = new JPanel();
-        rail.setLayout(new BoxLayout(rail, BoxLayout.Y_AXIS));
-        rail.setBackground(t.header);
-        rail.setBorder(new EmptyBorder(18, 12, 18, 12));
-        rail.setPreferredSize(new Dimension(196, 10));
+    private JComponent buildAppBar() {
+        JPanel bar = new JPanel();
+        bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+        bar.setBackground(t.header);
+        bar.setBorder(new EmptyBorder(14, 16, 12, 10));
+        bar.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel brand = new JLabel("maxima");
-        brand.setFont(t.extrabold(18f));
+        JLabel brand = new JLabel("Maxima");
+        brand.setFont(t.extrabold(22f));
         brand.setForeground(t.onHeader);
-        brand.setBorder(new EmptyBorder(2, 8, 18, 8));
-        brand.setAlignmentX(Component.LEFT_ALIGNMENT);
-        rail.add(brand);
+        bar.add(brand);
 
-        String[] labels = {"Chats", "Contacts", "Wallet", "Network", "Settings"};
-        for (int i = 0; i < labels.length; i++) {
-            NavItem n = new NavItem(i, labels[i]);
-            mNav.add(n);
-            rail.add(n);
-            rail.add(k.vgap(4));
-        }
-        return rail;
+        JLabel ver = new JLabel("v" + com.eurobuddha.maxima.desktop.DesktopMain.APP_VERSION);
+        ver.setFont(t.font(11f));
+        ver.setForeground(DKit.alpha(t.onHeader, 150));
+        ver.setBorder(new EmptyBorder(6, 7, 0, 0));
+        bar.add(ver);
+
+        bar.add(javax.swing.Box.createHorizontalGlue());
+
+        // Live status pill (dot + text), like the phone header_pill.
+        DKit.RoundPanel statusPill = new DKit.RoundPanel(DKit.alpha(t.onHeader, 28), 999);
+        statusPill.setLayout(new BoxLayout(statusPill, BoxLayout.X_AXIS));
+        statusPill.setBorder(new EmptyBorder(5, 10, 5, 11));
+        mStatusDot = new StatusDot();
+        statusPill.add(mStatusDot);
+        statusPill.add(javax.swing.Box.createRigidArea(new Dimension(6, 0)));
+        mStatusText = new JLabel("starting…");
+        mStatusText.setFont(t.medium(11f));
+        mStatusText.setForeground(t.onHeader);
+        statusPill.add(mStatusText);
+        statusPill.setMaximumSize(statusPill.getPreferredSize());
+        bar.add(statusPill);
+
+        bar.add(javax.swing.Box.createRigidArea(new Dimension(6, 0)));
+
+        // Theme toggle (sun/moon), drawn as a vector so it never renders as tofu.
+        Icons.Btn theme = new Icons.Btn(t.mode == Theme.Mode.DARK ? Icons.SUN : Icons.MOON,
+                t.onHeader, DKit.alpha(t.onHeader, 24), 38, 20, 1.6f);
+        theme.onClick(() -> {
+            Theme.Mode next = t.mode == Theme.Mode.DARK ? Theme.Mode.LIGHT : Theme.Mode.DARK;
+            java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop")
+                    .put("appearance", next == Theme.Mode.DARK ? "dark" : "light");
+            switchTheme(next);
+        });
+        bar.add(theme);
+        return bar;
     }
 
     void select(int i) {
         mSelected = i;
         mCards.show(mContent, String.valueOf(i));
+        if (mStrip != null) mStrip.setSelected(i);
         try { mTabs.get(i).refresh(); } catch (Exception ignored) { }
-        for (NavItem n : mNav) { n.repaint(); }
+        pushWidth();
     }
 
-    /** A single rail entry: drawn icon + label, selected state highlighted. Shows
-     *  an unread badge on the Chats item. */
-    private final class NavItem extends JPanel {
-        private final int index;
-        private final String text;
-        private boolean hover;
+    private void pushWidth() {
+        int w = mContent.getWidth();
+        if (w <= 0) return;
+        Tab vis = mTabs.get(mSelected);
+        if (vis instanceof Responsive) {
+            ((Responsive) vis).onWidth(w);
+        }
+    }
 
-        NavItem(int i, String label) {
-            index = i;
-            text = label;
-            setOpaque(false);
-            setAlignmentX(Component.LEFT_ALIGNMENT);
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-            setPreferredSize(new Dimension(170, 44));
+    private void refreshStatus() {
+        if (mStatusText == null) return;
+        int hosts = 0;
+        try { hosts = mNode.node().pool().activeCount(); } catch (Exception ignored) { }
+        boolean ok = hosts > 0;
+        mStatusText.setText(ok ? (hosts + (hosts == 1 ? " host" : " hosts")) : "offline");
+        mStatusDot.setColor(ok ? t.success : t.error);
+    }
+
+    // ---- widgets ----
+
+    private final class StatusDot extends JComponent {
+        private Color c = t.pending;
+        StatusDot() { setPreferredSize(new Dimension(8, 8)); setMaximumSize(new Dimension(8, 8)); }
+        void setColor(Color zc) { c = zc; repaint(); }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(c);
+            g2.fillOval(0, 0, 8, 8);
+            g2.dispose();
+        }
+    }
+
+    /** A round-hover icon button for the app bar. */
+    static final class IconButton extends JLabel {
+        private boolean hover;
+        private Runnable action;
+        private final Theme theme;
+        IconButton(String glyph, Theme t) {
+            super(glyph, javax.swing.SwingConstants.CENTER);
+            theme = t;
+            setFont(t.medium(17f));
+            setForeground(t.onHeader);
+            setPreferredSize(new Dimension(38, 38));
+            setMaximumSize(new Dimension(38, 38));
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             addMouseListener(new MouseAdapter() {
                 public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
                 public void mouseExited(MouseEvent e) { hover = false; repaint(); }
-                public void mouseClicked(MouseEvent e) { select(index); }
+                public void mouseClicked(MouseEvent e) { if (action != null) action.run(); }
             });
         }
+        IconButton onClick(Runnable r) { action = r; return this; }
+        protected void paintComponent(Graphics g) {
+            if (hover) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(DKit.alpha(theme.onHeader, 24));
+                g2.fillOval(3, 3, getWidth() - 6, getHeight() - 6);
+                g2.dispose();
+            }
+            super.paintComponent(g);
+        }
+    }
+
+    /** The 5-tab strip: fixed tabs, underline indicator (not full width), on the header color. */
+    static final class TabStrip extends JComponent {
+        private final String[] labels;
+        private int selected;
+        private int hover = -1;
+        private final Theme theme;
+        private final java.util.function.IntConsumer onPick;
+
+        TabStrip(String[] zLabels, Theme t, java.util.function.IntConsumer zOnPick) {
+            labels = zLabels;
+            theme = t;
+            onPick = zOnPick;
+            setPreferredSize(new Dimension(400, 44));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+            setAlignmentX(Component.LEFT_ALIGNMENT);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                public void mouseExited(MouseEvent e) { hover = -1; repaint(); }
+                public void mouseClicked(MouseEvent e) {
+                    int seg = segAt(e.getX());
+                    if (seg >= 0 && onPick != null) onPick.accept(seg);
+                }
+            });
+            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                public void mouseMoved(MouseEvent e) {
+                    int s = segAt(e.getX());
+                    if (s != hover) { hover = s; repaint(); }
+                }
+            });
+        }
+
+        private int segAt(int x) {
+            int n = labels.length;
+            if (n == 0 || getWidth() <= 0) return -1;
+            int seg = x * n / getWidth();
+            return Math.max(0, Math.min(n - 1, seg));
+        }
+
+        void setSelected(int i) { selected = i; repaint(); }
 
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            boolean sel = index == mSelected;
-            if (sel || hover) {
-                g2.setColor(sel ? DKit.alpha(t.onHeader, sel ? 38 : 20)
-                        : DKit.alpha(t.onHeader, 16));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
-            }
-            int cx = 22;
-            int cy = getHeight() / 2;
-            drawIcon(g2, index, cx, cy, sel);
-
-            g2.setFont(sel ? t.semibold(13.5f) : t.medium(13.5f));
-            g2.setColor(sel ? t.onHeader : DKit.alpha(t.onHeader, 200));
-            java.awt.FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(text, 44, cy + fm.getAscent() / 2 - 2);
-
-            if (index == 0) {
-                int unread = safeUnread();
-                if (unread > 0) {
-                    String s = unread > 99 ? "99+" : String.valueOf(unread);
-                    g2.setFont(t.bold(10.5f));
-                    java.awt.FontMetrics bm = g2.getFontMetrics();
-                    int bw = bm.stringWidth(s) + 12;
-                    int bx = getWidth() - bw - 10;
-                    g2.setColor(t.error);
-                    g2.fillRoundRect(bx, cy - 9, bw, 18, 18, 18);
-                    g2.setColor(Color.WHITE);
-                    g2.drawString(s, bx + 6, cy + bm.getAscent() / 2 - 1);
+            int w = getWidth(), h = getHeight(), n = labels.length;
+            int segW = w / Math.max(1, n);
+            for (int i = 0; i < n; i++) {
+                boolean sel = i == selected;
+                g2.setFont(sel ? theme.semibold(13f) : theme.medium(13f));
+                g2.setColor(sel ? theme.onHeader
+                        : (i == hover ? DKit.alpha(theme.onHeader, 210) : DKit.alpha(theme.onHeader, 150)));
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                int lx = i * segW + (segW - fm.stringWidth(labels[i])) / 2;
+                int ly = (h + fm.getAscent()) / 2 - 4;
+                g2.drawString(labels[i], lx, ly);
+                if (sel) {
+                    int iw = Math.min(segW - 24, fm.stringWidth(labels[i]) + 14);
+                    int ix = i * segW + (segW - iw) / 2;
+                    g2.setColor(theme.onHeader);
+                    g2.fillRoundRect(ix, h - 3, iw, 3, 3, 3);
                 }
             }
             g2.dispose();
         }
-
-        private int safeUnread() {
-            try {
-                return mNode.chat().totalUnread();
-            } catch (Exception e) {
-                return 0;
-            }
-        }
     }
-
-    /** Minimal, hand-drawn line icons — no stock glyph set, matching the phone's
-     *  custom icon ethos. */
-    private void drawIcon(Graphics2D g2, int i, int cx, int cy, boolean sel) {
-        Color c = sel ? t.onHeader : DKit.alpha(t.onHeader, 200);
-        g2.setColor(c);
-        g2.setStroke(new java.awt.BasicStroke(1.7f, java.awt.BasicStroke.CAP_ROUND,
-                java.awt.BasicStroke.JOIN_ROUND));
-        int s = 8;
-        switch (i) {
-            case 0: // Chats — speech bubble
-                g2.drawRoundRect(cx - s, cy - s + 1, s * 2, (int) (s * 1.5), 6, 6);
-                g2.drawLine(cx - 3, cy + s - 1, cx - 6, cy + s + 3);
-                break;
-            case 1: // Contacts — person
-                g2.drawOval(cx - 4, cy - s, 8, 8);
-                g2.drawArc(cx - s, cy + 1, s * 2, s * 2, 0, 180);
-                break;
-            case 2: // Wallet — card
-                g2.drawRoundRect(cx - s, cy - 6, s * 2, 12, 4, 4);
-                g2.drawLine(cx - s, cy - 1, cx + s, cy - 1);
-                break;
-            case 3: // Network — nodes
-                g2.drawOval(cx - s, cy - s, 5, 5);
-                g2.drawOval(cx + 3, cy - 2, 5, 5);
-                g2.drawOval(cx - 3, cy + 3, 5, 5);
-                g2.drawLine(cx - s + 3, cy - s + 3, cx + 5, cy);
-                g2.drawLine(cx - 1, cy + 5, cx + 5, cy);
-                break;
-            default: // Settings — gear-ish
-                g2.drawOval(cx - 6, cy - 6, 12, 12);
-                g2.drawOval(cx - 2, cy - 2, 4, 4);
-        }
-    }
-
-    // silence unused
-    static final int UNUSED = SwingConstants.CENTER;
 }

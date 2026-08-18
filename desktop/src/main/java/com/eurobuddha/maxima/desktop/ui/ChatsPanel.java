@@ -3,15 +3,16 @@ package com.eurobuddha.maxima.desktop.ui;
 import com.eurobuddha.maxima.core.chat.ChatEngine;
 import com.eurobuddha.maxima.core.chat.ChatMedia;
 import com.eurobuddha.maxima.core.chat.ChatPay;
-import com.eurobuddha.maxima.core.chat.Group;
 import com.eurobuddha.maxima.core.contacts.Contact;
 import com.eurobuddha.maxima.core.media.MediaManifest;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -26,35 +27,48 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTextField;
+import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.ScrollPaneConstants;
-import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 
 /**
- * The Chats tab: a conversation list on the left and the open conversation on the
- * right (message bubbles + a send bar), mirroring the phone's chat list + chat
- * screen in one desktop-native split view.
+ * The Chats tab — a faithful desktop recreation of the phone's chat list + chat
+ * screen. Responsive: a two-pane list+conversation when the window is wide,
+ * collapsing to a single phone-style column (list → open conversation → back)
+ * when narrow. The conversation carries the phone's message bubbles (reflowing,
+ * payment + media aware, delivery/read ticks) and the phone's input bar: an
+ * attach button, an emoji picker, a wrapping text field, and a circular send FAB.
  */
-public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
+public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, MaximaWindow.Responsive {
+
+    private static final int NARROW = 640;   // below this, single-column phone mode
 
     private final DesktopNode node;
     private final Theme t;
     private final DKit k;
 
+    private final JPanel mListPane = new JPanel(new BorderLayout());
     private final JPanel mList = new JPanel();
+    private final JScrollPane mListScroll;
+
+    private final JPanel mConvPane = new JPanel(new BorderLayout());
     private final JPanel mThread = new JPanel();
     private final JScrollPane mThreadScroll;
     private final JLabel mThreadTitle;
     private final JLabel mThreadSub;
-    private final JTextField mInput;
+    private final JTextArea mInput;
+    private final Icons.Btn mBack;
 
-    private String mOpen;         // conversation key (peer pubkey or group id)
+    private String mOpen;
     private boolean mOpenGroup;
+    private boolean mNarrow;
+    private boolean mLaidOut;
+    private boolean mShowList = true;   // narrow-mode: list vs conversation
+    private int mPaneWidth = 700;
     private String mLastSig = "";
     private String mThreadSig = "";
-    /** ref → scaled thumbnail, so media isn't re-fetched on every thread rebuild. */
+
     private final java.util.Map<String, javax.swing.ImageIcon> mMediaCache =
             new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -65,22 +79,24 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         setLayout(new BorderLayout());
         setBackground(t.bg);
 
-        // ---- left: conversation list ----
+        // ---- conversation list ----
         mList.setLayout(new BoxLayout(mList, BoxLayout.Y_AXIS));
         mList.setBackground(t.card);
-        JScrollPane listScroll = scroll(mList);
-        listScroll.setPreferredSize(new Dimension(320, 10));
-        listScroll.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, t.divider));
-        add(listScroll, BorderLayout.WEST);
+        mListScroll = scroll(mList, t.card);
+        mListScroll.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, t.divider));
+        mListPane.setBackground(t.card);
+        mListPane.add(mListScroll, BorderLayout.CENTER);
 
-        // ---- right: open conversation ----
-        JPanel right = new JPanel(new BorderLayout());
-        right.setBackground(t.chatBg);
-
+        // ---- open conversation ----
+        mConvPane.setBackground(t.chatBg);
         JPanel head = new JPanel();
         head.setLayout(new BoxLayout(head, BoxLayout.X_AXIS));
         head.setBackground(t.header);
-        head.setBorder(new EmptyBorder(12, 18, 12, 18));
+        head.setBorder(new EmptyBorder(10, 12, 10, 16));
+        mBack = new Icons.Btn(Icons.CHEVRON_LEFT, t.onHeader, DKit.alpha(t.onHeader, 24), 32, 20, 2.2f);
+        mBack.onClick(() -> { mShowList = true; applyLayout(); });
+        head.add(mBack);
+        head.add(Box.createRigidArea(new Dimension(6, 0)));
         JPanel titleCol = new JPanel();
         titleCol.setOpaque(false);
         titleCol.setLayout(new BoxLayout(titleCol, BoxLayout.Y_AXIS));
@@ -96,55 +112,60 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         titleCol.add(mThreadSub);
         head.add(titleCol);
         head.add(Box.createHorizontalGlue());
-        right.add(head, BorderLayout.NORTH);
+        mConvPane.add(head, BorderLayout.NORTH);
 
         mThread.setLayout(new BoxLayout(mThread, BoxLayout.Y_AXIS));
         mThread.setBackground(t.chatBg);
-        mThread.setBorder(new EmptyBorder(16, 20, 16, 20));
-        mThreadScroll = scroll(mThread);
+        mThread.setBorder(new EmptyBorder(16, 18, 12, 18));
+        mThreadScroll = scroll(mThread, t.chatBg);
         mThreadScroll.setBorder(null);
-        right.add(mThreadScroll, BorderLayout.CENTER);
+        mConvPane.add(mThreadScroll, BorderLayout.CENTER);
 
-        // input bar
-        JPanel bar = new JPanel(new BorderLayout(10, 0));
-        bar.setBackground(t.header);
-        bar.setBorder(new EmptyBorder(10, 14, 12, 14));
-        DKit.RoundPanel pill = new DKit.RoundPanel(t.input, 999);
-        pill.setLayout(new BorderLayout());
-        pill.setBorder(new EmptyBorder(2, 6, 2, 8));
-        DKit.HoverButton attach = k.ghostButton("＋");
-        attach.setFont(t.bold(16f));
-        attach.onClick(this::attachFile);
-        pill.add(attach, BorderLayout.WEST);
-        mInput = new JTextField();
-        mInput.setFont(t.font(13.5f));
-        mInput.setForeground(t.text);
-        mInput.setCaretColor(t.text);
-        mInput.setOpaque(false);
-        mInput.setBorder(new EmptyBorder(8, 0, 8, 0));
-        pill.add(mInput, BorderLayout.CENTER);
-        DKit.HoverButton send = k.primaryButton("Send");
-        send.onClick(this::sendCurrent);
-        pill.add(send, BorderLayout.EAST);
-        bar.add(pill, BorderLayout.CENTER);
-        right.add(bar, BorderLayout.SOUTH);
+        mInput = new JTextArea(1, 10);
+        mInput.setLineWrap(true);
+        mInput.setWrapStyleWord(true);
+        mConvPane.add(buildInputBar(), BorderLayout.SOUTH);
 
-        // Enter to send.
-        mInput.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "send");
-        mInput.getActionMap().put("send", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) { sendCurrent(); }
-        });
-
-        add(right, BorderLayout.CENTER);
+        applyLayout();   // default two-pane; onWidth() adjusts on first resize
     }
 
     public String label() { return "Chats"; }
     public JComponent view() { return this; }
 
+    public void onWidth(int contentWidth) {
+        boolean narrow = contentWidth < NARROW;
+        mPaneWidth = narrow ? contentWidth : Math.max(320, contentWidth - 320);
+        if (narrow != mNarrow || !mLaidOut) {
+            mNarrow = narrow;
+            mLaidOut = true;
+            applyLayout();
+        }
+        // Reflow bubbles to the new pane width.
+        updateBubbleWidths();
+    }
+
+    // ---- responsive layout ----
+
+    private void applyLayout() {
+        removeAll();
+        if (mNarrow) {
+            mBack.setVisible(true);
+            add(mShowList || mOpen == null ? mListPane : mConvPane, BorderLayout.CENTER);
+        } else {
+            mBack.setVisible(false);
+            mListPane.setPreferredSize(new Dimension(320, 10));
+            add(mListPane, BorderLayout.WEST);
+            add(mConvPane, BorderLayout.CENTER);
+        }
+        revalidate();
+        repaint();
+    }
+
+    // ---- refresh ----
+
     public void refresh() {
         ChatEngine ce = node.chat();
         List<ChatEngine.Summary> sums = ce.summaries();
-        // Signature: only rebuild the list when it actually changes.
         StringBuilder sig = new StringBuilder();
         for (ChatEngine.Summary s : sums) {
             sig.append(s.conversation).append(s.lastTime).append(s.unread).append('|');
@@ -154,8 +175,6 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
             rebuildList(sums);
         }
         if (mOpen != null) {
-            // Only rebuild the open thread when its content actually changed —
-            // rebuilding every 2s tick would flicker and fight the user's scroll.
             List<ChatEngine.Entry> conv = ce.conversation(mOpen);
             StringBuilder ts = new StringBuilder();
             for (ChatEngine.Entry e : conv) {
@@ -163,7 +182,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
             }
             if (!ts.toString().equals(mThreadSig)) {
                 mThreadSig = ts.toString();
-                rebuildThread();
+                rebuildThread(conv);
             }
         }
     }
@@ -175,8 +194,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
             empty.setOpaque(false);
             empty.setBorder(new EmptyBorder(40, 20, 20, 20));
             empty.setLayout(new BoxLayout(empty, BoxLayout.Y_AXIS));
-            JLabel l = k.sub("No conversations yet. Add a contact to start.");
-            empty.add(l);
+            empty.add(k.sub("No conversations yet. Add a contact to start."));
             mList.add(empty);
         }
         for (ChatEngine.Summary s : sums) {
@@ -192,12 +210,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         String title = titleFor(s.conversation, group);
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(true);
-        row.setBackground(s.conversation.equals(mOpen) ? t.selected : t.card);
-        row.setBorder(new EmptyBorder(12, 16, 12, 16));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
-        row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        row.add(k.avatar(s.conversation, title, 40), BorderLayout.WEST);
+        row.setBackground(s.conversation.equals(mOpen) && !mShowList ? t.selected : t.card);
+        row.setBorder(new EmptyBorder(11, 16, 11, 16));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
+        row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        row.add(k.avatar(s.conversation, title, 42), BorderLayout.WEST);
 
         JPanel mid = new JPanel();
         mid.setOpaque(false);
@@ -207,7 +224,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         name.setForeground(t.text);
         name.setAlignmentX(Component.LEFT_ALIGNMENT);
         String preview = (s.lastMine ? "You: " : "") + previewBody(s.lastBody);
-        JLabel last = new JLabel(clip(preview, 40));
+        JLabel last = new JLabel(clip(preview, 42));
         last.setFont(t.font(12f));
         last.setForeground(t.subtext);
         last.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -215,20 +232,19 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         mid.add(last);
         row.add(mid, BorderLayout.CENTER);
 
+        JPanel right = new JPanel();
+        right.setOpaque(false);
+        right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
+        JLabel time = new JLabel(shortTime(s.lastTime));
+        time.setFont(t.font(10.5f));
+        time.setForeground(t.subtext);
+        time.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        right.add(time);
         if (s.unread > 0) {
-            JLabel badge = new JLabel(String.valueOf(s.unread), SwingConstants.CENTER);
-            badge.setOpaque(false);
-            badge.setFont(t.bold(10.5f));
-            badge.setForeground(Color.WHITE);
-            DKit.RoundPanel b = new DKit.RoundPanel(t.error, 999);
-            b.setLayout(new BorderLayout());
-            b.setBorder(new EmptyBorder(2, 7, 2, 7));
-            b.add(badge);
-            JPanel wrap = new JPanel(new BorderLayout());
-            wrap.setOpaque(false);
-            wrap.add(b, BorderLayout.CENTER);
-            row.add(wrap, BorderLayout.EAST);
+            right.add(Box.createRigidArea(new Dimension(0, 4)));
+            right.add(unreadBadge(s.unread));
         }
+        row.add(right, BorderLayout.EAST);
 
         row.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) { open(s.conversation, group); }
@@ -236,19 +252,34 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         return row;
     }
 
+    private JComponent unreadBadge(int n) {
+        JLabel badge = new JLabel(String.valueOf(n), javax.swing.SwingConstants.CENTER);
+        badge.setFont(t.bold(10.5f));
+        badge.setForeground(Color.WHITE);
+        DKit.RoundPanel b = new DKit.RoundPanel(t.error, 999);
+        b.setLayout(new BorderLayout());
+        b.setBorder(new EmptyBorder(1, 6, 1, 6));
+        b.add(badge);
+        b.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        b.setMaximumSize(new Dimension(40, 18));
+        return b;
+    }
+
     private void open(String conversation, boolean group) {
         mOpen = conversation;
         mOpenGroup = group;
+        mShowList = false;
         node.chat().markRead(conversation);
         mThreadTitle.setText(titleFor(conversation, group));
         mThreadSub.setText(group ? groupSub(conversation) : peerSub(conversation));
-        mLastSig = "";       // force list repaint (selection + unread cleared)
-        mThreadSig = "";     // force thread rebuild for the newly opened conversation
+        mLastSig = "";
+        mThreadSig = "";
+        if (mNarrow) applyLayout();
         refresh();
+        mInput.requestFocusInWindow();
     }
 
-    private void rebuildThread() {
-        List<ChatEngine.Entry> conv = node.chat().conversation(mOpen);
+    private void rebuildThread(List<ChatEngine.Entry> conv) {
         mThread.removeAll();
         for (ChatEngine.Entry e : conv) {
             mThread.add(bubble(e));
@@ -257,23 +288,40 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         mThread.add(Box.createVerticalGlue());
         mThread.revalidate();
         mThread.repaint();
-        // Scroll to bottom.
         javax.swing.SwingUtilities.invokeLater(() -> {
             javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
             v.setValue(v.getMaximum());
         });
     }
 
+    private int bubbleMax() {
+        return Math.max(180, (int) (mPaneWidth * 0.72));
+    }
+
+    private void updateBubbleWidths() {
+        int max = bubbleMax();
+        for (Component row : mThread.getComponents()) {
+            if (row instanceof JPanel) {
+                for (Component c : ((JPanel) row).getComponents()) {
+                    if (c instanceof DKit.RoundPanel) {
+                        Dimension d = c.getPreferredSize();
+                        c.setMaximumSize(new Dimension(Math.min(max, d.width), Integer.MAX_VALUE));
+                    }
+                }
+            }
+        }
+        mThread.revalidate();
+    }
+
     private JComponent bubble(ChatEngine.Entry e) {
         boolean mine = e.mine;
-        boolean pay = ChatPay.isPayment(e.body);
         boolean media = ChatMedia.isMedia(e.body);
+        boolean pay = ChatPay.isPayment(e.body);
 
         JPanel line = new JPanel();
         line.setOpaque(false);
         line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
         line.setAlignmentX(Component.LEFT_ALIGNMENT);
-        line.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
         Color bg = mine ? t.bubbleOut : t.bubbleIn;
         Color fg = mine ? t.bubbleOutText : t.bubbleInText;
@@ -291,14 +339,21 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
 
         if (media) {
             addMediaTo(b, e.body, fg);
+        } else if (pay) {
+            JLabel body = new JLabel("💸  " + ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body));
+            body.setFont(t.semibold(13.5f));
+            body.setForeground(fg);
+            body.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(body);
         } else {
-            String bodyText = pay
-                    ? "💸  " + ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body)
-                    : e.body;
-            JLabel body = new JLabel("<html><div style='width:360px'>"
-                    + escHtml(bodyText) + "</div></html>");
+            JTextArea body = new JTextArea(e.body);
             body.setFont(t.font(13.5f));
             body.setForeground(fg);
+            body.setOpaque(false);
+            body.setEditable(false);
+            body.setFocusable(false);
+            body.setLineWrap(true);
+            body.setWrapStyleWord(true);
             body.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(body);
         }
@@ -308,7 +363,9 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         meta.setForeground(DKit.alpha(fg, 160));
         meta.setAlignmentX(Component.LEFT_ALIGNMENT);
         b.add(meta);
-        b.setMaximumSize(b.getPreferredSize());
+
+        Dimension pref = b.getPreferredSize();
+        b.setMaximumSize(new Dimension(Math.min(bubbleMax(), pref.width), Integer.MAX_VALUE));
 
         if (mine) {
             line.add(Box.createHorizontalGlue());
@@ -320,11 +377,97 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         return line;
     }
 
+    // ---- input bar (phone: attach + emoji + field + send FAB) ----
+
+    private JComponent buildInputBar() {
+        JPanel bar = new JPanel(new BorderLayout(8, 0));
+        bar.setBackground(t.header);
+        bar.setBorder(new EmptyBorder(9, 12, 11, 12));
+
+        DKit.RoundPanel pill = new DKit.RoundPanel(t.input, 22);
+        pill.setLayout(new BoxLayout(pill, BoxLayout.X_AXIS));
+        pill.setBorder(new EmptyBorder(4, 10, 4, 8));
+
+        Icons.Btn attach = new Icons.Btn(Icons.PLUS, t.subtext, null, 30, 19, 2f);
+        attach.onClick(this::attachFile);
+        pill.add(attach);
+        pill.add(Box.createRigidArea(new Dimension(2, 0)));
+        Icons.Btn emoji = new Icons.Btn(Icons.SMILE, t.subtext, null, 30, 19, 1.6f);
+        emoji.onClick(() -> showEmojiPicker(emoji));
+        pill.add(emoji);
+        pill.add(Box.createRigidArea(new Dimension(8, 0)));
+
+        mInput.setFont(t.font(13.5f));
+        mInput.setForeground(t.text);
+        mInput.setCaretColor(t.text);
+        mInput.setOpaque(false);
+        mInput.setBorder(new EmptyBorder(7, 0, 7, 0));
+        JScrollPane inScroll = new JScrollPane(mInput,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        inScroll.setOpaque(false);
+        inScroll.getViewport().setOpaque(false);
+        inScroll.setBorder(null);
+        inScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 96));
+        pill.add(inScroll);
+
+        bar.add(pill, BorderLayout.CENTER);
+
+        SendFab fab = new SendFab(t);
+        fab.onClick(this::sendCurrent);
+        JPanel fabWrap = new JPanel(new BorderLayout());
+        fabWrap.setOpaque(false);
+        fabWrap.setBorder(new EmptyBorder(0, 8, 0, 0));
+        fabWrap.add(fab, BorderLayout.CENTER);
+        bar.add(fabWrap, BorderLayout.EAST);
+
+        // Enter sends; Shift+Enter newline.
+        mInput.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "send");
+        mInput.getActionMap().put("send", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { sendCurrent(); }
+        });
+        mInput.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,
+                java.awt.event.InputEvent.SHIFT_DOWN_MASK), "newline");
+        mInput.getActionMap().put("newline", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { mInput.append("\n"); }
+        });
+        return bar;
+    }
+
+    private void showEmojiPicker(JComponent anchor) {
+        javax.swing.JPopupMenu pop = new javax.swing.JPopupMenu();
+        pop.setBackground(t.card);
+        pop.setBorder(new EmptyBorder(6, 6, 6, 6));
+        String[] emojis = {
+            "😀","😁","😂","🤣","😊","😍","😘","😎","🤔","😅","😉","🙂","🙃","😌","😴","🤗",
+            "👍","👎","👏","🙏","💪","🔥","✨","🎉","❤️","💜","💯","✅","❌","⚡","💸","📎",
+            "😢","😭","😡","😤","🥳","😱","🤯","👀","🙌","🤝","💀","🌟","☀️","🌙","⭐","🚀"
+        };
+        JPanel grid = new JPanel(new java.awt.GridLayout(0, 8, 2, 2));
+        grid.setBackground(t.card);
+        for (String em : emojis) {
+            JLabel l = new JLabel(em, javax.swing.SwingConstants.CENTER);
+            l.setFont(new java.awt.Font("Apple Color Emoji", java.awt.Font.PLAIN, 20));
+            l.setPreferredSize(new Dimension(30, 30));
+            l.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            l.addMouseListener(new MouseAdapter() {
+                public void mouseClicked(MouseEvent e) {
+                    mInput.insert(em, mInput.getCaretPosition());
+                    pop.setVisible(false);
+                    mInput.requestFocusInWindow();
+                }
+                public void mouseEntered(MouseEvent e) { l.setOpaque(true); l.setBackground(t.selected); l.repaint(); }
+                public void mouseExited(MouseEvent e) { l.setOpaque(false); l.repaint(); }
+            });
+            grid.add(l);
+        }
+        pop.add(grid);
+        pop.show(anchor, 0, -pop.getPreferredSize().height - 6);
+    }
+
     private void sendCurrent() {
         String txt = mInput.getText().trim();
-        if (txt.isEmpty() || mOpen == null) {
-            return;
-        }
+        if (txt.isEmpty() || mOpen == null) return;
         mInput.setText("");
         new Thread(() -> {
             try {
@@ -332,25 +475,19 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
                     node.chat().sendGroup(mOpen, txt);
                 } else {
                     Contact c = node.node().contact(mOpen);
-                    if (c != null) {
-                        node.chat().send(c, txt);
-                    }
+                    if (c != null) node.chat().send(c, txt);
                 }
-            } catch (Exception ignored) {
-            }
-            javax.swing.SwingUtilities.invokeLater(this::rebuildThread);
+            } catch (Exception ignored) { }
+            javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
         }, "chat-send").start();
     }
 
     // ---- media ----
 
-    /** Render an image message: caption text (if any) plus a thumbnail fetched
-     *  from the media mesh off-EDT and cached by ref so it isn't re-fetched. */
     private void addMediaTo(DKit.RoundPanel b, String body, Color fg) {
         String caption = ChatMedia.caption(body);
         String mime = ChatMedia.mime(body);
         final String ref = ChatMedia.ref(body);
-
         JLabel img = new JLabel();
         img.setAlignmentX(Component.LEFT_ALIGNMENT);
         javax.swing.ImageIcon cached = ref == null ? null : mMediaCache.get(ref);
@@ -367,9 +504,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
             img.setForeground(fg);
         }
         b.add(img);
-
         if (caption != null && !caption.isEmpty()) {
-            JLabel cap = new JLabel("<html><div style='width:340px'>" + escHtml(caption) + "</div></html>");
+            JLabel cap = new JLabel("<html><div style='width:320px'>" + escHtml(caption) + "</div></html>");
             cap.setFont(t.font(13f));
             cap.setForeground(fg);
             cap.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -379,9 +515,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private void fetchThumb(String ref, JLabel target) {
-        if (ref == null || !ref.startsWith("mx1:")) {
-            return;
-        }
+        if (ref == null || !ref.startsWith("mx1:")) return;
         new Thread(() -> {
             try {
                 String json = new String(java.util.Base64.getUrlDecoder()
@@ -390,14 +524,12 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
                 byte[] bytes = node.media().fetch(mf);
                 java.awt.image.BufferedImage bi =
                         javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
-                if (bi == null) {
-                    return;
-                }
+                if (bi == null) return;
                 int max = 260;
                 int w = bi.getWidth(), h = bi.getHeight();
                 double s = Math.min(1.0, (double) max / Math.max(w, h));
-                java.awt.Image scaled = bi.getScaledInstance(
-                        (int) (w * s), (int) (h * s), java.awt.Image.SCALE_SMOOTH);
+                java.awt.Image scaled = bi.getScaledInstance((int) (w * s), (int) (h * s),
+                        java.awt.Image.SCALE_SMOOTH);
                 javax.swing.ImageIcon icon = new javax.swing.ImageIcon(scaled);
                 mMediaCache.put(ref, icon);
                 javax.swing.SwingUtilities.invokeLater(() -> {
@@ -412,35 +544,25 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private void attachFile() {
-        if (mOpen == null) {
-            return;
-        }
+        if (mOpen == null) return;
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setDialogTitle("Send a photo");
-        if (fc.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
-            return;
-        }
+        if (fc.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
         java.io.File f = fc.getSelectedFile();
         new Thread(() -> {
             try {
                 byte[] bytes = java.nio.file.Files.readAllBytes(f.toPath());
                 String mime = java.nio.file.Files.probeContentType(f.toPath());
-                if (mime == null) {
-                    mime = "application/octet-stream";
-                }
-                if (mOpenGroup) {
-                    node.chat().sendGroupMedia(mOpen, bytes, mime, "");
-                } else {
+                if (mime == null) mime = "application/octet-stream";
+                if (mOpenGroup) node.chat().sendGroupMedia(mOpen, bytes, mime, "");
+                else {
                     Contact c = node.node().contact(mOpen);
-                    if (c != null) {
-                        node.chat().sendMedia(c, bytes, mime, "");
-                    }
+                    if (c != null) node.chat().sendMedia(c, bytes, mime, "");
                 }
                 javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
             } catch (Exception ex) {
                 javax.swing.SwingUtilities.invokeLater(() ->
-                        javax.swing.JOptionPane.showMessageDialog(this,
-                                "Couldn't send: " + ex.getMessage()));
+                        javax.swing.JOptionPane.showMessageDialog(this, "Couldn't send: " + ex.getMessage()));
             }
         }, "chat-attach").start();
     }
@@ -449,7 +571,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
 
     private String titleFor(String conversation, boolean group) {
         if (group) {
-            Group g = node.chat().group(conversation);
+            com.eurobuddha.maxima.core.chat.Group g = node.chat().group(conversation);
             return g != null ? g.name : "Group";
         }
         return nameFor(conversation);
@@ -457,60 +579,52 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
 
     private String nameFor(String pubkey) {
         Contact c = node.node().contact(pubkey);
-        if (c != null && c.name != null && !c.name.isEmpty() && !"noname".equals(c.name)) {
-            return c.name;
-        }
+        if (c != null && c.name != null && !c.name.isEmpty() && !"noname".equals(c.name)) return c.name;
         return shortKey(pubkey);
     }
 
     private String peerSub(String pubkey) {
         Contact c = node.node().contact(pubkey);
-        if (c == null) {
-            return "unknown contact";
-        }
+        if (c == null) return "unknown contact";
         long ls = c.lastSeen;
-        if (ls <= 0) {
-            return "offline";
-        }
+        if (ls <= 0) return "offline";
         long d = System.currentTimeMillis() - ls;
         return d < 30 * 60 * 1000L ? "online" : "last seen " + ago(d);
     }
 
     private String groupSub(String id) {
-        Group g = node.chat().group(id);
+        com.eurobuddha.maxima.core.chat.Group g = node.chat().group(id);
         return g == null ? "" : g.size() + " members";
     }
 
     private static String previewBody(String body) {
-        if (ChatPay.isPayment(body)) {
-            return "💸 " + ChatPay.amount(body) + " " + ChatPay.tokenName(body);
-        }
+        if (ChatMedia.isMedia(body)) return "📷 Photo";
+        if (ChatPay.isPayment(body)) return "💸 " + ChatPay.amount(body) + " " + ChatPay.tokenName(body);
         return body == null ? "" : body;
     }
 
     private String stateGlyph(ChatEngine.Entry e) {
         String st = e.state == null ? "" : e.state;
-        if (st.contains("read")) {
-            return "✓✓";
-        }
-        if (st.contains("deliver") || !e.deliveredBy.isEmpty()) {
-            return "✓✓";
-        }
-        if (st.contains("sent")) {
-            return "✓";
-        }
+        if (st.contains("read")) return "✓✓";
+        if (st.contains("deliver") || !e.deliveredBy.isEmpty()) return "✓✓";
+        if (st.contains("sent")) return "✓";
         return "·";
     }
 
-    private static String shortKey(String k) {
-        if (k == null) {
-            return "?";
-        }
-        return k.length() > 12 ? k.substring(0, 10) + "…" : k;
+    private static String shortKey(String kk) {
+        if (kk == null) return "?";
+        return kk.length() > 12 ? kk.substring(0, 10) + "…" : kk;
     }
 
     private static String time(long ms) {
         return new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date(ms));
+    }
+
+    private static String shortTime(long ms) {
+        if (ms <= 0) return "";
+        long d = System.currentTimeMillis() - ms;
+        if (d < 24 * 3600_000L) return time(ms);
+        return new java.text.SimpleDateFormat("dd MMM").format(new java.util.Date(ms));
     }
 
     private static String ago(long ms) {
@@ -531,16 +645,46 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
                 .replace(">", "&gt;").replace("\n", "<br>");
     }
 
-    private JScrollPane scroll(JComponent c) {
+    private JScrollPane scroll(JComponent c, Color bg) {
         JPanel holder = new JPanel(new BorderLayout());
         holder.setOpaque(false);
         holder.add(c, BorderLayout.NORTH);
         JScrollPane sp = new JScrollPane(holder,
                 ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
                 ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        sp.getViewport().setBackground(c.getBackground());
+        sp.getViewport().setBackground(bg);
         sp.setBorder(null);
         sp.getVerticalScrollBar().setUnitIncrement(16);
         return sp;
+    }
+
+    // ---- small drawn buttons ----
+
+    /** The circular accent send button with a paper-plane glyph. */
+    private static final class SendFab extends JComponent {
+        private final Theme theme;
+        private boolean hover;
+        private Runnable action;
+        SendFab(Theme t) {
+            theme = t;
+            setPreferredSize(new Dimension(44, 44));
+            setMaximumSize(new Dimension(44, 44));
+            setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
+                public void mouseExited(MouseEvent e) { hover = false; repaint(); }
+                public void mouseClicked(MouseEvent e) { if (action != null) action.run(); }
+            });
+        }
+        SendFab onClick(Runnable r) { action = r; return this; }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Color c = hover ? DKit.mix(theme.accent, theme.mode == Theme.Mode.DARK ? Color.WHITE : Color.BLACK, 0.08f) : theme.accent;
+            g2.setColor(c);
+            g2.fillOval(2, 2, 40, 40);
+            Icons.paint(g2, Icons.SEND, 12, 12, 20, theme.onAccent, 1.6f);
+            g2.dispose();
+        }
     }
 }
