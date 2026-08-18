@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Tier 2 on the phone: turn a lucky network into a genuine public address.
@@ -70,7 +71,10 @@ public final class DirectReachability {
     private volatile String mDetail = "not started";
     private volatile boolean mStopping;
     /** Bumped by any event that invalidates an in-flight attempt. */
-    private volatile int mGen;
+    // Generation guard: bumped (atomically, from any thread) whenever the
+    // network changes or the user re-checks, so an in-flight attempt refuses to
+    // advertise a stale mapping. A plain int++ loses increments under races.
+    private final AtomicInteger mGen = new AtomicInteger();
 
     private final PortMapper mMapper = new PortMapper();
     private PortMapper.Mapping mMapping;
@@ -129,7 +133,7 @@ public final class DirectReachability {
      * from any thread; the work runs on the state thread.
      */
     public void reprobe() {
-        mGen++;
+        mGen.incrementAndGet();
         submit(() -> {
             if (mStopping) {
                 return;
@@ -155,13 +159,13 @@ public final class DirectReachability {
      * blocking work, which was the whole problem with a shared monitor.
      */
     public void onNetworkChanged() {
-        mGen++;
+        mGen.incrementAndGet();
         submit(() -> withdraw("network changed"));
     }
 
     public void shutdown() {
         mStopping = true;
-        mGen++;
+        mGen.incrementAndGet();
         submit(() -> withdraw("stopping"));
         mExec.shutdown();
         try {
@@ -204,7 +208,7 @@ public final class DirectReachability {
     }
 
     private void attempt() {
-        int gen = mGen;
+        int gen = mGen.get();
 
         // Never leak a previous mapping if we are re-entering.
         if (mMapping != null) {
@@ -243,7 +247,7 @@ public final class DirectReachability {
 
         // The network may have changed while map() blocked. If so, this mapping
         // belongs to a network that is gone - release it and do not advertise.
-        if (mStopping || gen != mGen || !gatesPass()) {
+        if (mStopping || gen != mGen.get() || !gatesPass()) {
             mMapper.release(m);
             mState = State.OFF;
             mDetail = "network changed during mapping (staying Tier 1)";
@@ -259,7 +263,7 @@ public final class DirectReachability {
 
         // Re-check AFTER the probe too - it also blocks, and a change during it
         // is exactly the dead-address window we must not advertise into.
-        if (mStopping || gen != mGen || !gatesPass()) {
+        if (mStopping || gen != mGen.get() || !gatesPass()) {
             mMapper.release(m);
             mMapping = null;
             mState = State.OFF;
@@ -299,7 +303,7 @@ public final class DirectReachability {
         mState = State.PROBING;
         mDetail = "verifying " + ip + ":" + extPort + " from outside…";
         boolean reachable = proveReachable(extPort);
-        if (mStopping || gen != mGen || !gatesPass()) {
+        if (mStopping || gen != mGen.get() || !gatesPass()) {
             mState = State.OFF;
             mDetail = "network changed during verification (staying Tier 1)";
             return;

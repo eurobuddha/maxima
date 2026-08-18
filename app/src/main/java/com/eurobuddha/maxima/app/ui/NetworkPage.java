@@ -58,6 +58,13 @@ public final class NetworkPage implements Page {
     private TextView mMlsText;
     private TextView mLog;
     private TextView mAutoBtn;
+    private boolean mVerifying;
+
+    /** The host activity is still usable (not finishing/destroyed) — guards every
+     *  delayed dialog/render posted from a background or timer callback. */
+    private boolean alive() {
+        return !mAct.isFinishing() && !mAct.isDestroyed();
+    }
 
     public NetworkPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -293,6 +300,9 @@ public final class NetworkPage implements Page {
     }
 
     private void confirmConnected(String host) {
+        if (!alive()) {
+            return;
+        }
         MaximaNode node = MaximaService.node();
         int n = node == null ? 0 : node.pool().activeCount();
         boolean up = node != null && node.pool().activeHosts().contains(host);
@@ -664,6 +674,10 @@ public final class NetworkPage implements Page {
                 mAct.toast("Port must be 1–65535");
                 return;
             }
+            if (p == RelayHost.RELAY_PORT) {
+                mAct.toast("Port " + p + " is reserved for relay mode — pick another");
+                return;
+            }
             final int port2 = p;
             String ip = ipF.getText().toString().trim();
             if (ip.isEmpty()) {
@@ -720,13 +734,19 @@ public final class NetworkPage implements Page {
     /** Poll the reachability state after a manual enable and report the result. */
     private void verifyManual() {
         final DirectReachability dr = MaximaService.direct();
-        if (dr == null) {
+        if (dr == null || mVerifying) {
             return;
         }
+        mVerifying = true;
         final int[] tries = {0};
         final Runnable[] poll = new Runnable[1];
         poll[0] = () -> {
+            if (!alive()) {
+                mVerifying = false;
+                return;
+            }
             if (dr.state() == DirectReachability.State.ADVERTISED) {
+                mVerifying = false;
                 render();
                 new AlertDialog.Builder(mAct)
                         .setTitle("You're directly reachable")
@@ -740,6 +760,7 @@ public final class NetworkPage implements Page {
             boolean hardFail = b == DirectReachability.Blocker.ROUTER_NO_PORT
                     || b == DirectReachability.Blocker.NEEDS_PUBLIC_IP;
             if (tries[0]++ >= 15 || (hardFail && tries[0] > 4)) {
+                mVerifying = false;
                 render();
                 new AlertDialog.Builder(mAct)
                         .setTitle("Couldn't verify")
@@ -785,11 +806,11 @@ public final class NetworkPage implements Page {
             c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             c.setConnectTimeout(5000);
             c.setReadTimeout(5000);
-            java.io.BufferedReader r = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(c.getInputStream()));
-            String line = r.readLine();
-            r.close();
-            return line == null ? null : line.trim();
+            try (java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(c.getInputStream()))) {
+                String line = r.readLine();
+                return line == null ? null : line.trim();
+            }
         } catch (Exception e) {
             return null;
         } finally {

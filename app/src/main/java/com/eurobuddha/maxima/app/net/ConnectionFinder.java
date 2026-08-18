@@ -65,10 +65,13 @@ public final class ConnectionFinder {
             return;
         }
         new Thread(() -> {
+            // onDone MUST fire exactly once on every path (including a thrown
+            // exception), or the UI's Auto-connect button stays disabled forever.
+            final AtomicBoolean done = new AtomicBoolean(false);
             try {
                 MaximaNode node = MaximaService.node();
                 if (node == null) {
-                    post(zUi, () -> zCb.onDone(0, false));
+                    finish(zUi, zCb, done, 0, false);
                     return;
                 }
                 post(zUi, () -> zCb.onStep("Checking your network…"));
@@ -98,9 +101,18 @@ public final class ConnectionFinder {
                         break;
                     }
                 }
-                final int total = node.pool().activeCount();
-                final boolean any = !reachable.isEmpty();
-                post(zUi, () -> zCb.onDone(total, any));
+                finish(zUi, zCb, done, node.pool().activeCount(), !reachable.isEmpty());
+            } catch (Throwable t) {
+                // Best-effort: report whatever is currently attached so the UI recovers.
+                int total = 0;
+                try {
+                    MaximaNode n = MaximaService.node();
+                    if (n != null) {
+                        total = n.pool().activeCount();
+                    }
+                } catch (Throwable ignored) {
+                }
+                finish(zUi, zCb, done, total, false);
             } finally {
                 BUSY.set(false);
             }
@@ -140,6 +152,14 @@ public final class ConnectionFinder {
         }
         pool.shutdownNow();
         return ok;
+    }
+
+    /** Post onDone at most once, guarded by {@code zDone}. */
+    private static void finish(Activity zUi, Listener zCb, AtomicBoolean zDone,
+                               int zTotal, boolean zAny) {
+        if (zDone.compareAndSet(false, true)) {
+            post(zUi, () -> zCb.onDone(zTotal, zAny));
+        }
     }
 
     private static void post(Activity zUi, Runnable zR) {
