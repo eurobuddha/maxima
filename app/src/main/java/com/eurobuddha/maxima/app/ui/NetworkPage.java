@@ -634,9 +634,17 @@ public final class NetworkPage implements Page {
         body.addView(portF, k.mb(k.dp(9)));
         LinearLayout.LayoutParams pfp = (LinearLayout.LayoutParams) portF.getLayoutParams();
         pfp.topMargin = k.dp(10);
-        final EditText ipF = k.field("Your public IP (see whatismyip.com)");
+        final EditText ipF = k.field("Your public IP (found automatically)");
         ipF.setText(ManualForward.publicIp(mAct));
         body.addView(ipF, k.mb(k.dp(9)));
+        // Find the public IP for the user so they never have to look it up.
+        if (ipF.getText().toString().trim().isEmpty()) {
+            detectPublicIp(ip -> {
+                if (ip != null && ipF.getText().toString().trim().isEmpty()) {
+                    ipF.setText(ip);
+                }
+            });
+        }
 
         TextView enable = k.primaryButton("Enable & verify");
         body.addView(enable, k.mb(k.dp(8)));
@@ -645,7 +653,6 @@ public final class NetworkPage implements Page {
 
         BottomSheetDialog d = k.sheet("Manual port-forward", body);
         enable.setOnClickListener(v -> {
-            String ip = ipF.getText().toString().trim();
             int p;
             try {
                 p = Integer.parseInt(portF.getText().toString().trim());
@@ -657,15 +664,24 @@ public final class NetworkPage implements Page {
                 mAct.toast("Port must be 1–65535");
                 return;
             }
-            if (!com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(ip)) {
-                mAct.toast("Enter a valid public IP");
+            final int port2 = p;
+            String ip = ipF.getText().toString().trim();
+            if (ip.isEmpty()) {
+                mAct.toast("Finding your public IP…");
+                detectPublicIp(det -> {
+                    if (det == null) {
+                        mAct.toast("Couldn't find your public IP — enter it manually");
+                    } else {
+                        enableManual(det, port2, d);
+                    }
+                });
                 return;
             }
-            ManualForward.set(mAct, true, ip, p);
-            applyManualRebind();
-            mAct.toast("Verifying " + ip + ":" + p + "…");
-            d.dismiss();
-            render();
+            if (!com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(ip)) {
+                mAct.toast("That doesn't look like a public IP");
+                return;
+            }
+            enableManual(ip, port2, d);
         });
         off.setOnClickListener(v -> {
             ManualForward.setEnabled(mAct, false);
@@ -676,16 +692,115 @@ public final class NetworkPage implements Page {
         });
     }
 
-    /** Rebind the direct listener to the (new) pinned/ephemeral port, then re-prove. */
+    private void enableManual(String ip, int port, BottomSheetDialog d) {
+        ManualForward.set(mAct, true, ip, port);
+        applyManualRebind();
+        d.dismiss();
+        render();
+        mAct.toast("Verifying " + ip + ":" + port + "…");
+        verifyManual();
+    }
+
+    /** Rebind the direct listener to the pinned/ephemeral port IMMEDIATELY (not on
+     *  the 60s heartbeat), then re-prove — all off the main thread. */
     private void applyManualRebind() {
-        MaximaNode n = MaximaService.node();
-        if (n != null) {
-            n.stopDirect();   // next heartbeat re-binds on the correct port
-        }
+        new Thread(() -> {
+            MaximaNode n = MaximaService.node();
+            if (n != null) {
+                n.stopDirect();
+                n.startDirect(ManualForward.enabled(mAct) ? ManualForward.port(mAct) : 0);
+            }
+            DirectReachability dr = MaximaService.direct();
+            if (dr != null) {
+                dr.reprobe();
+            }
+        }, "manual-rebind").start();
+    }
+
+    /** Poll the reachability state after a manual enable and report the result. */
+    private void verifyManual() {
         final DirectReachability dr = MaximaService.direct();
-        if (dr != null) {
-            mView.postDelayed(dr::reprobe, 1200);
+        if (dr == null) {
+            return;
         }
+        final int[] tries = {0};
+        final Runnable[] poll = new Runnable[1];
+        poll[0] = () -> {
+            if (dr.state() == DirectReachability.State.ADVERTISED) {
+                render();
+                new AlertDialog.Builder(mAct)
+                        .setTitle("You're directly reachable")
+                        .setMessage("Verified — others can now reach you at " + dr.publicAddress()
+                                + ", no relay in between.")
+                        .setPositiveButton("Great", null)
+                        .show();
+                return;
+            }
+            DirectReachability.Blocker b = dr.blocker();
+            boolean hardFail = b == DirectReachability.Blocker.ROUTER_NO_PORT
+                    || b == DirectReachability.Blocker.NEEDS_PUBLIC_IP;
+            if (tries[0]++ >= 15 || (hardFail && tries[0] > 4)) {
+                render();
+                new AlertDialog.Builder(mAct)
+                        .setTitle("Couldn't verify")
+                        .setMessage("Not reachable from outside yet. Check your router forwards TCP "
+                                + ManualForward.port(mAct) + " to " + MaximaService.localIp()
+                                + " (this phone's current LAN IP), and that the public IP is right.\n\n"
+                                + "If the rule looks correct and it still fails, your internet provider "
+                                + "is probably using carrier-grade NAT (a public IP shared across many "
+                                + "homes) — no port-forward can open that, and you'll stay connected "
+                                + "through relays.\n\n(" + dr.detail() + ")")
+                        .setPositiveButton("OK", null)
+                        .setNeutralButton("Try again", (di, w) -> {
+                            applyManualRebind();
+                            verifyManual();
+                        })
+                        .show();
+                return;
+            }
+            mView.postDelayed(poll[0], 1000);
+        };
+        mView.postDelayed(poll[0], 2000);
+    }
+
+    private interface IpCallback {
+        void onIp(String zIp);
+    }
+
+    /** Discover this phone's PUBLIC IP via an outbound echo service, off-main. */
+    private void detectPublicIp(IpCallback zCb) {
+        new Thread(() -> {
+            String ip = httpGet("https://api.ipify.org");
+            if (!looksLikeIp(ip)) {
+                ip = httpGet("https://icanhazip.com");
+            }
+            final String out = looksLikeIp(ip) ? ip.trim() : null;
+            mAct.runOnUiThread(() -> zCb.onIp(out));
+        }, "detect-public-ip").start();
+    }
+
+    private String httpGet(String url) {
+        java.net.HttpURLConnection c = null;
+        try {
+            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(5000);
+            c.setReadTimeout(5000);
+            java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(c.getInputStream()));
+            String line = r.readLine();
+            r.close();
+            return line == null ? null : line.trim();
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) {
+                c.disconnect();
+            }
+        }
+    }
+
+    private boolean looksLikeIp(String s) {
+        return s != null && s.trim().matches("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
     }
 
     private void openWifi() {
