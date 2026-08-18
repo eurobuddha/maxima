@@ -50,7 +50,11 @@ public final class LockGate {
     }
 
     private void applySecure() {
-        if (AppLock.isEnabled(mAct)) {
+        // FLAG_SECURE blacks out the app under screen mirroring/casting. Apply it only
+        // when App Lock is on AND the user hasn't allowed screen sharing (Settings →
+        // Privacy → "Allow screen sharing", default on so demos work out of the box).
+        boolean secure = AppLock.isEnabled(mAct) && !ChatPrefs.allowScreenShare(mAct);
+        if (secure) {
             mAct.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         } else {
             mAct.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);

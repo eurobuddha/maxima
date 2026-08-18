@@ -78,6 +78,18 @@ public final class ChatPrefs {
         }
     }
 
+    private static final String ALLOW_SCREEN_SHARE = "allow_screen_share";
+
+    /** Allow screen mirroring/casting/screenshots even when App Lock is on
+     *  (needed for live demos). Default ON. When off + App Lock on, FLAG_SECURE. */
+    public static boolean allowScreenShare(Context zCtx) {
+        return prefs(zCtx).getBoolean(ALLOW_SCREEN_SHARE, true);
+    }
+
+    public static void setAllowScreenShare(Context zCtx, boolean zOn) {
+        prefs(zCtx).edit().putBoolean(ALLOW_SCREEN_SHARE, zOn).apply();
+    }
+
     public static boolean readReceipts(Context zCtx) {
         return prefs(zCtx).getBoolean(READ_RECEIPTS, false);
     }

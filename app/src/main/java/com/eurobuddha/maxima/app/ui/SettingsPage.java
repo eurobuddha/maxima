@@ -106,6 +106,24 @@ public final class SettingsPage implements Page {
                                 ? "Require fingerprint or device PIN to open Maxima"
                                 : "Set a screen lock on this device to use this"),
                 lockOn, checked -> toggleAppLock(checked)));
+        mPrivacy.addView(k.divider());
+        boolean share = ChatPrefs.allowScreenShare(mAct);
+        mPrivacy.addView(k.switchRow("Allow screen sharing",
+                share ? "Screen can be mirrored, cast or screenshotted (needed for demos)"
+                        : "Screen is hidden from mirroring/casting when App lock is on",
+                share, checked -> {
+                    ChatPrefs.setAllowScreenShare(mAct, checked);
+                    EventLog.add("screen sharing " + (checked ? "allowed" : "blocked"));
+                    // Re-apply FLAG_SECURE immediately for the live window.
+                    if (checked) {
+                        mAct.getWindow().clearFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_SECURE);
+                    } else if (com.eurobuddha.maxima.app.AppLock.isEnabled(mAct)) {
+                        mAct.getWindow().addFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_SECURE);
+                    }
+                    render();
+                }));
 
         // Appearance segmented highlight.
         setAppearSeg(ChatPrefs.appearance(mAct));
