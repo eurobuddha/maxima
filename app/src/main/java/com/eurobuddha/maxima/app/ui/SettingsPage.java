@@ -254,21 +254,50 @@ public final class SettingsPage implements Page {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Reveal", (d, w) -> {
                     String phrase = SeedStore.revealPhrase(mAct);
-                    new AlertDialog.Builder(mAct)
+                    AlertDialog reveal = new AlertDialog.Builder(mAct)
                             .setTitle("Write these down, offline")
                             .setMessage(phrase == null ? "(none)" : phrase)
                             .setNeutralButton("What is this?",
                                     (d2, w2) -> Explain.show(mAct, "seed"))
-                            .setPositiveButton("Copy", (d2, w2) -> {
-                                ClipboardManager cm =
-                                        mAct.getSystemService(ClipboardManager.class);
-                                cm.setPrimaryClip(ClipData.newPlainText("seed", phrase));
-                                mAct.toast("Copied — clear your clipboard afterwards");
-                            })
+                            .setPositiveButton("Copy", (d2, w2) -> copySeedToClipboard(phrase))
                             .setNegativeButton("Close", null)
-                            .show();
+                            .create();
+                    // The seed must never land in a screenshot or the recents thumbnail.
+                    if (reveal.getWindow() != null) {
+                        reveal.getWindow().addFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_SECURE);
+                    }
+                    reveal.show();
                 })
                 .show();
+    }
+
+    /** Copy the seed marked SENSITIVE, and auto-clear it after 60s if still ours. */
+    private void copySeedToClipboard(String zPhrase) {
+        if (zPhrase == null || zPhrase.isEmpty()) {
+            return;
+        }
+        ClipboardManager cm = mAct.getSystemService(ClipboardManager.class);
+        ClipData clip = ClipData.newPlainText("seed", zPhrase);
+        android.os.PersistableBundle extras = new android.os.PersistableBundle();
+        extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
+        clip.getDescription().setExtras(extras);
+        cm.setPrimaryClip(clip);
+        mAct.toast("Copied — will auto-clear in 60s");
+        mAct.getWindow().getDecorView().postDelayed(() -> {
+            try {
+                ClipData cur = cm.getPrimaryClip();
+                if (cur != null && cur.getItemCount() > 0
+                        && zPhrase.contentEquals(cur.getItemAt(0).coerceToText(mAct))) {
+                    if (android.os.Build.VERSION.SDK_INT >= 28) {
+                        cm.clearPrimaryClip();
+                    } else {
+                        cm.setPrimaryClip(ClipData.newPlainText("", ""));
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }, 60_000);
     }
 
     private boolean isBatteryExempt() {

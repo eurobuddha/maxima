@@ -19,6 +19,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.eurobuddha.maxima.app.LockGate;
 import com.eurobuddha.maxima.app.MaximaService;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.core.MaximaNode;
@@ -121,10 +122,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mHandler.postDelayed(mRender, 80);
     }
 
+    private final LockGate mLock = new LockGate(this);
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
+        mLock.onCreate();
 
         if (!adopt(getIntent())) {
             finish();
@@ -825,6 +829,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }
         render();
         mHandler.postDelayed(mPayWatch, 3_000);
+        mLock.onResume();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        mLock.onStop();
     }
 
     @Override

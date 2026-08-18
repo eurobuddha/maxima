@@ -52,8 +52,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
     private ViewPager mPager;
     private final List<Page> mPages = new ArrayList<>();
 
-    private android.view.View mLockOverlay;
-    private boolean mPrompting;
+    private final LockGate mLock = new LockGate(this);
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Runnable mTick = new Runnable() {
@@ -161,9 +160,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
 
         // If the app lock is on, cover the content until the user authenticates
         // (the prompt itself fires from onResume).
-        if (AppLock.mustUnlock(this)) {
-            showLock();
-        }
+        mLock.onCreate();
     }
 
     @Override
@@ -172,13 +169,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         ChatHub.setForeground("");
         ChatHub.register(this);
         mHandler.post(mTick);
-        AppLock.onForeground(this);
-        if (AppLock.mustUnlock(this)) {
-            showLock();
-            promptUnlock();
-        } else {
-            hideLock();
-        }
+        mLock.onResume();
     }
 
     @Override
@@ -187,91 +178,12 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         ChatHub.unregister(this);
         mHandler.removeCallbacks(mTick);
         stopPulse();
-        AppLock.onBackground();
     }
 
-    // ---- app lock ----
-
-    private void showLock() {
-        if (mLockOverlay != null) {
-            return;
-        }
-        mLockOverlay = buildLockOverlay();
-        getWindow().addContentView(mLockOverlay,
-                new android.view.ViewGroup.LayoutParams(-1, -1));
-    }
-
-    private void hideLock() {
-        if (mLockOverlay == null) {
-            return;
-        }
-        android.view.ViewParent p = mLockOverlay.getParent();
-        if (p instanceof android.view.ViewGroup) {
-            ((android.view.ViewGroup) p).removeView(mLockOverlay);
-        }
-        mLockOverlay = null;
-    }
-
-    private void promptUnlock() {
-        if (mPrompting) {
-            return;
-        }
-        mPrompting = true;
-        AppLock.authenticate(this, "Unlock Maxima", "Fingerprint or device PIN",
-                new AppLock.Callback() {
-                    public void onSuccess() {
-                        mPrompting = false;
-                        hideLock();
-                    }
-
-                    public void onError(String zMessage) {
-                        mPrompting = false;
-                    }
-
-                    public void onCancelled() {
-                        mPrompting = false;
-                    }
-                });
-    }
-
-    private android.view.View buildLockOverlay() {
-        float d = getResources().getDisplayMetrics().density;
-        android.widget.FrameLayout fl = new android.widget.FrameLayout(this);
-        fl.setBackgroundColor(getColor(R.color.ux_bg));
-        fl.setClickable(true);
-        fl.setFocusable(true);
-        android.widget.LinearLayout col = new android.widget.LinearLayout(this);
-        col.setOrientation(android.widget.LinearLayout.VERTICAL);
-        col.setGravity(android.view.Gravity.CENTER);
-        android.widget.ImageView icon = new android.widget.ImageView(this);
-        icon.setImageResource(R.drawable.ic_lock);
-        icon.setColorFilter(getColor(R.color.ux_subtext));
-        col.addView(icon, new android.widget.LinearLayout.LayoutParams((int) (46 * d), (int) (46 * d)));
-        android.widget.TextView t = new android.widget.TextView(this);
-        t.setText("Maxima is locked");
-        t.setTextSize(16);
-        t.setTextColor(getColor(R.color.ux_text));
-        t.setGravity(android.view.Gravity.CENTER);
-        t.setPadding(0, (int) (14 * d), 0, 0);
-        col.addView(t);
-        android.widget.TextView btn = new android.widget.TextView(this);
-        btn.setText("Unlock");
-        btn.setTextSize(14);
-        btn.setGravity(android.view.Gravity.CENTER);
-        btn.setTextColor(getColor(R.color.ux_on_accent));
-        btn.setBackgroundResource(R.drawable.btn_primary);
-        btn.setPadding((int) (40 * d), (int) (12 * d), (int) (40 * d), (int) (12 * d));
-        btn.setClickable(true);
-        btn.setOnClickListener(v -> promptUnlock());
-        android.widget.LinearLayout.LayoutParams blp =
-                new android.widget.LinearLayout.LayoutParams(-2, -2);
-        blp.topMargin = (int) (22 * d);
-        col.addView(btn, blp);
-        android.widget.FrameLayout.LayoutParams clp =
-                new android.widget.FrameLayout.LayoutParams(-2, -2);
-        clp.gravity = android.view.Gravity.CENTER;
-        fl.addView(col, clp);
-        return fl;
+    @Override
+    protected void onStop() {
+        super.onStop();
+        mLock.onStop();
     }
 
     /** Only the visible page is rendered; the others refresh when swiped to. */
