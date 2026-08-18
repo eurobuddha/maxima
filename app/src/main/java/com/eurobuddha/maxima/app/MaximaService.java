@@ -533,6 +533,18 @@ public final class MaximaService extends Service {
         if (n != null) {
             n.stop();
         }
+        // Publish "fully torn down" LAST, after every component above has
+        // flushed its state to disk. A restore waits for node()==null before it
+        // wipes node/ and chat/, so a slow teardown can no longer re-persist the
+        // old identity on top of the freshly restored one.
+        sMedia = null;
+        sGossip = null;
+        sRelay = null;
+        sLan = null;
+        sDirect = null;
+        sChat = null;
+        sPolicy = null;
+        sNode = null;
         super.onDestroy();
     }
 

@@ -354,13 +354,25 @@ public final class SettingsPage implements Page {
 
     private void applyRestoredIdentity() {
         mAct.stopService(new Intent(mAct, MaximaService.class));
-        mView.postDelayed(() -> {
+        // Do NOT wipe on a fixed delay: onDestroy flushes node + chat state to
+        // the very dirs we clear, so wiping before teardown finishes lets the old
+        // identity be re-persisted on top of the restore. Wait for the service to
+        // publish node()==null (its last teardown act), then wipe + restart.
+        waitForTeardownThenRestore(0);
+    }
+
+    private void waitForTeardownThenRestore(int zAttempt) {
+        boolean down = MaximaService.node() == null;
+        if (down || zAttempt >= 40) {   // hard cap ~10s so we never hang
             wipeDir(new java.io.File(mAct.getFilesDir(), "node"));
             wipeDir(new java.io.File(mAct.getFilesDir(), "chat"));
             MaximaService.start(mAct);
             mName.setText(SeedStore.displayName(mAct));
-            mAct.toast("Identity restored — reconnecting");
-        }, 1500);
+            mAct.toast(down ? "Identity restored — reconnecting"
+                    : "Identity restored — reconnecting (forced)");
+            return;
+        }
+        mView.postDelayed(() -> waitForTeardownThenRestore(zAttempt + 1), 250);
     }
 
     private static void wipeDir(java.io.File zDir) {

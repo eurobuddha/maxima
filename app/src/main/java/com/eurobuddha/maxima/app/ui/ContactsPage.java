@@ -57,9 +57,6 @@ public final class ContactsPage implements Page {
     private String mSearchQuery = "";
     private String mLastSignature = "";
 
-    /** Cached IP-form of our shareable address (resolved off-main). */
-    private volatile String mShareAddr;
-
     private static final long ONLINE_MS = 30 * 60 * 1000L;
 
     public ContactsPage(MainActivity zAct, View zView) {
@@ -264,11 +261,30 @@ public final class ContactsPage implements Page {
         String addr = c.primaryAddress();
         if (addr != null) {
             body.addView(copyField("Maxima address", addr, "Address copied"));
+            // RULE 1: every host address must be copyable in full, not just
+            // counted. Tap to reveal the rest as their own copy fields.
             if (c.addresses != null && c.addresses.size() > 1) {
-                TextView more = sub("+ " + (c.addresses.size() - 1) + " more host"
-                        + (c.addresses.size() - 1 == 1 ? "" : "s"));
-                more.setPadding(dp(2), dp(6), 0, 0);
+                final LinearLayout extras = new LinearLayout(mAct);
+                extras.setOrientation(LinearLayout.VERTICAL);
+                extras.setVisibility(View.GONE);
+                final int n = c.addresses.size() - 1;
+                final TextView more = ghostButton("Show " + n + " more host"
+                        + (n == 1 ? "" : "s"));
+                more.setPadding(dp(2), dp(8), 0, 0);
+                more.setOnClickListener(v -> {
+                    if (extras.getChildCount() == 0) {
+                        int idx = 0;
+                        for (String a : c.addresses) {
+                            if (a != null && !a.equals(addr)) {
+                                extras.addView(copyField("Host " + (++idx), a, "Address copied"));
+                            }
+                        }
+                    }
+                    extras.setVisibility(View.VISIBLE);
+                    more.setVisibility(View.GONE);
+                });
                 body.addView(more);
+                body.addView(extras);
             }
         } else {
             TextView none = sub("No address known yet — they have not replied to your introduction.");
@@ -364,9 +380,20 @@ public final class ContactsPage implements Page {
         // Resolve host → IP off-main, then fill QR + copy field + share.
         new Thread(() -> {
             final String ipAddr = toIpForm(raw);
-            mShareAddr = ipAddr;
-            final Bitmap bmp = Qr.encode(ipAddr, dp(200));
             mAct.runOnUiThread(() -> {
+                if (ipAddr == null) {
+                    // Couldn't turn a domain host into an IP — never share the
+                    // domain form. Ask the user to retry once online.
+                    copyHolder.removeAllViews();
+                    TextView warn = sub("Couldn't resolve a shareable IP address. "
+                            + "Check your connection and reopen this to try again.");
+                    warn.setPadding(dp(2), dp(6), dp(2), 0);
+                    copyHolder.addView(warn);
+                    shareBtn.setEnabled(false);
+                    shareBtn.setAlpha(0.4f);
+                    return;
+                }
+                final Bitmap bmp = Qr.encode(ipAddr, dp(200));
                 if (bmp != null) {
                     qr.setImageBitmap(bmp);
                 }
@@ -488,25 +515,34 @@ public final class ContactsPage implements Page {
     }
 
     /** {@code Mx…@host:port} → {@code Mx…@<ip>:port}, resolving a domain via DNS.
-     *  Call off-main. Falls back to the input if resolution fails. */
+     *  Call off-main. Returns null rather than ever handing out a domain form:
+     *  the rule is that OUR shared address always carries an IP host, never a
+     *  domain (a domain can be repointed or shared across hosts). A malformed
+     *  input with no '@' has no host to leak and is returned unchanged. */
     private String toIpForm(String addr) {
+        int at = addr == null ? -1 : addr.lastIndexOf('@');
+        if (at < 0) {
+            return addr;
+        }
+        String mx = addr.substring(0, at);
+        String hp = addr.substring(at + 1);
+        // Bracketed IPv6 literal ([2001:db8::1]:port): the host itself contains
+        // colons, so never split on the last colon.
+        if (hp.startsWith("[")) {
+            return addr;
+        }
+        int colon = hp.lastIndexOf(':');
+        String host = colon < 0 ? hp : hp.substring(0, colon);
+        String port = colon < 0 ? "" : hp.substring(colon);
+        if (isIp(host)) {
+            return addr;
+        }
         try {
-            int at = addr.lastIndexOf('@');
-            if (at < 0) {
-                return addr;
-            }
-            String mx = addr.substring(0, at);
-            String hp = addr.substring(at + 1);
-            int colon = hp.lastIndexOf(':');
-            String host = colon < 0 ? hp : hp.substring(0, colon);
-            String port = colon < 0 ? "" : hp.substring(colon);
-            if (isIp(host)) {
-                return addr;
-            }
             java.net.InetAddress ia = java.net.InetAddress.getByName(host);
             return mx + "@" + ia.getHostAddress() + port;
         } catch (Exception e) {
-            return addr;
+            // Can't produce an IP — refuse to share a domain-based address.
+            return null;
         }
     }
 
@@ -516,12 +552,24 @@ public final class ContactsPage implements Page {
             return "";
         }
         String hp = addr.substring(at + 1);
+        // Bracketed IPv6 literal: host is what's inside the brackets.
+        if (hp.startsWith("[")) {
+            int close = hp.indexOf(']');
+            return close > 1 ? hp.substring(1, close) : hp;
+        }
         int colon = hp.lastIndexOf(':');
         return colon < 0 ? hp : hp.substring(0, colon);
     }
 
+    /** True for an IPv4 dotted-quad or an IPv6 literal (colon-bearing) host. */
     private boolean isIp(String host) {
-        return host != null && host.matches("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+        if (host == null || host.isEmpty()) {
+            return false;
+        }
+        if (host.indexOf(':') >= 0) {
+            return true; // IPv6 literal
+        }
+        return host.matches("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
     }
 
     // ---------------------------------------------------------------
