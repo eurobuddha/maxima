@@ -332,6 +332,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         open(conversation, group);
     }
 
+    /** Focus the conversation search field (top-bar magnifying glass). */
+    public void focusSearch() {
+        if (mSearch != null) {
+            mSearch.requestFocusInWindow();
+        }
+    }
+
     private void open(String conversation, boolean group) {
         mOpen = conversation;
         mOpenGroup = group;

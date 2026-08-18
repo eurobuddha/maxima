@@ -193,9 +193,10 @@ public final class MaximaWindow {
         statusPill.setMaximumSize(statusPill.getPreferredSize());
         bar.add(statusPill);
 
-        bar.add(javax.swing.Box.createRigidArea(new Dimension(6, 0)));
+        bar.add(javax.swing.Box.createRigidArea(new Dimension(8, 0)));
 
-        // Theme toggle (sun/moon), drawn as a vector so it never renders as tofu.
+        // The phone's three top-bar action buttons, same order: theme, search, more.
+        // Theme toggle (sun/moon) — light↔dark, persisted.
         Icons.Btn theme = new Icons.Btn(t.mode == Theme.Mode.DARK ? Icons.SUN : Icons.MOON,
                 t.onHeader, DKit.alpha(t.onHeader, 24), 38, 20, 1.6f);
         theme.onClick(() -> {
@@ -205,6 +206,20 @@ public final class MaximaWindow {
             switchTheme(next);
         });
         bar.add(theme);
+
+        // Search (magnifying glass) → jump to Chats and focus its search (phone: showTab(0)).
+        Icons.Btn search = new Icons.Btn(Icons.SEARCH, t.onHeader, DKit.alpha(t.onHeader, 24), 38, 19, 1.9f);
+        search.onClick(() -> {
+            select(0);
+            Tab chats = mTabs.get(0);
+            if (chats instanceof ChatsPanel) ((ChatsPanel) chats).focusSearch();
+        });
+        bar.add(search);
+
+        // Overflow (three dots) → Settings (phone: showTab(4)).
+        Icons.Btn more = new Icons.Btn(Icons.MORE, t.onHeader, DKit.alpha(t.onHeader, 24), 36, 18, 1.6f);
+        more.onClick(() -> select(4));
+        bar.add(more);
         return bar;
     }
 

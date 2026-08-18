@@ -40,6 +40,8 @@ public final class Icons {
     public static final String SETTINGS = "settings";
     public static final String SEARCH = "search";
     public static final String CHECK = "check";
+    public static final String MORE = "more";
+    public static final String THEME = "theme";
 
     /** Paint icon {@code name} centred in a {@code size}×{@code size} box at (x,y). */
     public static void paint(Graphics2D g, String name, int x, int y, int size, Color color, float stroke) {
@@ -159,6 +161,22 @@ public final class Icons {
                 p.lineTo(s * 0.42, s * 0.72);
                 p.lineTo(s * 0.8, s * 0.28);
                 g2.draw(p);
+                break;
+            }
+            case MORE: {
+                // three vertical dots (Android overflow)
+                double d = s * 0.12;
+                g2.fill(new java.awt.geom.Ellipse2D.Double(s * 0.5 - d / 2, s * 0.18, d, d));
+                g2.fill(new java.awt.geom.Ellipse2D.Double(s * 0.5 - d / 2, s * 0.44, d, d));
+                g2.fill(new java.awt.geom.Ellipse2D.Double(s * 0.5 - d / 2, s * 0.70, d, d));
+                break;
+            }
+            case THEME: {
+                // half-filled contrast circle (light/dark)
+                g2.draw(new java.awt.geom.Ellipse2D.Double(s * 0.18, s * 0.18, s * 0.64, s * 0.64));
+                java.awt.geom.Arc2D half = new java.awt.geom.Arc2D.Double(
+                        s * 0.18, s * 0.18, s * 0.64, s * 0.64, 90, 180, java.awt.geom.Arc2D.PIE);
+                g2.fill(half);
                 break;
             }
             default:
