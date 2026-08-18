@@ -35,7 +35,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
     private final DKit k;
 
     private final JPanel mBody = new JPanel();
-    private final JLabel mLog = new JLabel();
+    private final DKit.WrapText mLog = new DKit.WrapText("");
     private String mSig = "";
 
     private JLabel mHeroBig;
@@ -75,8 +75,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         if (!mConnecting) {
             updateHero(hosts);
         }
-        mLog.setText("<html><pre style='font-family:monospace;font-size:10px'>"
-                + esc(DesktopEventLog.asText(40)) + "</pre></html>");
+        mLog.setText(DesktopEventLog.asText(40));
 
         String sig = hosts + "|" + n.contacts().size() + "|" + n.mailbox().totalItems()
                 + "|" + n.outbox().size() + "|" + n.services().methods().size()
@@ -282,7 +281,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(8));
         DKit.RoundPanel logCard = k.card();
         mLog.setForeground(t.subtext);
-        mLog.setVerticalAlignment(JLabel.TOP);
+        mLog.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10));
         mLog.setAlignmentX(Component.LEFT_ALIGNMENT);
         logCard.add(mLog);
         mBody.add(logCard);

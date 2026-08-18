@@ -185,16 +185,10 @@ public final class DKit {
         JLabel l = label(upperLabel ? labelText.toUpperCase() : labelText,
                 t.semibold(10f), t.subtext);
 
-        JTextArea v = new JTextArea(value == null ? "" : value);
+        WrapText v = new WrapText(value == null ? "" : value);
         v.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         v.setForeground(t.text);
-        v.setOpaque(false);
-        v.setEditable(false);
-        v.setFocusable(false);           // don't steal focus/selection; clicks copy
-        v.setLineWrap(true);
-        v.setWrapStyleWord(false);       // hex/base32 wraps by char, like the phone
         v.setBorder(new EmptyBorder(6, 0, 0, 0));
-        v.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         box.add(l);
         box.add(v);
@@ -274,6 +268,37 @@ public final class DKit {
     // ============================================================
     // Widgets
     // ============================================================
+
+    /**
+     * A read-only, transparent, always-wrapping text block. The key to reliable
+     * wrapping inside a BoxLayout: report a maximum size with UNBOUNDED width and a
+     * height derived from the CURRENT width, so the layout stretches it full-width
+     * and line-wrap then reflows. Fixes long addresses/keys/logs overflowing.
+     */
+    public static final class WrapText extends JTextArea {
+        public WrapText(String s) {
+            super(s);
+            setOpaque(false);
+            setEditable(false);
+            setFocusable(false);
+            setLineWrap(true);
+            setWrapStyleWord(false);
+            setAlignmentX(Component.LEFT_ALIGNMENT);
+        }
+
+        public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+        }
+
+        public Dimension getPreferredSize() {
+            // Height for the current width (0 width falls back to the default).
+            int w = getWidth();
+            if (w > 0) {
+                setSize(w, Short.MAX_VALUE);
+            }
+            return super.getPreferredSize();
+        }
+    }
 
     /** A panel that paints a rounded, anti-aliased filled background. */
     public static final class RoundPanel extends JPanel {
