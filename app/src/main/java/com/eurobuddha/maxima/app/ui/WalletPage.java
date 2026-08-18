@@ -17,6 +17,7 @@ import android.widget.TextView;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
+import com.eurobuddha.maxima.app.EventLog;
 import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.wallet.MaximaWallet;
@@ -137,14 +138,38 @@ public final class WalletPage implements Page {
                 renderUses(w);
                 render();
             });
-            mPub.trackScript(w.script(), new WalletPublisher.Cb() {
-                public void onResult(JSONObject r) {
-                    mTracked = true;
-                }
+            mTracked = false;
+            trackWallet(w, 0);
+        });
+    }
 
-                public void onError(String m) {
+    /**
+     * Register the wallet's script with the node so balance/coins queries see it.
+     * This is essential — without it the node has no history for our key index and
+     * every balance comes back empty. So a failure is retried (bounded) and, if it
+     * ultimately can't register, surfaced to the event log rather than swallowed.
+     * On success we force an immediate refresh so the balance appears at once
+     * instead of waiting for the next 5s render tick.
+     */
+    private void trackWallet(final MaximaWallet w, final int zTry) {
+        mPub.trackScript(w.script(), new WalletPublisher.Cb() {
+            public void onResult(JSONObject r) {
+                mTracked = true;
+                mLastFetch = 0;       // let the next render fetch immediately
+                post(() -> render());
+            }
+
+            public void onError(String m) {
+                if (zTry < 3 && mWallet == w) {
+                    post(() -> mView.postDelayed(() -> {
+                        if (mWallet == w) {
+                            trackWallet(w, zTry + 1);
+                        }
+                    }, 1500L * (zTry + 1)));
+                } else {
+                    EventLog.add("wallet: could not register script with node: " + m);
                 }
-            });
+            }
         });
     }
 
@@ -193,12 +218,16 @@ public final class WalletPage implements Page {
                     }
                     mConf = conf;
                     mUnconf = unconf;
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    EventLog.add("wallet: balance parse failed: " + e.getMessage());
                 }
                 post(() -> repaintHero());
             }
 
             public void onError(String m) {
+                // Transient fetch errors self-heal on the next render tick; only
+                // log so a persistent failure is visible in diagnostics.
+                EventLog.add("wallet: balance fetch error: " + m);
             }
         });
         // coins → per-token aggregate (SIGNEDBY-aware spendable) + card list.
@@ -219,7 +248,8 @@ public final class WalletPage implements Page {
                     }
                     mAggs = aggs;
                     mSpendMinima = spend;
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    EventLog.add("wallet: coins parse failed: " + e.getMessage());
                 }
                 post(() -> {
                     repaintHero();
@@ -228,6 +258,7 @@ public final class WalletPage implements Page {
             }
 
             public void onError(String m) {
+                EventLog.add("wallet: coins fetch error: " + m);
             }
         });
     }

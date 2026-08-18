@@ -40,6 +40,8 @@ public final class SettingsPage implements Page {
     private final TextView[] mAppearSeg = new TextView[3];
     private LinearLayout mPower;
     private LinearLayout mApps;
+    /** Signature of the state the heavy sections render, to skip idle rebuilds. */
+    private String mLastSig;
 
     public SettingsPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -63,6 +65,23 @@ public final class SettingsPage implements Page {
     public void render() {
         MaximaNode node = MaximaService.node();
         mKeyValue.setText(node == null ? "…" : node.identity().publicKeyHex());
+
+        // The 2s heartbeat calls this repeatedly. Only the key field above is
+        // cheap to refresh every tick; the sections below removeAllViews() +
+        // rebuild, so skip that churn unless their inputs actually changed.
+        String heavySig = (node == null ? "-" : node.identity().publicKeyHex())
+                + "|" + ChatPrefs.readReceipts(mAct)
+                + "|" + com.eurobuddha.maxima.app.AppLock.isEnabled(mAct)
+                + "|" + com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)
+                + "|" + ChatPrefs.appearance(mAct)
+                + "|" + ChatPrefs.nodeKind(mAct)
+                + "|" + isBatteryExempt()
+                + "|" + MaximaApiReceiver.pendingPackages(mAct)
+                + "|" + MaximaApiReceiver.approvedPackages(mAct);
+        if (heavySig.equals(mLastSig)) {
+            return;
+        }
+        mLastSig = heavySig;
 
         // Privacy.
         mPrivacy.removeAllViews();

@@ -59,6 +59,8 @@ public final class NetworkPage implements Page {
     private TextView mLog;
     private TextView mAutoBtn;
     private boolean mVerifying;
+    /** Signature of the state the heavy sections render, to skip idle rebuilds. */
+    private String mLastNetSig;
 
     /** The host activity is still usable (not finishing/destroyed) — guards every
      *  delayed dialog/render posted from a background or timer callback. */
@@ -109,6 +111,33 @@ public final class NetworkPage implements Page {
             mNodeSub.setText(sb.toString());
         }
         setPill(hosts > 0 ? "Reachable" : "Offline", hosts > 0 ? Kit.OK : Kit.BAD);
+
+        // The 2s heartbeat calls render() constantly. The cheap live bits above
+        // (log, pill, subtitle) refresh every tick, but the sections below all
+        // removeAllViews() + rebuild — churn that flickers and drops taps. Skip
+        // that heavy rebuild unless the state it depends on actually changed.
+        RelayHost relay0 = MaximaService.relay();
+        boolean relayOn0 = relay0 != null && relay0.state() == RelayHost.State.RUNNING;
+        AndroidContribution polSig = MaximaService.policy();
+        String heavySig = hosts
+                + "|" + node.contacts().size()
+                + "|" + node.mailbox().totalItems()
+                + "|" + node.outbox().size()
+                + "|" + node.services().methods().size()
+                + "|" + directNow + "|" + relayOn0
+                + "|" + (polSig != null && AndroidContribution.isEnabled(mAct))
+                + "|" + AndroidContribution.unmeteredOnly(mAct)
+                + "|" + node.pool().activeHosts()
+                + "|" + RelayStore.get(mAct)
+                + "|" + node.mlsAddress()
+                + "|" + (dr == null ? "-" : dr.blocker() + ":" + dr.suggestedPort()
+                        + ":" + dr.state() + ":" + dr.publicAddress())
+                + "|" + (relay0 == null ? "-" : relay0.blocker())
+                + "|" + node.tier1().contributionSummary();
+        if (heavySig.equals(mLastNetSig)) {
+            return;
+        }
+        mLastNetSig = heavySig;
 
         // ---- transport figures ----
         mStats.removeAllViews();
