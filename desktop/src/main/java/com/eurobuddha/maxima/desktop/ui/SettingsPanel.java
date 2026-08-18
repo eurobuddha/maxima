@@ -10,18 +10,21 @@ import java.util.prefs.Preferences;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.border.EmptyBorder;
 
 /**
- * The Settings tab: display name, the maxima publickey (copyable, lowercase),
- * read-receipt and appearance (light/dark) preferences, and an about line. The
- * appearance toggle rebuilds the window under a new {@link Theme}, so the whole
- * app switches light/dark at once — matching the phone's appearance control.
+ * The Settings tab — parity with the phone's desktop-meaningful settings: your name
+ * + maxima publickey, privacy (read receipts), appearance (System/Light/Dark),
+ * node kind (run as core), keys & security (show seed with 60s auto-clear copy,
+ * restore a seed phrase), and about. Phone-only items (app-lock, battery, Android
+ * app IPC) are intentionally omitted.
  */
 public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
 
@@ -30,6 +33,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
     private final DKit k;
     private final MaximaWindow window;
     private final JPanel mBody = new JPanel();
+    private JLabel mKeyValue;
     private boolean mBuilt;
 
     private static final Preferences PREFS =
@@ -43,9 +47,9 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         setLayout(new BorderLayout());
         setBackground(t.bg);
         mBody.setLayout(new BoxLayout(mBody, BoxLayout.Y_AXIS));
-        mBody.setBackground(t.bg);
-        mBody.setBorder(new EmptyBorder(22, 26, 22, 26));
-        JScrollPane sp = new JScrollPane(mBody,
+        mBody.setOpaque(false);
+        mBody.setBorder(new EmptyBorder(20, 22, 22, 22));
+        JScrollPane sp = new JScrollPane(holder(k.centered(mBody, 720)),
                 ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
                 ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         sp.setBorder(null);
@@ -58,83 +62,123 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
     public JComponent view() { return this; }
 
     public void refresh() {
-        if (mBuilt) {
-            return;
+        if (!mBuilt) { mBuilt = true; build(); }
+        if (mKeyValue != null) {
+            try { mKeyValue.setText(node.node().identity().publicKeyHex()); } catch (Exception ignored) { }
         }
-        mBuilt = true;
-        build();
     }
 
     private void build() {
         mBody.removeAll();
-        mBody.add(k.title("Settings"));
-        mBody.add(k.vgap(16));
 
-        // Identity card.
-        DKit.RoundPanel idCard = k.card();
-        idCard.add(k.sectionLabel("Identity"));
-        idCard.add(k.vgap(8));
-        JPanel nameRow = new JPanel(new BorderLayout(10, 0));
-        nameRow.setOpaque(false);
-        nameRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        nameRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // ---- your name + maxima publickey ----
+        mBody.add(k.sectionLabel("Your name"));
+        mBody.add(k.vgap(8));
+        DKit.RoundPanel nameCard = k.card();
+        JPanel nameRow = rowX();
         JTextField name = k.field("Display name");
         name.setText(currentName());
-        nameRow.add(name, BorderLayout.CENTER);
+        name.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        nameRow.add(name);
+        nameRow.add(Box.createRigidArea(new Dimension(9, 0)));
         DKit.HoverButton set = k.primaryButton("Set");
         set.onClick(() -> {
             String nm = name.getText().trim();
-            if (!nm.isEmpty()) {
-                node.node().setName(nm);
-                PREFS.put("name", nm);
-                window.frame().setTitle("Maxima — " + nm);
-            }
+            if (nm.isEmpty()) return;
+            PREFS.put("name", nm);
+            node.node().setName(nm);
+            window.frame().setTitle("Maxima — " + nm);
+            new Thread(() -> { try { node.node().refreshContacts(); } catch (Exception ignored) { } },
+                    "refresh-contacts").start();
         });
-        nameRow.add(set, BorderLayout.EAST);
-        idCard.add(nameRow);
-        idCard.add(k.vgap(10));
-        idCard.add(k.copyField("maxima publickey", node.identity().publicKeyHex(), false));
-        mBody.add(idCard);
+        nameRow.add(set);
+        nameCard.add(nameRow);
+        nameCard.add(k.vgap(10));
+        JComponent keyField = k.copyField("maxima publickey", node.node().identity().publicKeyHex(), false);
+        nameCard.add(keyField);
+        mKeyValue = findValueLabel(keyField);
+        mBody.add(nameCard);
         mBody.add(k.vgap(14));
 
-        // Privacy card.
+        // ---- privacy ----
+        mBody.add(k.sectionLabel("Privacy"));
+        mBody.add(k.vgap(8));
         DKit.RoundPanel priv = k.card();
-        priv.add(k.sectionLabel("Privacy"));
-        priv.add(k.vgap(8));
         boolean rr = PREFS.getBoolean("readReceipts", true);
         node.setReadReceipts(rr);
-        priv.add(toggleRow("Read receipts",
+        priv.add(switchRow("Read receipts",
                 rr ? "Contacts are told when you read their message"
-                        : "Contacts see delivery only, never when you read",
-                rr, checked -> {
-                    PREFS.putBoolean("readReceipts", checked);
-                    node.setReadReceipts(checked);
-                    rebuild();
-                }));
+                        : "Contacts see delivery only, never when you read", rr, on -> {
+            PREFS.putBoolean("readReceipts", on);
+            node.setReadReceipts(on);
+            rebuild();
+        }));
+        priv.add(k.divider());
+        priv.add(k.kvLine("Delivery receipts", "always on"));
         mBody.add(priv);
         mBody.add(k.vgap(14));
 
-        // Appearance card.
+        // ---- appearance ----
+        mBody.add(k.sectionLabel("Appearance"));
+        mBody.add(k.vgap(8));
         DKit.RoundPanel appear = k.card();
-        appear.add(k.sectionLabel("Appearance"));
-        appear.add(k.vgap(8));
-        boolean dark = t.mode == Theme.Mode.DARK;
-        appear.add(toggleRow("Dark mode",
-                dark ? "Greyscale dark palette" : "Greyscale light palette",
-                dark, checked -> {
-                    PREFS.put("appearance", checked ? "dark" : "light");
-                    window.switchTheme(checked ? Theme.Mode.DARK : Theme.Mode.LIGHT);
-                }));
+        String cur = PREFS.get("appearance", "system");
+        int sel = cur.equals("light") ? 1 : cur.equals("dark") ? 2 : 0;
+        DKit.Segmented seg = k.segmented(new String[]{"System", "Light", "Dark"}, sel, i -> {
+            String val = i == 1 ? "light" : i == 2 ? "dark" : "system";
+            PREFS.put("appearance", val);
+            Theme.Mode m = val.equals("dark") ? Theme.Mode.DARK
+                    : val.equals("light") ? Theme.Mode.LIGHT : Theme.detectMode();
+            window.switchTheme(m);
+        });
+        seg.setAlignmentX(Component.LEFT_ALIGNMENT);
+        appear.add(seg);
         mBody.add(appear);
         mBody.add(k.vgap(14));
 
-        // About.
+        // ---- node ----
+        mBody.add(k.sectionLabel("Node"));
+        mBody.add(k.vgap(8));
+        DKit.RoundPanel nodeCard = k.card();
+        boolean core = PREFS.getBoolean("coreNode", true);
+        nodeCard.add(switchRow("Run as core node",
+                core ? "Shown to contacts as an always-on core node"
+                        : "Shown to contacts as an ordinary node", core, on -> {
+            PREFS.putBoolean("coreNode", on);
+            try { node.node().setNodeKind(on ? "core" : ""); } catch (Exception ignored) { }
+            rebuild();
+        }));
+        mBody.add(nodeCard);
+        mBody.add(k.vgap(14));
+
+        // ---- keys & security ----
+        mBody.add(k.sectionLabel("Keys & security"));
+        mBody.add(k.vgap(8));
+        DKit.RoundPanel keys = k.card();
+        keys.add(k.kvLine("Seed phrase", "24 words"));
+        keys.add(k.sub("These words are your identity AND a spendable Minima wallet seed."));
+        keys.add(k.vgap(10));
+        JPanel kr = rowX();
+        DKit.HoverButton show = k.dangerButton("Show seed phrase");
+        show.onClick(this::showSeed);
+        DKit.HoverButton restore = k.ghostButton("Restore a seed phrase");
+        restore.onClick(this::restoreSeed);
+        kr.add(show);
+        kr.add(Box.createRigidArea(new Dimension(8, 0)));
+        kr.add(restore);
+        kr.add(Box.createHorizontalGlue());
+        keys.add(kr);
+        mBody.add(keys);
+        mBody.add(k.vgap(14));
+
+        // ---- about ----
+        mBody.add(k.sectionLabel("About"));
+        mBody.add(k.vgap(8));
         DKit.RoundPanel about = k.card();
-        about.add(k.sectionLabel("About"));
-        about.add(k.vgap(8));
-        about.add(k.sub("Maxima desktop · a decentralized, relay-routed messenger."));
-        about.add(k.vgap(2));
-        about.add(k.sub("Version " + DesktopMain.APP_VERSION));
+        about.add(k.sub("Maxima desktop — a decentralized, relay-routed messenger. "
+                + "Your identity lives only on your devices; no server holds your account."));
+        about.add(k.vgap(6));
+        about.add(k.kvLine("Version", DesktopMain.APP_VERSION));
         mBody.add(about);
 
         mBody.add(Box.createVerticalGlue());
@@ -142,9 +186,133 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.repaint();
     }
 
-    private void rebuild() {
-        mBuilt = false;
-        refresh();
+    private void rebuild() { mBuilt = false; refresh(); }
+
+    // ---- seed dialogs ----
+
+    private void showSeed() {
+        int ok = javax.swing.JOptionPane.showConfirmDialog(this,
+                "Your 24 words are your identity AND a spendable wallet seed.\n"
+                        + "Make sure nobody is looking. Reveal them?",
+                "Show seed phrase?", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (ok != javax.swing.JOptionPane.OK_OPTION) return;
+        String phrase = node.seedPhrase();
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        body.add(k.sub("Write these down, offline. Anyone with them is you."));
+        body.add(k.vgap(10));
+        JTextArea ta = new JTextArea(phrase.isEmpty() ? "(unavailable)" : phrase);
+        ta.setLineWrap(true);
+        ta.setWrapStyleWord(true);
+        ta.setEditable(false);
+        ta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 14));
+        ta.setForeground(t.text);
+        ta.setBackground(t.input);
+        ta.setBorder(new EmptyBorder(12, 12, 12, 12));
+        ta.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(ta);
+        body.add(k.vgap(12));
+        JPanel r = rowX();
+        DKit.HoverButton copy = k.primaryButton("Copy (auto-clears in 60s)");
+        copy.onClick(() -> copySeedAutoClear(phrase));
+        r.add(copy);
+        r.add(Box.createHorizontalGlue());
+        body.add(r);
+        dialog("Your seed phrase", body, 460);
+    }
+
+    private void copySeedAutoClear(String phrase) {
+        DKit.copy(phrase);
+        javax.swing.Timer tm = new javax.swing.Timer(60000, e -> {
+            try {
+                java.awt.datatransfer.Clipboard cb =
+                        java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
+                Object cur = cb.getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+                if (phrase.equals(cur)) {
+                    cb.setContents(new java.awt.datatransfer.StringSelection(""), null);
+                }
+            } catch (Exception ignored) { }
+        });
+        tm.setRepeats(false);
+        tm.start();
+        javax.swing.JOptionPane.showMessageDialog(this, "Copied — will auto-clear in 60s.");
+    }
+
+    private void restoreSeed() {
+        JTextArea input = new JTextArea(3, 28);
+        input.setLineWrap(true);
+        input.setWrapStyleWord(true);
+        int ok = javax.swing.JOptionPane.showConfirmDialog(this,
+                new Object[]{
+                    "This REPLACES the identity on this machine with the one your words derive.\n"
+                            + "Contacts and chats here are cleared. Paste your 24 words:",
+                    new JScrollPane(input)},
+                "Restore a seed phrase", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (ok != javax.swing.JOptionPane.OK_OPTION) return;
+        String phrase = input.getText().trim();
+        if (phrase.isEmpty()) return;
+        try {
+            node.restoreSeed(phrase);
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Identity restored. Maxima will now close — reopen it to use the restored identity.");
+            System.exit(0);
+        } catch (Exception e) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Couldn't restore: " + e.getMessage());
+        }
+    }
+
+    // ---- helpers ----
+
+    private JComponent switchRow(String title, String hint, boolean on,
+                                 java.util.function.Consumer<Boolean> cb) {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(6, 0, 6, 0));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
+        JPanel left = new JPanel();
+        left.setOpaque(false);
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+        JLabel tl = new JLabel(title);
+        tl.setFont(t.semibold(13.5f));
+        tl.setForeground(t.text);
+        tl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel hl = k.sub(hint);
+        hl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        left.add(tl);
+        left.add(hl);
+        row.add(left, BorderLayout.CENTER);
+        DKit.Toggle sw = k.toggle(on, cb);
+        JPanel tw = new JPanel(new BorderLayout());
+        tw.setOpaque(false);
+        tw.add(sw, BorderLayout.NORTH);
+        row.add(tw, BorderLayout.EAST);
+        return row;
+    }
+
+    private JPanel rowX() {
+        JPanel r = new JPanel();
+        r.setOpaque(false);
+        r.setLayout(new BoxLayout(r, BoxLayout.X_AXIS));
+        r.setAlignmentX(Component.LEFT_ALIGNMENT);
+        r.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        return r;
+    }
+
+    private JDialog dialog(String title, JComponent body, int width) {
+        JDialog d = new JDialog(window.frame(), title, false);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(16, 18, 18, 18));
+        wrap.add(body, BorderLayout.CENTER);
+        d.setContentPane(wrap);
+        d.pack();
+        d.setSize(Math.max(width, d.getWidth()), d.getHeight());
+        d.setLocationRelativeTo(window.frame());
+        d.setVisible(true);
+        return d;
     }
 
     private String currentName() {
@@ -152,65 +320,16 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         return p.isEmpty() ? "Maxima Desktop" : p;
     }
 
-    interface OnToggle { void changed(boolean checked); }
-
-    private JComponent toggleRow(String title, String hint, boolean on, OnToggle cb) {
-        JPanel row = new JPanel(new BorderLayout(12, 0));
-        row.setOpaque(false);
-        row.setBorder(new EmptyBorder(8, 2, 8, 2));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 56));
-        JPanel left = new JPanel();
-        left.setOpaque(false);
-        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
-        JLabel tl = new JLabel(title);
-        tl.setFont(t.semibold(13f));
-        tl.setForeground(t.text);
-        tl.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel hl = new JLabel(hint);
-        hl.setFont(t.font(11.5f));
-        hl.setForeground(t.subtext);
-        hl.setAlignmentX(Component.LEFT_ALIGNMENT);
-        left.add(tl);
-        left.add(hl);
-        row.add(left, BorderLayout.CENTER);
-        Toggle sw = new Toggle(on, t, cb);
-        JPanel wrap = new JPanel(new BorderLayout());
-        wrap.setOpaque(false);
-        wrap.add(sw, BorderLayout.CENTER);
-        row.add(wrap, BorderLayout.EAST);
-        return row;
+    /** The copyField's value JTextArea, so refresh can update the live publickey. */
+    private JLabel findValueLabel(JComponent copyField) {
+        return null;   // copyField renders the value in a JTextArea, not a JLabel; live-updating
+                       // the publickey isn't needed (it's constant per identity).
     }
 
-    /** A small drawn iOS-style switch. */
-    private static final class Toggle extends JComponent {
-        private boolean on;
-        private final Theme theme;
-
-        Toggle(boolean zOn, Theme t, OnToggle cb) {
-            on = zOn;
-            theme = t;
-            setPreferredSize(new Dimension(44, 26));
-            setMaximumSize(new Dimension(44, 26));
-            setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-            addMouseListener(new java.awt.event.MouseAdapter() {
-                public void mouseClicked(java.awt.event.MouseEvent e) {
-                    on = !on;
-                    repaint();
-                    cb.changed(on);
-                }
-            });
-        }
-
-        protected void paintComponent(java.awt.Graphics g) {
-            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
-                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(on ? theme.accent : theme.divider);
-            g2.fillRoundRect(0, 2, 44, 22, 22, 22);
-            g2.setColor(on ? theme.onAccent : theme.card);
-            int x = on ? 22 : 3;
-            g2.fillOval(x, 5, 16, 16);
-            g2.dispose();
-        }
+    private static JComponent holder(JComponent c) {
+        JPanel h = new JPanel(new BorderLayout());
+        h.setOpaque(false);
+        h.add(c, BorderLayout.NORTH);
+        return h;
     }
 }

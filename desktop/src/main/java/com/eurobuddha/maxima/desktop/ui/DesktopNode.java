@@ -275,6 +275,45 @@ public final class DesktopNode {
         mChat.setSendReadReceipts(on);
     }
 
+    // ---- seed (identity = spendable wallet seed) ----
+
+    /** The 24 words, read from the seed file. Empty if unavailable. */
+    public String seedPhrase() {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(mDataDir.resolve("seed.txt")),
+                    java.nio.charset.StandardCharsets.UTF_8).trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * Replace this machine's identity with the one the phrase derives: validate,
+     * stop the node, wipe node/chat/media so the old identity can't mix in, and
+     * write the new seed. The caller restarts the process to load it.
+     */
+    public void restoreSeed(String phrase) throws Exception {
+        MaximaIdentity.fromPhrase(phrase.trim());   // throws if the phrase is invalid
+        shutdown();
+        wipe(mDataDir.resolve("node"));
+        wipe(mDataDir.resolve("chat"));
+        wipe(mDataDir.resolve("media"));
+        java.nio.file.Files.write(mDataDir.resolve("seed.txt"),
+                phrase.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static void wipe(Path dir) {
+        try {
+            File d = dir.toFile();
+            if (!d.exists()) return;
+            File[] fs = d.listFiles();
+            if (fs != null) for (File f : fs) {
+                if (f.isDirectory()) wipe(f.toPath()); else f.delete();
+            }
+            d.delete();
+        } catch (Exception ignored) { }
+    }
+
     public void shutdown() {
         mRunning = false;
         if (mPump != null) {
