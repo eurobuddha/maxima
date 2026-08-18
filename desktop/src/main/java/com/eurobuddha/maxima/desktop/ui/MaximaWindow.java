@@ -73,14 +73,19 @@ public final class MaximaWindow {
         mFrame = new JFrame("Maxima");
         mFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mFrame.setMinimumSize(new Dimension(360, 560));   // phone-narrow floor
-        mFrame.setSize(1040, 720);
+        mFrame.setSize(Integer.getInteger("maxima.w", 1040), Integer.getInteger("maxima.h", 720));
         mFrame.setLocationRelativeTo(null);
+        // -Dmaxima.x/-Dmaxima.y position the window (dev/QA convenience).
+        Integer px = Integer.getInteger("maxima.x", null), py = Integer.getInteger("maxima.y", null);
+        if (px != null && py != null) {
+            mFrame.setLocation(px, py);
+        }
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(t.bg);
 
         mTabs.add(new ChatsPanel(mNode, t));
-        mTabs.add(new ContactsPanel(mNode, t));
+        mTabs.add(new ContactsPanel(mNode, t, this));
         mTabs.add(new WalletPanel(mNode, t));
         mTabs.add(new NetworkPanel(mNode, t));
         mTabs.add(new SettingsPanel(mNode, t, this));
@@ -109,7 +114,11 @@ public final class MaximaWindow {
             public void componentResized(ComponentEvent e) { pushWidth(); }
         });
 
-        select(0);
+        // -Dmaxima.tab=N opens a given tab first (dev/QA convenience; default Chats).
+        int start = 0;
+        try { start = Math.max(0, Math.min(mTabs.size() - 1, Integer.getInteger("maxima.tab", 0))); }
+        catch (Exception ignored) { }
+        select(start);
 
         mBeat = new Timer(2000, e -> {
             try { mTabs.get(mSelected).refresh(); } catch (Exception ignored) { }
@@ -127,6 +136,15 @@ public final class MaximaWindow {
     public void show() { mFrame.setVisible(true); }
     public JFrame frame() { return mFrame; }
     public DesktopNode node() { return mNode; }
+
+    /** Switch to the Chats tab and open a conversation with a contact (from Contacts). */
+    public void openChat(String pubkey) {
+        select(0);
+        Tab chats = mTabs.get(0);
+        if (chats instanceof ChatsPanel) {
+            ((ChatsPanel) chats).openConversation(pubkey, false);
+        }
+    }
 
     /** Rebuild the whole window under a new palette, preserving geometry; no reconnect. */
     public void switchTheme(Theme.Mode m) {

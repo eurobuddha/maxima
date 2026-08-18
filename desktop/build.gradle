@@ -27,6 +27,8 @@ tasks.withType(JavaCompile).configureEach {
 dependencies {
     implementation project(':core')
     implementation project(':server')   // RelayServer + RelayRuntime
+    // Pure-Java QR encoder (same lib the phone uses) for the "share my address" QR.
+    implementation 'com.google.zxing:core:3.5.3'
 }
 
 application {

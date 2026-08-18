@@ -215,6 +215,22 @@ public final class DKit {
         return new Avatar(key, initial, size, t);
     }
 
+    // ---- centered, width-capped column (fluid-fill single-column pages) ----
+
+    /** Center a vertical body, capped at {@code maxWidth}; it fills when the window
+     *  is narrower. This is how the non-chat pages stay phone-like on a wide desktop
+     *  window instead of stretching a single column edge to edge. */
+    public JComponent centered(JComponent body, int maxWidth) {
+        body.setMaximumSize(new Dimension(maxWidth, Integer.MAX_VALUE));
+        JPanel rowp = new JPanel();
+        rowp.setOpaque(false);
+        rowp.setLayout(new BoxLayout(rowp, BoxLayout.X_AXIS));
+        rowp.add(Box.createHorizontalGlue());
+        rowp.add(body);
+        rowp.add(Box.createHorizontalGlue());
+        return rowp;
+    }
+
     // ---- helpers ----
 
     public static void copy(String s) {
@@ -458,11 +474,7 @@ public final class DKit {
             theme = t;
             initial = initialStr == null || initialStr.isEmpty()
                     ? "?" : initialStr.substring(0, 1).toUpperCase();
-            int h = key == null ? 0 : key.hashCode();
-            int base = t.mode == Theme.Mode.DARK ? 70 : 190;
-            int spread = (Math.abs(h) % 40) - 20;
-            int gg = clamp(base + spread);
-            disc = new Color(gg, gg, gg);
+            disc = identityColour(key);
             setPreferredSize(new Dimension(zSize, zSize));
             setMaximumSize(new Dimension(zSize, zSize));
             setMinimumSize(new Dimension(zSize, zSize));
@@ -483,8 +495,30 @@ public final class DKit {
             g2.dispose();
         }
 
-        private static int clamp(int v) {
-            return Math.max(30, Math.min(220, v));
+        /** The phone's exact hue-hashed muted disc colour (Avatars.colour): hash the
+         *  WHOLE key mod 30 → spread hue, low saturation/lightness so white reads. */
+        static Color identityColour(String key) {
+            int v = (key == null || key.isEmpty()) ? 0 : key.hashCode();
+            int idx = Math.floorMod(v, 30);
+            float hue = (idx * 360f) / 30f;
+            float sat = 0.32f + (idx % 3) * 0.03f;
+            float light = 0.42f + (idx % 2) * 0.03f;
+            return hsl(hue, sat, light);
+        }
+
+        private static Color hsl(float h, float s, float l) {
+            float c = (1 - Math.abs(2 * l - 1)) * s;
+            float hp = h / 60f;
+            float x = c * (1 - Math.abs(hp % 2 - 1));
+            float r = 0, g = 0, b = 0;
+            if (hp < 1) { r = c; g = x; }
+            else if (hp < 2) { r = x; g = c; }
+            else if (hp < 3) { g = c; b = x; }
+            else if (hp < 4) { g = x; b = c; }
+            else if (hp < 5) { r = x; b = c; }
+            else { r = c; b = x; }
+            float m = l - c / 2;
+            return new Color(Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255));
         }
     }
 }

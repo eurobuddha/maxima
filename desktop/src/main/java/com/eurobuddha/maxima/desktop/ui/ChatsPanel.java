@@ -24,10 +24,12 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.border.EmptyBorder;
@@ -60,6 +62,9 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private final JTextArea mInput;
     private final Icons.Btn mBack;
 
+    private JTextField mSearch;
+    private String mQuery = "";
+
     private String mOpen;
     private boolean mOpenGroup;
     private boolean mNarrow;
@@ -79,13 +84,52 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         setLayout(new BorderLayout());
         setBackground(t.bg);
 
-        // ---- conversation list ----
+        // ---- conversation list (search bar + list + floating new-chat FAB) ----
         mList.setLayout(new BoxLayout(mList, BoxLayout.Y_AXIS));
         mList.setBackground(t.card);
         mListScroll = scroll(mList, t.card);
-        mListScroll.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, t.divider));
+        mListScroll.setBorder(null);
         mListPane.setBackground(t.card);
-        mListPane.add(mListScroll, BorderLayout.CENTER);
+        mListPane.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, t.divider));
+
+        JPanel searchWrap = new JPanel(new BorderLayout());
+        searchWrap.setBackground(t.card);
+        searchWrap.setBorder(new EmptyBorder(10, 12, 8, 12));
+        DKit.RoundPanel searchPill = k.round(t.input, DKit.R_FIELD);
+        searchPill.setLayout(new BoxLayout(searchPill, BoxLayout.X_AXIS));
+        searchPill.setBorder(new EmptyBorder(2, 12, 2, 12));
+        searchPill.add(new Icons.Btn(Icons.SEARCH, t.subtext, null, 22, 15, 1.8f));
+        searchPill.add(Box.createRigidArea(new Dimension(8, 0)));
+        mSearch = new JTextField();
+        mSearch.setOpaque(false);
+        mSearch.setBorder(new EmptyBorder(8, 0, 8, 0));
+        mSearch.setFont(t.font(13f));
+        mSearch.setForeground(t.text);
+        mSearch.setCaretColor(t.text);
+        mSearch.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }
+        });
+        searchPill.add(mSearch);
+        searchWrap.add(searchPill, BorderLayout.CENTER);
+        mListPane.add(searchWrap, BorderLayout.NORTH);
+
+        // Floating new-chat FAB over the list.
+        javax.swing.JLayeredPane layered = new javax.swing.JLayeredPane();
+        layered.setLayout(null);
+        SendFabLike fab = new SendFabLike(t);
+        fab.onClick(this::showNewChat);
+        layered.add(mListScroll, Integer.valueOf(javax.swing.JLayeredPane.DEFAULT_LAYER));
+        layered.add(fab, Integer.valueOf(javax.swing.JLayeredPane.PALETTE_LAYER));
+        layered.addComponentListener(new java.awt.event.ComponentAdapter() {
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                int w = layered.getWidth(), h = layered.getHeight();
+                mListScroll.setBounds(0, 0, w, h);
+                fab.setBounds(w - 62, h - 62, 52, 52);
+            }
+        });
+        mListPane.add(layered, BorderLayout.CENTER);
 
         // ---- open conversation ----
         mConvPane.setBackground(t.chatBg);
@@ -163,10 +207,26 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     // ---- refresh ----
 
+    private void onSearch() {
+        mQuery = mSearch.getText();
+        mLastSig = "";
+        refresh();
+    }
+
+    private boolean matches(ChatEngine.Summary s) {
+        String q = mQuery.trim().toLowerCase();
+        if (q.isEmpty()) return true;
+        String title = titleFor(s.conversation, node.chat().group(s.conversation) != null);
+        return title.toLowerCase().contains(q)
+                || (s.lastBody != null && s.lastBody.toLowerCase().contains(q));
+    }
+
     public void refresh() {
         ChatEngine ce = node.chat();
-        List<ChatEngine.Summary> sums = ce.summaries();
-        StringBuilder sig = new StringBuilder();
+        List<ChatEngine.Summary> all = ce.summaries();
+        List<ChatEngine.Summary> sums = new java.util.ArrayList<>();
+        for (ChatEngine.Summary s : all) if (matches(s)) sums.add(s);
+        StringBuilder sig = new StringBuilder(mQuery).append('#');
         for (ChatEngine.Summary s : sums) {
             sig.append(s.conversation).append(s.lastTime).append(s.unread).append('|');
         }
@@ -263,6 +323,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         b.setAlignmentX(Component.RIGHT_ALIGNMENT);
         b.setMaximumSize(new Dimension(40, 18));
         return b;
+    }
+
+    /** Open a conversation from another tab (e.g. Contacts → Message). */
+    public void openConversation(String conversation, boolean group) {
+        open(conversation, group);
     }
 
     private void open(String conversation, boolean group) {
@@ -482,6 +547,57 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }, "chat-send").start();
     }
 
+    /** The new-chat FAB: pick a contact to open (or start) a conversation. */
+    private void showNewChat() {
+        List<Contact> cs = node.node().contacts();
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        JDialogRef ref = new JDialogRef();
+        if (cs.isEmpty()) {
+            body.add(k.sub("No contacts yet. Add someone in the Contacts tab first."));
+        } else {
+            for (Contact c : cs) {
+                String name = nameFor(c.publicKey);
+                JPanel row = new JPanel(new BorderLayout(12, 0));
+                row.setOpaque(false);
+                row.setBorder(new EmptyBorder(9, 8, 9, 8));
+                row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 56));
+                row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+                row.add(k.avatar(c.publicKey, name, 38), BorderLayout.WEST);
+                JLabel nm = new JLabel(name);
+                nm.setFont(t.semibold(13.5f));
+                nm.setForeground(t.text);
+                row.add(nm, BorderLayout.CENTER);
+                row.addMouseListener(new MouseAdapter() {
+                    public void mouseClicked(MouseEvent e) {
+                        if (ref.d != null) ref.d.dispose();
+                        open(c.publicKey, false);
+                    }
+                });
+                body.add(row);
+            }
+        }
+        JScrollPane sp = new JScrollPane(body,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(t.card);
+        JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                "New chat", java.awt.Dialog.ModalityType.MODELESS);
+        ref.d = d;
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(sp, BorderLayout.CENTER);
+        d.setContentPane(wrap);
+        d.setSize(340, Math.min(520, 120 + cs.size() * 58));
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    private static final class JDialogRef { JDialog d; }
+
     // ---- media ----
 
     private void addMediaTo(DKit.RoundPanel b, String body, Color fg) {
@@ -684,6 +800,35 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             g2.setColor(c);
             g2.fillOval(2, 2, 40, 40);
             Icons.paint(g2, Icons.SEND, 12, 12, 20, theme.onAccent, 1.6f);
+            g2.dispose();
+        }
+    }
+
+    /** The floating new-chat FAB: an accent disc with a compose (plus) icon. */
+    private static final class SendFabLike extends JComponent {
+        private final Theme theme;
+        private boolean hover;
+        private Runnable action;
+        SendFabLike(Theme t) {
+            theme = t;
+            setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
+                public void mouseExited(MouseEvent e) { hover = false; repaint(); }
+                public void mouseClicked(MouseEvent e) { if (action != null) action.run(); }
+            });
+        }
+        SendFabLike onClick(Runnable r) { action = r; return this; }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Color c = hover ? DKit.mix(theme.accent, theme.mode == Theme.Mode.DARK ? Color.WHITE : Color.BLACK, 0.08f) : theme.accent;
+            int d = Math.min(getWidth(), getHeight());
+            g2.setColor(DKit.alpha(Color.BLACK, 40));
+            g2.fillOval(3, 5, d - 6, d - 6);
+            g2.setColor(c);
+            g2.fillOval(2, 2, d - 6, d - 6);
+            Icons.paint(g2, Icons.PLUS, (d - 20) / 2 - 2, (d - 20) / 2 - 2, 20, theme.onAccent, 2.2f);
             g2.dispose();
         }
     }
