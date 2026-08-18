@@ -164,7 +164,7 @@ public final class WalletPublisher {
         };
     }
 
-    // ---- gateway config (user-overridable later; sane shipped defaults) ----
+    // ---- gateway config (user-overridable; sane shipped defaults) ----
 
     static String gatewayUrl(Context zCtx) {
         return zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE)
@@ -174,5 +174,31 @@ public final class WalletPublisher {
     static String gatewayToken(Context zCtx) {
         return zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE)
                 .getString("gateway_token", DEFAULT_GATEWAY_TOKEN);
+    }
+
+    // ---- public node-config surface (the "Wallet node" sheet, like FreezePeach) ----
+
+    /** The wallet-node endpoint currently in use (your own node's /cmd, or the default). */
+    public static String currentGatewayUrl(Context zCtx)   { return gatewayUrl(zCtx); }
+
+    public static String currentGatewayToken(Context zCtx) { return gatewayToken(zCtx); }
+
+    /** The shipped default hosted MegaMMR endpoint (shown as the reset target). */
+    public static String defaultGatewayUrl()   { return DEFAULT_GATEWAY_URL; }
+
+    public static String defaultGatewayToken() { return DEFAULT_GATEWAY_TOKEN; }
+
+    /**
+     * Point the wallet at a node endpoint. An empty value restores the shipped default,
+     * exactly like FreezePeach ({@code wallet_node_url}/{@code wallet_node_token}). The
+     * caller must rebuild its WalletPublisher afterwards so the new endpoint takes effect.
+     */
+    public static void saveGateway(Context zCtx, String zUrl, String zToken) {
+        String url = (zUrl == null) ? "" : zUrl.trim();
+        String tok = (zToken == null) ? "" : zToken.trim();
+        zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE).edit()
+                .putString("gateway_url", url.isEmpty() ? DEFAULT_GATEWAY_URL : url)
+                .putString("gateway_token", tok.isEmpty() ? DEFAULT_GATEWAY_TOKEN : tok)
+                .apply();
     }
 }

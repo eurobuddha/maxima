@@ -276,7 +276,7 @@ public final class WalletPage implements Page {
         if (w == null || mAutoSynced || mSyncing) {
             return;
         }
-        if (isLess(mSpendMinima, mConfMinima)) {
+        if (isLess(mSpendMinima, held(mConfMinima, mUnconfMinima))) {
             mAutoSynced = true;
             syncCoins(w, null);
         }
@@ -287,17 +287,29 @@ public final class WalletPage implements Page {
     // ---------------------------------------------------------------
 
     private void repaintHero() {
+        String held = held(mConfMinima, mUnconfMinima);
         if (mHeroAmt != null) {
-            // "TOTAL BALANCE" = confirmed (what you own), NOT sendable — a coin
-            // funded before the wallet tracked it is confirmed on-chain but not yet
-            // spendable, and showing 0 there made a funded wallet look empty.
-            mHeroAmt.setText(Amounts.list(mConfMinima));
+            // "TOTAL BALANCE" = HELD (confirmed + unconfirmed), exactly like FreezePeach
+            // (Util.held) — NOT sendable. A coin funded before the wallet tracked it is
+            // confirmed on-chain but not yet spendable, and showing sendable there made a
+            // funded wallet look empty.
+            mHeroAmt.setText(Amounts.list(held));
         }
         if (mHeroSub != null) {
-            boolean lag = isLess(mSpendMinima, mConfMinima);
+            boolean lag = isLess(mSpendMinima, held);
             mHeroSub.setText(lag
                     ? Amounts.list(mSpendMinima) + " sendable · tap Sync to unlock the rest"
                     : Amounts.list(mSpendMinima) + " sendable now");
+        }
+    }
+
+    /** confirmed + unconfirmed as a decimal MINIMA string (FreezePeach's Util.held). */
+    private static String held(String confirmed, String unconfirmed) {
+        try {
+            return new java.math.BigDecimal(confirmed)
+                    .add(new java.math.BigDecimal(unconfirmed)).stripTrailingZeros().toPlainString();
+        } catch (Exception e) {
+            return confirmed == null ? "0" : confirmed;
         }
     }
 
@@ -1003,13 +1015,86 @@ public final class WalletPage implements Page {
                 : "Maxima identity seed · key #1000 (one phrase backs chat, comms and wallet)");
         src.setPadding(0, 0, 0, dp(12));
         body.addView(src);
+        TextView node = ghostButton("Wallet node");
+        body.addView(node, marginBottom(dp(8)));
         TextView imp = primaryButton("Import a phrase");
         body.addView(imp, marginBottom(dp(8)));
         TextView rev = ghostButton("Use Maxima seed");
         body.addView(rev);
         BottomSheetDialog d = sheet("Wallet settings", body);
+        node.setOnClickListener(v -> { d.dismiss(); showNodeConfig(); });
         imp.setOnClickListener(v -> { d.dismiss(); importSeed(); });
         rev.setOnClickListener(v -> { d.dismiss(); revertSeed(); });
+    }
+
+    /**
+     * The "Wallet node" sheet — a faithful port of FreezePeach's nodeConfigSheet. Maxima
+     * has no local Minima node, so the wallet reads its balance from a Minima node with
+     * MegaMMR over the /cmd proxy. By default that is the hosted MegaMMR relay (so it
+     * works out of the box); set this to YOUR OWN node's endpoint to be fully self-hosted.
+     * The seed never leaves the phone — only reads + the pre-signed txn relay go here.
+     */
+    private void showNodeConfig() {
+        LinearLayout body = new LinearLayout(mAct);
+        body.setOrientation(LinearLayout.VERTICAL);
+
+        TextView explain = sub("Your Minima MegaMMR node endpoint + token. Default is the "
+                + "hosted relay; point it at your own node to self-host. Your seed never "
+                + "leaves this phone.");
+        explain.setPadding(0, 0, 0, dp(12));
+        body.addView(explain);
+
+        final EditText urlF = new EditText(mAct);
+        urlF.setHint("https://your-node…/cmd");
+        urlF.setSingleLine(true);
+        urlF.setText(com.eurobuddha.maxima.app.wallet.WalletPublisher.currentGatewayUrl(mAct));
+        styleField(urlF);
+        body.addView(urlF, marginBottom(dp(8)));
+
+        final EditText tokF = new EditText(mAct);
+        tokF.setHint("access token");
+        tokF.setSingleLine(true);
+        tokF.setText(com.eurobuddha.maxima.app.wallet.WalletPublisher.currentGatewayToken(mAct));
+        styleField(tokF);
+        body.addView(tokF, marginBottom(dp(12)));
+
+        TextView save = primaryButton("Save node");
+        body.addView(save, marginBottom(dp(8)));
+        TextView reset = ghostButton("Reset to hosted relay");
+        body.addView(reset);
+
+        BottomSheetDialog d = sheet("Wallet node", body);
+        save.setOnClickListener(v -> {
+            com.eurobuddha.maxima.app.wallet.WalletPublisher.saveGateway(mAct,
+                    urlF.getText().toString(), tokF.getText().toString());
+            rebuildPublisher();
+            d.dismiss();
+            mAct.toast("Wallet node saved");
+        });
+        reset.setOnClickListener(v -> {
+            com.eurobuddha.maxima.app.wallet.WalletPublisher.saveGateway(mAct, "", "");
+            rebuildPublisher();
+            d.dismiss();
+            mAct.toast("Reset to hosted relay");
+        });
+    }
+
+    /** Pill-styled single-line input, matching the Send sheet's fields. */
+    private void styleField(EditText zField) {
+        zField.setBackgroundResource(R.drawable.field_pill);
+        int fp = dp(12);
+        zField.setPadding(fp, fp, fp, fp);
+        zField.setTextColor(col(R.color.ux_text));
+        zField.setHintTextColor(col(R.color.ux_subtext));
+        zField.setTextSize(13);
+    }
+
+    /** Recreate the publisher against the newly-saved endpoint and refresh immediately. */
+    private void rebuildPublisher() {
+        mPub = new WalletPublisher(mAct, mNode);
+        mAutoSynced = false;   // let the backfill re-run against the new node
+        mLastFetch = 0;        // force an immediate balance/coins refetch
+        render();
     }
 
     private void importSeed() {
@@ -1126,7 +1211,7 @@ public final class WalletPage implements Page {
                 mAct.toast("Syncing coins…");
                 return;
             }
-            if (isLess(mSpendMinima, mConfMinima)) {
+            if (isLess(mSpendMinima, held(mConfMinima, mUnconfMinima))) {
                 mAct.toast("Syncing coins…");
                 syncCoins(w, null);
             }
