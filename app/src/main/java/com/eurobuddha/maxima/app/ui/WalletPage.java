@@ -762,7 +762,10 @@ public final class WalletPage implements Page {
         final Object lock = new Object();
         final JSONObject[] resp = new JSONObject[1];
         final String[] err = new String[1];
-        mPub.cmd(zCommand, new WalletPublisher.Cb() {
+        // The coin backfill (newscript / coinexport / coinimport) is entirely MegaMMR-
+        // dependent, so it MUST run against the hosted gateway, never a paired local
+        // node — same reason balance/coins do (see WalletPublisher.gcmd).
+        mPub.gcmd(zCommand, new WalletPublisher.Cb() {
             public void onResult(JSONObject r) {
                 synchronized (lock) { resp[0] = r; lock.notifyAll(); }
             }

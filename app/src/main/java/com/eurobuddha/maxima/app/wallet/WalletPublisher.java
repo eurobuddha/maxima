@@ -75,44 +75,45 @@ public final class WalletPublisher {
         }
     }
 
+    /**
+     * Run a command ALWAYS against the hosted MegaMMR gateway, never a paired local
+     * node. The whole wallet — balance/coins reads, the funded-before-tracked coin
+     * backfill, and the publish relay — depends on a MegaMMR node: a user's own
+     * Minima node is virtually never a MegaMMR node, so {@code megammr:true} reads
+     * come back EMPTY on it (the "balance shows 0" bug), and coins imported on the
+     * gateway can only be spent by publishing through that SAME gateway. This is
+     * exactly how FreezePeach works — one hosted MegaMMR node serves any address —
+     * so the wallet path pins to the gateway and only chat/IPC use the paired node.
+     */
+    public void gcmd(String zCommand, Cb zCb) {
+        mGateway.cmd(zCommand, wrapG(zCb));
+    }
+
     public void balance(String zAddress, Cb zCb) {
-        cmd("balance megammr:true address:" + zAddress, zCb);
+        gcmd("balance megammr:true address:" + zAddress, zCb);
     }
 
     public void coins(String zAddress, Cb zCb) {
-        cmd("coins megammr:true address:" + zAddress, zCb);
+        gcmd("coins megammr:true address:" + zAddress, zCb);
     }
 
     public void trackScript(String zScript, Cb zCb) {
-        cmd("newscript trackall:true script:\"" + zScript + "\"", zCb);
+        gcmd("newscript trackall:true script:\"" + zScript + "\"", zCb);
     }
 
-    /** Publish a LOCALLY-SIGNED txn: txnimport -> txnbasics -> txnpost. */
+    /**
+     * Publish a LOCALLY-SIGNED txn: txnimport -> txnbasics -> txnpost. ALWAYS through
+     * the hosted MegaMMR gateway (see {@link #gcmd}): txnbasics must attach the coins'
+     * MMR proofs from the node that actually tracks them, which — after the backfill —
+     * is the gateway, not the user's node.
+     */
     public void publish(String zImportCmd, String zId, String zPostCmd, Cb zCb) {
-        if (usingCore()) {
-            // Same three-step relay, through the local node.
-            mNode.cmd(zImportCmd, wrap(step1 -> {
-                if (!step1.optBoolean("status", false)) {
-                    zCb.onError("txnimport: " + step1.optString("error", step1.toString()));
-                    return;
-                }
-                mNode.cmd("txnbasics id:" + zId, wrap(step2 -> {
-                    if (!step2.optBoolean("status", false)) {
-                        zCb.onError("txnbasics: " + step2.optString("error", step2.toString()));
-                        return;
-                    }
-                    mNode.cmd(zPostCmd, wrap(step3 -> {
-                        if (!step3.optBoolean("status", false)) {
-                            zCb.onError("txnpost: " + step3.optString("error", step3.toString()));
-                            return;
-                        }
-                        zCb.onResult(step3);
-                    }, zCb));
-                }, zCb));
-            }, zCb));
-        } else {
-            mGateway.publish(zImportCmd, zId, zPostCmd, wrapG(zCb));
-        }
+        // Publishing via a paired local node would require that node to be a MegaMMR
+        // node AND to already track our backfilled coins (so txnbasics can attach their
+        // proofs) — a normal paired node is neither. So publish through the same hosted
+        // gateway the coins were imported to. (Node-side publishing can return when the
+        // node also does the backfill.)
+        mGateway.publish(zImportCmd, zId, zPostCmd, wrapG(zCb));
     }
 
     // ---- adapters between the two backends' callback shapes ----
