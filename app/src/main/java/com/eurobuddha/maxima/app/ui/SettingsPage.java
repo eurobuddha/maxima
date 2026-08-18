@@ -101,9 +101,9 @@ public final class SettingsPage implements Page {
         mPrivacy.addView(k.divider());
         boolean lockOn = com.eurobuddha.maxima.app.AppLock.isEnabled(mAct);
         mPrivacy.addView(k.switchRow("App lock",
-                lockOn ? "Fingerprint or device PIN to open Maxima"
+                lockOn ? "Fingerprint or device PIN to open Parlons"
                         : (com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)
-                                ? "Require fingerprint or device PIN to open Maxima"
+                                ? "Require fingerprint or device PIN to open Parlons"
                                 : "Set a screen lock on this device to use this"),
                 lockOn, checked -> toggleAppLock(checked)));
         mPrivacy.addView(k.divider());
@@ -189,7 +189,7 @@ public final class SettingsPage implements Page {
 
     private void approveSheet(String pkg) {
         new AlertDialog.Builder(mAct)
-                .setTitle("Let " + appLabel(pkg) + " use Maxima?")
+                .setTitle("Let " + appLabel(pkg) + " use Parlons?")
                 .setMessage(pkg + " wants to send and receive messages through your Maxima "
                         + "identity, on its own application channel.")
                 .setNegativeButton("Deny", (d, w) -> {
@@ -577,9 +577,11 @@ public final class SettingsPage implements Page {
         mBox.addView(k.sectionLabel("About"));
         LinearLayout aboutCard = k.card();
         TextView about = new TextView(mAct);
-        about.setText("Maxima is a comms layer, not a service. Your messages go from your device "
-                + "to theirs, through whichever independent hosts are carrying traffic. No account, "
-                + "no phone number, no server holding your history.");
+        about.setText("Parlons is private, secure chat with nobody in the middle. Your messages go "
+                + "straight from your device to theirs, end to end, through whichever independent "
+                + "hosts are carrying traffic — no account, no phone number, no server holding your "
+                + "history. Your keys and your wallet never leave this phone.\n\n"
+                + "Powered by Maxima · Minima");
         about.setTextSize(12);
         about.setLineSpacing(k.dp(2), 1f);
         about.setTextColor(k.col(R.color.ux_subtext));

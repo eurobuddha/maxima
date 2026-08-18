@@ -1012,14 +1012,14 @@ public final class WalletPage implements Page {
         body.setOrientation(LinearLayout.VERTICAL);
         TextView src = sub(MaximaWallet.hasCustomPhrase(mAct)
                 ? "Independent imported phrase — separate address & key-use budget"
-                : "Maxima identity seed · key #1000 (one phrase backs chat, comms and wallet)");
+                : "Parlons identity seed · key #1000 (one phrase backs chat, comms and wallet)");
         src.setPadding(0, 0, 0, dp(12));
         body.addView(src);
         TextView node = ghostButton("Wallet node");
         body.addView(node, marginBottom(dp(8)));
         TextView imp = primaryButton("Import a phrase");
         body.addView(imp, marginBottom(dp(8)));
-        TextView rev = ghostButton("Use Maxima seed");
+        TextView rev = ghostButton("Use Parlons seed");
         body.addView(rev);
         BottomSheetDialog d = sheet("Wallet settings", body);
         node.setOnClickListener(v -> { d.dismiss(); showNodeConfig(); });
@@ -1105,7 +1105,7 @@ public final class WalletPage implements Page {
         input.setMinLines(2);
         new androidx.appcompat.app.AlertDialog.Builder(mAct)
                 .setTitle("Import a wallet seed")
-                .setMessage("This replaces the Maxima wallet's seed with the phrase you enter — "
+                .setMessage("This replaces the Parlons wallet's seed with the phrase you enter — "
                         + "its address and funds change.\n\n⚠ ONLY import a seed whose key #1000 "
                         + "has NOT signed on another wallet or node. Reusing a one-time signing "
                         + "key can expose it and lose funds. An imported seed starts with a fresh "
@@ -1127,17 +1127,17 @@ public final class WalletPage implements Page {
 
     private void revertSeed() {
         if (!MaximaWallet.hasCustomPhrase(mAct)) {
-            mAct.toast("Already using the Maxima seed");
+            mAct.toast("Already using the Parlons seed");
             return;
         }
         new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                .setTitle("Use the Maxima seed?")
-                .setMessage("Switch the wallet back to your Maxima identity seed (key #1000). "
+                .setTitle("Use the Parlons seed?")
+                .setMessage("Switch the wallet back to your Parlons identity seed (key #1000). "
                         + "The imported wallet is not deleted — re-import its phrase to return to it.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Use Maxima seed", (d, w) -> {
                     MaximaWallet.setCustomPhrase(mAct, null);
-                    mAct.toast("Back to the Maxima seed…");
+                    mAct.toast("Back to the Parlons seed…");
                     openWallet();
                 })
                 .show();

@@ -260,7 +260,7 @@ public final class ContactsPage implements Page {
 
         String addr = c.primaryAddress();
         if (addr != null) {
-            body.addView(copyField("Maxima address", addr, "Address copied"));
+            body.addView(copyField("Parlons address", addr, "Address copied"));
             // RULE 1: every host address must be copyable in full, not just
             // counted. Tap to reveal the rest as their own copy fields.
             if (c.addresses != null && c.addresses.size() > 1) {
@@ -463,7 +463,7 @@ public final class ContactsPage implements Page {
             return false;
         }
         if (!addr.startsWith("Mx") && !addr.startsWith("MAX#")) {
-            mAct.toast("Not a Maxima address");
+            mAct.toast("Not a Parlons address");
             return false;
         }
         final MaximaNode node = MaximaService.node();
@@ -492,7 +492,7 @@ public final class ContactsPage implements Page {
         Intent i = new Intent(Intent.ACTION_SEND);
         i.setType("text/plain");
         i.putExtra(Intent.EXTRA_TEXT, text);
-        mAct.startActivity(Intent.createChooser(i, "Share your Maxima address"));
+        mAct.startActivity(Intent.createChooser(i, "Share your Parlons address"));
     }
 
     // ---------------------------------------------------------------
@@ -646,7 +646,7 @@ public final class ContactsPage implements Page {
         if ("classic".equals(pill)) {
             return "Classic Maxima";
         }
-        return "Maxima app";
+        return "Parlons app";
     }
 
     // ---------------------------------------------------------------
@@ -673,7 +673,7 @@ public final class ContactsPage implements Page {
         LinearLayout idcol = new LinearLayout(mAct);
         idcol.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(mAct);
-        title.setText("Your Maxima address");
+        title.setText("Your Parlons address");
         title.setTextSize(16);
         title.setTypeface(manrope(Typeface.BOLD));
         title.setTextColor(col(R.color.ux_text));

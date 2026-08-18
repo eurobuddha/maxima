@@ -121,7 +121,7 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
         r.putExtra(MaximaApiMessages.EXTRA_ENABLED, approved);
         r.putExtra(MaximaApiMessages.EXTRA_RESULT,
                 approved ? (starting ? "approved - transport starting" : "approved")
-                         : "pending - approve in the Maxima app");
+                         : "pending - approve in the Parlons app");
         ctx.sendBroadcast(r);
     }
 
@@ -150,7 +150,7 @@ public final class MaximaApiReceiver extends BroadcastReceiver {
                     open, android.app.PendingIntent.FLAG_IMMUTABLE);
             nm.notify(NOTIF_ID_PENDING, new android.app.Notification.Builder(ctx, IPC_CHANNEL)
                     .setSmallIcon(com.eurobuddha.maxima.app.R.drawable.ic_stat_maxima)
-                    .setContentTitle(label + " wants to use Maxima")
+                    .setContentTitle(label + " wants to use Parlons")
                     .setContentText("Approve or deny in Settings → Connected apps")
                     .setContentIntent(pi)
                     .setAutoCancel(true)

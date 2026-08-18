@@ -296,7 +296,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         com.journeyapps.barcodescanner.ScanOptions o =
                 new com.journeyapps.barcodescanner.ScanOptions();
         o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
-        o.setPrompt("Scan a Maxima QR");
+        o.setPrompt("Scan a Parlons QR");
         o.setBeepEnabled(false);
         o.setOrientationLocked(true);
         mScanLauncher.launch(o);

@@ -66,7 +66,7 @@ public final class LockGate {
             return;
         }
         mPrompting = true;
-        AppLock.authenticate(mAct, "Unlock Maxima", "Fingerprint or device PIN",
+        AppLock.authenticate(mAct, "Unlock Parlons", "Fingerprint or device PIN",
                 new AppLock.Callback() {
                     public void onSuccess() {
                         mPrompting = false;
@@ -118,7 +118,7 @@ public final class LockGate {
         icon.setColorFilter(mAct.getColor(R.color.ux_subtext));
         col.addView(icon, new android.widget.LinearLayout.LayoutParams((int) (46 * d), (int) (46 * d)));
         android.widget.TextView t = new android.widget.TextView(mAct);
-        t.setText("Maxima is locked");
+        t.setText("Parlons is locked");
         t.setTextSize(16);
         t.setTextColor(mAct.getColor(R.color.ux_text));
         t.setGravity(android.view.Gravity.CENTER);

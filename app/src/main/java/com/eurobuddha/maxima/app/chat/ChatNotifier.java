@@ -61,7 +61,7 @@ public final class ChatNotifier {
         }
         NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Messages",
                 NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Incoming Maxima messages");
+        ch.setDescription("Incoming Parlons messages");
         ch.enableVibration(true);
         ch.setShowBadge(true);
         nm.createNotificationChannel(ch);
