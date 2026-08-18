@@ -1,14 +1,20 @@
 package com.eurobuddha.maxima.desktop.ui;
 
 import com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink;
+import com.eurobuddha.maxima.desktop.wallet.DesktopWallet;
+import com.eurobuddha.maxima.desktop.wallet.DesktopWalletLedger;
+import com.eurobuddha.maxima.desktop.wallet.DesktopWalletPublisher;
+import com.eurobuddha.wallet.CoinSelector;
+import com.eurobuddha.wallet.TxnFactory;
 
-import org.minima.utils.json.JSONArray;
-import org.minima.utils.json.JSONObject;
+import org.minima.objects.base.MiniNumber;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -16,19 +22,17 @@ import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.border.EmptyBorder;
 
 /**
- * The Wallet tab. The desktop shares the phone's identity but has no bundled Minima
- * node, so a real, working wallet comes from connecting to the user's <b>Minima Core
- * Desktop</b> over RPC (just as the phone talks to its bundled node). Unconfigured,
- * it shows a clear connect card; connected, it shows a Balance / History segmented
- * view with a hero balance, per-token cards, and Send / Receive — all driven by the
- * node's own wallet over RPC.
+ * The Wallet tab — a FULLY LOCAL Minima wallet, the same as the phone (APK). The
+ * seed, key derivation, transaction building and Winternitz signing all happen on
+ * this machine ({@link DesktopWallet}); balances are read and the pre-signed txn is
+ * relayed through the shipped read-only gateway (no node required) or, if you've
+ * configured one, a connected node. Nothing about the wallet relies on a node.
  */
 public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
 
@@ -37,11 +41,20 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
     private final DKit k;
 
     private final JPanel mBody = new JPanel();
-    private int mSeg = 0;                 // 0 = Balance, 1 = History
-    private volatile JSONObject mBalance; // last balance reply
-    private volatile JSONArray mHistory;  // last history reply
+    private int mSeg = 0;                     // 0 = Balance, 1 = History
+    private JPanel mPaneHolder;
+
+    private volatile DesktopWallet mWallet;   // built off-EDT (heavy WOTS derivation)
+    private DesktopWalletPublisher mPub;
+    private DesktopWalletLedger mLedger;
+    private volatile boolean mBuilding;
+
+    // Cached figures (native MINIMA), refreshed off-EDT.
+    private volatile String mConf = "…", mUnconf = "0", mSpend = "…";
+    private volatile org.json.JSONArray mBalanceArr;
     private long mLastFetch;
     private boolean mFetching;
+    private boolean mBuilt;
 
     public WalletPanel(DesktopNode zNode, Theme zTheme) {
         node = zNode;
@@ -65,110 +78,76 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
     public JComponent view() { return this; }
 
     public void refresh() {
-        DesktopNodeLink link = DesktopNodeLink.configured();
-        if (link == null) {
-            if (mBody.getComponentCount() == 0 || mBalance != null) {
-                mBalance = null;
-                buildDisconnected();
-            }
-            return;
+        if (!mBuilt) {
+            mBuilt = true;
+            buildScaffold();
+            openWallet();
         }
-        // Poll balance/history every 6s while connected.
-        long now = System.currentTimeMillis();
-        if (!mFetching && now - mLastFetch > 6000) {
-            mLastFetch = now;
-            fetch(link);
-        }
-        if (mBody.getComponentCount() == 0) {
-            buildConnected();
+        if (mWallet != null && !mFetching && System.currentTimeMillis() - mLastFetch > 6000) {
+            mLastFetch = System.currentTimeMillis();
+            fetchBalance();
         }
     }
 
-    // ---- disconnected: connect card ----
+    // ---- open the local wallet (heavy) ----
 
-    private void buildDisconnected() {
-        mBody.removeAll();
-        DKit.RoundPanel hero = k.round(t.accent, 18);
-        hero.setLayout(new BoxLayout(hero, BoxLayout.Y_AXIS));
-        hero.setBorder(new EmptyBorder(20, 20, 20, 20));
-        JLabel lbl = new JLabel("YOUR MINIMA IDENTITY");
-        lbl.setFont(t.semibold(10.5f));
-        lbl.setForeground(DKit.alpha(t.onAccent, 190));
-        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-        DKit.WrapText id = new DKit.WrapText(node.identity().mxIdentity());
-        id.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
-        id.setForeground(t.onAccent);
-        id.setBorder(new EmptyBorder(8, 0, 0, 0));
-        hero.add(lbl);
-        hero.add(id);
-        mBody.add(hero);
-        mBody.add(k.vgap(14));
-
-        mBody.add(k.sectionLabel("Connect your wallet"));
-        mBody.add(k.vgap(8));
-        DKit.RoundPanel card = k.card();
-        card.add(k.sub("Point Maxima at your running Minima Core Desktop node to check your "
-                + "balance and send MINIMA from here. On the node, enable RPC (e.g. start with "
-                + "-rpcenable), then enter its RPC address below."));
-        card.add(k.vgap(12));
-        JTextField url = k.field("http://127.0.0.1:9005");
-        url.setText(DesktopNodeLink.configuredUrl().isEmpty()
-                ? DesktopNodeLink.DEFAULT_URL : DesktopNodeLink.configuredUrl());
-        url.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
-        url.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.add(url);
-        card.add(k.vgap(8));
-        JPasswordField pw = new JPasswordField();
-        pw.setOpaque(true);
-        pw.setBackground(t.input);
-        pw.setForeground(t.text);
-        pw.setCaretColor(t.text);
-        pw.setBorder(new EmptyBorder(11, 14, 11, 14));
-        pw.setFont(t.font(13f));
-        pw.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
-        pw.setAlignmentX(Component.LEFT_ALIGNMENT);
-        pw.setText(DesktopNodeLink.configuredPassword());
-        card.add(pw);
-        card.add(k.sub("RPC password — leave blank if your node has none."));
-        card.add(k.vgap(12));
-        final JLabel status = k.sub(" ");
-        JPanel r = rowX();
-        DKit.HoverButton save = k.primaryButton("Save & test");
-        save.onClick(() -> {
-            String u = url.getText().trim();
-            String p = new String(pw.getPassword());
-            status.setText("Testing " + u + "…");
-            new Thread(() -> {
-                DesktopNodeLink.save(u, p);
-                DesktopNodeLink link = DesktopNodeLink.configured();
-                boolean ok = link != null && link.ping();
-                javax.swing.SwingUtilities.invokeLater(() -> {
-                    if (ok) {
-                        status.setText("Connected.");
-                        mBody.removeAll();
-                        mLastFetch = 0;
-                        buildConnected();
-                        refresh();
-                    } else {
-                        status.setText("Couldn't reach a Minima node at that address.");
-                    }
+    private void openWallet() {
+        if (mBuilding) return;
+        mBuilding = true;
+        java.io.File wdir = new java.io.File(node.dataDir().toFile(), "wallet");
+        mLedger = new DesktopWalletLedger(wdir);
+        mPub = new DesktopWalletPublisher(DesktopNodeLink.configured());
+        new Thread(() -> {
+            try {
+                DesktopWallet w = DesktopWallet.open(node.seedPhrase(), wdir);
+                w.ensureAddress();   // heavy WOTS walk
+                mWallet = w;
+                // Register our script so a coin funded before tracking is spendable.
+                mPub.trackScript(w.script(), new DesktopWalletPublisher.Cb() {
+                    public void onResult(org.json.JSONObject r) { }
+                    public void onError(String m) { }
                 });
-            }, "rpc-test").start();
-        });
-        r.add(save);
-        r.add(Box.createHorizontalGlue());
-        card.add(r);
-        card.add(k.vgap(6));
-        card.add(status);
-        mBody.add(card);
-        mBody.add(Box.createVerticalGlue());
-        mBody.revalidate();
-        mBody.repaint();
+                javax.swing.SwingUtilities.invokeLater(() -> { mLastFetch = 0; rebuildPanes(); });
+            } catch (Exception e) {
+                javax.swing.SwingUtilities.invokeLater(() -> showError("Couldn't open wallet: " + e.getMessage()));
+            } finally {
+                mBuilding = false;
+            }
+        }, "wallet-open").start();
     }
 
-    // ---- connected: balance / history ----
+    private void fetchBalance() {
+        DesktopWallet w = mWallet;
+        if (w == null || mPub == null) return;
+        mFetching = true;
+        mPub.balance(w.hexAddress(), new DesktopWalletPublisher.Cb() {
+            public void onResult(org.json.JSONObject r) {
+                try {
+                    org.json.JSONArray arr = r.optJSONArray("response");
+                    mBalanceArr = arr;
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            org.json.JSONObject tk = arr.getJSONObject(i);
+                            if ("0x00".equals(tk.optString("tokenid"))) {
+                                mConf = tk.optString("confirmed", "0");
+                                mUnconf = tk.optString("unconfirmed", "0");
+                                mSpend = tk.optString("sendable", tk.optString("confirmed", "0"));
+                            }
+                        }
+                    }
+                } catch (Exception ignored) { }
+                mFetching = false;
+                javax.swing.SwingUtilities.invokeLater(WalletPanel.this::rebuildPanes);
+            }
+            public void onError(String m) {
+                mFetching = false;
+            }
+        });
+    }
 
-    private void buildConnected() {
+    // ---- layout ----
+
+    private void buildScaffold() {
         mBody.removeAll();
         DKit.Segmented seg = k.segmented(new String[]{"Balance", "History"}, mSeg, i -> {
             mSeg = i;
@@ -186,8 +165,6 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         rebuildPanes();
     }
 
-    private JPanel mPaneHolder;
-
     private void rebuildPanes() {
         if (mPaneHolder == null) return;
         mPaneHolder.removeAll();
@@ -197,46 +174,33 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private void buildBalance() {
-        // Hero: native MINIMA.
-        String conf = "…", sendable = "…";
-        JSONArray toks = balanceArray();
-        if (toks != null) {
-            for (Object o : toks) {
-                JSONObject tk = (JSONObject) o;
-                if ("0x00".equals(str(tk, "tokenid"))) {
-                    conf = str(tk, "confirmed");
-                    sendable = str(tk, "sendable");
-                }
-            }
-        }
+        // Hero.
         DKit.RoundPanel hero = k.round(t.accent, 18);
         hero.setLayout(new BoxLayout(hero, BoxLayout.Y_AXIS));
         hero.setBorder(new EmptyBorder(20, 20, 20, 20));
-        JLabel l = new JLabel("MINIMA BALANCE");
-        l.setFont(t.semibold(10.5f));
-        l.setForeground(DKit.alpha(t.onAccent, 190));
-        l.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel amt = new JLabel(conf);
+        hero.add(heroLabel("MINIMA BALANCE"));
+        JLabel amt = new JLabel(mWallet == null ? "opening wallet…" : mConf);
         amt.setFont(t.extrabold(30f));
         amt.setForeground(t.onAccent);
         amt.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel sub = new JLabel(sendable + " sendable");
+        hero.add(k.vgap(4));
+        hero.add(amt);
+        JLabel sub = new JLabel(mWallet == null ? "" : mSpend + " sendable");
         sub.setFont(t.font(12.5f));
         sub.setForeground(DKit.alpha(t.onAccent, 190));
         sub.setAlignmentX(Component.LEFT_ALIGNMENT);
-        hero.add(l);
-        hero.add(k.vgap(4));
-        hero.add(amt);
         hero.add(k.vgap(2));
         hero.add(sub);
         mPaneHolder.add(hero);
         mPaneHolder.add(k.vgap(12));
 
+        // Actions.
         JPanel actions = rowX();
         DKit.HoverButton send = k.primaryButton("Send");
         send.onClick(this::showSend);
         DKit.HoverButton receive = k.ghostButton("Receive");
         receive.onClick(this::showReceive);
+        if (mWallet == null) { send.setButtonEnabled(false); receive.setButtonEnabled(false); }
         actions.add(send);
         actions.add(Box.createRigidArea(new Dimension(10, 0)));
         actions.add(receive);
@@ -244,44 +208,62 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         mPaneHolder.add(actions);
         mPaneHolder.add(k.vgap(14));
 
-        // Token cards.
-        mPaneHolder.add(k.sectionLabel("Tokens"));
+        // Four-field balance detail.
+        DKit.RoundPanel bal = k.card();
+        bal.add(k.kvLine("Confirmed", mWallet == null ? "…" : mConf));
+        bal.add(k.divider());
+        bal.add(k.kvLine("Unconfirmed", mWallet == null ? "…" : mUnconf));
+        bal.add(k.divider());
+        bal.add(k.kvLine("Sendable", mWallet == null ? "…" : mSpend));
+        mPaneHolder.add(bal);
+        mPaneHolder.add(k.vgap(14));
+
+        // Sends remaining (one-time-signature budget) — the wallet's life.
+        mPaneHolder.add(k.sectionLabel("Sends remaining"));
         mPaneHolder.add(k.vgap(8));
-        if (toks == null) {
-            DKit.RoundPanel c = k.card();
-            c.add(k.sub("Loading balance from your node…"));
-            mPaneHolder.add(c);
-        } else {
-            for (Object o : toks) {
-                mPaneHolder.add(tokenCard((JSONObject) o));
+        DKit.RoundPanel uses = k.card();
+        int used = 0;
+        try { used = mWallet == null ? 0 : mWallet.uses(new java.io.File(node.dataDir().toFile(), "wallet")); }
+        catch (Exception ignored) { }
+        int left = DesktopWallet.MAX_USES - used;
+        JLabel big = new JLabel(mWallet == null ? "…" : String.format("%,d", left));
+        big.setFont(t.extrabold(22f));
+        big.setForeground(t.text);
+        big.setAlignmentX(Component.LEFT_ALIGNMENT);
+        uses.add(big);
+        uses.add(k.vgap(2));
+        uses.add(k.sub("Each send spends one of this key's one-time signatures. "
+                + used + " used of " + String.format("%,d", DesktopWallet.MAX_USES) + "."));
+        mPaneHolder.add(uses);
+        mPaneHolder.add(k.vgap(14));
+
+        // Token cards (non-Minima tokens held).
+        org.json.JSONArray arr = mBalanceArr;
+        if (arr != null && arr.length() > 1) {
+            mPaneHolder.add(k.sectionLabel("Tokens"));
+            mPaneHolder.add(k.vgap(8));
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject tk = arr.optJSONObject(i);
+                if (tk == null || "0x00".equals(tk.optString("tokenid"))) continue;
+                mPaneHolder.add(tokenCard(tk));
                 mPaneHolder.add(k.vgap(8));
             }
         }
     }
 
-    private JComponent tokenCard(JSONObject tk) {
+    private JComponent tokenCard(org.json.JSONObject tk) {
+        String tokenid = tk.optString("tokenid");
         String name = tokenName(tk);
-        String tokenid = str(tk, "tokenid");
         DKit.RoundPanel card = k.card();
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
-        row.add(k.avatar(tokenid, name, 40), BorderLayout.WEST);
-        JPanel mid = new JPanel();
-        mid.setOpaque(false);
-        mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
+        row.add(k.avatar(tokenid, name, 38), BorderLayout.WEST);
         JLabel nm = new JLabel(name);
         nm.setFont(t.semibold(14f));
         nm.setForeground(t.text);
-        nm.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel sub = new JLabel(str(tk, "sendable") + " sendable");
-        sub.setFont(t.font(11.5f));
-        sub.setForeground(t.subtext);
-        sub.setAlignmentX(Component.LEFT_ALIGNMENT);
-        mid.add(nm);
-        mid.add(sub);
-        row.add(mid, BorderLayout.CENTER);
-        JLabel bal = new JLabel(str(tk, "confirmed"));
-        bal.setFont(t.bold(15f));
+        row.add(nm, BorderLayout.CENTER);
+        JLabel bal = new JLabel(tk.optString("confirmed", "0"));
+        bal.setFont(t.bold(14f));
         bal.setForeground(t.text);
         row.add(bal, BorderLayout.EAST);
         card.add(row);
@@ -289,51 +271,60 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private void buildHistory() {
-        mPaneHolder.add(k.sectionLabel("Recent transactions"));
+        mPaneHolder.add(k.sectionLabel("Transactions"));
         mPaneHolder.add(k.vgap(8));
-        JSONArray hist = mHistory;
-        if (hist == null) {
+        List<DesktopWalletLedger.Row> rows = mLedger == null ? new ArrayList<>() : mLedger.list();
+        if (rows.isEmpty()) {
             DKit.RoundPanel c = k.card();
-            c.add(k.sub("Loading history from your node…"));
-            mPaneHolder.add(c);
-            return;
-        }
-        if (hist.isEmpty()) {
-            DKit.RoundPanel c = k.card();
-            c.add(k.sub("No transactions yet."));
+            c.add(k.sub("No transactions yet. Sends and receipts appear here."));
             mPaneHolder.add(c);
             return;
         }
         DKit.RoundPanel card = k.card();
         card.setBorder(new EmptyBorder(4, 8, 4, 8));
-        int shown = 0;
-        for (Object o : hist) {
-            if (shown++ > 60) break;
-            if (shown > 1) card.add(k.divider());
-            card.add(historyRow((JSONObject) o));
+        for (int i = 0; i < rows.size(); i++) {
+            if (i > 0) card.add(k.divider());
+            card.add(historyRow(rows.get(i)));
         }
         mPaneHolder.add(card);
     }
 
-    private JComponent historyRow(JSONObject h) {
+    private JComponent historyRow(DesktopWalletLedger.Row r) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(9, 6, 9, 6));
-        String detail = str(h, "detail");
-        JLabel l = new JLabel(detail.isEmpty() ? "transaction" : detail);
-        l.setFont(t.font(12.5f));
-        l.setForeground(t.text);
-        row.add(l, BorderLayout.CENTER);
+        JPanel mid = new JPanel();
+        mid.setOpaque(false);
+        mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
+        JLabel who = new JLabel((r.sent ? "Sent to " : "Received from ") + clip(r.who, 22));
+        who.setFont(t.semibold(13f));
+        who.setForeground(t.text);
+        who.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel when = new JLabel(new java.text.SimpleDateFormat("dd MMM HH:mm")
+                .format(new java.util.Date(r.time)));
+        when.setFont(t.font(11f));
+        when.setForeground(t.subtext);
+        when.setAlignmentX(Component.LEFT_ALIGNMENT);
+        mid.add(who);
+        mid.add(when);
+        row.add(mid, BorderLayout.CENTER);
+        JLabel amt = new JLabel((r.sent ? "-" : "+") + r.amount + " " + r.token);
+        amt.setFont(t.bold(13.5f));
+        amt.setForeground(r.sent ? t.text : t.success);
+        row.add(amt, BorderLayout.EAST);
         return row;
     }
 
     // ---- send / receive ----
 
     private void showSend() {
+        final DesktopWallet w = mWallet;
+        if (w == null) return;
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
-        body.add(k.sub("Send MINIMA from your connected node."));
+        body.add(k.sub("Send MINIMA. Built and signed on THIS device; only the signed "
+                + "transaction is relayed (via " + mPub.backendName() + ")."));
         body.add(k.vgap(10));
         JTextField to = k.field("Mx… address");
         to.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
@@ -353,47 +344,97 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         body.add(r);
         body.add(k.vgap(6));
         body.add(status);
-        JDialog d = dialog("Send MINIMA", body, 420);
+        JDialog d = dialog("Send MINIMA", body, 440);
         sign.onClick(() -> {
             String addr = to.getText().trim();
             String a = amt.getText().trim();
             if (addr.isEmpty() || a.isEmpty()) { status.setText("Enter an address and amount."); return; }
-            status.setText("Building + signing…");
+            final MiniNumber amount;
+            try { amount = new MiniNumber(a); } catch (Exception e) { status.setText("Bad amount."); return; }
+            if (!amount.isMore(MiniNumber.ZERO)) { status.setText("Amount must be greater than 0."); return; }
             sign.setButtonEnabled(false);
-            new Thread(() -> {
-                String msg;
-                try {
-                    DesktopNodeLink link = DesktopNodeLink.configured();
-                    JSONObject res = link.cmd("send address:" + addr + " amount:" + a);
-                    boolean ok = Boolean.TRUE.equals(res.get("status"));
-                    msg = ok ? "Sent." : "Failed: " + res.getOrDefault("error", res.toString());
-                } catch (Exception e) {
-                    msg = "Failed: " + e.getMessage();
-                }
-                final String fmsg = msg;
-                javax.swing.SwingUtilities.invokeLater(() -> {
-                    status.setText(fmsg);
-                    sign.setButtonEnabled(true);
-                    mLastFetch = 0;
-                    if (fmsg.equals("Sent.")) {
-                        javax.swing.Timer tm = new javax.swing.Timer(1200, ev -> d.dispose());
-                        tm.setRepeats(false);
-                        tm.start();
-                    }
-                });
-            }, "wallet-send").start();
+            status.setText("Selecting coins…");
+            new Thread(() -> doSend(w, addr, amount, status, sign, d), "wallet-send").start();
         });
     }
 
+    private void doSend(DesktopWallet w, String to, MiniNumber amount,
+                        JLabel status, DKit.HoverButton sign, JDialog d) {
+        try {
+            // 1. coins for our address (read, via gateway/node).
+            final org.json.JSONObject[] resp = new org.json.JSONObject[1];
+            final String[] err = new String[1];
+            final Object lk = new Object();
+            mPub.coins(w.hexAddress(), new DesktopWalletPublisher.Cb() {
+                public void onResult(org.json.JSONObject r) { synchronized (lk) { resp[0] = r; lk.notifyAll(); } }
+                public void onError(String m) { synchronized (lk) { err[0] = m; lk.notifyAll(); } }
+            });
+            synchronized (lk) {
+                long deadline = System.currentTimeMillis() + 45_000;
+                while (resp[0] == null && err[0] == null) {
+                    long rem = deadline - System.currentTimeMillis();
+                    if (rem <= 0) break;
+                    lk.wait(rem);
+                }
+            }
+            if (resp[0] == null) throw new IllegalStateException(err[0] != null ? err[0] : "coins timeout");
+
+            // 2. select coins to cover, build InputCoins.
+            org.minima.utils.json.JSONObject full = (org.minima.utils.json.JSONObject)
+                    new org.minima.utils.json.parser.JSONParser().parse(resp[0].toString());
+            org.minima.utils.json.JSONArray coins = (org.minima.utils.json.JSONArray) full.get("response");
+            List<org.minima.utils.json.JSONObject> sel = CoinSelector.selectToCover(coins, "0x00", amount);
+            List<TxnFactory.InputCoin> inputs = new ArrayList<>();
+            for (org.minima.utils.json.JSONObject cn : sel) {
+                inputs.add(TxnFactory.fromCoinJson(cn, DesktopWallet.KEY_INDEX));
+            }
+
+            // 3. build + SIGN locally (this reserves a one-time key use).
+            uiStatus(status, "Signing on this device…");
+            TxnFactory factory = new TxnFactory(w.core());
+            final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, amount,
+                    TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
+
+            // 4. publish the SIGNED txn (relay only) via gateway/node.
+            uiStatus(status, "Publishing via " + mPub.backendName() + "…");
+            mPub.publish(built.getTxnImportCommand(), built.getID(), built.getTxnPostCommand(),
+                    new DesktopWalletPublisher.Cb() {
+                public void onResult(org.json.JSONObject r) {
+                    mLedger.add(true, amount.toString(), "MINIMA", to, built.getID(), "0x00");
+                    mLastFetch = 0;
+                    uiStatus(status, "Sent ⛏ (mining into a block)");
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        rebuildPanes();
+                        javax.swing.Timer tm = new javax.swing.Timer(1400, e -> d.dispose());
+                        tm.setRepeats(false); tm.start();
+                    });
+                }
+                public void onError(String m) {
+                    uiStatus(status, "Publish failed: " + m);
+                    javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
+                }
+            });
+        } catch (CoinSelector.InsufficientFundsException ife) {
+            uiStatus(status, "Not enough confirmed funds.");
+            javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
+        } catch (Exception e) {
+            uiStatus(status, "Send failed: " + e.getMessage());
+            javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
+        }
+    }
+
     private void showReceive() {
+        final DesktopWallet w = mWallet;
+        if (w == null) return;
+        String addr = w.mxAddress();
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
-        JLabel qr = new JLabel("Fetching an address…", javax.swing.SwingConstants.CENTER);
-        qr.setForeground(t.subtext);
-        qr.setFont(t.font(12f));
-        qr.setPreferredSize(new Dimension(230, 230));
-        qr.setMaximumSize(new Dimension(230, 230));
+        JLabel qr = new JLabel();
+        qr.setAlignmentX(Component.CENTER_ALIGNMENT);
+        java.awt.image.BufferedImage img = DesktopQr.encode(addr, 230,
+                0xFF000000 | (t.text.getRGB() & 0xFFFFFF), 0xFFFFFFFF);
+        if (img != null) qr.setIcon(new javax.swing.ImageIcon(img));
         JPanel qw = new JPanel();
         qw.setOpaque(false);
         qw.setLayout(new BoxLayout(qw, BoxLayout.X_AXIS));
@@ -402,89 +443,44 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         qw.add(Box.createHorizontalGlue());
         body.add(qw);
         body.add(k.vgap(12));
-        JPanel copyHolder = new JPanel(new BorderLayout());
-        copyHolder.setOpaque(false);
-        body.add(copyHolder);
-        JDialog d = dialog("Receive MINIMA", body, 320);
-        new Thread(() -> {
-            String addr = "";
-            try {
-                DesktopNodeLink link = DesktopNodeLink.configured();
-                JSONObject res = link.cmd("getaddress");
-                Object resp = res.get("response");
-                if (resp instanceof JSONObject) addr = str((JSONObject) resp, "miniaddress");
-            } catch (Exception ignored) { }
-            final String faddr = addr;
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                if (faddr.isEmpty()) { qr.setText("Couldn't fetch an address."); return; }
-                java.awt.image.BufferedImage img = DesktopQr.encode(faddr, 230,
-                        0xFF000000 | (t.text.getRGB() & 0xFFFFFF), 0xFFFFFFFF);
-                if (img != null) { qr.setText(null); qr.setIcon(new javax.swing.ImageIcon(img)); }
-                copyHolder.add(k.copyField("your MINIMA address", faddr, false), BorderLayout.CENTER);
-                copyHolder.revalidate();
-                d.pack();
-                d.setLocationRelativeTo(WalletPanel.this);
-            });
-        }, "wallet-receive").start();
-    }
-
-    // ---- fetch ----
-
-    private void fetch(DesktopNodeLink link) {
-        mFetching = true;
-        new Thread(() -> {
-            JSONObject bal = null;
-            JSONArray hist = null;
-            try { bal = link.cmd("balance"); } catch (Exception ignored) { }
-            try {
-                JSONObject h = link.cmd("history");
-                Object resp = h == null ? null : h.get("response");
-                if (resp instanceof JSONObject) {
-                    Object txns = ((JSONObject) resp).get("txpows");
-                    if (txns instanceof JSONArray) hist = flattenHistory((JSONArray) txns);
-                } else if (resp instanceof JSONArray) {
-                    hist = (JSONArray) resp;
-                }
-            } catch (Exception ignored) { }
-            mBalance = bal;
-            if (hist != null) mHistory = hist;
-            mFetching = false;
-            javax.swing.SwingUtilities.invokeLater(this::rebuildPanes);
-        }, "wallet-fetch").start();
-    }
-
-    private JSONArray flattenHistory(JSONArray txns) {
-        JSONArray out = new JSONArray();
-        for (Object o : txns) {
-            JSONObject row = new JSONObject();
-            row.put("detail", "transaction");
-            out.add(row);
-        }
-        return out;
-    }
-
-    private JSONArray balanceArray() {
-        JSONObject b = mBalance;
-        if (b == null) return null;
-        Object resp = b.get("response");
-        return resp instanceof JSONArray ? (JSONArray) resp : null;
+        body.add(k.copyField("your MINIMA address", addr, false));
+        dialog("Receive MINIMA", body, 320);
     }
 
     // ---- helpers ----
 
-    private static String str(JSONObject o, String key) {
-        Object v = o == null ? null : o.get(key);
-        return v == null ? "" : v.toString();
+    private void showError(String m) {
+        mBody.removeAll();
+        mBody.add(k.sub(m));
+        mBody.revalidate();
+        mBody.repaint();
     }
 
-    private static String tokenName(JSONObject tk) {
-        Object token = tk.get("token");
-        if (token instanceof JSONObject) {
-            Object n = ((JSONObject) token).get("name");
-            if (n != null) return n.toString();
+    private void uiStatus(JLabel l, String s) {
+        javax.swing.SwingUtilities.invokeLater(() -> l.setText(s));
+    }
+
+    private JLabel heroLabel(String s) {
+        JLabel l = new JLabel(s);
+        l.setFont(t.semibold(10.5f));
+        l.setForeground(DKit.alpha(t.onAccent, 190));
+        l.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return l;
+    }
+
+    private static String tokenName(org.json.JSONObject tk) {
+        Object token = tk.opt("token");
+        if (token instanceof org.json.JSONObject) {
+            String n = ((org.json.JSONObject) token).optString("name", "");
+            if (!n.isEmpty()) return n;
         }
-        if (token != null) return token.toString();
-        return "0x00".equals(str(tk, "tokenid")) ? "Minima" : str(tk, "tokenid");
+        String s = tk.optString("token", "");
+        return s.isEmpty() ? "Token" : s;
+    }
+
+    private static String clip(String s, int n) {
+        if (s == null) return "";
+        return s.length() > n ? s.substring(0, n - 1) + "…" : s;
     }
 
     private JDialog dialog(String title, JComponent body, int width) {
@@ -509,12 +505,5 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         r.setAlignmentX(Component.LEFT_ALIGNMENT);
         r.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         return r;
-    }
-
-    private static JComponent holder(JComponent c) {
-        JPanel h = new JPanel(new BorderLayout());
-        h.setOpaque(false);
-        h.add(c, BorderLayout.NORTH);
-        return h;
     }
 }

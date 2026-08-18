@@ -7,7 +7,7 @@ plugins {
 // A fresh artifact line. macOS jpackage requires a major version >= 1
 // (independent of the relay protocol version). 1.1.0 adds the windowed chat
 // client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
-version = '1.2.3'
+version = '1.2.4'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
@@ -29,17 +29,29 @@ dependencies {
     implementation project(':server')   // RelayServer + RelayRuntime
     // Pure-Java QR encoder (same lib the phone uses) for the "share my address" QR.
     implementation 'com.google.zxing:core:3.5.3'
+    // The local Maxima wallet (same code the APK uses) needs the Winternitz signer.
+    // 1.7x removed the pqc.gmss classes it depends on; pin 1.69 (also has SHA3Digest).
+    // NEVER upgrade — matches the family rule for the vendored signer.
+    implementation 'org.bouncycastle:bcprov-jdk15on:1.69'
+    // org.json is bundled in Android; the wallet's Util uses it. Add the standard
+    // pure-Java implementation for desktop (distinct from org.minima.utils.json).
+    implementation 'org.json:json:20231013'
 }
 
-// Compile in Minima's self-contained JSON parser (from :app's tree) so the Wallet
-// tab can talk to a Minima Core Desktop node over its RPC using the exact JSON the
-// node emits — no extra dependency, guaranteed compatibility.
+// Compile the APK's FULLY-LOCAL wallet stack + Minima objects into the desktop app,
+// straight from :app's tree — same key-#1000 derivation, txn build and Winternitz
+// signing done ON THE DEVICE, exactly like the phone. Only the two Android-coupled
+// helpers (Identicon, PrefsKeyUses) are excluded and reimplemented for desktop.
+// org.minima.* here is a curated, self-contained pure-Java subset (no android imports).
 sourceSets {
     main {
         java {
             srcDir '../app/src/main/java'
             include 'com/eurobuddha/maxima/desktop/**'
-            include 'org/minima/utils/json/**'
+            include 'org/minima/**'
+            include 'com/eurobuddha/wallet/**'
+            exclude 'com/eurobuddha/wallet/Identicon.java'      // android Bitmap
+            exclude 'com/eurobuddha/wallet/PrefsKeyUses.java'   // android prefs
         }
     }
 }

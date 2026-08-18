@@ -120,6 +120,7 @@ public final class DesktopNode {
     public MediaService media()    { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
     public DesktopRelayStore relayStore() { return mRelayStore; }
+    public Path dataDir()          { return mDataDir; }
 
     // ---- direct reachability ----
     public ReachabilityManager.State reachState() { return mReachState; }
