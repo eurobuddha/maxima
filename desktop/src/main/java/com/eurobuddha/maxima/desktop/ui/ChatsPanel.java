@@ -1,9 +1,11 @@
 package com.eurobuddha.maxima.desktop.ui;
 
 import com.eurobuddha.maxima.core.chat.ChatEngine;
+import com.eurobuddha.maxima.core.chat.ChatMedia;
 import com.eurobuddha.maxima.core.chat.ChatPay;
 import com.eurobuddha.maxima.core.chat.Group;
 import com.eurobuddha.maxima.core.contacts.Contact;
+import com.eurobuddha.maxima.core.media.MediaManifest;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -52,6 +54,9 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
     private boolean mOpenGroup;
     private String mLastSig = "";
     private String mThreadSig = "";
+    /** ref → scaled thumbnail, so media isn't re-fetched on every thread rebuild. */
+    private final java.util.Map<String, javax.swing.ImageIcon> mMediaCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     public ChatsPanel(DesktopNode zNode, Theme zTheme) {
         node = zNode;
@@ -106,7 +111,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
         bar.setBorder(new EmptyBorder(10, 14, 12, 14));
         DKit.RoundPanel pill = new DKit.RoundPanel(t.input, 999);
         pill.setLayout(new BorderLayout());
-        pill.setBorder(new EmptyBorder(2, 14, 2, 8));
+        pill.setBorder(new EmptyBorder(2, 6, 2, 8));
+        DKit.HoverButton attach = k.ghostButton("＋");
+        attach.setFont(t.bold(16f));
+        attach.onClick(this::attachFile);
+        pill.add(attach, BorderLayout.WEST);
         mInput = new JTextField();
         mInput.setFont(t.font(13.5f));
         mInput.setForeground(t.text);
@@ -258,9 +267,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
     private JComponent bubble(ChatEngine.Entry e) {
         boolean mine = e.mine;
         boolean pay = ChatPay.isPayment(e.body);
-        String bodyText = pay
-                ? "💸  " + ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body)
-                : e.body;
+        boolean media = ChatMedia.isMedia(e.body);
 
         JPanel line = new JPanel();
         line.setOpaque(false);
@@ -281,11 +288,20 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
             who.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(who);
         }
-        JLabel body = new JLabel("<html><div style='width:360px'>" + escHtml(bodyText) + "</div></html>");
-        body.setFont(t.font(13.5f));
-        body.setForeground(fg);
-        body.setAlignmentX(Component.LEFT_ALIGNMENT);
-        b.add(body);
+
+        if (media) {
+            addMediaTo(b, e.body, fg);
+        } else {
+            String bodyText = pay
+                    ? "💸  " + ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body)
+                    : e.body;
+            JLabel body = new JLabel("<html><div style='width:360px'>"
+                    + escHtml(bodyText) + "</div></html>");
+            body.setFont(t.font(13.5f));
+            body.setForeground(fg);
+            body.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(body);
+        }
 
         JLabel meta = new JLabel(time(e.time) + (mine ? "  " + stateGlyph(e) : ""));
         meta.setFont(t.font(10f));
@@ -324,6 +340,109 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab {
             }
             javax.swing.SwingUtilities.invokeLater(this::rebuildThread);
         }, "chat-send").start();
+    }
+
+    // ---- media ----
+
+    /** Render an image message: caption text (if any) plus a thumbnail fetched
+     *  from the media mesh off-EDT and cached by ref so it isn't re-fetched. */
+    private void addMediaTo(DKit.RoundPanel b, String body, Color fg) {
+        String caption = ChatMedia.caption(body);
+        String mime = ChatMedia.mime(body);
+        final String ref = ChatMedia.ref(body);
+
+        JLabel img = new JLabel();
+        img.setAlignmentX(Component.LEFT_ALIGNMENT);
+        javax.swing.ImageIcon cached = ref == null ? null : mMediaCache.get(ref);
+        if (cached != null) {
+            img.setIcon(cached);
+        } else if (mime != null && mime.startsWith("image/")) {
+            img.setText("Loading image…");
+            img.setFont(t.font(12f));
+            img.setForeground(DKit.alpha(fg, 170));
+            fetchThumb(ref, img);
+        } else {
+            img.setText("📎 " + (mime == null ? "attachment" : mime));
+            img.setFont(t.font(12.5f));
+            img.setForeground(fg);
+        }
+        b.add(img);
+
+        if (caption != null && !caption.isEmpty()) {
+            JLabel cap = new JLabel("<html><div style='width:340px'>" + escHtml(caption) + "</div></html>");
+            cap.setFont(t.font(13f));
+            cap.setForeground(fg);
+            cap.setAlignmentX(Component.LEFT_ALIGNMENT);
+            cap.setBorder(new EmptyBorder(5, 0, 0, 0));
+            b.add(cap);
+        }
+    }
+
+    private void fetchThumb(String ref, JLabel target) {
+        if (ref == null || !ref.startsWith("mx1:")) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                String json = new String(java.util.Base64.getUrlDecoder()
+                        .decode(ref.substring(4)), java.nio.charset.StandardCharsets.UTF_8);
+                MediaManifest mf = MediaManifest.decode(json);
+                byte[] bytes = node.media().fetch(mf);
+                java.awt.image.BufferedImage bi =
+                        javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+                if (bi == null) {
+                    return;
+                }
+                int max = 260;
+                int w = bi.getWidth(), h = bi.getHeight();
+                double s = Math.min(1.0, (double) max / Math.max(w, h));
+                java.awt.Image scaled = bi.getScaledInstance(
+                        (int) (w * s), (int) (h * s), java.awt.Image.SCALE_SMOOTH);
+                javax.swing.ImageIcon icon = new javax.swing.ImageIcon(scaled);
+                mMediaCache.put(ref, icon);
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    target.setText(null);
+                    target.setIcon(icon);
+                    target.revalidate();
+                });
+            } catch (Exception e) {
+                javax.swing.SwingUtilities.invokeLater(() -> target.setText("Image unavailable"));
+            }
+        }, "media-fetch").start();
+    }
+
+    private void attachFile() {
+        if (mOpen == null) {
+            return;
+        }
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle("Send a photo");
+        if (fc.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File f = fc.getSelectedFile();
+        new Thread(() -> {
+            try {
+                byte[] bytes = java.nio.file.Files.readAllBytes(f.toPath());
+                String mime = java.nio.file.Files.probeContentType(f.toPath());
+                if (mime == null) {
+                    mime = "application/octet-stream";
+                }
+                if (mOpenGroup) {
+                    node.chat().sendGroupMedia(mOpen, bytes, mime, "");
+                } else {
+                    Contact c = node.node().contact(mOpen);
+                    if (c != null) {
+                        node.chat().sendMedia(c, bytes, mime, "");
+                    }
+                }
+                javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
+            } catch (Exception ex) {
+                javax.swing.SwingUtilities.invokeLater(() ->
+                        javax.swing.JOptionPane.showMessageDialog(this,
+                                "Couldn't send: " + ex.getMessage()));
+            }
+        }, "chat-attach").start();
     }
 
     // ---- helpers ----
