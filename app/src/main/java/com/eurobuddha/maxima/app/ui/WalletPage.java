@@ -67,6 +67,9 @@ public final class WalletPage implements Page {
     /** Re-entrancy guard: one in-flight send at a time. Burning two Winternitz
      *  key-uses on a double-tap is irreversible, so this must never race. */
     private volatile boolean mSending;
+    /** One coin-import sweep at a time; and auto-run it at most once per open. */
+    private volatile boolean mSyncing;
+    private volatile boolean mAutoSynced;
 
     /** Winternitz one-time-signature budget for key #1000. */
     private static final int KEY_TOTAL = 262144;
@@ -254,6 +257,7 @@ public final class WalletPage implements Page {
                 post(() -> {
                     repaintHero();
                     rebuildTokenCards();
+                    maybeAutoSync();
                 });
             }
 
@@ -263,13 +267,46 @@ public final class WalletPage implements Page {
         });
     }
 
+    /**
+     * If we are holding confirmed funds that aren't yet spendable (funded-before-
+     * tracked coins), backfill them ONCE per wallet open. See {@link #syncCoins}.
+     */
+    private void maybeAutoSync() {
+        MaximaWallet w = mWallet;
+        if (w == null || mAutoSynced || mSyncing) {
+            return;
+        }
+        if (isLess(mSpendMinima, mConfMinima)) {
+            mAutoSynced = true;
+            syncCoins(w, null);
+        }
+    }
+
     // ---------------------------------------------------------------
     // Balance pane rendering
     // ---------------------------------------------------------------
 
     private void repaintHero() {
         if (mHeroAmt != null) {
-            mHeroAmt.setText(Amounts.list(mSpendMinima));
+            // "TOTAL BALANCE" = confirmed (what you own), NOT sendable — a coin
+            // funded before the wallet tracked it is confirmed on-chain but not yet
+            // spendable, and showing 0 there made a funded wallet look empty.
+            mHeroAmt.setText(Amounts.list(mConfMinima));
+        }
+        if (mHeroSub != null) {
+            boolean lag = isLess(mSpendMinima, mConfMinima);
+            mHeroSub.setText(lag
+                    ? Amounts.list(mSpendMinima) + " sendable · tap Sync to unlock the rest"
+                    : Amounts.list(mSpendMinima) + " sendable now");
+        }
+    }
+
+    /** True if a &lt; b for two decimal MINIMA strings (best-effort). */
+    private static boolean isLess(String a, String b) {
+        try {
+            return new java.math.BigDecimal(a).compareTo(new java.math.BigDecimal(b)) < 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -637,6 +674,120 @@ public final class WalletPage implements Page {
         });
     }
 
+    /**
+     * Make funded-before-tracked coins spendable. A coin that arrived at our address
+     * BEFORE the node was tracking our script is confirmed on-chain (so `balance
+     * megammr:true` shows it and it counts in TOTAL BALANCE) but is NOT in the node's
+     * own tracked set — so it has no local MMR proof, {@code txnbasics} can't attach
+     * one, and {@code coins} (non-megammr) reports {@code sendable:0}. That is exactly
+     * why a freshly reinstalled wallet looked "empty".
+     *
+     * The fix is the standard Minima backfill, the same one the gateway allowlist was
+     * built for: track the script, then for each coin {@code coinexport} it out of the
+     * global MegaMMR and {@code coinimport track:true} it back into the node's tracked
+     * set (coin + proof). After that the coins are spendable and {@code sendable} fills
+     * to match {@code confirmed}. Runs OFF-MAIN. It NEVER signs and NEVER spends — no
+     * key use is burned — so it is safe to auto-run when we detect the lag.
+     */
+    private void syncCoins(final MaximaWallet w, final Runnable zOnDone) {
+        if (w == null || w.hexAddress() == null || mSyncing) {
+            return;
+        }
+        mSyncing = true;
+        mIo.execute(() -> {
+            int imported = 0, failed = 0;
+            try {
+                // 1) Track our script so coins register locally from here on.
+                try {
+                    cmdBlocking("newscript trackall:true script:\"" + w.script() + "\"");
+                } catch (Exception trackErr) {
+                    // Non-fatal: the script may already be tracked.
+                    EventLog.add("wallet: track script note: " + trackErr.getMessage());
+                }
+
+                // 2) Enumerate our coins from the global MegaMMR.
+                JSONObject coinsResp = cmdBlocking("coins megammr:true address:" + w.hexAddress());
+                org.json.JSONArray arr = coinsResp.optJSONArray("response");
+                if (arr != null) {
+                    for (int i = 0; i < arr.length(); i++) {
+                        String coinid = arr.getJSONObject(i).optString("coinid", "");
+                        if (coinid.isEmpty()) {
+                            continue;
+                        }
+                        try {
+                            // 3) Export the coin+proof, then import it into the tracked set.
+                            JSONObject ex = cmdBlocking("coinexport coinid:" + coinid);
+                            JSONObject exResp = ex.optJSONObject("response");
+                            String data = exResp != null ? exResp.optString("data", "") : "";
+                            if (data.isEmpty()) {
+                                failed++;
+                                continue;
+                            }
+                            cmdBlocking("coinimport data:" + data + " track:true");
+                            imported++;
+                        } catch (Exception coinErr) {
+                            failed++;
+                            EventLog.add("wallet: coin sync skipped " + coinid
+                                    + ": " + coinErr.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                EventLog.add("wallet: coin sync failed: " + e.getMessage());
+            } finally {
+                mSyncing = false;
+            }
+            final int fi = imported, ff = failed;
+            EventLog.add("wallet: coin sync imported=" + fi + " failed=" + ff);
+            post(() -> {
+                if (fi > 0 && ff == 0) {
+                    mAct.toast("Coins synced — " + fi + " now spendable");
+                } else if (ff > 0) {
+                    mAct.toast("Synced " + fi + ", " + ff + " pending — try again shortly");
+                }
+                mLastFetch = 0;   // force the next render() to refetch balance + coins
+                render();
+                if (zOnDone != null) {
+                    zOnDone.run();
+                }
+            });
+        });
+    }
+
+    /**
+     * Run a single node/gateway command and BLOCK for its reply. Off-main only (it
+     * parks the calling thread up to 45s). Mirrors {@link #sendPayment}'s lock/wait.
+     */
+    private JSONObject cmdBlocking(String zCommand) throws Exception {
+        final Object lock = new Object();
+        final JSONObject[] resp = new JSONObject[1];
+        final String[] err = new String[1];
+        mPub.cmd(zCommand, new WalletPublisher.Cb() {
+            public void onResult(JSONObject r) {
+                synchronized (lock) { resp[0] = r; lock.notifyAll(); }
+            }
+
+            public void onError(String m) {
+                synchronized (lock) { err[0] = m; lock.notifyAll(); }
+            }
+        });
+        synchronized (lock) {
+            long deadline = System.currentTimeMillis() + 45_000;
+            while (resp[0] == null && err[0] == null) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                lock.wait(remaining);
+            }
+        }
+        if (resp[0] == null) {
+            throw new IllegalStateException(
+                    err[0] != null ? err[0] : "timeout: " + zCommand);
+        }
+        return resp[0];
+    }
+
     private void showReceive() {
         final MaximaWallet w = mWallet;
         if (w == null || w.mxAddress() == null) {
@@ -961,6 +1112,22 @@ public final class WalletPage implements Page {
         arp.topMargin = dp(6);
         hero.addView(amtRow, arp);
         mHeroSub = sub("sendable now");
+        // Tapping the sub-line re-runs the coin backfill (see syncCoins): useful if the
+        // one-shot auto-sync couldn't reach the node, or funds arrived after open.
+        mHeroSub.setOnClickListener(v -> {
+            MaximaWallet w = mWallet;
+            if (w == null) {
+                return;
+            }
+            if (mSyncing) {
+                mAct.toast("Syncing coins…");
+                return;
+            }
+            if (isLess(mSpendMinima, mConfMinima)) {
+                mAct.toast("Syncing coins…");
+                syncCoins(w, null);
+            }
+        });
         hero.addView(mHeroSub);
 
         LinearLayout actions = new LinearLayout(mAct);
