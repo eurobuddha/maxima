@@ -63,6 +63,9 @@ public final class WalletPage implements Page {
     private volatile WalletPublisher mPub;
     private NodeLink mNode;
     private volatile boolean mTracked;
+    /** Re-entrancy guard: one in-flight send at a time. Burning two Winternitz
+     *  key-uses on a double-tap is irreversible, so this must never race. */
+    private volatile boolean mSending;
 
     /** Winternitz one-time-signature budget for key #1000. */
     private static final int KEY_TOTAL = 262144;
@@ -115,7 +118,22 @@ public final class WalletPage implements Page {
             w.ensureAddress();
             mWallet = w;
             mLastFetch = 0;
+            // A seed switch changes the address+funds — drop the previous wallet's
+            // cached figures so we never show the old balance on the new wallet.
+            mConfMinima = "0";
+            mUnconfMinima = "0";
+            mSpendMinima = "0";
+            mAggs = new ArrayList<>();
+            mConf = new HashMap<>();
+            mUnconf = new HashMap<>();
+            mSupplyMinima = null;
             mAct.runOnUiThread(() -> {
+                if (mHeroAmt != null) {
+                    mHeroAmt.setText("…");
+                }
+                if (mTokenList != null) {
+                    mTokenList.removeAllViews();
+                }
                 renderUses(w);
                 render();
             });
@@ -498,6 +516,14 @@ public final class WalletPage implements Page {
             status.setText("Bad amount");
             return;
         }
+        if (!amount.isMore(MiniNumber.ZERO)) {
+            status.setText("Enter an amount greater than 0");
+            return;
+        }
+        if (mSending) {
+            return;   // already signing/publishing — never double-burn a key use
+        }
+        mSending = true;
         status.setText("Selecting coins…");
         mIo.execute(() -> {
             try {
@@ -514,8 +540,13 @@ public final class WalletPage implements Page {
                     }
                 });
                 synchronized (lock) {
-                    if (resp[0] == null && err[0] == null) {
-                        lock.wait(45_000);
+                    long deadline = System.currentTimeMillis() + 45_000;
+                    while (resp[0] == null && err[0] == null) {
+                        long remaining = deadline - System.currentTimeMillis();
+                        if (remaining <= 0) {
+                            break;   // real timeout, not a spurious wakeup
+                        }
+                        lock.wait(remaining);
                     }
                 }
                 if (resp[0] == null) {
@@ -545,6 +576,7 @@ public final class WalletPage implements Page {
                 mPub.publish(built.getTxnImportCommand(), built.getID(),
                         built.getTxnPostCommand(), new WalletPublisher.Cb() {
                             public void onResult(JSONObject r) {
+                                mSending = false;
                                 WalletLedger.add(mAct, true, amount.toString(), "MINIMA",
                                         to, built.getID(), "0x00");
                                 post(() -> {
@@ -560,12 +592,15 @@ public final class WalletPage implements Page {
                             }
 
                             public void onError(String m) {
+                                mSending = false;
                                 post(() -> status.setText("Publish failed: " + m));
                             }
                         });
             } catch (CoinSelector.InsufficientFundsException ife) {
+                mSending = false;
                 post(() -> status.setText("Not enough confirmed funds"));
             } catch (Exception e) {
+                mSending = false;
                 post(() -> status.setText("Send failed: " + e.getMessage()));
             }
         });

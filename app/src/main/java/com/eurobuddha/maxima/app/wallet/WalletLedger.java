@@ -44,7 +44,7 @@ public final class WalletLedger {
 
     /** As {@link #add}, also recording the token id so history can label
      *  non-Minima payments and open the right token. */
-    public static void add(Context zCtx, boolean zSent, String zAmount, String zToken,
+    public static synchronized void add(Context zCtx, boolean zSent, String zAmount, String zToken,
                            String zWho, String zTxid, String zTokenid) {
         try {
             JSONObject o = new JSONObject();
