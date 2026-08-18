@@ -103,6 +103,24 @@ public final class DKit {
         return l;
     }
 
+    /** A label-left / value-right line (like the phone's kv row). */
+    public JComponent kvLine(String label, String value) {
+        JPanel row = new JPanel(new java.awt.BorderLayout(10, 0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(4, 0, 4, 0));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel l = new JLabel(label);
+        l.setFont(t.font(12.5f));
+        l.setForeground(t.subtext);
+        JLabel v = new JLabel(value);
+        v.setFont(t.semibold(12.5f));
+        v.setForeground(t.text);
+        row.add(l, java.awt.BorderLayout.WEST);
+        row.add(v, java.awt.BorderLayout.EAST);
+        return row;
+    }
+
     public JComponent divider() {
         JPanel d = new JPanel();
         d.setBackground(t.divider);
