@@ -115,20 +115,22 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         searchWrap.add(searchPill, BorderLayout.CENTER);
         mListPane.add(searchWrap, BorderLayout.NORTH);
 
-        // Floating new-chat FAB over the list.
-        javax.swing.JLayeredPane layered = new javax.swing.JLayeredPane();
-        layered.setLayout(null);
-        SendFabLike fab = new SendFabLike(t);
+        // Floating new-chat FAB over the list. A JLayeredPane with a null layout does
+        // NOT size its children on its own — it only worked when a resize event
+        // happened to fire, which it didn't in two-pane/WEST mode, leaving the list
+        // 0x0 and invisible. Override doLayout() so children are sized on EVERY layout
+        // pass (reliable), full-bleed list + bottom-right FAB.
+        final SendFabLike fab = new SendFabLike(t);
         fab.onClick(this::showNewChat);
-        layered.add(mListScroll, Integer.valueOf(javax.swing.JLayeredPane.DEFAULT_LAYER));
-        layered.add(fab, Integer.valueOf(javax.swing.JLayeredPane.PALETTE_LAYER));
-        layered.addComponentListener(new java.awt.event.ComponentAdapter() {
-            public void componentResized(java.awt.event.ComponentEvent e) {
-                int w = layered.getWidth(), h = layered.getHeight();
+        javax.swing.JLayeredPane layered = new javax.swing.JLayeredPane() {
+            public void doLayout() {
+                int w = getWidth(), h = getHeight();
                 mListScroll.setBounds(0, 0, w, h);
                 fab.setBounds(w - 62, h - 62, 52, 52);
             }
-        });
+        };
+        layered.add(mListScroll, Integer.valueOf(javax.swing.JLayeredPane.DEFAULT_LAYER));
+        layered.add(fab, Integer.valueOf(javax.swing.JLayeredPane.PALETTE_LAYER));
         mListPane.add(layered, BorderLayout.CENTER);
 
         // ---- open conversation ----
