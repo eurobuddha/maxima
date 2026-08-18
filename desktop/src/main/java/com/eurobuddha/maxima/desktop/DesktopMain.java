@@ -38,10 +38,15 @@ import java.util.concurrent.TimeUnit;
  */
 public final class DesktopMain {
 
+    /** User-facing desktop app version (independent of the relay protocol). */
+    public static final String APP_VERSION = "1.1.0";
+
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
     private static final int DEFAULT_PORT = 9501;
     private static final int TRAY_SIZE = 20;
+
+    private String[] mArgs = new String[0];
 
     // Live status, read by the tray refresh.
     private volatile ReachabilityManager.State mReach = ReachabilityManager.State.OFF;
@@ -61,7 +66,9 @@ public final class DesktopMain {
     private RandomAccessFile mLockFile;
 
     public static void main(String[] args) throws Exception {
-        new DesktopMain().run();
+        DesktopMain m = new DesktopMain();
+        m.mArgs = args == null ? new String[0] : args;
+        m.run();
     }
 
     private void run() throws Exception {
@@ -69,7 +76,20 @@ public final class DesktopMain {
         Files.createDirectories(dataDir);
 
         if (!acquireSingleInstanceLock(dataDir)) {
-            note("Maxima Node is already running.");
+            note("Maxima is already running.");
+            return;
+        }
+
+        // Two personalities from one binary, one identity seed:
+        //   - windowed  (default on a machine with a display): the full chat
+        //     client — Chats/Contacts/Wallet/Network/Settings, parity with the phone.
+        //   - relay     (headless boxes, or --relay / MAXIMA_RELAY=1): the
+        //     set-and-forget forwarding relay + tray, exactly as before.
+        boolean relayOnly = java.awt.GraphicsEnvironment.isHeadless()
+                || "1".equals(System.getenv("MAXIMA_RELAY"))
+                || java.util.Arrays.asList(mArgs).contains("--relay");
+        if (!relayOnly) {
+            launchWindow(dataDir);
             return;
         }
 
@@ -180,6 +200,60 @@ public final class DesktopMain {
 
         // keep alive
         Thread.currentThread().join();
+    }
+
+    // ---- windowed chat client ----
+
+    private void launchWindow(Path dataDir) throws Exception {
+        RelayRuntime.Seed seed = RelayRuntime.loadOrCreateSeed(dataDir);
+        MaximaIdentity id = MaximaIdentity.fromPhrase(seed.phrase);
+
+        java.util.prefs.Preferences prefs =
+                java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
+        String name = prefs.get("name", "Maxima Desktop");
+
+        com.eurobuddha.maxima.desktop.ui.DesktopNode dnode =
+                new com.eurobuddha.maxima.desktop.ui.DesktopNode(id, dataDir, name);
+
+        // Attach + pump on a background thread so the UI paints immediately.
+        Thread starter = new Thread(() -> {
+            try {
+                int attached = dnode.start();
+                log("chat client attached to " + attached + " relay(s)");
+            } catch (Exception e) {
+                log("chat client start failed: " + e.getMessage());
+            }
+        }, "maxima-window-start");
+        starter.setDaemon(true);
+        starter.start();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                dnode.shutdown();
+            } catch (Exception ignored) {
+            }
+            releaseLock();
+        }, "maxima-window-shutdown"));
+
+        // First run: show the wallet-grade seed backup once.
+        if (seed.created) {
+            showSeedBackup(seed);
+        }
+
+        final com.eurobuddha.maxima.desktop.ui.Theme.Mode mode =
+                "dark".equals(prefs.get("appearance", ""))
+                        ? com.eurobuddha.maxima.desktop.ui.Theme.Mode.DARK
+                        : "light".equals(prefs.get("appearance", ""))
+                                ? com.eurobuddha.maxima.desktop.ui.Theme.Mode.LIGHT
+                                : com.eurobuddha.maxima.desktop.ui.Theme.detectMode();
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            com.eurobuddha.maxima.desktop.ui.Theme theme =
+                    new com.eurobuddha.maxima.desktop.ui.Theme(mode);
+            com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
+                    new com.eurobuddha.maxima.desktop.ui.MaximaWindow(dnode, theme);
+            w.frame().setTitle("Maxima — " + name);
+            w.show();
+        });
     }
 
     // ---- pump loop for the reachability/gossip client ----

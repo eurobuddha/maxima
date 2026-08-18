@@ -30,9 +30,11 @@ dependencies {
 
 application {
     mainClass = 'com.eurobuddha.maxima.desktop.DesktopMain'
-    // The tray app has no console; keep AWT headless-off so SystemTray works, and
-    // run as a macOS menu-bar accessory (no Dock icon) — it lives in the tray.
-    applicationDefaultJvmArgs = ['-Djava.awt.headless=false', '-Dapple.awt.UIElement=true']
+    // Keep AWT headless-off so SystemTray works in relay mode. The windowed chat
+    // client is a normal app with a Dock/taskbar icon, so do NOT force the macOS
+    // menu-bar-accessory flag globally (relay-only installs can still set
+    // -Dapple.awt.UIElement=true themselves).
+    applicationDefaultJvmArgs = ['-Djava.awt.headless=false']
 }
 
 /*
