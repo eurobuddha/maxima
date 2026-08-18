@@ -208,6 +208,14 @@ public final class Kit {
     // ---- copy field ----
 
     public LinearLayout copyField(String labelText, String value, String toastMsg) {
+        return copyField(labelText, value, toastMsg, true);
+    }
+
+    /** As {@link #copyField}, but {@code upperLabel=false} keeps the label verbatim
+     *  (e.g. "maxima publickey", a term of art from classic Minima that must not
+     *  be upper-cased). */
+    public LinearLayout copyField(String labelText, String value, String toastMsg,
+                                  boolean upperLabel) {
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundResource(R.drawable.field_pill);
@@ -220,9 +228,9 @@ public final class Kit {
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView l = new TextView(a);
-        l.setText(labelText.toUpperCase());
+        l.setText(upperLabel ? labelText.toUpperCase() : labelText);
         l.setTextSize(10);
-        l.setLetterSpacing(0.12f);
+        l.setLetterSpacing(upperLabel ? 0.12f : 0.04f);
         l.setTextColor(col(R.color.ux_subtext));
         head.addView(l, new LinearLayout.LayoutParams(0, -2, 1f));
         ImageView cp = new ImageView(a);

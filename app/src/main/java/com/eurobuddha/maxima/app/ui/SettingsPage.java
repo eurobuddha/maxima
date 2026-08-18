@@ -467,7 +467,7 @@ public final class SettingsPage implements Page {
         nameRow.addView(setBtn, sp);
         setBtn.setOnClickListener(v -> setName());
         nameCard.addView(nameRow);
-        LinearLayout keyField = k.copyField("Identity key", "…", "Identity key copied");
+        LinearLayout keyField = k.copyField("maxima publickey", "…", "maxima publickey copied", false);
         mKeyValue = (TextView) keyField.getChildAt(1);
         nameCard.addView(keyField);
         mBox.addView(nameCard, k.mb(k.dp(4)));
