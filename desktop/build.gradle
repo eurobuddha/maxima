@@ -31,6 +31,19 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.3'
 }
 
+// Compile in Minima's self-contained JSON parser (from :app's tree) so the Wallet
+// tab can talk to a Minima Core Desktop node over its RPC using the exact JSON the
+// node emits — no extra dependency, guaranteed compatibility.
+sourceSets {
+    main {
+        java {
+            srcDir '../app/src/main/java'
+            include 'com/eurobuddha/maxima/desktop/**'
+            include 'org/minima/utils/json/**'
+        }
+    }
+}
+
 application {
     mainClass = 'com.eurobuddha.maxima.desktop.DesktopMain'
     // Keep AWT headless-off so SystemTray works in relay mode. The windowed chat
