@@ -101,6 +101,7 @@ public final class DesktopNode {
 
     /** Subscribe to "something changed" — fired on any inbound/state/group event. */
     public void addChangeListener(Runnable r) { mChangeListeners.add(r); }
+    public void removeChangeListener(Runnable r) { mChangeListeners.remove(r); }
     public void addChatListener(ChatEngine.Listener l) { mChatListeners.add(l); }
 
     private void fireChanged() {

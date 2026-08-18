@@ -50,6 +50,8 @@ public final class MaximaWindow {
     private final List<Tab> mTabs = new ArrayList<>();
     private final List<NavItem> mNav = new ArrayList<>();
     private int mSelected = 0;
+    private final Timer mBeat;
+    private final Runnable mChangeHook;
 
     public MaximaWindow(DesktopNode zNode, Theme zTheme) {
         mNode = zNode;
@@ -84,18 +86,19 @@ public final class MaximaWindow {
         select(0);
 
         // Heartbeat: refresh the visible tab every 2s (mirrors the phone).
-        Timer beat = new Timer(2000, e -> {
+        mBeat = new Timer(2000, e -> {
             Tab vis = mTabs.get(mSelected);
             try { vis.refresh(); } catch (Exception ignored) { }
             for (NavItem n : mNav) { n.repaint(); }
         });
-        beat.start();
+        mBeat.start();
 
         // Node change events also nudge the visible tab immediately.
-        mNode.addChangeListener(() -> SwingUtilities.invokeLater(() -> {
+        mChangeHook = () -> SwingUtilities.invokeLater(() -> {
             try { mTabs.get(mSelected).refresh(); } catch (Exception ignored) { }
             for (NavItem n : mNav) { n.repaint(); }
-        }));
+        });
+        mNode.addChangeListener(mChangeHook);
     }
 
     public void show() {
@@ -113,6 +116,11 @@ public final class MaximaWindow {
     /** Rebuild the whole window under a new light/dark palette, preserving the
      *  frame geometry. The node is reused, so no reconnect. */
     public void switchTheme(Theme.Mode m) {
+        // Tear down THIS window's heartbeat + change hook before building the new
+        // one, or every toggle leaks a live 2s timer and listener firing on a
+        // disposed frame.
+        mBeat.stop();
+        mNode.removeChangeListener(mChangeHook);
         MaximaWindow w = new MaximaWindow(mNode, new Theme(m));
         w.frame().setBounds(mFrame.getBounds());
         w.frame().setExtendedState(mFrame.getExtendedState());
