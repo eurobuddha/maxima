@@ -1262,11 +1262,22 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
      *  dark ink to stay readable (blue read-ticks are invisible on green). The
      *  read/delivered/failed state is carried by the tick GLYPH itself
      *  (✓ / ✓✓ / ✗), not by colour. */
+    /** Timestamp+ticks on a normal SENT bubble. The bubble is dark charcoal in
+     *  both modes, so the meta must be LIGHT — the old hardcoded "dark ink"
+     *  (written for the payment card) was near-invisible on it. */
     private int sentMetaColour(String zState) {
         if (Receipt.FAILED.equals(zState)) {
-            return 0xE0731105;   // dark red-brown, still legible on green
+            return getColor(R.color.ux_error);
         }
-        return 0xCC0A1F12;       // dark ink
+        return getColor(R.color.ux_bubble_out_sub);
+    }
+
+    /** Timestamp on the PAYMENT card: the card is the accent colour (charcoal in
+     *  light mode, near-white in night), so derive from ux_on_accent — the ink
+     *  that is guaranteed readable on it — at slight transparency. A hardcoded
+     *  dark ink was illegible on the light-mode charcoal card. */
+    private int payMetaColour() {
+        return (getColor(R.color.ux_on_accent) & 0x00FFFFFF) | 0xCC000000;
     }
 
     /** The two-line payment card text: a small direction line, then a big bold
@@ -1400,11 +1411,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             String stamp = mTime.format(new Date(e.time));
             if (e.mine) {
                 h.meta.setText(stamp + "  " + ticks(e.state));
-                h.meta.setTextColor(sentMetaColour(e.state));
+                h.meta.setTextColor(pay ? payMetaColour() : sentMetaColour(e.state));
             } else {
                 h.meta.setText(stamp);
-                // On the orange payment card, grey is unreadable - use dark ink.
-                h.meta.setTextColor(pay ? 0xCC0A1F12 : getColor(R.color.ux_subtext));
+                // On the accent payment card, grey is unreadable - use its ink.
+                h.meta.setTextColor(pay ? payMetaColour() : getColor(R.color.ux_subtext));
             }
         } else {
             h.meta.setVisibility(View.GONE);
