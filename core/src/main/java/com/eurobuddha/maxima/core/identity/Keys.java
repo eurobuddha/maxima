@@ -32,4 +32,40 @@ public final class Keys {
     public static boolean same(String zA, String zB) {
         return norm(zA).equals(norm(zB));
     }
+
+    /**
+     * A short, stable fingerprint of an identity public key: SHA-256 of the raw
+     * DER key bytes, as 64 lowercase hex chars.
+     *
+     * Used where the full key (a 162-byte DER blob → 326-char 0x-hex string) is
+     * too large to carry — notably an Android NSD TXT record, which caps a
+     * single attribute at key+value &lt; 255 bytes. Both peers derive it from the
+     * SAME canonical key form, so a fingerprint match is a reliable identity
+     * match. SHA-256 via {@link java.security.MessageDigest} keeps this free of
+     * any BouncyCastle version dependency.
+     */
+    public static String fingerprint(String zPublicKeyHex) {
+        String k = norm(zPublicKeyHex);
+        if (k.startsWith("0x") || k.startsWith("0X")) {
+            k = k.substring(2);
+        }
+        if (k.isEmpty() || (k.length() % 2) != 0) {
+            return "";
+        }
+        byte[] der = new byte[k.length() / 2];
+        for (int i = 0; i < der.length; i++) {
+            der[i] = (byte) Integer.parseInt(k.substring(i * 2, i * 2 + 2), 16);
+        }
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256").digest(der);
+            StringBuilder sb = new StringBuilder(h.length * 2);
+            for (byte b : h) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
 }

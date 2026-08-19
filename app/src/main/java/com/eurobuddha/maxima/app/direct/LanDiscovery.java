@@ -152,7 +152,13 @@ public final class LanDiscovery {
         info.setServiceType(SERVICE_TYPE);
         info.setPort(zPort);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            info.setAttribute(TXT_IDENTITY, mNode.identity().publicKeyHex());
+            // Carry only a SHORT fingerprint of our key, never the full key. A
+            // Maxima public key is a 162-byte DER blob → 326-char 0x-hex; NSD caps
+            // a TXT attribute at key+value < 255 bytes, so advertising the full key
+            // made registerService throw and killed LAN discovery outright. The
+            // 64-char SHA-256 fingerprint fits, and both peers derive it from the
+            // same canonical key, so the discovery-side match is exact.
+            info.setAttribute(TXT_IDENTITY, mNode.identity().fingerprint());
         }
 
         mReg = new NsdManager.RegistrationListener() {
@@ -231,15 +237,18 @@ public final class LanDiscovery {
                         if (!(s.getHost() instanceof java.net.Inet4Address)) {
                             return;
                         }
-                        String peerId = new String(idBytes, StandardCharsets.UTF_8);
+                        // The TXT carries a SHORT fingerprint, not the full key.
+                        // Map it back to the contact whose key hashes to it.
+                        String fingerprint = new String(idBytes, StandardCharsets.UTF_8).trim();
                         String hostPort = s.getHost().getHostAddress() + ":" + s.getPort();
+                        com.eurobuddha.maxima.core.contacts.Contact peer =
+                                mNode.contactByFingerprint(fingerprint);
                         // Only matters if they are a contact; the node ignores
                         // the rest. Tried first by sendToContact from now on.
-                        if (mNode.contact(peerId) != null) {
-                            mNode.noteLanPeer(peerId, hostPort);
-                            mResolved.put(s.getServiceName(), peerId);
-                            EventLog.add("LAN peer found: " + mNode.contact(peerId).name
-                                    + " at " + hostPort);
+                        if (peer != null) {
+                            mNode.noteLanPeer(peer.publicKey, hostPort);
+                            mResolved.put(s.getServiceName(), peer.publicKey);
+                            EventLog.add("LAN peer found: " + peer.name + " at " + hostPort);
                         }
                     } catch (Exception ignored) {
                     }

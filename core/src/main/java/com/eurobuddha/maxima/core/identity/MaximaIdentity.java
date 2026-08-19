@@ -98,6 +98,11 @@ public final class MaximaIdentity {
         return MxAddress.make(publicKeyData());
     }
 
+    /** Short SHA-256 fingerprint of our public key (see {@link Keys#fingerprint}). */
+    public String fingerprint() {
+        return Keys.fingerprint(publicKeyHex());
+    }
+
     /**
      * The throwaway routing keypair for one relay.
      * Keyed by "host:port" so reconnecting to the same relay reuses it.

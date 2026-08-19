@@ -773,6 +773,24 @@ public final class MaximaNode {
         return mContacts.get(Keys.norm(zPublicKeyHex));
     }
 
+    /**
+     * Find a contact by the short {@link Keys#fingerprint} of their public key.
+     * LAN discovery carries only the fingerprint in its NSD TXT record (the full
+     * key is too large for the 255-byte cap), so this maps a discovered peer back
+     * to the contact whose key hashes to it. Null if none matches.
+     */
+    public Contact contactByFingerprint(String zFingerprint) {
+        if (zFingerprint == null || zFingerprint.isEmpty()) {
+            return null;
+        }
+        for (Contact c : mContacts.values()) {
+            if (zFingerprint.equals(Keys.fingerprint(c.publicKey))) {
+                return c;
+            }
+        }
+        return null;
+    }
+
     // ---------------------------------------------------------------
     // lifecycle
     // ---------------------------------------------------------------

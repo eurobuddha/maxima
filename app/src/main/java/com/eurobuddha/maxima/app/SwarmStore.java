@@ -69,6 +69,17 @@ public final class SwarmStore {
         }
     }
 
+    /**
+     * Forget the entire learned swarm. Used as a one-time scrub on upgrade to
+     * flush entries that should never have been persisted (e.g. our own stale
+     * direct-forward address, or a classic Minima node that greets but relays
+     * nothing). The {@link RelayStore#DEFAULTS} fleet floor is separate and
+     * untouched, so the phone still has its full, correct relay set immediately.
+     */
+    public static void clear(Context zCtx) {
+        prefs(zCtx).edit().clear().apply();
+    }
+
     private static SharedPreferences prefs(Context zCtx) {
         return zCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }

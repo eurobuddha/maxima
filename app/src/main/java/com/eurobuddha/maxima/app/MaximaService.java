@@ -279,6 +279,16 @@ public final class MaximaService extends Service {
         mPumpThread = new Thread(() -> {
             MaximaNode node = sNode;
             try {
+                // One-time scrub (0.5.13): flush a swarm store that may hold our own
+                // stale direct-forward or a classic non-relay node persisted by older
+                // builds. The RelayStore fleet floor is untouched, so no relay is lost.
+                android.content.SharedPreferences mig =
+                        getSharedPreferences("maxima_migrations", MODE_PRIVATE);
+                if (!mig.getBoolean("swarm_scrub_v513", false)) {
+                    SwarmStore.clear(MaximaService.this);
+                    mig.edit().putBoolean("swarm_scrub_v513", true).apply();
+                    EventLog.add("swarm store scrubbed (0.5.13) - relearning relays");
+                }
                 // Seed candidates from the trusted floor + the swarm we remember
                 // from last time; gossip grows this at runtime. The pool scores
                 // and picks the best RELAY_TARGET; dead entries just age out.
@@ -289,10 +299,11 @@ public final class MaximaService extends Service {
                 List<String> relays = new ArrayList<>(seed);
                 EventLog.add("attaching to " + relays.size() + " candidate relay(s)");
                 int attached = node.start(relays, 30000);
-                for (String a : node.myAddresses()) {
-                    int at = a.indexOf('@');
-                    if (at >= 0) SwarmStore.seen(MaximaService.this, a.substring(at + 1));
-                }
+                // Do NOT feed our OWN addresses back into the swarm store. myAddresses()
+                // includes our direct/LAN endpoint, and persisting that as a "relay"
+                // candidate is how a stale direct-forward (e.g. an old CGNAT forward)
+                // came back every boot and stranded messages. The swarm is genuinely
+                // learned RELAYS only — ConnectionFinder records those on real attach.
                 updateNotification(attached + " relay(s) connected");
                 if (attached == 0) {
                     EventLog.add("NO RELAYS REACHED - check the relay list and connectivity");
@@ -317,10 +328,14 @@ public final class MaximaService extends Service {
                             // this is what makes relay-switching automatic.
                             int fails = mPumpFails.merge(hp, 1, Integer::sum);
                             if (fails >= PUMP_FAIL_DROP) {
-                                node.pool().detach(hp);
+                                // detachDead (not detach) puts it in a cooldown so
+                                // reconcile/fill does NOT re-adopt it next cycle - the
+                                // fix for the 60s relay flap on a classic node that
+                                // greets but holds no mailbox for us.
+                                node.pool().detachDead(hp);
                                 mPumpFails.remove(hp);
                                 EventLog.add("dropped dead relay " + hp
-                                        + " (" + fails + " strikes) - reconciling");
+                                        + " (" + fails + " strikes) - cooling down");
                             } else {
                                 Log.w(TAG, "pump error on " + hp + ": " + e);
                             }
@@ -423,12 +438,9 @@ public final class MaximaService extends Service {
                                         EventLog.add("discovered relay(s) via gossip - swarm now "
                                                 + sGossip.learnedCount() + " learned");
                                     }
-                                    for (String a : gnode.myAddresses()) {
-                                        int at = a.indexOf('@');
-                                        if (at >= 0) {
-                                            SwarmStore.seen(MaximaService.this, a.substring(at + 1));
-                                        }
-                                    }
+                                    // Our OWN addresses are NOT swarm relays - never
+                                    // persist them (see the seed loop above). Gossip
+                                    // records genuinely learned relays on its own.
                                 } catch (Exception e) {
                                     Log.w(TAG, "gossip tick: " + e);
                                 } finally {

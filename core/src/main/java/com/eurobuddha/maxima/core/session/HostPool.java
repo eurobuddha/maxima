@@ -30,6 +30,17 @@ public final class HostPool {
     /** Attach to this many relays by default. */
     public static final int DEFAULT_TARGET = 3;
 
+    /**
+     * How long a host proven dead (repeated pump failures → {@link #detachDead})
+     * is barred from re-adoption. Without this, {@code fill}/{@code reconcile}
+     * re-attach a just-dropped host on the very next cycle, so a broken endpoint
+     * (a classic Minima node that greets but holds no mailbox, a stale
+     * direct-forward) flaps in and out every heartbeat — and any message routed
+     * to it strands until a 60s resend. Five minutes lets a live relay hold the
+     * slot instead.
+     */
+    public static final long COOLDOWN_MS = 5 * 60 * 1000;
+
     /** Scored record of one relay we know about. */
     public static final class HostRecord {
         public final String hostPort;
@@ -73,6 +84,8 @@ public final class HostPool {
 
     private final Map<String, HostRecord> mKnown = new ConcurrentHashMap<>();
     private final Map<String, HostConnection> mActive = new ConcurrentHashMap<>();
+    /** hostPort -> epoch-ms until which a proven-dead host is barred from re-adoption. */
+    private final Map<String, Long> mCooldown = new ConcurrentHashMap<>();
 
     /** Our proven public endpoint to claim in greetings, or null (see HostConnection). */
     private volatile String mAdvertisedEndpoint;
@@ -152,6 +165,15 @@ public final class HostPool {
         if (mActive.containsKey(zHostPort)) {
             return true;
         }
+        // Bar a proven-dead host until its cooldown expires, so we do not
+        // re-adopt a broken endpoint on the next tick (see COOLDOWN_MS).
+        Long until = mCooldown.get(zHostPort);
+        if (until != null) {
+            if (System.currentTimeMillis() < until) {
+                return false;
+            }
+            mCooldown.remove(zHostPort);
+        }
         HostConnection conn = new HostConnection(
                 zHostPort.substring(0, zHostPort.lastIndexOf(':')),
                 Integer.parseInt(zHostPort.substring(zHostPort.lastIndexOf(':') + 1)),
@@ -202,6 +224,18 @@ public final class HostPool {
             rec.attachedAt = 0;
         }
         conn.close();
+    }
+
+    /**
+     * Drop a relay that has PROVEN dead (repeated pump failures), and put it in a
+     * {@link #COOLDOWN_MS} cooldown so {@code fill}/{@code reconcile} do not
+     * re-adopt it on the next cycle. This is the fix for the 60s relay flap: a
+     * classic node that greets but holds no mailbox, or a stale direct forward,
+     * is tried at most once per cooldown window instead of every heartbeat.
+     */
+    public void detachDead(String zHostPort) {
+        detach(zHostPort);
+        mCooldown.put(zHostPort, System.currentTimeMillis() + COOLDOWN_MS);
     }
 
     /**
