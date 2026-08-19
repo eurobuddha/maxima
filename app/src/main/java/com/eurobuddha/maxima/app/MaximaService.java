@@ -320,7 +320,12 @@ public final class MaximaService extends Service {
                     boolean any = false;
                     for (String hp : node.pool().activeHosts()) {
                         try {
-                            any |= node.pump(hp, 1500);
+                            // 4s, not 1.5s: on a weak Wi-Fi a healthy relay's pump
+                            // read can exceed 1.5s, and three such timeouts benched
+                            // a GOOD relay (3 strikes -> cooldown). The patient
+                            // timeout only costs latency when a relay is actually
+                            // slow; a dead one still fails fast on connect.
+                            any |= node.pump(hp, 4000);
                             mPumpFails.remove(hp);   // a good pump clears the count
                         } catch (Exception e) {
                             // A relay that greets then keeps failing (an old-protocol

@@ -36,10 +36,16 @@ public final class HostPool {
      * re-attach a just-dropped host on the very next cycle, so a broken endpoint
      * (a classic Minima node that greets but holds no mailbox, a stale
      * direct-forward) flaps in and out every heartbeat — and any message routed
-     * to it strands until a 60s resend. Five minutes lets a live relay hold the
-     * slot instead.
+     * to it strands until a 60s resend.
+     *
+     * Kept SHORT (90s, ~1.5 heartbeats) on purpose: on a weak Wi-Fi, pump reads
+     * time out against perfectly healthy relays, and a long cooldown benches a
+     * GOOD relay — shrinking the receiver's live set and delaying mailbox drains
+     * (observed live: two fleet relays cooled for 5 min on a one-bar link while
+     * messages stranded). 90s still stops the every-tick flap on a truly dead
+     * host, at the cost of one cheap retry connect per window.
      */
-    public static final long COOLDOWN_MS = 5 * 60 * 1000;
+    public static final long COOLDOWN_MS = 90 * 1000;
 
     /** Scored record of one relay we know about. */
     public static final class HostRecord {
