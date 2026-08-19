@@ -110,6 +110,25 @@ public final class MaximaNode {
     /** Ephemeral LAN-discovered addresses: contact identity (norm) -> Mx@lanIp:port. */
     private final Map<String, String> mLanPeers = new ConcurrentHashMap<>();
 
+    /** Daemon pool for the hedged send in {@link #sendToContact} (2 racers per send). */
+    private final java.util.concurrent.ExecutorService mSendPool =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "maxima-send-hedge");
+                t.setDaemon(true);
+                return t;
+            });
+    /** Short connect leash for a chat send: a real connection completes in &lt;1s, so a dead
+     *  direct/port-forward fails here instead of eating the patient 20s default. */
+    private static final int SEND_CONNECT_TIMEOUT_MS = 3500;
+    /** Read leash for a hedged attempt: an ack (relay or direct) returns in &lt;1s; this only
+     *  bounds a connected-but-silent straggler so it can't hold a socket for 20s. */
+    private static final int SEND_READ_TIMEOUT_MS = 8000;
+    /** Head start the top (usually direct/LAN, 1-hop) path gets before the backup relay races
+     *  it. If the top wins inside this window the backup never sends — no duplicate. */
+    private static final int SEND_HEDGE_HEADSTART_MS = 450;
+    /** Max wall-clock to wait for one of the top-two racers before falling through to the rest. */
+    private static final int SEND_HEDGE_BUDGET_MS = 9000;
+
     /**
      * Durable storage. Defaults to memory-only so nothing breaks if a host
      * forgets to supply one, but a real deployment MUST call
@@ -779,6 +798,7 @@ public final class MaximaNode {
 
     public void stop() {
         stopDirect();
+        mSendPool.shutdownNow();
         mPool.closeAll();
         mStore.flush();
     }
@@ -1091,18 +1111,87 @@ public final class MaximaNode {
      */
     public MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData)
             throws Exception {
-        Exception last = null;
-        String lan = mLanPeers.get(Keys.norm(zContact.publicKey));
-        // A LAN-discovered address is tried FIRST: it is on the same network,
-        // reaches the peer's direct endpoint with no relay, and works even with
-        // the internet down. If it fails we fall straight through to the relay
-        // addresses AND forget the LAN entry, so a peer who left the network
-        // stops taxing every future send with a connect timeout - the entry
-        // self-heals even if the mDNS "lost" event was missed.
-        for (String addr : sendOrder(zContact)) {
+        final List<String> order = sendOrder(zContact);
+        if (order.isEmpty()) {
+            throw new IllegalStateException("no reachable address for " + zContact.name);
+        }
+        final String lan = mLanPeers.get(Keys.norm(zContact.publicKey));
+
+        // HEDGED SEND. The old loop was sequential and trusted advertised order, so a peer's
+        // first address decided everything: a dead direct cost the full 20s connect timeout,
+        // while relay-first cost a permanent extra hop on every send to a reachable peer.
+        // Instead we RACE the top-two candidates. The first (usually the 1-hop LAN/direct path)
+        // fires immediately on a short connect leash; the backup (a relay, which fails fast when
+        // it can't route and always routes when it can) fires after a small head start and only
+        // if the top hasn't already won. First OK wins; the loser is cancelled.
+        //   direct up   -> wins in <headstart, backup never sends -> 1 hop, no duplicate.
+        //   direct dead -> connect fails fast, backup relay wins  -> single delivery, no 20s stall.
+        //   direct slow -> both may briefly race; the recipient's app layer dedups by message id
+        //                  (ChatEngine mMessages / receipts), so a rare double is harmless.
+        // A LAN address self-heals on failure (forgetLanPeer) exactly as before.
+        final int racers = Math.min(2, order.size());
+        final java.util.concurrent.atomic.AtomicReference<MaximaSender.Result> winner =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.atomic.AtomicReference<Exception> firstErr =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.CountDownLatch settled = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicInteger active = new java.util.concurrent.atomic.AtomicInteger(racers);
+        final List<java.util.concurrent.Future<?>> tasks = new ArrayList<>();
+
+        for (int i = 0; i < racers; i++) {
+            final String addr = order.get(i);
+            final boolean isLan = addr.equals(lan);
+            final int headstart = i == 0 ? 0 : SEND_HEDGE_HEADSTART_MS;
+            tasks.add(mSendPool.submit(() -> {
+                try {
+                    if (headstart > 0) {
+                        Thread.sleep(headstart);
+                        if (winner.get() != null) {
+                            return;   // the head-start path already won — do not double-send
+                        }
+                    }
+                    MaximaSender.Result r = sendRaw(addr, zApplication, zData,
+                            SEND_CONNECT_TIMEOUT_MS, SEND_READ_TIMEOUT_MS);
+                    if (r.isOk()) {
+                        if (winner.compareAndSet(null, r)) {
+                            settled.countDown();
+                        }
+                    } else if (isLan) {
+                        forgetLanPeer(zContact.publicKey);
+                    }
+                } catch (InterruptedException ignored) {
+                    // cancelled after another path won — nothing to do
+                } catch (Exception e) {
+                    if (isLan) {
+                        forgetLanPeer(zContact.publicKey);
+                    }
+                    firstErr.compareAndSet(null, e);
+                } finally {
+                    if (active.decrementAndGet() == 0) {
+                        settled.countDown();   // all racers done, none won — release the waiter early
+                    }
+                }
+            }));
+        }
+
+        settled.await(SEND_HEDGE_BUDGET_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        for (java.util.concurrent.Future<?> f : tasks) {
+            f.cancel(true);   // cancel the loser / any straggler
+        }
+        MaximaSender.Result w = winner.get();
+        if (w != null) {
+            return w;
+        }
+
+        // Neither of the top two reached the peer in the budget — fall through to any remaining
+        // addresses sequentially (rare: first relay down AND direct down).
+        Exception last = firstErr.get();
+        for (int i = racers; i < order.size(); i++) {
+            String addr = order.get(i);
             boolean isLan = addr.equals(lan);
             try {
-                MaximaSender.Result r = sendRaw(addr, zApplication, zData);
+                MaximaSender.Result r = sendRaw(addr, zApplication, zData,
+                        SEND_CONNECT_TIMEOUT_MS, SEND_READ_TIMEOUT_MS);
                 if (r.isOk()) {
                     return r;
                 }
