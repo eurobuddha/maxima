@@ -56,12 +56,6 @@ public final class DirectReachability {
     /** Re-prove from scratch at most this often, to catch a silently-changed WAN IP. */
     private static final long REPROVE_INTERVAL_MS = 20 * 60 * 1000;
 
-    /** Manual forward is NOT charging-gated, so nothing but this periodic re-verify catches
-     *  the forward going down (e.g. after the phone is unplugged / leaves the home network).
-     *  Kept short so we stop advertising a dead port-forward within a heartbeat or two - the
-     *  service ticks ~every 60s. The re-verify is SILENT while still reachable (no reannounce). */
-    private static final long MANUAL_REPROVE_MS = 60 * 1000;
-
     private final Context mCtx;
     private final MaximaNode mNode;
     private final AndroidContribution mPolicy;
@@ -331,20 +325,11 @@ public final class DirectReachability {
     }
 
     private void renewIfDue() {
-        // Manual mode has no router lease. Re-verify FREQUENTLY that the forward is still
-        // reachable, so we only ever advertise the port-forward IP while it is actually up
-        // (manual mode is not charging-gated, so unplugging / leaving the network does NOT
-        // otherwise withdraw it). Silent while still reachable - just bump the timer, no
-        // reannounce; withdraw + reannounce the moment a re-prove fails, so contacts fall
-        // back to relays instead of caching a dead direct IP.
+        // Manual mode has no router lease — just re-prove periodically.
         if (ManualForward.enabled(mCtx)) {
-            if (System.currentTimeMillis() - mProvenAtMs > MANUAL_REPROVE_MS) {
-                if (proveReachable(ManualForward.port(mCtx))) {
-                    mProvenAtMs = System.currentTimeMillis();
-                } else {
-                    withdraw("port-forward no longer reachable");
-                    attempt();
-                }
+            if (System.currentTimeMillis() - mProvenAtMs > REPROVE_INTERVAL_MS) {
+                withdraw("periodic re-verification");
+                attempt();
             }
             return;
         }
@@ -384,7 +369,19 @@ public final class DirectReachability {
      * one answers definitively.
      */
     private boolean proveReachable(int zExternalPort) {
+        // Only a GENUINELY EXTERNAL relay can prove external reachability. A relay on our
+        // OWN network shares our public IP, so its dial-back to us HAIRPINS through the
+        // router and falsely confirms reachability that no true off-net peer has - which is
+        // exactly what made a CGNAT'd / double-NAT'd phone advertise a dead port-forward.
+        // Skip any relay whose IP equals our own public IP; if none is left to ask, we are
+        // NOT provably reachable and must not advertise.
+        String myPublicIp = ManualForward.enabled(mCtx)
+                ? ManualForward.publicIp(mCtx)
+                : (mMapping != null ? mMapping.externalIp : "");
         for (String hostPort : mNode.pool().activeHosts()) {
+            if (isOwnNetwork(hostPort, myPublicIp)) {
+                continue;   // hairpin risk - proves nothing about external reachability
+            }
             com.eurobuddha.maxima.core.net.HostConnection c = mNode.pool().connection(hostPort);
             if (c == null) {
                 continue;
@@ -405,6 +402,24 @@ public final class DirectReachability {
             }
         }
         return false;
+    }
+
+    /** True if this relay sits on our OWN NAT (its IP == our public IP), so a dial-back from
+     *  it would hairpin and cannot prove genuine external reachability. */
+    private static boolean isOwnNetwork(String zHostPort, String zMyPublicIp) {
+        if (zMyPublicIp == null || zMyPublicIp.isEmpty()) {
+            return false;
+        }
+        int colon = zHostPort.lastIndexOf(':');
+        String host = colon < 0 ? zHostPort : zHostPort.substring(0, colon);
+        if (host.equals(zMyPublicIp)) {
+            return true;
+        }
+        try {
+            return java.net.InetAddress.getByName(host).getHostAddress().equals(zMyPublicIp);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void withdraw(String zWhy) {

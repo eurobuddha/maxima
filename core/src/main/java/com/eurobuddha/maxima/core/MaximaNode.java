@@ -117,6 +117,7 @@ public final class MaximaNode {
      *  re-proves the manual forward every ~60s); this just bounds the residual window. */
     private static final int SEND_CONNECT_TIMEOUT_MS = 5000;
 
+
     /**
      * Durable storage. Defaults to memory-only so nothing breaks if a host
      * forgets to supply one, but a real deployment MUST call
@@ -1103,10 +1104,10 @@ public final class MaximaNode {
         // Try addresses in order: LAN first (same network, no relay), then the contact's
         // advertised addresses (direct first, then relays). A short connect leash
         // (SEND_CONNECT_TIMEOUT_MS) means a stale/dead direct fails in a few seconds and we
-        // fall straight through to a relay, rather than eating the patient 20s default - the
-        // primary defence is that a peer only advertises its direct address while actually
-        // reachable (DirectReachability re-proves the manual forward every ~60s and withdraws
-        // it the moment it is not reachable). A failed LAN entry self-heals via forgetLanPeer.
+        // fall straight through to a relay, rather than eating the patient 20s default - and
+        // a peer only advertises its direct address while genuinely externally reachable
+        // (DirectReachability's proof skips same-NAT hairpin relays). A failed LAN entry
+        // self-heals via forgetLanPeer.
         for (String addr : sendOrder(zContact)) {
             boolean isLan = addr.equals(lan);
             try {
