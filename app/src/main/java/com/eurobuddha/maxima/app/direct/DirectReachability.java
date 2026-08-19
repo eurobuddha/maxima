@@ -56,6 +56,12 @@ public final class DirectReachability {
     /** Re-prove from scratch at most this often, to catch a silently-changed WAN IP. */
     private static final long REPROVE_INTERVAL_MS = 20 * 60 * 1000;
 
+    /** Manual forward is NOT charging-gated, so nothing but this periodic re-verify catches
+     *  the forward going down (e.g. after the phone is unplugged / leaves the home network).
+     *  Kept short so we stop advertising a dead port-forward within a heartbeat or two - the
+     *  service ticks ~every 60s. The re-verify is SILENT while still reachable (no reannounce). */
+    private static final long MANUAL_REPROVE_MS = 60 * 1000;
+
     private final Context mCtx;
     private final MaximaNode mNode;
     private final AndroidContribution mPolicy;
@@ -325,11 +331,20 @@ public final class DirectReachability {
     }
 
     private void renewIfDue() {
-        // Manual mode has no router lease — just re-prove periodically.
+        // Manual mode has no router lease. Re-verify FREQUENTLY that the forward is still
+        // reachable, so we only ever advertise the port-forward IP while it is actually up
+        // (manual mode is not charging-gated, so unplugging / leaving the network does NOT
+        // otherwise withdraw it). Silent while still reachable - just bump the timer, no
+        // reannounce; withdraw + reannounce the moment a re-prove fails, so contacts fall
+        // back to relays instead of caching a dead direct IP.
         if (ManualForward.enabled(mCtx)) {
-            if (System.currentTimeMillis() - mProvenAtMs > REPROVE_INTERVAL_MS) {
-                withdraw("periodic re-verification");
-                attempt();
+            if (System.currentTimeMillis() - mProvenAtMs > MANUAL_REPROVE_MS) {
+                if (proveReachable(ManualForward.port(mCtx))) {
+                    mProvenAtMs = System.currentTimeMillis();
+                } else {
+                    withdraw("port-forward no longer reachable");
+                    attempt();
+                }
             }
             return;
         }
