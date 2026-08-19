@@ -32,8 +32,12 @@ public final class AppLock {
     private static volatile boolean sUnlocked;
     /** When the app went to background, for the re-lock grace period. */
     private static volatile long sBackgroundedAt;
-    /** Re-lock after this long in the background. */
-    private static final long RELOCK_AFTER_MS = 30_000;
+    /** Re-lock only after this long continuously in the background. Kept generous
+     *  (5 min) so normal use — glancing at another app, sitting in a chat, the
+     *  screen briefly sleeping — does NOT force a biometric re-auth every time you
+     *  come back; it re-locks only after real inactivity. Switching tabs never
+     *  backgrounds the app, so it never prompts. */
+    private static final long RELOCK_AFTER_MS = 300_000;
 
     public interface Callback {
         void onSuccess();
