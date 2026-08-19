@@ -49,6 +49,15 @@ public final class ChatMessage {
     public int type;
     /** Message id, chosen by the sender; receipts refer back to it. */
     public String id = "";
+    /**
+     * The sender's SEND time (epoch ms). Carried on the wire so the receiver can
+     * place the message at when it was SENT, not when it arrived - a late relay
+     * delivery then slots back into its true chronological spot instead of the
+     * bottom of the thread. 0 = not set (an older sender); the receiver falls
+     * back to arrival time. Only the visible-message types (TEXT/GROUP_TEXT/
+     * PAYMENT) set it; a roster/receipt/address never becomes a dated bubble.
+     */
+    public long time;
     public String groupId = "";
     public String body = "";
     public String groupName = "";
@@ -67,20 +76,22 @@ public final class ChatMessage {
     public String memo = "";
     public String txid = "";
 
-    public static ChatMessage text(String zId, String zBody) {
+    public static ChatMessage text(String zId, String zBody, long zTime) {
         ChatMessage m = new ChatMessage();
         m.type = TYPE_TEXT;
         m.id = zId;
         m.body = zBody;
+        m.time = zTime;
         return m;
     }
 
-    public static ChatMessage groupText(String zId, String zGroupId, String zBody) {
+    public static ChatMessage groupText(String zId, String zGroupId, String zBody, long zTime) {
         ChatMessage m = new ChatMessage();
         m.type = TYPE_GROUP_TEXT;
         m.id = zId;
         m.groupId = zGroupId;
         m.body = zBody;
+        m.time = zTime;
         return m;
     }
 
@@ -111,7 +122,7 @@ public final class ChatMessage {
     }
 
     public static ChatMessage payment(String zId, String zAmount, String zTokenId,
-                                      String zTokenName, String zMemo, String zTxid) {
+                                      String zTokenName, String zMemo, String zTxid, long zTime) {
         ChatMessage m = new ChatMessage();
         m.type = TYPE_PAYMENT;
         m.id = zId;
@@ -120,12 +131,14 @@ public final class ChatMessage {
         m.tokenName = zTokenName;
         m.memo = zMemo;
         m.txid = zTxid;
+        m.time = zTime;
         return m;
     }
 
     public String encode() {
         Json.Writer w = new Json.Writer().putRaw("t", Integer.toString(type));
         if (!id.isEmpty()) w.put("id", id);
+        if (time > 0) w.putRaw("ts", Long.toString(time));
         if (!groupId.isEmpty()) w.put("gid", groupId);
         if (!body.isEmpty()) w.put("body", body);
         if (!groupName.isEmpty()) w.put("name", groupName);
@@ -151,6 +164,11 @@ public final class ChatMessage {
             c.type = 0;
         }
         c.id = m.getOrDefault("id", "");
+        try {
+            c.time = Long.parseLong(m.getOrDefault("ts", "0").trim());
+        } catch (NumberFormatException e) {
+            c.time = 0;
+        }
         c.groupId = m.getOrDefault("gid", "");
         c.body = m.getOrDefault("body", "");
         c.groupName = m.getOrDefault("name", "");

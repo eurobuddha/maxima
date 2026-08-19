@@ -550,7 +550,7 @@ public final class ChatEngine {
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
 
-        ChatMessage cm = ChatMessage.text(id, zBody);
+        ChatMessage cm = ChatMessage.text(id, zBody, e.time);
         boolean ok = deliver(zTo, cm);
         setState(e, ok ? Receipt.SENT : Receipt.FAILED);
         return e;
@@ -604,7 +604,7 @@ public final class ChatEngine {
             if (g == null) {
                 return false;
             }
-            ChatMessage cm = ChatMessage.groupText(e.id, e.groupId, e.body);
+            ChatMessage cm = ChatMessage.groupText(e.id, e.groupId, e.body, e.time);
             boolean any = false;
             for (String m : g.others(mNode.identity().publicKeyHex())) {
                 if (e.deliveredBy.contains(Keys.norm(m))) {
@@ -625,8 +625,8 @@ public final class ChatEngine {
         // payment keeps its own type. Same id → the receiver dedups.
         ChatMessage cm = ChatPay.isPayment(e.body)
                 ? ChatMessage.payment(e.id, ChatPay.amount(e.body), "",
-                        ChatPay.tokenName(e.body), ChatPay.memo(e.body), ChatPay.txid(e.body))
-                : ChatMessage.text(e.id, e.body);
+                        ChatPay.tokenName(e.body), ChatPay.memo(e.body), ChatPay.txid(e.body), e.time)
+                : ChatMessage.text(e.id, e.body, e.time);
         return deliver(c, cm);
     }
 
@@ -668,7 +668,7 @@ public final class ChatEngine {
     public boolean completePayment(Contact zTo, Entry zEntry) {
         ChatMessage cm = ChatMessage.payment(zEntry.id, ChatPay.amount(zEntry.body), "",
                 ChatPay.tokenName(zEntry.body), ChatPay.memo(zEntry.body),
-                ChatPay.txid(zEntry.body));
+                ChatPay.txid(zEntry.body), zEntry.time);
         boolean ok = deliver(zTo, cm);
         setState(zEntry, ok ? Receipt.SENT : Receipt.FAILED);
         return ok;
@@ -694,7 +694,7 @@ public final class ChatEngine {
                 Keys.norm(mNode.identity().publicKeyHex()), body,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
-        ChatMessage cm = ChatMessage.payment(id, zAmount, zTokenId, zTokenName, zMemo, zTxid);
+        ChatMessage cm = ChatMessage.payment(id, zAmount, zTokenId, zTokenName, zMemo, zTxid, e.time);
         boolean ok = deliver(zTo, cm);
         setState(e, ok ? Receipt.SENT : Receipt.FAILED);
         return e;
@@ -717,7 +717,7 @@ public final class ChatEngine {
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
 
-        ChatMessage cm = ChatMessage.groupText(id, zGroupId, zBody);
+        ChatMessage cm = ChatMessage.groupText(id, zGroupId, zBody, e.time);
         int sent = 0;
         for (String member : g.others(me)) {
             Contact c = mNode.contact(member);
@@ -844,16 +844,26 @@ public final class ChatEngine {
     private void handlePayment(String zFrom, ChatMessage zMsg) {
         String body = ChatPay.wrap(zMsg.amount, zMsg.tokenName, zMsg.txid, zMsg.memo);
         Entry e = new Entry(zMsg.id, zFrom, "", zFrom, body,
-                System.currentTimeMillis(), false, Receipt.DELIVERED);
+                inboundTime(zMsg), false, Receipt.DELIVERED);
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
         }
     }
 
+    /**
+     * The time to stamp an INBOUND message with: the sender's send-time if it
+     * carried one (0.5.15+), else our arrival time (older sender). Sorting by
+     * this is what drops a late-arriving message back into its true place in the
+     * thread instead of the bottom.
+     */
+    private static long inboundTime(ChatMessage zMsg) {
+        return zMsg.time > 0 ? zMsg.time : System.currentTimeMillis();
+    }
+
     private void handleText(String zFrom, ChatMessage zMsg) {
         Entry e = new Entry(zMsg.id, zFrom, "", zFrom, zMsg.body,
-                System.currentTimeMillis(), false, Receipt.DELIVERED);
+                inboundTime(zMsg), false, Receipt.DELIVERED);
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
@@ -872,7 +882,7 @@ public final class ChatEngine {
             return;
         }
         Entry e = new Entry(zMsg.id, "", zMsg.groupId, zFrom, zMsg.body,
-                System.currentTimeMillis(), false, Receipt.DELIVERED);
+                inboundTime(zMsg), false, Receipt.DELIVERED);
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
