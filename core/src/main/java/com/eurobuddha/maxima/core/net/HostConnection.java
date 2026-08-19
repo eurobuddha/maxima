@@ -378,10 +378,81 @@ public final class HostConnection implements Closeable {
 
     @Override
     public void close() {
+        mReaderRun = false;   // a blocked reader unblocks via the socket close
         try {
             if (mSocket != null) mSocket.close();
         } catch (Exception ignored) {
         }
         mAttached = false;
+    }
+
+    // ---------------------------------------------------------------
+    // push reader
+    // ---------------------------------------------------------------
+
+    /**
+     * Keep the NAT mapping alive by writing at least this often. Consumer
+     * routers reap idle TCP mappings after ~30-60s; the old 120s cadence let
+     * the mapping die, the socket black-holed, and the connection churned -
+     * the direct cause of stranded mailbox mail. Same ~25s cadence the big
+     * messengers use, for the same reason.
+     */
+    public static final long NAT_KEEPALIVE_MS = 25_000;
+
+    /** Where the reader thread delivers inbound messages and reports death. */
+    public interface Sink {
+        void onInbound(Inbound zIn);
+
+        /** The socket died (reap, RST, ...). The connection is already closed. */
+        void onDead(String zHostPort);
+    }
+
+    private volatile Thread mReader;
+    private volatile boolean mReaderRun;
+
+    /**
+     * Start the dedicated reader for this connection: block on {@link #receive}
+     * so a pushed message is handled the instant it arrives (the relay PUSHES;
+     * the old round-robin polling added seconds of latency per pass), and send
+     * a keep-alive whenever the link has been write-idle past
+     * {@link #NAT_KEEPALIVE_MS}. On any socket error the reader closes the
+     * connection and reports {@link Sink#onDead}; the caller's maintain loop
+     * re-attaches. Idempotent while a reader is running.
+     */
+    public synchronized void startReader(Sink zSink) {
+        if (mReader != null || !mAttached || zSink == null) {
+            return;
+        }
+        mReaderRun = true;
+        final String hp = mHost + ":" + mPort;
+        Thread t = new Thread(() -> {
+            try {
+                while (mReaderRun && mAttached) {
+                    if (needsKeepalive(NAT_KEEPALIVE_MS)) {
+                        keepalive();
+                    }
+                    // 10s slice so the keep-alive check runs often enough;
+                    // receive returns null on a clean timeout.
+                    Inbound in = receive(10_000);
+                    if (in != null) {
+                        try {
+                            zSink.onInbound(in);
+                        } catch (Exception ignored) {
+                            // a bad handler must not kill the transport
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                if (mReaderRun) {
+                    close();
+                    zSink.onDead(hp);
+                }
+            } finally {
+                mReader = null;
+            }
+        }, "maxima-reader-" + hp);
+        t.setDaemon(true);
+        mReader = t;
+        t.start();
     }
 }

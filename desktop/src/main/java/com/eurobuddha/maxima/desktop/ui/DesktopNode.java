@@ -221,29 +221,9 @@ public final class DesktopNode {
     }
 
     private void startPump() {
-        mPump = new Thread(() -> {
-            while (mRunning) {
-                boolean any = false;
-                for (String hp : mNode.pool().activeHosts()) {
-                    try {
-                        any |= mNode.pump(hp, 1500);
-                    } catch (Exception ignored) {
-                    }
-                }
-                if (any) {
-                    // Inbound was drained on the pool thread; nudge the UI.
-                    fireChanged();
-                } else {
-                    try {
-                        Thread.sleep(250);
-                    } catch (InterruptedException e) {
-                        return;
-                    }
-                }
-            }
-        }, "maxima-desktop-pump");
-        mPump.setDaemon(true);
-        mPump.start();
+        // Receiving is PUSH now: :core runs a dedicated reader per attached host
+        // (25s NAT keep-alive + instant inbound), and the ChatEngine listener
+        // already fires the UI. No polling loop needed - only maintain below.
 
         mMaint = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "maxima-desktop-maint");

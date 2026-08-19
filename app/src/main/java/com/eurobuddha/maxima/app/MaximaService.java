@@ -66,23 +66,17 @@ public final class MaximaService extends Service {
      *  list. Same client the desktop node and the relays already run. */
     private static volatile com.eurobuddha.maxima.core.session.RelayGossipClient sGossip;
 
-    /** Consecutive pump failures per host — a host that keeps failing is dropped
-     *  so reconcile swaps in a live one instead of tight-looping on a dead one. */
-    private final java.util.Map<String, Integer> mPumpFails =
-            new java.util.concurrent.ConcurrentHashMap<>();
-
-    /** One swarm-discovery round at a time; gossip runs off the pump thread. */
+    /** One swarm-discovery round at a time; gossip runs off the heartbeat thread. */
     private final AtomicBoolean mGossipBusy = new AtomicBoolean(false);
-    /** maintain() does blocking network; runs off the pump thread, guarded so a
-     *  slow pass never overlaps or stalls message delivery. */
+    /** maintain() does blocking network; runs off the heartbeat thread, guarded
+     *  so a slow pass never overlaps. */
     private final AtomicBoolean mMaintainBusy = new AtomicBoolean(false);
     private final AtomicBoolean mResendBusy = new AtomicBoolean(false);
 
-    /** How many multi-homed relays the swarm tries to hold open at once. */
-    private static final int RELAY_TARGET = 4;
-
-    /** Drop a host after this many consecutive pump failures. */
-    private static final int PUMP_FAIL_DROP = 3;
+    /** STATIC fleet routing: attend EVERY fleet relay (capped), so every mailbox
+     *  we advertise is drained by a live push reader — no rotation lottery. */
+    private static final int RELAY_TARGET = Math.min(8,
+            com.eurobuddha.maxima.core.session.Bootstrap.RELAYS.size());
 
     /** The media publish/fetch service (self-hosted blobs), or null if not up. */
     public static com.eurobuddha.maxima.core.media.MediaService media() {
@@ -316,37 +310,11 @@ public final class MaximaService extends Service {
                 Log.i(TAG, "attached to " + attached + " relays: " + node.myAddresses());
 
                 long lastMaintain = System.currentTimeMillis();
+                // Receiving is PUSH now: every attached host has a dedicated
+                // reader thread in :core (25s NAT keep-alive + instant inbound).
+                // This loop is only the 60s heartbeat - maintain, resend,
+                // LAN/listener, reachability, gossip.
                 while (mPumping.get()) {
-                    boolean any = false;
-                    for (String hp : node.pool().activeHosts()) {
-                        try {
-                            // 4s, not 1.5s: on a weak Wi-Fi a healthy relay's pump
-                            // read can exceed 1.5s, and three such timeouts benched
-                            // a GOOD relay (3 strikes -> cooldown). The patient
-                            // timeout only costs latency when a relay is actually
-                            // slow; a dead one still fails fast on connect.
-                            any |= node.pump(hp, 4000);
-                            mPumpFails.remove(hp);   // a good pump clears the count
-                        } catch (Exception e) {
-                            // A relay that greets then keeps failing (an old-protocol
-                            // node, a moved port) used to spin here forever. Drop it
-                            // after a few strikes so reconcile swaps in a live one -
-                            // this is what makes relay-switching automatic.
-                            int fails = mPumpFails.merge(hp, 1, Integer::sum);
-                            if (fails >= PUMP_FAIL_DROP) {
-                                // detachDead (not detach) puts it in a cooldown so
-                                // reconcile/fill does NOT re-adopt it next cycle - the
-                                // fix for the 60s relay flap on a classic node that
-                                // greets but holds no mailbox for us.
-                                node.pool().detachDead(hp);
-                                mPumpFails.remove(hp);
-                                EventLog.add("dropped dead relay " + hp
-                                        + " (" + fails + " strikes) - cooling down");
-                            } else {
-                                Log.w(TAG, "pump error on " + hp + ": " + e);
-                            }
-                        }
-                    }
                     if (System.currentTimeMillis() - lastMaintain > 60_000) {
                         // maintain() does blocking network (attach, publish,
                         // check-connect); run it OFF the pump thread so message
@@ -469,15 +437,10 @@ public final class MaximaService extends Service {
                             gt.setDaemon(true);
                             gt.start();
                         }
-                        // Forget strike counts for relays no longer attached, so a
-                        // reconcile-dropped host doesn't carry a stale count back.
-                        mPumpFails.keySet().retainAll(node.pool().activeHosts());
                         lastMaintain = System.currentTimeMillis();
                         updateNotification(node.pool().activeCount() + " relay(s) connected");
                     }
-                    if (!any) {
-                        Thread.sleep(200);
-                    }
+                    Thread.sleep(1000);
                 }
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();

@@ -93,6 +93,14 @@ public final class HostPool {
     /** hostPort -> epoch-ms until which a proven-dead host is barred from re-adoption. */
     private final Map<String, Long> mCooldown = new ConcurrentHashMap<>();
 
+    /** Delivered every inbound message from every attached host's reader thread.
+     *  Set ONCE (by the node) before the first attach. */
+    private volatile HostConnection.Sink mSink;
+
+    public void setSink(HostConnection.Sink zSink) {
+        mSink = zSink;
+    }
+
     /** Our proven public endpoint to claim in greetings, or null (see HostConnection). */
     private volatile String mAdvertisedEndpoint;
 
@@ -192,6 +200,12 @@ public final class HostPool {
             rec.successes++;
             rec.attachedAt = System.currentTimeMillis();
             rec.lastSeen = rec.attachedAt;
+            // Push receive: the reader owns this socket from here - inbound is
+            // handled the instant the relay pushes it, and the 25s NAT
+            // keep-alive stops the mapping being reaped.
+            if (mSink != null) {
+                conn.startReader(mSink);
+            }
             return true;
         } catch (Exception e) {
             rec.failures++;

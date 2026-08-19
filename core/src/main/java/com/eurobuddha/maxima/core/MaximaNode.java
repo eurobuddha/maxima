@@ -189,6 +189,24 @@ public final class MaximaNode {
         mIdentity = zIdentity;
         mVersion = zVersion;
         mPool = new HostPool(zIdentity, zVersion, zRelayTarget);
+        // Push receive: every attached host gets a dedicated reader that hands
+        // inbound straight to handle() the instant the relay pushes it. handle()
+        // is synchronized, so inbound stays effectively single-threaded exactly
+        // as it was under the old one-thread pump loop.
+        mPool.setSink(new com.eurobuddha.maxima.core.net.HostConnection.Sink() {
+            @Override
+            public void onInbound(com.eurobuddha.maxima.core.net.HostConnection.Inbound zIn) {
+                handle(zIn);
+            }
+
+            @Override
+            public void onDead(String zHostPort) {
+                // Bank the uptime and free the slot; the caller's maintain
+                // heartbeat re-attaches. No cooldown: a NAT-reaped socket says
+                // nothing bad about the relay.
+                mPool.detach(zHostPort);
+            }
+        });
         mRpc = new RpcPeer(zIdentity, mServices);
         mTier1 = new Tier1Services(zIdentity, mMailbox, mDirectory);
         mTier1.registerAll(mServices);
@@ -896,6 +914,19 @@ public final class MaximaNode {
                 out.add(a);
             }
         }
+        // STATIC fleet addressing: also advertise our mailbox at EVERY bootstrap
+        // relay, attached right now or not. The per-host routing key is derived
+        // deterministically from our seed, so these addresses are valid forever,
+        // and with the pool targeting the whole fleet each mailbox is drained by
+        // a live reader. This is what ends the "sender fans out to a stale
+        // snapshot" strand: the advertisement cannot go stale because it no
+        // longer depends on the moment's attachments.
+        for (String h : com.eurobuddha.maxima.core.session.Bootstrap.RELAYS) {
+            String a = mIdentity.contactAddress(h);
+            if (!out.contains(a) && !isInternalAddress(a)) {
+                out.add(a);
+            }
+        }
         return out;
     }
 
@@ -978,8 +1009,10 @@ public final class MaximaNode {
         return true;
     }
 
-    /** Route one inbound message. */
-    public void handle(HostConnection.Inbound zInbound) {
+    /** Route one inbound message. Synchronized: with one reader thread per
+     *  attached host, inbound arrives concurrently; the chat engine and dedup
+     *  were written for the old single pump thread, so serialise here. */
+    public synchronized void handle(HostConnection.Inbound zInbound) {
         MaximaMessage msg = zInbound.message;
 
         // Replay and duplicate protection - neither exists in classic.

@@ -259,26 +259,9 @@ public final class DesktopMain {
     // ---- pump loop for the reachability/gossip client ----
 
     private void startPump(MaximaNode node) {
-        Thread t = new Thread(() -> {
-            while (true) {
-                boolean any = false;
-                for (String hp : node.pool().activeHosts()) {
-                    try {
-                        any |= node.pump(hp, 1500);
-                    } catch (Exception ignored) {
-                    }
-                }
-                if (!any) {
-                    try {
-                        Thread.sleep(200);
-                    } catch (InterruptedException e) {
-                        return;
-                    }
-                }
-            }
-        }, "maxima-probe-pump");
-        t.setDaemon(true);
-        t.start();
+        // Receiving is PUSH now: :core runs a dedicated reader per attached host
+        // (25s NAT keep-alive + instant inbound). Only the maintain sweep below
+        // is still needed.
 
         // keep the pool healthy (re-attach dropped relays)
         ScheduledExecutorService maint = Executors.newSingleThreadScheduledExecutor(r -> {
