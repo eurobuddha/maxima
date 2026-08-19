@@ -259,7 +259,7 @@ public final class DirectReachability {
         // 3. PROVE it from outside before advertising a single thing
         mState = State.PROBING;
         mDetail = "verifying " + m.externalIp + ":" + m.externalPort + " from outside…";
-        boolean reachable = proveReachable(m.externalPort);
+        boolean reachable = proveReachable(m.externalPort, m.externalIp);
 
         // Re-check AFTER the probe too - it also blocks, and a change during it
         // is exactly the dead-address window we must not advertise into.
@@ -292,17 +292,22 @@ public final class DirectReachability {
 
     /** Manual mode: prove the user's forwarded public IP:port, then advertise it. */
     private void attemptManual(int gen) {
-        String ip = ManualForward.publicIp(mCtx);
         int extPort = ManualForward.port(mCtx);
-        if (ip.isEmpty() || !PortMapper.isPublic(ip)) {
+        // ADVERTISE ONLY THE EXTERNALLY-PROVEN ADDRESS. We use the phone's CURRENT public
+        // egress IP, fetched fresh, NOT a manually-typed value: an external relay dials that
+        // egress back, and we advertise exactly it only if the dial succeeds. This kills the
+        // old bug where the app proved the real egress but advertised a stale hand-entered IP
+        // (a phone that roamed networks, or is behind CGNAT, kept advertising a dead address).
+        String ip = currentPublicIp();
+        if (ip.isEmpty()) {
             mState = State.OFF;
             mBlocker = Blocker.NEEDS_PUBLIC_IP;
-            mDetail = "enter your public IP for the manual forward";
+            mDetail = "can't determine your public IP (need internet)";
             return;
         }
         mState = State.PROBING;
         mDetail = "verifying " + ip + ":" + extPort + " from outside…";
-        boolean reachable = proveReachable(extPort);
+        boolean reachable = proveReachable(extPort, ip);
         if (mStopping || gen != mGen.get() || !gatesPass()) {
             mState = State.OFF;
             mDetail = "network changed during verification (staying Tier 1)";
@@ -311,7 +316,8 @@ public final class DirectReachability {
         if (!reachable) {
             mState = State.OFF;
             mBlocker = Blocker.ROUTER_NO_PORT;
-            mDetail = ip + ":" + extPort + " wasn't reachable — check the forward rule";
+            mDetail = ip + ":" + extPort + " not reachable from outside — behind CGNAT, or the "
+                    + "forward rule must point at Parlons port " + extPort;
             return;
         }
         mPublicAddress = ip + ":" + extPort;
@@ -368,18 +374,15 @@ public final class DirectReachability {
      * A relay that cannot itself reach us tells us nothing, so we try each until
      * one answers definitively.
      */
-    private boolean proveReachable(int zExternalPort) {
+    private boolean proveReachable(int zExternalPort, String zMyPublicIp) {
         // Only a GENUINELY EXTERNAL relay can prove external reachability. A relay on our
         // OWN network shares our public IP, so its dial-back to us HAIRPINS through the
         // router and falsely confirms reachability that no true off-net peer has - which is
         // exactly what made a CGNAT'd / double-NAT'd phone advertise a dead port-forward.
         // Skip any relay whose IP equals our own public IP; if none is left to ask, we are
         // NOT provably reachable and must not advertise.
-        String myPublicIp = ManualForward.enabled(mCtx)
-                ? ManualForward.publicIp(mCtx)
-                : (mMapping != null ? mMapping.externalIp : "");
         for (String hostPort : mNode.pool().activeHosts()) {
-            if (isOwnNetwork(hostPort, myPublicIp)) {
+            if (isOwnNetwork(hostPort, zMyPublicIp)) {
                 continue;   // hairpin risk - proves nothing about external reachability
             }
             com.eurobuddha.maxima.core.net.HostConnection c = mNode.pool().connection(hostPort);
@@ -419,6 +422,38 @@ public final class DirectReachability {
             return java.net.InetAddress.getByName(host).getHostAddress().equals(zMyPublicIp);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** The phone's CURRENT public egress IP, fetched fresh (ipify → icanhazip). This is the
+     *  address an external relay actually dials back, so it is what we advertise - never a
+     *  stale hand-entered value. Empty (→ not advertised) if it can't be determined or isn't
+     *  a routable public address. Blocking; runs on the state thread only. */
+    private String currentPublicIp() {
+        String ip = httpGet("https://api.ipify.org");
+        if (ip.isEmpty()) {
+            ip = httpGet("https://icanhazip.com");
+        }
+        return PortMapper.isPublic(ip) ? ip : "";
+    }
+
+    private static String httpGet(String zUrl) {
+        java.net.HttpURLConnection c = null;
+        try {
+            c = (java.net.HttpURLConnection) new java.net.URL(zUrl).openConnection();
+            c.setConnectTimeout(6000);
+            c.setReadTimeout(6000);
+            try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    c.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                String line = r.readLine();
+                return line == null ? "" : line.trim();
+            }
+        } catch (Exception e) {
+            return "";
+        } finally {
+            if (c != null) {
+                c.disconnect();
+            }
         }
     }
 
