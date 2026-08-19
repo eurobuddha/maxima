@@ -583,6 +583,16 @@ public final class ChatEngine {
             if (age < RESEND_SETTLE_MS || age > RESEND_MAX_AGE_MS) {
                 continue;
             }
+            // A classic peer never sends receipts, so "undelivered" is this
+            // message's PERMANENT state - resending would spam them every 60s
+            // forever. One tick (handed to the network) is the honest final
+            // word for a classic contact.
+            if (!e.isGroup()) {
+                Contact cc = mNode.contact(e.peer);
+                if (cc != null && cc.isClassic()) {
+                    continue;
+                }
+            }
             if (redeliver(e)) {
                 n++;
                 if (Receipt.FAILED.equals(e.state)) {
@@ -771,6 +781,31 @@ public final class ChatEngine {
 
     private boolean deliver(Contact zTo, ChatMessage zMsg) {
         try {
+            // THE BRIDGE: a classic peer (MaxSolo on a stock node) speaks the
+            // maxsolo wire, not ours. Only human-visible content crosses -
+            // receipts/roster/address are our protocol alone and would be
+            // gibberish there, so they no-op successfully.
+            if (zTo.isClassic()) {
+                if (zMsg.type != ChatMessage.TYPE_TEXT
+                        && zMsg.type != ChatMessage.TYPE_PAYMENT) {
+                    return true;
+                }
+                String body;
+                if (zMsg.type == ChatMessage.TYPE_PAYMENT) {
+                    body = "Payment: " + zMsg.amount + " " + zMsg.tokenName
+                            + (zMsg.memo.isEmpty() ? "" : " - " + zMsg.memo)
+                            + " (txid " + zMsg.txid + ")";
+                } else if (ChatMedia.isMedia(zMsg.body)) {
+                    // A classic peer cannot fetch our blobs - send the caption.
+                    String cap = ChatMedia.caption(zMsg.body);
+                    body = cap.isEmpty() ? "[photo]" : cap + " [photo]";
+                } else {
+                    body = zMsg.body;
+                }
+                MaximaSender.Result cr = mNode.sendToContact(zTo, ClassicChat.APPLICATION,
+                        ClassicChat.build(mNode.name(), body).getBytes(StandardCharsets.UTF_8));
+                return cr.isOk();
+            }
             MaximaSender.Result r = mNode.sendToContact(zTo, ChatMessage.APPLICATION,
                     zMsg.encode().getBytes(StandardCharsets.UTF_8));
             return r.isOk();
@@ -790,7 +825,21 @@ public final class ChatEngine {
      * @return true if it was ours
      */
     public boolean onInbound(MaximaMessage zMsg) {
-        if (!ChatMessage.APPLICATION.equals(zMsg.mApplication.toString())) {
+        return onInbound(zMsg, "");
+    }
+
+    /**
+     * As {@link #onInbound(MaximaMessage)} but with the transport message id,
+     * which gives CLASSIC (MaxSolo-format) messages a stable dedup id - vital
+     * because classic relays re-push held mail on every re-attach.
+     */
+    public boolean onInbound(MaximaMessage zMsg, String zMsgid) {
+        String app = zMsg.mApplication.toString();
+        if (ClassicChat.APPLICATION.equals(app)) {
+            handleClassic(zMsg, zMsgid);
+            return true;
+        }
+        if (!ChatMessage.APPLICATION.equals(app)) {
             return false;
         }
         String from = Keys.norm(zMsg.mFrom.to0xString());
@@ -859,6 +908,40 @@ public final class ChatEngine {
      */
     private static long inboundTime(ChatMessage zMsg) {
         return zMsg.time > 0 ? zMsg.time : System.currentTimeMillis();
+    }
+
+    /**
+     * A CLASSIC (MaxSolo-format) chat message from a stock-node peer. Recorded
+     * exactly like one of ours: thread keyed by the sender's identity key, time
+     * from the transport's send-stamp, dedup by the transport msgid. No receipt
+     * goes back - classic has no receipt protocol, so the sender's single tick
+     * is all the truth there is.
+     */
+    private void handleClassic(MaximaMessage zMsg, String zMsgid) {
+        String from = Keys.norm(zMsg.mFrom.to0xString());
+        java.util.Map<String, String> m;
+        try {
+            m = ClassicChat.parse(new String(zMsg.mData.getBytes(), StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return;
+        }
+        String type = m.getOrDefault("type", "text");
+        String body = m.getOrDefault("message", "");
+        if (body.isEmpty()) {
+            if ("text".equals(type)) {
+                return;
+            }
+            body = "[" + type + "]";   // an image/file we cannot fetch classically
+        }
+        long time = zMsg.mTimeMilli.getAsLong();
+        String id = (zMsgid == null || zMsgid.isEmpty())
+                ? "classic-" + from.hashCode() + "-" + time
+                : zMsgid;
+        Entry e = new Entry(id, from, "", from, body,
+                time > 0 ? time : System.currentTimeMillis(), false, Receipt.DELIVERED);
+        if (record(e)) {
+            fire(e);
+        }
     }
 
     private void handleText(String zFrom, ChatMessage zMsg) {

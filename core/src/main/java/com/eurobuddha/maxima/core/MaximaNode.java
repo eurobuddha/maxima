@@ -253,6 +253,11 @@ public final class MaximaNode {
         mStore.put(C_SETTINGS, "name", zName);
     }
 
+    /** Our display name - what contacts (including classic peers) see. */
+    public String name() {
+        return mName;
+    }
+
     /**
      * Attach durable storage and load whatever is already there.
      * Call once, before {@link #start}.

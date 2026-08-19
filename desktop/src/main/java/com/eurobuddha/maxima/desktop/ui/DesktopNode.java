@@ -109,7 +109,7 @@ public final class DesktopNode {
         // Route inbound chat traffic into the engine (the phone does the same).
         mNode.setMessageListener((msg, msgid) -> {
             try {
-                mChat.onInbound(msg);
+                mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
             } catch (Exception ignored) {
             }
         });

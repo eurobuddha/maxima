@@ -202,7 +202,7 @@ public final class MaximaService extends Service {
             // so it never goes out over IPC. Everything else is handed to
             // whichever app subscribed to that application string.
             com.eurobuddha.maxima.core.chat.ChatEngine ce = sChat;
-            if (ce != null && ce.onInbound(msg)) {
+            if (ce != null && ce.onInbound(msg, msgid == null ? "" : msgid.to0xString())) {
                 return;
             }
             com.eurobuddha.maxima.app.ipc.MaximaApiDelivery.deliver(
