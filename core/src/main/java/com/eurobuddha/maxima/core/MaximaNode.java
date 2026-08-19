@@ -1117,48 +1117,54 @@ public final class MaximaNode {
      */
     public MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData)
             throws Exception {
-        Exception last = null;
+        // 1. LAN FIRST. A same-network hit is a REAL delivery straight to the peer's
+        //    endpoint (not a mailbox), so on success we are done - instant, no relay.
+        //    A short connect leash means a stale LAN entry fails in a few seconds and
+        //    self-heals via forgetLanPeer, and we fall through to the relays.
         String lan = mLanPeers.get(Keys.norm(zContact.publicKey));
-        // Try addresses in order: LAN first (same network, no relay), then the contact's
-        // advertised addresses (direct first, then relays). A short connect leash
-        // (SEND_CONNECT_TIMEOUT_MS) means a stale/dead direct fails in a few seconds and we
-        // fall straight through to a relay, rather than eating the patient 20s default - and
-        // a peer only advertises its direct address while genuinely externally reachable
-        // (DirectReachability's proof skips same-NAT hairpin relays). A failed LAN entry
-        // self-heals via forgetLanPeer.
-        for (String addr : sendOrder(zContact)) {
-            boolean isLan = addr.equals(lan);
+        if (lan != null) {
             try {
-                MaximaSender.Result r = sendRaw(addr, zApplication, zData,
+                MaximaSender.Result r = sendRaw(lan, zApplication, zData,
                         SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
                 if (r.isOk()) {
                     return r;
                 }
-                if (isLan) {
-                    forgetLanPeer(zContact.publicKey);
+                forgetLanPeer(zContact.publicKey);
+            } catch (Exception e) {
+                forgetLanPeer(zContact.publicKey);
+            }
+        }
+
+        // 2. FAN OUT to EVERY advertised address (direct + all relays), not just the
+        //    first that accepts. A relay only stores-and-forwards; the peer pulls from
+        //    whichever relay it is attached to RIGHT NOW. On a weak/flapping network the
+        //    peer's live relay set drifts away from any single relay we would pick, so a
+        //    one-relay delivery strands in a mailbox the peer never checks - the cause of
+        //    the multi-minute stalls and lost messages. sendRaw opens a fresh connection
+        //    to each relay, so we can drop a copy in ALL of the peer's mailboxes; wherever
+        //    the peer is actually listening, a copy lands. The peer dedups by message id
+        //    (ChatMessage.id), so the extra copies are harmless. This is the reliability
+        //    guarantee: as long as the peer is reachable via ANY of its relays, it wins.
+        MaximaSender.Result okResult = null;
+        Exception last = null;
+        for (String addr : zContact.addresses) {
+            try {
+                MaximaSender.Result r = sendRaw(addr, zApplication, zData,
+                        SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+                if (r.isOk() && okResult == null) {
+                    okResult = r;   // first acceptance wins the return, but keep fanning out
                 }
             } catch (Exception e) {
-                if (isLan) {
-                    forgetLanPeer(zContact.publicKey);
-                }
                 last = e;
             }
+        }
+        if (okResult != null) {
+            return okResult;
         }
         if (last != null) {
             throw last;
         }
         throw new IllegalStateException("no reachable address for " + zContact.name);
-    }
-
-    /** LAN address (if any) first, then the contact's known addresses. */
-    private List<String> sendOrder(Contact zContact) {
-        List<String> out = new ArrayList<>();
-        String lan = mLanPeers.get(Keys.norm(zContact.publicKey));
-        if (lan != null) {
-            out.add(lan);
-        }
-        out.addAll(zContact.addresses);
-        return out;
     }
 
     /**

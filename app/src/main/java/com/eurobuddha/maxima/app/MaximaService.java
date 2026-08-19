@@ -76,6 +76,7 @@ public final class MaximaService extends Service {
     /** maintain() does blocking network; runs off the pump thread, guarded so a
      *  slow pass never overlaps or stalls message delivery. */
     private final AtomicBoolean mMaintainBusy = new AtomicBoolean(false);
+    private final AtomicBoolean mResendBusy = new AtomicBoolean(false);
 
     /** How many multi-homed relays the swarm tries to hold open at once. */
     private static final int RELAY_TARGET = 4;
@@ -371,14 +372,27 @@ public final class MaximaService extends Service {
                             sChat.flushState();
                             // Re-deliver anything the two-tick receipt hasn't
                             // confirmed - the fix for messages/payments lost to
-                            // a half-open relay socket.
-                            try {
-                                int re = sChat.resendUndelivered();
-                                if (re > 0) {
-                                    EventLog.add("re-sent " + re + " undelivered");
-                                }
-                            } catch (Exception e) {
-                                Log.w(TAG, "resend: " + e);
+                            // a half-open relay socket. Run OFF the pump thread:
+                            // resend now FANS OUT to every relay a peer advertises,
+                            // so on weak signal it can do several slow connects -
+                            // doing that inline would stall the mailbox pull and
+                            // delay RECEIVING. Mirrors the off-thread maintain().
+                            if (mResendBusy.compareAndSet(false, true)) {
+                                final com.eurobuddha.maxima.core.chat.ChatEngine rchat = sChat;
+                                Thread rt = new Thread(() -> {
+                                    try {
+                                        int re = rchat.resendUndelivered();
+                                        if (re > 0) {
+                                            EventLog.add("re-sent " + re + " undelivered");
+                                        }
+                                    } catch (Exception e) {
+                                        Log.w(TAG, "resend: " + e);
+                                    } finally {
+                                        mResendBusy.set(false);
+                                    }
+                                }, "maxima-resend");
+                                rt.setDaemon(true);
+                                rt.start();
                             }
                         }
                         // Tier 2 listener + LAN discovery under a LIGHT gate:
