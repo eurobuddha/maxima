@@ -46,10 +46,10 @@ public class ChatTest {
 
     public static void main(String[] args) {
         // ---- wire format round trip ----
-        ChatMessage t = ChatMessage.text("0xID1", "hello, with \"quotes\" and a\ttab");
+        ChatMessage t = ChatMessage.text("0xID1", "hello, with \"quotes\" and a\ttab", 1755600000000L);
         ChatMessage back = ChatMessage.decode(t.encode());
         if (back.type == ChatMessage.TYPE_TEXT && back.id.equals("0xID1")
-                && back.body.equals(t.body)) {
+                && back.body.equals(t.body) && back.time == 1755600000000L) {
             ok("1:1 text round-trips, including quotes and tabs");
         } else {
             bad("text round trip broken: " + back.body);
@@ -249,9 +249,9 @@ public class ChatTest {
 
         String them = "0x" + "AB".repeat(32);
         u1.onInbound(inbound(them, id.publicKeyHex(),
-                ChatMessage.text("0xU1", "first").encode()));
+                ChatMessage.text("0xU1", "first", System.currentTimeMillis()).encode()));
         u1.onInbound(inbound(them, id.publicKeyHex(),
-                ChatMessage.text("0xU2", "second").encode()));
+                ChatMessage.text("0xU2", "second", System.currentTimeMillis()).encode()));
 
         if (u1.unread(them) == 2 && u1.totalUnread() == 2) {
             ok("two inbound messages count as two unread");
@@ -271,7 +271,7 @@ public class ChatTest {
 
         sleepMs(3);
         u1.onInbound(inbound(them, id.publicKeyHex(),
-                ChatMessage.text("0xU3", "after reading").encode()));
+                ChatMessage.text("0xU3", "after reading", System.currentTimeMillis()).encode()));
         if (u1.unread(them) == 1) {
             ok("a message arriving after markRead is unread again");
         } else {
@@ -295,7 +295,7 @@ public class ChatTest {
         String quiet = "0x" + "CD".repeat(32);
         u1.markRead(quiet);
         u1.onInbound(inbound(quiet, id.publicKeyHex(),
-                ChatMessage.text("0xU4", "arrived the same instant").encode()));
+                ChatMessage.text("0xU4", "arrived the same instant", System.currentTimeMillis()).encode()));
         if (u1.unread(quiet) == 1) {
             ok("a message racing markRead on an empty thread is still unread");
         } else {
@@ -367,7 +367,7 @@ public class ChatTest {
         // The two new wire types survive encode/decode.
         ChatMessage addrMsg = ChatMessage.decode(ChatMessage.address("MxWALLET123").encode());
         ChatMessage payMsg = ChatMessage.decode(
-                ChatMessage.payment("0xP", "3", "0x00", "MINIMA", "hi", "0xTX").encode());
+                ChatMessage.payment("0xP", "3", "0x00", "MINIMA", "hi", "0xTX", System.currentTimeMillis()).encode());
         if (addrMsg.type == ChatMessage.TYPE_ADDRESS && addrMsg.address.equals("MxWALLET123")
                 && payMsg.type == ChatMessage.TYPE_PAYMENT && payMsg.amount.equals("3")
                 && payMsg.tokenName.equals("MINIMA") && payMsg.txid.equals("0xTX")) {
@@ -398,7 +398,7 @@ public class ChatTest {
                     + " msgs=" + u1.conversation(payer).size());
         }
         u1.onInbound(inbound(payer, id.publicKeyHex(),
-                ChatMessage.payment("0xPAY9", "7", "0x00", "MINIMA", "thanks", "0xTXX").encode()));
+                ChatMessage.payment("0xPAY9", "7", "0x00", "MINIMA", "thanks", "0xTXX", System.currentTimeMillis()).encode()));
         java.util.List<com.eurobuddha.maxima.core.chat.ChatEngine.Entry> pconv =
                 u1.conversation(payer);
         if (pconv.size() == 1
