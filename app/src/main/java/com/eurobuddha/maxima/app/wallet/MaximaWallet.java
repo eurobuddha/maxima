@@ -102,13 +102,19 @@ public final class MaximaWallet {
      * phrase), exactly as a node derives it — via :core's identity machinery.
      */
     private static MiniData canonicalSeed(Context zCtx, String zCustomPhrase) {
-        String phrase = (zCustomPhrase != null && !zCustomPhrase.isEmpty())
-                ? zCustomPhrase
-                : SeedStore.revealPhrase(zCtx);
-        // MaximaIdentity.fromPhrase computes the node-canonical seed; its seed()
-        // is the exact bytes a node would produce for these words.
-        byte[] seedBytes = MaximaIdentity.fromPhrase(phrase).seed().getBytes();
-        return new MiniData(seedBytes);
+        final MaximaIdentity id;
+        if (zCustomPhrase != null && !zCustomPhrase.isEmpty()) {
+            // An imported phrase: derive the node-canonical seed straight from it.
+            id = MaximaIdentity.fromPhrase(zCustomPhrase);
+        } else {
+            // The default Maxima seed = this install's identity. Use loadOrCreate so a
+            // FRESH INSTALL that opens the wallet before the service has generated the
+            // seed creates it here instead of passing a null phrase to fromPhrase — that
+            // null NPE'd on the wallet thread and took the whole app down on first launch.
+            id = SeedStore.loadOrCreateIdentity(zCtx);
+        }
+        // id.seed() is the exact bytes a node would produce for these words.
+        return new MiniData(id.seed().getBytes());
     }
 
     // ---------------------------------------------------------------

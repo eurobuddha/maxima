@@ -42,6 +42,11 @@ public final class DeterministicRsa {
     public static final int PRIME_BITS = KEY_BITS / 2;
     public static final BigInteger E = BigInteger.valueOf(65537);
 
+    /** BigInteger.valueOf(2), NOT BigInteger.TWO: TWO was only added to Android's
+     *  java.math.BigInteger in API 33, so referencing it NoSuchFieldError-crashes the
+     *  whole app at identity creation on every device below Android 13 (minSdk is 28). */
+    private static final BigInteger TWO = BigInteger.valueOf(2);
+
     /** Change this and every derived identity changes. Treat as frozen. */
     public static final String INFO_P = "maxima-identity-v1-p";
     public static final String INFO_Q = "maxima-identity-v1-q";
@@ -124,7 +129,7 @@ public final class DeterministicRsa {
         BigInteger candidate = new BigInteger(1, bytes);
 
         while (!candidate.isProbablePrime(CERTAINTY)) {
-            candidate = candidate.add(BigInteger.TWO);
+            candidate = candidate.add(TWO);
             // Stepping up could in principle overflow into 513 bits.
             if (candidate.bitLength() != PRIME_BITS) {
                 throw new IllegalStateException("Prime search overflowed for " + zInfo);

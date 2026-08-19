@@ -118,8 +118,17 @@ public final class WalletPage implements Page {
     /** Open (or re-open, after a seed change) the wallet off-main. */
     private void openWallet() {
         mIo.execute(() -> {
-            MaximaWallet w = MaximaWallet.open(mAct);
-            w.ensureAddress();
+            final MaximaWallet w;
+            try {
+                w = MaximaWallet.open(mAct);
+                w.ensureAddress();
+            } catch (Throwable t) {
+                // NEVER let a wallet-open failure crash the whole app (an uncaught
+                // throwable on this pool thread would). Log it and leave mWallet null;
+                // render()/repaintHero already no-op safely until the next open.
+                EventLog.add("wallet: open failed: " + t);
+                return;
+            }
             mWallet = w;
             mLastFetch = 0;
             // A seed switch changes the address+funds — drop the previous wallet's
