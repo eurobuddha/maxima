@@ -841,7 +841,7 @@ public final class MaximaNode {
     }
 
     /**
-     * Every EXTERNALLY-REACHABLE address we can be reached at, RELAYS FIRST.
+     * Every EXTERNALLY-REACHABLE address we can be reached at, direct first.
      *
      * This is what we hand to remote contacts, publish to MLS, show as "your
      * address", and expose over IPC - so it must never contain our own LAN /
@@ -853,27 +853,22 @@ public final class MaximaNode {
      * internal-IP predicate. The LAN direct address is deliberately excluded -
      * it lives only in {@link #directAddresses()} for same-LAN blob serving.
      *
-     * ORDERING (fund/UX-critical): relays lead, the WAN direct address goes LAST.
-     * A contact stores our addresses in the order we advertise and its send loop
-     * (sendOrder) tries them sequentially with a full connect timeout on each, so
-     * whatever leads is what every inbound message hits first. A phone's direct
-     * endpoint is inherently flaky (asleep, unplugged, forward down), so leading
-     * with it made every sender eat a connect timeout before falling back to a
-     * relay - inbound felt much slower than outbound. Relays are the phone's
-     * reliable inbound path, so they lead; the direct address stays only as a
-     * last-resort fast-path (same-LAN peers are unaffected - they're tried first
-     * from mLanPeers in sendOrder, ahead of this list entirely).
+     * Direct leads because it is the cheapest path for a sender - no relay hop.
+     * (The 0.5.4 relay-first ordering was reverted: it removed the dead-direct
+     * timeout but forced a permanent 2-hop relay on every send to a reachable
+     * peer. The proper fix is a hedged send in sendToContact - see Part B - which
+     * makes a dead direct cheap so direct-first is safe again.)
      */
     public List<String> myAddresses() {
         List<String> out = new ArrayList<>();
-        for (String a : mPool.contactAddresses()) {  // relays we dialled out to — reliable, FIRST
+        String pub = directAddress();               // proven-public direct only; NOT the LAN address
+        if (!pub.isEmpty() && !isInternalAddress(pub)) {
+            out.add(pub);
+        }
+        for (String a : mPool.contactAddresses()) {  // relays we dialled out to
             if (!isInternalAddress(a)) {
                 out.add(a);
             }
-        }
-        String pub = directAddress();               // proven-public WAN direct only; NOT the LAN address
-        if (!pub.isEmpty() && !isInternalAddress(pub) && !out.contains(pub)) {
-            out.add(pub);                            // fast-path option, tried LAST so a dead forward never delays inbound
         }
         return out;
     }

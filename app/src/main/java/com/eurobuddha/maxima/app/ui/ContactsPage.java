@@ -499,16 +499,18 @@ public final class ContactsPage implements Page {
     // Address helpers — appended host is ALWAYS an IP, never a domain.
     // ---------------------------------------------------------------
 
-    /** The stable primary address to share: the FIRST advertised address, which is
-     *  now a relay (myAddresses() is relay-first). Deliberately NOT the flaky WAN
-     *  direct/port-forward IP — sharing that made contacts cache an endpoint that
-     *  goes down whenever the phone sleeps, slowing every inbound message. */
+    /** Prefer an address whose host is already an IP; else the first one. */
     private String pickShareAddrRaw() {
         MaximaNode node = MaximaService.node();
         if (node == null) {
             return null;
         }
         List<String> addrs = node.myAddresses();
+        for (String a : addrs) {
+            if (isIp(hostOf(a))) {
+                return a;
+            }
+        }
         return addrs.isEmpty() ? null : addrs.get(0);
     }
 
