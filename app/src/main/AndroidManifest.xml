@@ -8,6 +8,7 @@
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Same-WiFi direct P2P: NSD/mDNS discovery needs a held MulticastLock on most
          devices, or discovery silently receives nothing. -->

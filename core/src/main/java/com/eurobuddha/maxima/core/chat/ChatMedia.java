@@ -74,7 +74,7 @@ public final class ChatMedia {
             return zBody;
         }
         String kind = p[0].startsWith("video") ? "🎥 Video"
-                : p[0].startsWith("audio") ? "🎵 Audio"
+                : p[0].startsWith("audio") ? "🎤 Voice note"
                 : "📷 Photo";
         return p[2].isEmpty() ? kind : kind + "  " + p[2];
     }

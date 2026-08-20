@@ -283,6 +283,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private static final int PICK_PHOTO = 71;
     private static final int TAKE_PHOTO = 72;
     private android.net.Uri mCaptureUri;
+    private static final int REQ_RECORD_AUDIO = 73;
+
+    // ---- voice notes: one player at a time, ticker refreshes the playing row ----
+    private android.media.MediaPlayer mAudioPlayer;
+    private String mAudioPlayingId;
+    private final android.os.Handler mAudioTicker =
+            new android.os.Handler(android.os.Looper.getMainLooper());
     private com.eurobuddha.maxima.app.wallet.PaymentSender mSender;
 
     /** Decoded chat images, by message id — the WOTS-free path: fetch once. */
@@ -546,6 +553,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 && node.contact(mConversation) != null;
         final List<String> items = new ArrayList<>();
         items.add("Photo library");
+        items.add("Voice note");
         if (canPay) {
             items.add("Send payment");
         }
@@ -554,6 +562,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     String c = items.get(which);
                     if ("Send payment".equals(c)) {
                         payContact();
+                    } else if ("Voice note".equals(c)) {
+                        startVoiceNote();
                     } else {
                         pickPhoto();
                     }
@@ -699,6 +709,302 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
             runOnUiThread(this::render);
         }, "chat-media").start();
+    }
+
+    // ------------------------------------------------------------------
+    // Voice notes
+    // ------------------------------------------------------------------
+
+    private void startVoiceNote() {
+        ChatEngine chat = MaximaService.chat();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
+        if (chat == null || node == null) {
+            toast("Transport not running");
+            return;
+        }
+        if (chat.group(mConversation) == null) {
+            Contact c = node.contact(mConversation);
+            if (c != null && c.isClassic()) {
+                toast("Voice notes need Parlons on both ends");
+                return;
+            }
+        }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},
+                    REQ_RECORD_AUDIO);
+            return;
+        }
+        recordVoiceDialog();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int zReq, String[] zPerms, int[] zGrants) {
+        super.onRequestPermissionsResult(zReq, zPerms, zGrants);
+        if (zReq == REQ_RECORD_AUDIO && zGrants.length > 0
+                && zGrants[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            recordVoiceDialog();
+        }
+    }
+
+    private void recordVoiceDialog() {
+        final VoiceNote rec = new VoiceNote(this);
+        try {
+            rec.start();
+        } catch (Exception e) {
+            toast("Microphone unavailable");
+            return;
+        }
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(dp(22), dp(18), dp(22), dp(6));
+        final TextView dot = new TextView(this);
+        dot.setText("\u25cf");
+        dot.setTextColor(0xFFE0524D);
+        dot.setTextSize(16);
+        final TextView timer = new TextView(this);
+        timer.setTextSize(28);
+        timer.setTypeface(android.graphics.Typeface.MONOSPACE);
+        timer.setTextColor(getColor(R.color.ux_text));
+        timer.setPadding(dp(14), 0, 0, 0);
+        timer.setText("0:00");
+        box.addView(dot);
+        box.addView(timer);
+
+        final AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("Voice note")
+                .setView(box)
+                .setPositiveButton("Send", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+        dlg.setCanceledOnTouchOutside(false);
+        dlg.show();
+
+        final android.os.Handler h =
+                new android.os.Handler(android.os.Looper.getMainLooper());
+        final Runnable tick = new Runnable() {
+            @Override
+            public void run() {
+                int sSec = rec.elapsedSeconds();
+                dot.setAlpha(dot.getAlpha() > 0.5f ? 0.25f : 1f);
+                if (sSec >= VoiceNote.MAX_SECONDS) {
+                    timer.setText(fmtSecs(VoiceNote.MAX_SECONDS) + "  max");
+                    rec.stopQuiet();   // recorder hard-caps too (setMaxDuration)
+                } else {
+                    timer.setText(fmtSecs(sSec));
+                    h.postDelayed(this, 500);
+                }
+            }
+        };
+        h.post(tick);
+
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            h.removeCallbacksAndMessages(null);
+            rec.stopQuiet();
+            byte[] bytes;
+            int secs = rec.recordedSeconds();
+            try {
+                bytes = rec.bytes();
+            } catch (Exception e) {
+                toast("Recording failed");
+                dlg.dismiss();
+                return;
+            }
+            dlg.dismiss();
+            if (bytes == null || bytes.length == 0 || secs < 1) {
+                toast("Too short - hold on a moment longer");
+                return;
+            }
+            sendVoice(bytes, rec.mime(), secs);
+        });
+        dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
+            h.removeCallbacksAndMessages(null);
+            rec.cancel();
+            dlg.dismiss();
+        });
+        dlg.setOnDismissListener(d -> {
+            h.removeCallbacksAndMessages(null);
+            rec.stopQuiet();
+        });
+    }
+
+    private void sendVoice(final byte[] zBytes, final String zMime, final int zSecs) {
+        final ChatEngine chat = MaximaService.chat();
+        final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
+        if (chat == null || node == null) {
+            toast("Transport not running");
+            return;
+        }
+        final Group g = chat.group(mConversation);
+        final Contact c = g == null ? node.contact(mConversation) : null;
+        if (g == null && c == null) {
+            return;
+        }
+        toast("Sending voice note\u2026");
+        mLastSendWasMine = true;
+        new Thread(() -> {
+            try {
+                // The duration rides in the caption slot - the bubble shows it
+                // without decoding, and previews read "Voice note 0:12".
+                if (g != null) {
+                    chat.sendGroupMedia(g.id, zBytes, zMime, fmtSecs(zSecs));
+                } else {
+                    chat.sendMedia(c, zBytes, zMime, fmtSecs(zSecs));
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Voice note failed: " + e.getMessage()));
+            }
+            runOnUiThread(this::render);
+        }, "chat-voice").start();
+    }
+
+    private void bindAudio(MsgVH h, ChatEngine.Entry e) {
+        boolean playing = e.id.equals(mAudioPlayingId) && mAudioPlayer != null;
+        int ink = getColor(e.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
+        h.audioBtn.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        h.audioBtn.setColorFilter(ink);
+        h.audioTime.setTextColor(ink);
+        String total = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+        if (playing) {
+            int pos = mAudioPlayer.getCurrentPosition() / 1000;
+            int dur = Math.max(1, mAudioPlayer.getDuration() / 1000);
+            h.audioTime.setText(fmtSecs(pos) + " / " + fmtSecs(dur));
+            h.audioBar.setMax(dur);
+            h.audioBar.setProgress(pos);
+        } else {
+            h.audioTime.setText(total.isEmpty() ? "voice note" : total);
+            h.audioBar.setMax(1);
+            h.audioBar.setProgress(0);
+        }
+        h.audio.setOnClickListener(v -> toggleAudio(e));
+    }
+
+    private void toggleAudio(final ChatEngine.Entry e) {
+        if (e.id.equals(mAudioPlayingId)) {
+            stopAudio();
+            return;
+        }
+        stopAudio();
+        new Thread(() -> {
+            final java.io.File f = audioCacheFile(e.id, e.body);
+            runOnUiThread(() -> {
+                if (f == null) {
+                    toast("Could not decode voice note");
+                    return;
+                }
+                try {
+                    mAudioPlayer = new android.media.MediaPlayer();
+                    mAudioPlayer.setAudioAttributes(
+                            new android.media.AudioAttributes.Builder()
+                                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(android.media.AudioAttributes
+                                            .CONTENT_TYPE_SPEECH)
+                                    .build());
+                    mAudioPlayer.setDataSource(f.getAbsolutePath());
+                    mAudioPlayer.prepare();
+                    mAudioPlayer.setOnCompletionListener(mp -> stopAudio());
+                    mAudioPlayer.start();
+                    mAudioPlayingId = e.id;
+                    audioTick();
+                    int i = rowIndexOf(e.id);
+                    if (i >= 0) {
+                        mAdapter.notifyItemChanged(i);
+                    }
+                } catch (Exception ex) {
+                    toast("Playback failed");
+                    stopAudio();
+                }
+            });
+        }, "chat-audio").start();
+    }
+
+    private void stopAudio() {
+        mAudioTicker.removeCallbacksAndMessages(null);
+        if (mAudioPlayer != null) {
+            try {
+                mAudioPlayer.stop();
+            } catch (Exception ignored) {
+            }
+            try {
+                mAudioPlayer.release();
+            } catch (Exception ignored) {
+            }
+            mAudioPlayer = null;
+        }
+        String was = mAudioPlayingId;
+        mAudioPlayingId = null;
+        if (was != null) {
+            int i = rowIndexOf(was);
+            if (i >= 0) {
+                mAdapter.notifyItemChanged(i);
+            } else {
+                mAdapter.notifyDataSetChanged();
+            }
+        }
+    }
+
+    private void audioTick() {
+        mAudioTicker.removeCallbacksAndMessages(null);
+        mAudioTicker.postDelayed(() -> {
+            if (mAudioPlayer == null || mAudioPlayingId == null) {
+                return;
+            }
+            int i = rowIndexOf(mAudioPlayingId);
+            if (i >= 0) {
+                mAdapter.notifyItemChanged(i);
+            }
+            audioTick();
+        }, 300);
+    }
+
+    private int rowIndexOf(String zId) {
+        for (int i = 0; i < mRows.size(); i++) {
+            Row r = mRows.get(i);
+            if (r.entry != null && zId.equals(r.entry.id)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Decode a voice-note ref (data: or mx1 manifest) into a playable cache
+     *  file, once per message id - MediaPlayer cannot open data: URIs. */
+    private java.io.File audioCacheFile(String zId, String zBody) {
+        try {
+            String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(zBody);
+            java.io.File dir = new java.io.File(getCacheDir(), "maximavoice");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir,
+                    "vn_" + Integer.toHexString(zId.hashCode()));
+            if (f.exists() && f.length() > 0) {
+                return f;
+            }
+            byte[] raw;
+            if (ref.startsWith("data:")) {
+                raw = android.util.Base64.decode(
+                        ref.substring(ref.indexOf(',') + 1), android.util.Base64.DEFAULT);
+            } else {
+                com.eurobuddha.maxima.core.media.MediaService media = MaximaService.media();
+                com.eurobuddha.maxima.core.media.MediaManifest mf =
+                        com.eurobuddha.maxima.core.media.MediaManifest.decode(
+                                new String(android.util.Base64.decode(
+                                        ref.substring("mx1:".length()),
+                                        android.util.Base64.URL_SAFE),
+                                        java.nio.charset.StandardCharsets.UTF_8));
+                raw = media.fetch(mf);
+            }
+            try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                os.write(raw);
+            }
+            return f;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String fmtSecs(int zSecs) {
+        return (zSecs / 60) + ":" + String.format(Locale.UK, "%02d", zSecs % 60);
     }
 
     /** Shrink a JPEG until it fits the classic inline cap
@@ -887,6 +1193,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     @Override
     protected void onStop() {
+        stopAudio();
         super.onStop();
         mLock.onStop();
     }
@@ -1393,6 +1700,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final LinearLayout row, bubble;
         final TextView who, body, meta;
         final android.widget.ImageView image;
+        final LinearLayout audio;
+        final android.widget.ImageView audioBtn;
+        final TextView audioTime;
+        final android.widget.ProgressBar audioBar;
         MsgVH(View v) {
             super(v);
             row = v.findViewById(R.id.bubble_row);
@@ -1401,6 +1712,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             body = v.findViewById(R.id.bubble_body);
             meta = v.findViewById(R.id.bubble_meta);
             image = v.findViewById(R.id.bubble_image);
+            audio = v.findViewById(R.id.bubble_audio);
+            audioBtn = v.findViewById(R.id.bubble_audio_btn);
+            audioTime = v.findViewById(R.id.bubble_audio_time);
+            audioBar = v.findViewById(R.id.bubble_audio_bar);
         }
     }
 
@@ -1422,6 +1737,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             h.who.setVisibility(View.GONE);
             h.image.setVisibility(View.GONE);
             h.image.setImageDrawable(null);
+            h.audio.setVisibility(View.GONE);
             h.body.setVisibility(View.VISIBLE);
             h.body.setText(paymentText(e));
             h.body.setTextColor(getColor(R.color.ux_on_accent));
@@ -1445,12 +1761,23 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
 
             if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
-                String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
-                h.body.setText(cap);
-                h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
-                h.image.setVisibility(View.VISIBLE);
-                bindImage(h.image, e.body, e.id);
+                String mime = com.eurobuddha.maxima.core.chat.ChatMedia.mime(e.body);
+                if (mime.startsWith("audio")) {
+                    h.image.setVisibility(View.GONE);
+                    h.image.setImageDrawable(null);
+                    h.body.setVisibility(View.GONE);
+                    h.audio.setVisibility(View.VISIBLE);
+                    bindAudio(h, e);
+                } else {
+                    h.audio.setVisibility(View.GONE);
+                    String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+                    h.body.setText(cap);
+                    h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
+                    h.image.setVisibility(View.VISIBLE);
+                    bindImage(h.image, e.body, e.id);
+                }
             } else {
+                h.audio.setVisibility(View.GONE);
                 h.image.setVisibility(View.GONE);
                 h.image.setImageDrawable(null);
                 h.body.setVisibility(View.VISIBLE);
