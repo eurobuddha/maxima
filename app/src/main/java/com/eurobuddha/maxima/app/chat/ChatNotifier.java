@@ -36,7 +36,7 @@ import java.util.Map;
  */
 public final class ChatNotifier {
 
-    public static final String CHANNEL_ID = "maxima_chat";
+    public static final String CHANNEL_ID = "maxima_chat_v2";
 
     /**
      * Notification ids must be ints, conversation keys are hex strings. The
@@ -64,7 +64,22 @@ public final class ChatNotifier {
         ch.setDescription("Incoming Parlons messages");
         ch.enableVibration(true);
         ch.setShowBadge(true);
+        // The Parlons "pssssst!" - channel sound settings are immutable after
+        // creation, hence the _v2 channel id; the old channel is removed so
+        // Settings shows one Messages entry, not two.
+        ch.setSound(android.net.Uri.parse("android.resource://"
+                        + zCtx.getPackageName() + "/"
+                        + com.eurobuddha.maxima.app.R.raw.pssst),
+                new android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(
+                                android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build());
         nm.createNotificationChannel(ch);
+        try {
+            nm.deleteNotificationChannel("maxima_chat");
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -173,7 +188,13 @@ public final class ChatNotifier {
     public static void onInbound(Context zCtx, ChatEngine zChat, ChatEngine.Entry zEntry,
                                  com.eurobuddha.maxima.core.ChatPort zNode) {
         String conv = zEntry.isGroup() ? zEntry.groupId : zEntry.peer;
-        if (zEntry.mine || ChatHub.isForeground(conv)) {
+        if (zEntry.mine) {
+            return;
+        }
+        if (ChatHub.isForeground(conv)) {
+            // No notification while you are looking at the conversation -
+            // just the soft in-app pssst.
+            Pssst.play(zCtx);
             return;
         }
         postConversation(zCtx, zChat, zNode, conv);
