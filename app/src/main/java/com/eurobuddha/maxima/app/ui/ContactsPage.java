@@ -370,16 +370,20 @@ public final class ContactsPage implements Page {
         if (node != null) {
             hosts = Math.max(1, node.myAddresses().size());
         }
-        TextView note = sub("Let a friend scan the QR, or share it. Reachable through "
-                + hosts + (hosts == 1 ? " host." : " hosts — any of them works."));
+        TextView note = sub(raw.startsWith("MAX#")
+                ? "Your PERMANENT address — it survives every host move. "
+                        + "Let a friend scan the QR, or share it."
+                : "Let a friend scan the QR, or share it. Reachable through "
+                        + hosts + (hosts == 1 ? " host." : " hosts — any of them works."));
         note.setPadding(dp(2), dp(10), dp(2), 0);
         body.addView(note);
 
         sheet("Share my address", body);
 
         // Resolve host → IP off-main, then fill QR + copy field + share.
+        // A MAX# permanent address is location-independent - no resolving.
         new Thread(() -> {
-            final String ipAddr = toIpForm(raw);
+            final String ipAddr = raw.startsWith("MAX#") ? raw : toIpForm(raw);
             mAct.runOnUiThread(() -> {
                 if (ipAddr == null) {
                     // Couldn't turn a domain host into an IP — never share the
@@ -499,8 +503,17 @@ public final class ContactsPage implements Page {
     // Address helpers — appended host is ALWAYS an IP, never a domain.
     // ---------------------------------------------------------------
 
-    /** Prefer an address whose host is already an IP; else the first one. */
+    /** Prefer an address whose host is already an IP; else the first one.
+     *  With a static MLS pinned, share the PERMANENT MAX# address instead -
+     *  it survives every rotation, which is the whole point of sharing it. */
     private String pickShareAddrRaw() {
+        com.eurobuddha.maxima.app.jar.JarEngine jarEngine = MaximaService.jar();
+        if (jarEngine != null) {
+            String perm = jarEngine.permanentAddress();
+            if (!perm.isEmpty()) {
+                return perm;
+            }
+        }
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             return null;
