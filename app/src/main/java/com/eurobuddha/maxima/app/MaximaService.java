@@ -308,12 +308,15 @@ public final class MaximaService extends Service {
                                 .seedIdentity(this) : null);
         sJarEngine = jar;
         if (migrate) {
-            int carried = com.eurobuddha.maxima.app.jar.JarMigration.seedContacts(this, jar);
+            com.eurobuddha.maxima.app.jar.JarMigration.seedContacts(this, jar);
             com.eurobuddha.maxima.app.jar.JarMigration.markDone(this);
-            if (carried > 0) {
-                // Tell everyone our new addresses without waiting for the loop.
-                jar.announceContactsSoon();
-            }
+        }
+        // Post-migration heal window: push our new address AND force-pull
+        // everyone's current one. Re-armed on every boot for 24h after
+        // migration - the timer dies with the process, and both ends of a
+        // freshly-flipped pair need this to find each other.
+        if (com.eurobuddha.maxima.app.jar.JarMigration.inHealWindow(this)) {
+            jar.announceContactsSoon();
         }
 
         com.eurobuddha.maxima.core.chat.ChatEngine chat =

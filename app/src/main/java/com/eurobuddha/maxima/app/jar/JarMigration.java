@@ -60,7 +60,17 @@ public final class JarMigration {
 
 	public static void markDone(Context zCtx) {
 		zCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-				.edit().putBoolean(PREF_DONE, true).apply();
+				.edit().putBoolean(PREF_DONE, true)
+				.putLong("migrated_at", System.currentTimeMillis()).apply();
+	}
+
+	/** True within 24h of migration - the window where both ends of a pair may
+	 *  have flipped and every stored address needs the forced MLS heal. The
+	 *  heal timer dies with the process, so each boot in the window re-arms it. */
+	public static boolean inHealWindow(Context zCtx) {
+		long at = zCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+				.getLong("migrated_at", 0);
+		return at > 0 && System.currentTimeMillis() - at < 24L * 60 * 60 * 1000;
 	}
 
 	/** Move any pre-migration jar world aside (archived, not deleted). */

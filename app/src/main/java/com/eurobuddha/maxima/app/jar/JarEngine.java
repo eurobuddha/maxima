@@ -344,15 +344,28 @@ public final class JarEngine implements ChatPort {
 		markCapable(zKey);
 	}
 
-	/** Nudge classic to push our (new) addresses to every contact soon - used
-	 *  right after migration so peers heal without waiting for the first
-	 *  20-minute loop. Delayed so hosts have adopted first. */
+	/** Post-migration heal, both directions, without waiting for the loops:
+	 *  push OUR new address to every contact (MAXIMA_REFRESH) and force-pull
+	 *  THEIR current addresses from their MLS (MAXIMA_CHECK_MLS force:true).
+	 *  The pull matters when BOTH ends migrated in quick succession - each
+	 *  side's stored address for the other went stale simultaneously, so the
+	 *  push alone is aimed at a dead slot and only the MLS lookup can heal it
+	 *  (classic's backstop, normally 30 minutes away). Delayed so hosts have
+	 *  adopted first; repeated once in case the first pass raced the publish. */
 	public void announceContactsSoon() {
 		Thread t = new Thread(() -> {
 			try {
-				Thread.sleep(30_000);
-				mManager.PostMessage(MaximaManager.MAXIMA_REFRESH);
-				EventLog.add("migration: address refresh pushed to all contacts");
+				for (int pass = 0; pass < 2; pass++) {
+					Thread.sleep(pass == 0 ? 30_000 : 90_000);
+					mManager.PostMessage(MaximaManager.MAXIMA_REFRESH);
+					org.minima.utils.messages.Message chk =
+							new org.minima.utils.messages.Message(
+									MaximaManager.MAXIMA_CHECK_MLS);
+					chk.addBoolean("force", true);
+					mManager.PostMessage(chk);
+					EventLog.add("migration: refresh pushed + forced MLS re-lookup (pass "
+							+ (pass + 1) + ")");
+				}
 			} catch (Exception ignored) {
 			}
 		}, "jar-migrate-announce");
