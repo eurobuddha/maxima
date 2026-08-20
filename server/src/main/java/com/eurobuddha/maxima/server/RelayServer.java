@@ -108,6 +108,21 @@ public final class RelayServer {
 
     private final MlsStore mDirectory = new MlsStore();
 
+    /** Open-pool MLS: -Dmaxima.mls.open=true (or env MAXIMA_MLS_OPEN=true) -
+     *  every published identity resolves for anyone, the public staticMLS
+     *  pool semantic. Off = classic allow-list + permanent-list behaviour. */
+    private static final boolean MLS_OPEN =
+            Boolean.parseBoolean(System.getProperty("maxima.mls.open",
+                    String.valueOf(Boolean.parseBoolean(
+                            System.getenv("MAXIMA_MLS_OPEN")))));
+
+    {
+        if (MLS_OPEN) {
+            mDirectory.setOpenResolve(true);
+            System.out.println("MLS OPEN-RESOLVE: this relay is a public staticMLS pool server");
+        }
+    }
+
     /**
      * Our public address, if the operator told us one.
      *

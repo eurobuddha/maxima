@@ -59,6 +59,12 @@ public class MaxJarNode {
 			case "-logs":
 				GeneralParams.MAXIMA_LOGS = true;
 				break;
+			case "-allowallip":
+				// Classic's escape for its coarse internal-IP prefix check,
+				// which also catches PUBLIC 192.x/172.x addresses (e.g. the
+				// megammr relay at 192.248.151.55).
+				GeneralParams.ALLOW_ALL_IP = true;
+				break;
 			default:
 				break;
 			}
@@ -209,6 +215,72 @@ public class MaxJarNode {
 				zTransport.disconnect(nioc.getUID());
 			}
 			System.out.println("unhosted " + parts[1]);
+			break;
+		}
+
+		case "pin": {
+			// Static MLS: publish our location to this identity from now on.
+			zManager.setStaticMLS(true, parts[1]);
+			zManager.PostMessage("MAXIMA_REFRESH");
+			System.out.println("pinned; publishing. Permanent address:");
+			System.out.println("MAX#" + zManager.getPublicKey().to0xString() + "#" + parts[1]);
+			break;
+		}
+
+		case "resolve": {
+			// MAX#publickey#mlshost -> current address, via a classic MLS GET.
+			String max = parts[1];
+			int split = max.indexOf('#', 4);
+			if (!max.startsWith("MAX#") || split < 0) {
+				System.out.println("expected MAX#publickey#mlshost");
+				return;
+			}
+			String pub = max.substring(4, split);
+			String mls = max.substring(split + 1);
+			org.minima.system.network.maxima.mls.MLSPacketGETReq req =
+					new org.minima.system.network.maxima.mls.MLSPacketGETReq(
+							pub, MaximaManager.MLS_RANDOM_UID);
+			org.minima.utils.messages.Message send = maxima.createSendMessage(mls,
+					MaximaManager.MAXIMA_MLS_GETAPP, MiniData.getMiniDataVersion(req));
+			MiniData wire = org.minima.system.network.maxima.MaxMsgHandler
+					.constructMaximaData(send);
+			String host = send.getString("tohost");
+			int port = send.getInteger("toport");
+			try (java.net.Socket sock = new java.net.Socket()) {
+				sock.connect(new java.net.InetSocketAddress(host, port), 20000);
+				sock.setSoTimeout(20000);
+				java.io.DataOutputStream dos =
+						new java.io.DataOutputStream(sock.getOutputStream());
+				java.io.DataInputStream dis =
+						new java.io.DataInputStream(sock.getInputStream());
+				wire.writeDataStream(dos);
+				dos.flush();
+				long deadline = System.currentTimeMillis() + 20000;
+				boolean answered = false;
+				while (System.currentTimeMillis() < deadline && !answered) {
+					MiniData resp = MiniData.ReadFromStream(dis);
+					try {
+						java.io.DataInputStream rdis = new java.io.DataInputStream(
+								new java.io.ByteArrayInputStream(resp.getBytes()));
+						org.minima.objects.base.MiniByte.ReadFromStream(rdis);
+						MiniData data = MiniData.ReadFromStream(rdis);
+						org.minima.system.network.maxima.mls.MLSPacketGETResp r =
+								org.minima.system.network.maxima.mls.MLSPacketGETResp
+										.convertMiniDataVersion(data);
+						System.out.println("resolved: " + r.getAddress());
+						answered = true;
+					} catch (Exception notMls) {
+						if (resp.getLength() > 8) {
+							System.out.println("unrecognised reply");
+							answered = true;
+						} else if (resp.getBytes().length > 0
+								&& resp.getBytes()[resp.getBytes().length - 1] == 2) {
+							System.out.println("UNKNOWN - not published there (or not resolvable)");
+							answered = true;
+						}
+					}
+				}
+			}
 			break;
 		}
 

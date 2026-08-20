@@ -95,6 +95,18 @@ public final class MlsStore {
      * @param zRequester who is asking, uppercase 0x hex
      * @return the entry, or null if unknown, expired, or not permitted
      */
+    /**
+     * OPEN-RESOLVE mode: every stored identity resolves for ANY requester -
+     * the semantics of a public pool MLS (like DNS). Off by default; a relay
+     * operator opts in. Users opt in per-identity by PINNING an open server
+     * as their static MLS - a rotating user never publishes here at all.
+     */
+    private volatile boolean mOpenResolve = false;
+
+    public void setOpenResolve(boolean zOpen) {
+        mOpenResolve = zOpen;
+    }
+
     public Entry get(String zTargetPublicKey, String zRequester) {
         Entry e = mEntries.get(norm(zTargetPublicKey));
         if (e == null) {
@@ -104,7 +116,7 @@ public final class MlsStore {
             mEntries.remove(norm(zTargetPublicKey));
             return null;
         }
-        if (isPermanent(e.publicKey)) {
+        if (mOpenResolve || isPermanent(e.publicKey)) {
             return e;
         }
         for (String a : e.allowedReaders) {

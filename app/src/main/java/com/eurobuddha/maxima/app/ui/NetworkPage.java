@@ -101,10 +101,26 @@ public final class NetworkPage implements Page {
                     + " · classic engine");
             setPill(jhosts > 0 ? "Reachable" : "Offline", jhosts > 0 ? Kit.OK : Kit.BAD);
             String jarSig = "jar|" + jactive + "|" + RelayStore.get(mAct)
-                    + "|" + jarEngine.isStaticMls();
+                    + "|" + jarEngine.isStaticMls()
+                    + "|" + jarEngine.contacts().size();
             if (!jarSig.equals(mLastNetSig)) {
                 mLastNetSig = jarSig;
                 renderHostList(jactive);
+                // Transport figures - the classic engine's honest numbers.
+                mStats.removeAllViews();
+                addStat("Hosts connected", "Classic hosts relaying for you right now",
+                        String.valueOf(jhosts), 0, "hosts");
+                addStat("Contacts", "People who can reach you and you them",
+                        String.valueOf(jarEngine.contacts().size()), 0, "contacts");
+                // Contribution + direct reachability ride the old engine; on
+                // classic they are simply not running - say so, don't sit blank.
+                mContrib.removeAllViews();
+                mContrib.addView(k.sub("Not available on the classic engine — "
+                        + "classic hosts carry the network."));
+                mContribNote.setVisibility(View.GONE);
+                mDirect.removeAllViews();
+                mDirect.addView(k.sub("Not available on the classic engine — "
+                        + "your hosts relay everything, exactly like a stock node."));
             }
             // ---- MLS (classic): rotating by default, static when pinned; a
             // static MLS mints a permanent MAX# address worth copying. ----
