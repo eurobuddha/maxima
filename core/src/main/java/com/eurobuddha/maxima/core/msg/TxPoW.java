@@ -16,9 +16,11 @@ import java.io.IOException;
  *
  * Why a synthetic carrier is safe and correct:
  *
- *   - Receivers verify ONLY {@code customHash == SHA3-256(MaximaPackage)}
- *     ({@code MaxTxPoW.checkValidTxPoW}). The proof-of-work is never checked,
- *     so the reference's 15-second mining budget buys nothing on the wire.
+ *   - Receivers verify {@code customHash == SHA3-256(MaximaPackage)}
+ *     ({@code MaxTxPoW.checkValidTxPoW}) AND - per the reference author - the
+ *     relay path requires real proof-of-work on the unit. We therefore MINE
+ *     every carrier to the protocol minimum (see {@link #mine}); the earlier
+ *     claim here that the PoW "buys nothing on the wire" was wrong.
  *   - After handling, a receiver re-injects the unit into the chain pipeline
  *     only {@code if(txpow.isTransaction() || txpow.isBlock())}.
  *       * {@code isTransaction()} returns false when there is no body.
@@ -125,6 +127,74 @@ public final class TxPoW implements Streamable {
         } else {
             mRawBody = null;
         }
+    }
+
+    // ---------------------------------------------------------------
+    // proof of work
+    //
+    // The reference author confirms (and the reference sender implements):
+    // Maxima messages carry REAL work - classic mines every carrier to the
+    // chain Magic's minimum-TxPoW-work before sending, and un-worked units are
+    // rejected on the relay path. The earlier claim in this file that the PoW
+    // "buys nothing on the wire" was WRONG. These constants mirror classic
+    // exactly: Magic.MIN_HASHES = 10000, MIN_TXPOW_VAL = Crypto.MAX_VAL/10000,
+    // TxPoWID = SHA3-256 of the serialised HEADER only (so a body-less carrier
+    // can still be mined - the nonce lives in the header).
+    // ---------------------------------------------------------------
+
+    /** Classic Crypto.MAX_VAL: 2^256 - 1. */
+    public static final java.math.BigInteger MAX_VAL =
+            new java.math.BigInteger(
+                    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+                            + "FFFFFFFFFFFFFFFF", 16);
+
+    /** Classic Magic.MIN_HASHES. */
+    public static final long MIN_HASHES = 10_000;
+
+    /** Classic Magic.MIN_TXPOW_VAL - the protocol's minimum-work target. */
+    public static final java.math.BigInteger MIN_TXPOW_VAL =
+            MAX_VAL.divide(java.math.BigInteger.valueOf(MIN_HASHES));
+
+    /** Classic MaxTxPoW.mMaxTimeMilli - the mining time budget. */
+    public static final long MINE_BUDGET_MS = 15_000;
+
+    /** The TxPoWID, exactly as classic computes it: SHA3-256(serialised header). */
+    public MiniData txPowId() {
+        try {
+            return new MiniData(com.eurobuddha.maxima.core.crypto.Hashes
+                    .sha3(Codec.serialise(mHeader)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** True when this unit's work meets the protocol minimum. */
+    public boolean meetsMinWork() {
+        return new java.math.BigInteger(1, txPowId().getBytes())
+                .compareTo(MIN_TXPOW_VAL) <= 0;
+    }
+
+    /**
+     * Mine this carrier: spin the header nonce until the TxPoWID meets the
+     * protocol minimum ({@link #MIN_TXPOW_VAL}, ~{@value #MIN_HASHES} expected
+     * hashes - milliseconds on any modern CPU), within the classic time budget.
+     *
+     * @return true when mined; false only if the budget expired (statistically
+     *         negligible at the minimum difficulty)
+     */
+    public boolean mine(long zBudgetMs) {
+        long deadline = System.currentTimeMillis() + zBudgetMs;
+        // Random start so parallel senders never duplicate nonce walks.
+        long nonce = new java.util.Random().nextLong() & 0x7FFFFFFFFFFFL;
+        while (System.currentTimeMillis() < deadline) {
+            for (int i = 0; i < 512; i++) {   // check the clock every 512 hashes
+                mHeader.mNonce = new MiniNumber(nonce++);
+                if (meetsMinWork()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public static TxPoW readFromStream(DataInputStream zIn) throws IOException {

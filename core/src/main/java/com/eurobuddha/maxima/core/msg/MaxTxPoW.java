@@ -34,18 +34,27 @@ public final class MaxTxPoW implements Streamable {
     }
 
     /**
-     * Build a complete unit around a package, with a synthetic carrier.
-     * No mining: receivers never verify the work.
+     * Build a complete unit around a package - and MINE it. The reference
+     * author confirms un-worked units are rejected on the relay path, and the
+     * reference sender mines every carrier (classic createMaxTxPoW). ~10k
+     * expected hashes at the protocol minimum: milliseconds, paid honestly.
      */
     public static MaxTxPoW create(MaximaPackage zMaxima, long zTimeMilli) {
         MiniData hash = new MiniData(Hashes.sha3(Codec.serialise(zMaxima)));
-        return new MaxTxPoW(zMaxima, TxPoW.carrier(hash, zTimeMilli));
+        TxPoW carrier = TxPoW.carrier(hash, zTimeMilli);
+        carrier.mine(TxPoW.MINE_BUDGET_MS);
+        return new MaxTxPoW(zMaxima, carrier);
     }
 
-    /** The check every receiver performs, and the only one. */
+    /** The binding check: customHash == SHA3-256(MaximaPackage). */
     public boolean checkValidTxPoW() {
         byte[] want = Hashes.sha3(Codec.serialise(mMaxima));
         return new MiniData(want).equals(mTxPoW.getHeader().mCustomHash);
+    }
+
+    /** Full relay-side validity: binding AND the protocol's minimum work. */
+    public boolean checkValidPoW() {
+        return checkValidTxPoW() && mTxPoW.meetsMinWork();
     }
 
     @Override
