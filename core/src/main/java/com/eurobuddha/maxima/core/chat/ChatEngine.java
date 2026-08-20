@@ -587,6 +587,16 @@ public final class ChatEngine {
         }
         try {
             String ref = ChatMedia.ref(zMediaBody);
+            if (ref != null && ref.startsWith("data:")) {
+                // Already embedded - pass straight through if it fits the wire.
+                int comma = ref.indexOf(',');
+                if (comma < 0 || (ref.length() - comma) * 3L / 4
+                        > ClassicChat.MAX_INLINE_IMAGE_BYTES) {
+                    return null;
+                }
+                return ClassicChat.buildImage(mNode.name(),
+                        ChatMedia.caption(zMediaBody), ref);
+            }
             if (ref == null || !ref.startsWith("mx1:")) {
                 return null;
             }
@@ -615,6 +625,13 @@ public final class ChatEngine {
     /** Publish bytes and return an mx1: ref (RFC4648 url-safe base64 manifest,
      *  matching android.util.Base64 URL_SAFE that the app UI decodes with). */
     private String publishRef(byte[] zBytes, String zMime) throws Exception {
+        // Local-only media (the jar engine): there is no shelf a receiver could
+        // fetch from, so the image itself RIDES IN the message as a data-URL.
+        // Receivers decode it directly; nothing to fetch, nothing to ghost.
+        if (mMedia.isLocalOnly()) {
+            return "data:" + zMime + ";base64,"
+                    + java.util.Base64.getEncoder().encodeToString(zBytes);
+        }
         com.eurobuddha.maxima.core.media.MediaManifest mf = mMedia.publish(zBytes, zMime);
         return "mx1:" + java.util.Base64.getUrlEncoder()
                 .encodeToString(mf.encode().getBytes(java.nio.charset.StandardCharsets.UTF_8));

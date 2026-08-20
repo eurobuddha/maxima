@@ -70,6 +70,12 @@ public final class MediaService {
      * Encrypt, keep locally, replicate, and return a manifest ready to seal into
      * a message. Blocking (network + crypto) — call off the main thread.
      */
+    /** True when there is no routing engine to replicate/fetch through - the
+     *  jar engine's mode. Senders must then EMBED media rather than reference it. */
+    public boolean isLocalOnly() {
+        return mNode == null;
+    }
+
     public MediaManifest publish(byte[] zPlain, String zMime) throws Exception {
         // Reject oversize BEFORE any encrypt/chunk/replicate work: the mesh
         // cannot durably host it, so fail in microseconds with a clear message

@@ -306,6 +306,19 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(body);
         new Thread(() -> {
             try {
+                // Embedded image (local-only media): decode straight from the ref.
+                if (ref != null && ref.startsWith("data:")) {
+                    int comma = ref.indexOf(',');
+                    byte[] raw = android.util.Base64.decode(
+                            ref.substring(comma + 1), android.util.Base64.DEFAULT);
+                    android.graphics.Bitmap dbmp = android.graphics.BitmapFactory
+                            .decodeByteArray(raw, 0, raw.length);
+                    if (dbmp != null) {
+                        mImageCache.put(id, dbmp);
+                        runOnUiThread(this::render);
+                    }
+                    return;
+                }
                 com.eurobuddha.maxima.core.media.MediaService media = MaximaService.media();
                 com.eurobuddha.maxima.core.media.MediaManifest mf =
                         com.eurobuddha.maxima.core.media.MediaManifest.decode(
@@ -667,7 +680,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         new Thread(() -> {
             try {
                 byte[] jpeg = readScaledJpeg(uri, 1400);
-                if (g == null && c != null && c.isClassic()) {
+                // Jar mode embeds images in the message itself, so EVERY photo
+                // must fit the inline cap - groups and capable peers included.
+                if (MaximaService.jar() != null
+                        || (g == null && c != null && c.isClassic())) {
                     // A classic peer gets the image INLINE on the maxsolo wire,
                     // capped - shrink until it fits rather than degrading to a
                     // "Photo" text summary they can't see.
