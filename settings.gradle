@@ -23,6 +23,11 @@ include ':core'
 // Added as they are built (milestones 7 and 8 in the plan):
 include ':server'
 
+// Classic Maxima, extracted whole and chain-free -> maxima.jar. Vendored
+// org.minima.* sources stay diffable against core/Minima; seams in
+// org.minima.maxjar. Never on the same classpath as real Minima.
+include ':maxjar'
+
 // The Android module needs AGP + an Android SDK just to CONFIGURE, which a
 // desktop-installer CI runner may not want. -PskipAndroid=true leaves it out.
 if (!providers.gradleProperty('skipAndroid').isPresent()) {

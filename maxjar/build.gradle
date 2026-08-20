@@ -1,0 +1,26 @@
+// maxima.jar - classic Maxima extracted WHOLE from core/Minima, stripped of the
+// chain. The vendored files under org.minima.* are kept byte-close to upstream
+// (diff -r against core/Minima/src to audit); ALL new code lives in
+// org.minima.maxjar. This module must NEVER share a classpath with real Minima.
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+    // The Minima Winternitz/crypto stack needs bcprov-jdk15on:1.69 EXACTLY -
+    // 1.71+ (all jdk18on) removed the classes. Workspace rule: never upgrade.
+    api 'org.bouncycastle:bcprov-jdk15on:1.69'
+    // MaximaDB is H2 SQL, two tables, exactly as classic runs it.
+    api 'com.h2database:h2:2.2.224'
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+jar {
+    archiveBaseName = 'maxima'
+}
