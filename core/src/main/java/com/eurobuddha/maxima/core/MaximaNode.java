@@ -1149,6 +1149,13 @@ public final class MaximaNode implements ChatPort {
         if (zPeerAddress == null) {
             return;
         }
+        // A MAX# permanent address resolves to the peer's CURRENT address via
+        // their MLS first - same behaviour as the classic engine. Without this
+        // the raw MAX# string reaches the socket parser and dies on the port.
+        if (zPeerAddress.trim().startsWith("MAX#")) {
+            zPeerAddress = resolvePermanent(zPeerAddress.trim());
+            log("MAX# resolved to " + zPeerAddress);
+        }
         String json = ContactCtrl.build(
                 mIdentity.publicKeyHex(),
                 myAddresses(),   // externally-reachable, internal-IP-filtered set
