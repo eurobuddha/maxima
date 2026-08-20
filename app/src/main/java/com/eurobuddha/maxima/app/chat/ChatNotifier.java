@@ -214,12 +214,8 @@ public final class ChatNotifier {
             return;
         }
         if (ChatHub.isForeground(conv)) {
-            // No notification while you are looking at the conversation -
-            // just the soft in-app pssst (if the toggle allows it).
-            if (com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx)) {
-                Pssst.ensureAudible(zCtx);
-                Pssst.play(zCtx);
-            }
+            // You are looking at the conversation: the message lands on
+            // screen in front of you. No notification, no sound.
             return;
         }
         postConversation(zCtx, zChat, zNode, conv);
