@@ -404,7 +404,8 @@ public final class MaximaNode implements ChatPort {
                 .done();
     }
 
-    static Contact contactFromJson(String zJson) {
+    /** Public: the jar-engine migration replays the persisted records. */
+    public static Contact contactFromJson(String zJson) {
         Map<String, String> m = Json.parse(zJson);
         Contact c = new Contact(m.get("publickey"));
         c.name = m.getOrDefault("name", "noname");

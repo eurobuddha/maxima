@@ -72,6 +72,14 @@ public final class JarEngine implements ChatPort {
 	private volatile Runnable mContactsChanged;
 
 	public JarEngine(Context zCtx, String zName, List<String> zHosts) throws Exception {
+		this(zCtx, zName, zHosts, null);
+	}
+
+	/** @param zPostDbInit runs after the databases mount and BEFORE the
+	 *  MaximaManager first initialises - the migration's identity-seed window
+	 *  (classic only creates keys when none exist). */
+	public JarEngine(Context zCtx, String zName, List<String> zHosts,
+			Runnable zPostDbInit) throws Exception {
 		mCtx = zCtx.getApplicationContext();
 
 		SharedPreferences sp = mCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -83,6 +91,10 @@ public final class JarEngine implements ChatPort {
 		}
 		MinimaDB.init(data);
 		MinimaDB.getDB().getUserDB().setMaximaName(zName == null ? "noname" : zName);
+
+		if (zPostDbInit != null) {
+			zPostDbInit.run();
+		}
 
 		mTransport = new org.minima.maxjar.SocketTransport("1.0-parlons", zHosts);
 		Main.init(mTransport, this::onNotifyEvent);
@@ -325,6 +337,27 @@ public final class JarEngine implements ChatPort {
 			EventLog.add("jar host " + zJson.get("host") + " connected:"
 					+ zJson.get("connected"));
 		}
+	}
+
+	/** Migration hook: a peer the old engine had proven Parlons-capable. */
+	public void noteCapable(String zKey) {
+		markCapable(zKey);
+	}
+
+	/** Nudge classic to push our (new) addresses to every contact soon - used
+	 *  right after migration so peers heal without waiting for the first
+	 *  20-minute loop. Delayed so hosts have adopted first. */
+	public void announceContactsSoon() {
+		Thread t = new Thread(() -> {
+			try {
+				Thread.sleep(30_000);
+				mManager.PostMessage(MaximaManager.MAXIMA_REFRESH);
+				EventLog.add("migration: address refresh pushed to all contacts");
+			} catch (Exception ignored) {
+			}
+		}, "jar-migrate-announce");
+		t.setDaemon(true);
+		t.start();
 	}
 
 	private void markCapable(String zKey) {

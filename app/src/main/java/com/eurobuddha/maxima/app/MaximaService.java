@@ -295,10 +295,26 @@ public final class MaximaService extends Service {
                 break;
             }
         }
+        // ONE-TIME MIGRATION: carry the old engine's identity and contact book
+        // into classic, so flipping engines keeps who you are and who you know.
+        final boolean migrate = com.eurobuddha.maxima.app.jar.JarMigration.needed(this);
+        if (migrate) {
+            com.eurobuddha.maxima.app.jar.JarMigration.archiveOldJarData(this);
+        }
         final com.eurobuddha.maxima.app.jar.JarEngine jar =
                 new com.eurobuddha.maxima.app.jar.JarEngine(
-                        this, SeedStore.displayName(this), hosts);
+                        this, SeedStore.displayName(this), hosts,
+                        migrate ? () -> com.eurobuddha.maxima.app.jar.JarMigration
+                                .seedIdentity(this) : null);
         sJarEngine = jar;
+        if (migrate) {
+            int carried = com.eurobuddha.maxima.app.jar.JarMigration.seedContacts(this, jar);
+            com.eurobuddha.maxima.app.jar.JarMigration.markDone(this);
+            if (carried > 0) {
+                // Tell everyone our new addresses without waiting for the loop.
+                jar.announceContactsSoon();
+            }
+        }
 
         com.eurobuddha.maxima.core.chat.ChatEngine chat =
                 new com.eurobuddha.maxima.core.chat.ChatEngine(jar);
