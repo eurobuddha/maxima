@@ -348,6 +348,37 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }, "chat-image").start();
     }
 
+    /** Hand the photo to any other app via the existing payloads FileProvider. */
+    private void shareImage(String id) {
+        final android.graphics.Bitmap b = mImageCache.get(id);
+        if (b == null) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+                dir.mkdirs();
+                java.io.File f = new java.io.File(dir, "share.jpg");
+                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
+                }
+                final android.net.Uri uri =
+                        androidx.core.content.FileProvider.getUriForFile(
+                                this, "com.eurobuddha.maxima.app.payloads", f);
+                runOnUiThread(() -> {
+                    android.content.Intent i =
+                            new android.content.Intent(android.content.Intent.ACTION_SEND);
+                    i.setType("image/jpeg");
+                    i.putExtra(android.content.Intent.EXTRA_STREAM, uri);
+                    i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(android.content.Intent.createChooser(i, "Share photo"));
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Could not share image"));
+            }
+        }, "chat-share-image").start();
+    }
+
     private void saveImage(String id) {
         final android.graphics.Bitmap b = mImageCache.get(id);
         if (b == null) {
@@ -1484,12 +1515,18 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final String copyText = media
                 ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body) : e.body;
         final boolean haveImage = media && mImageCache.containsKey(e.id);
+        final String txid = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
+                ? com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body) : "";
         final List<String> items = new ArrayList<>();
         if (copyText != null && !copyText.isEmpty()) {
             items.add("Copy");
         }
+        if (!txid.isEmpty()) {
+            items.add("Copy transaction id");
+        }
         if (haveImage) {
             items.add("Save photo");
+            items.add("Share photo");
         }
         items.add("Info");
         new AlertDialog.Builder(this)
@@ -1501,8 +1538,17 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         cm.setPrimaryClip(
                                 android.content.ClipData.newPlainText("message", copyText));
                         toast("Copied");
+                    } else if ("Copy transaction id".equals(choice)) {
+                        // The FULL txid - it exists to be pasted into an explorer.
+                        android.content.ClipboardManager cm =
+                                getSystemService(android.content.ClipboardManager.class);
+                        cm.setPrimaryClip(
+                                android.content.ClipData.newPlainText("txid", txid));
+                        toast("Transaction id copied");
                     } else if ("Save photo".equals(choice)) {
                         saveImage(e.id);
+                    } else if ("Share photo".equals(choice)) {
+                        shareImage(e.id);
                     } else {
                         showMessageInfo(e);
                     }
