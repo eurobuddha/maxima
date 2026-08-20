@@ -258,6 +258,15 @@ public final class MaximaNode {
         return mName;
     }
 
+    /** Our wallet RECEIVE address (Mx...), advertised in the contact handshake's
+     *  {@code minimaaddress} field - exactly where classic peers expect to find
+     *  where to pay us. Empty until the app's wallet reports it. */
+    private volatile String mWalletAddress = "";
+
+    public void setWalletAddress(String zMxAddress) {
+        mWalletAddress = zMxAddress == null ? "" : zMxAddress;
+    }
+
     /**
      * Attach durable storage and load whatever is already there.
      * Call once, before {@link #start}.
@@ -1111,7 +1120,7 @@ public final class MaximaNode {
         String json = ContactCtrl.build(
                 mIdentity.publicKeyHex(),
                 myAddresses(),   // externally-reachable, internal-IP-filtered set
-                mName, mIcon, "", mlsAddress(),
+                mName, mIcon, mWalletAddress, mlsAddress(),
                 mCapabilities, mNodeKind, zIntro);
 
         sendRaw(zPeerAddress, ContactCtrl.APPLICATION,

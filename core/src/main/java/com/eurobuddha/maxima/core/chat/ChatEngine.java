@@ -642,7 +642,21 @@ public final class ChatEngine {
 
     /** The wallet receive address a contact shared, or "" if we have none. */
     public String walletAddress(String zPeer) {
-        return mWalletAddr.getOrDefault(Keys.norm(zPeer), "");
+        String a = mWalletAddr.getOrDefault(Keys.norm(zPeer), "");
+        if (!a.isEmpty()) {
+            return a;
+        }
+        // A CLASSIC contact never sends our TYPE_ADDRESS record - but classic's
+        // own contact handshake carries their wallet address (minimaaddress),
+        // which the contact store already holds. "Mx00" is classic's own
+        // none-placeholder.
+        Contact c = mNode.contact(zPeer);
+        if (c != null && c.isClassic()
+                && c.minimaAddress != null && !c.minimaAddress.isEmpty()
+                && !"Mx00".equals(c.minimaAddress)) {
+            return c.minimaAddress;
+        }
+        return "";
     }
 
     /** Tell a contact our wallet receive address so they can pay us. Silent -

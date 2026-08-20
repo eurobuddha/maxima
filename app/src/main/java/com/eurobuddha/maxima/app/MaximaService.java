@@ -310,6 +310,29 @@ public final class MaximaService extends Service {
                 }
                 Log.i(TAG, "attached to " + attached + " relays: " + node.myAddresses());
 
+                // Advertise our WALLET receive address in the contact handshake
+                // (classic's minimaaddress field) so classic peers know where to
+                // pay us. Key derivation is heavy - own thread, one-shot.
+                {
+                    final MaximaNode wn = node;
+                    Thread wt = new Thread(() -> {
+                        try {
+                            com.eurobuddha.maxima.app.wallet.MaximaWallet w =
+                                    com.eurobuddha.maxima.app.wallet.MaximaWallet
+                                            .open(MaximaService.this);
+                            w.ensureAddress();
+                            String mx = w.mxAddress();
+                            if (mx != null && !mx.isEmpty()) {
+                                wn.setWalletAddress(mx);
+                            }
+                        } catch (Exception e) {
+                            Log.w(TAG, "wallet address advertise: " + e);
+                        }
+                    }, "maxima-walletaddr");
+                    wt.setDaemon(true);
+                    wt.start();
+                }
+
                 // OLD-HOME DRAIN: contacts may fan mail to a PREVIOUS home relay
                 // of ours until their copy of our address heals. Visit each
                 // recent old home briefly - attach (the relay pushes held mail
