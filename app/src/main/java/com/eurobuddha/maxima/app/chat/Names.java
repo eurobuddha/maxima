@@ -1,6 +1,6 @@
 package com.eurobuddha.maxima.app.chat;
 
-import com.eurobuddha.maxima.core.MaximaNode;
+import com.eurobuddha.maxima.core.ChatPort;
 import com.eurobuddha.maxima.core.chat.ChatEngine;
 import com.eurobuddha.maxima.core.chat.Group;
 import com.eurobuddha.maxima.core.contacts.Contact;
@@ -19,7 +19,7 @@ public final class Names {
     }
 
     /** A conversation key is either a group id or a contact's identity key. */
-    public static String of(MaximaNode zNode, ChatEngine zChat, String zConversation) {
+    public static String of(com.eurobuddha.maxima.core.ChatPort zNode, ChatEngine zChat, String zConversation) {
         if (zConversation == null || zConversation.isEmpty()) {
             return "(unknown)";
         }
@@ -33,7 +33,7 @@ public final class Names {
     }
 
     /** A single identity, named if we know them, abbreviated if we do not. */
-    public static String contact(MaximaNode zNode, String zPublicKey) {
+    public static String contact(com.eurobuddha.maxima.core.ChatPort zNode, String zPublicKey) {
         if (zPublicKey == null || zPublicKey.isEmpty()) {
             return "(unknown)";
         }

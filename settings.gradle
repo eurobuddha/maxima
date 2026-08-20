@@ -28,6 +28,10 @@ include ':server'
 // org.minima.maxjar. Never on the same classpath as real Minima.
 include ':maxjar'
 
+// Shared vendored classic base classes (MiniData/Crypto/json/...), used by both
+// the wallet engine in :app and :maxjar. One copy or the dex merge fails.
+include ':minima-common'
+
 // The Android module needs AGP + an Android SDK just to CONFIGURE, which a
 // desktop-installer CI runner may not want. -PskipAndroid=true leaves it out.
 if (!providers.gradleProperty('skipAndroid').isPresent()) {

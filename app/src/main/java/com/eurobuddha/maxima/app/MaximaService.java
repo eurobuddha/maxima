@@ -84,6 +84,26 @@ public final class MaximaService extends Service {
         return sMedia;
     }
 
+    /** The jar engine (classic Maxima extracted whole), when engine_jar is on. */
+    private static volatile com.eurobuddha.maxima.app.jar.JarEngine sJarEngine;
+    private static volatile String sJarWalletMx = "";
+
+    public static com.eurobuddha.maxima.app.jar.JarEngine jar() {
+        return sJarEngine;
+    }
+
+    /** The chat-facing engine, whichever is running. */
+    public static com.eurobuddha.maxima.core.ChatPort port() {
+        com.eurobuddha.maxima.app.jar.JarEngine j = sJarEngine;
+        return j != null ? j : sNode;
+    }
+
+    /** Hidden toggle (no UI): adb intent extra engine_jar on MainActivity. */
+    public static boolean jarMode(android.content.Context zCtx) {
+        return zCtx.getSharedPreferences("maxima_relays", MODE_PRIVATE)
+                .getBoolean("engine_jar", false);
+    }
+
     public static MaximaNode node() {
         return sNode;
     }
@@ -120,6 +140,19 @@ public final class MaximaService extends Service {
         super.onCreate();
         Sha3Provider.install();
         createChannel();
+
+        // THE JAR ENGINE (classic Maxima extracted whole, chain-free). When the
+        // hidden toggle is on, classic routing replaces the reimplementation
+        // wholesale; the chat brain and UI ride ChatPort and don't know.
+        if (jarMode(this)) {
+            try {
+                bootJarEngine();
+            } catch (Exception e) {
+                Log.e(TAG, "jar engine boot failed", e);
+                EventLog.add("JAR ENGINE BOOT FAILED: " + e);
+            }
+            return;
+        }
 
         MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
         sNode = new MaximaNode(id, "1.0.48", RELAY_TARGET);
@@ -251,6 +284,90 @@ public final class MaximaService extends Service {
         Log.i(TAG, "created, identity " + id.mxIdentity().substring(0, 24) + "...");
     }
 
+    /** Boot Parlons on maxima.jar - classic routing under the same chat brain. */
+    private void bootJarEngine() throws Exception {
+        // Classic-scale: a couple of hosts, healed by classic's own loop -
+        // never the whole fleet.
+        java.util.List<String> hosts = new java.util.ArrayList<>();
+        for (String h : RelayStore.get(this)) {
+            hosts.add(h);
+            if (hosts.size() >= 2) {
+                break;
+            }
+        }
+        final com.eurobuddha.maxima.app.jar.JarEngine jar =
+                new com.eurobuddha.maxima.app.jar.JarEngine(
+                        this, SeedStore.displayName(this), hosts);
+        sJarEngine = jar;
+
+        com.eurobuddha.maxima.core.chat.ChatEngine chat =
+                new com.eurobuddha.maxima.core.chat.ChatEngine(jar);
+        chat.setStore(new com.eurobuddha.maxima.core.store.FileStore(
+                new java.io.File(getFilesDir(), "chat")));
+        chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
+        chat.setListener(new com.eurobuddha.maxima.core.chat.ChatEngine.Listener() {
+            public void onMessage(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {
+                if (!e.mine) {
+                    com.eurobuddha.maxima.app.chat.ChatNotifier.onInbound(
+                            MaximaService.this, chat, e, jar);
+                    if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)) {
+                        com.eurobuddha.maxima.app.wallet.WalletLedger.add(
+                                MaximaService.this, false,
+                                com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body),
+                                com.eurobuddha.maxima.core.chat.ChatPay.tokenName(e.body),
+                                com.eurobuddha.maxima.app.chat.Names.contact(jar, e.sender),
+                                com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body));
+                    }
+                }
+                com.eurobuddha.maxima.app.chat.ChatHub.dispatchMessage(e);
+            }
+
+            public void onStateChanged(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {
+                com.eurobuddha.maxima.app.chat.ChatHub.dispatchState(e);
+            }
+
+            public void onGroupChanged(com.eurobuddha.maxima.core.chat.Group g) {
+                com.eurobuddha.maxima.app.chat.ChatHub.dispatchGroup(g);
+            }
+        });
+        sChat = chat;
+        com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
+
+        jar.setInbound((msg, msgid) -> {
+            String app = msg.mApplication.toString();
+            EventLog.add("inbound [" + app + "] " + msg.mData.getLength()
+                    + " bytes from " + shortKey(msg.mFrom.to0xString()));
+            com.eurobuddha.maxima.core.chat.ChatEngine ce = sChat;
+            if (ce != null && ce.onInbound(msg, msgid == null ? "" : msgid)) {
+                return;
+            }
+            com.eurobuddha.maxima.app.ipc.MaximaApiDelivery.deliver(
+                    MaximaService.this, msg,
+                    new com.eurobuddha.maxima.core.codec.MiniData(
+                            msgid == null || msgid.isEmpty() ? "0x00" : msgid));
+        });
+        jar.setContactsChanged(() -> EventLog.add("contacts changed (jar)"));
+
+        // Wallet receive address into classic's contact handshake, then keep it
+        // for the capability probes. Key derivation is heavy - own thread.
+        Thread wt = new Thread(() -> {
+            try {
+                com.eurobuddha.maxima.app.wallet.MaximaWallet w =
+                        com.eurobuddha.maxima.app.wallet.MaximaWallet.open(this);
+                w.ensureAddress();
+                String mx = w.mxAddress();
+                if (mx != null && !mx.isEmpty()) {
+                    jar.setWalletAddress(mx);
+                    sJarWalletMx = mx;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "jar wallet address: " + e);
+            }
+        }, "jar-walletaddr");
+        wt.setDaemon(true);
+        wt.start();
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         try {
@@ -274,6 +391,47 @@ public final class MaximaService extends Service {
 
     private void startPumping() {
         if (!mPumping.compareAndSet(false, true)) {
+            return;
+        }
+        // Jar engine: classic maintains itself (MAXIMA_LOOP, reconnect sweep) -
+        // the pump only drives the chat-brain heartbeat and the capability probe.
+        final com.eurobuddha.maxima.app.jar.JarEngine jarEngine = sJarEngine;
+        if (jarEngine != null) {
+            mPumpThread = new Thread(() -> {
+                while (mPumping.get()) {
+                    try {
+                        com.eurobuddha.maxima.core.chat.ChatEngine chat = sChat;
+                        if (chat != null) {
+                            chat.flushState();
+                            if (mResendBusy.compareAndSet(false, true)) {
+                                Thread rt = new Thread(() -> {
+                                    try {
+                                        chat.resendUndelivered();
+                                    } catch (Exception e) {
+                                        Log.w(TAG, "jar resend: " + e);
+                                    } finally {
+                                        mResendBusy.set(false);
+                                    }
+                                }, "jar-resend");
+                                rt.setDaemon(true);
+                                rt.start();
+                            }
+                            jarEngine.probeContacts(chat, sJarWalletMx);
+                        }
+                        updateNotification("Classic engine · "
+                                + jarEngine.connectedHosts().size() + " host(s)");
+                    } catch (Exception e) {
+                        Log.w(TAG, "jar pump: " + e);
+                    }
+                    try {
+                        Thread.sleep(60_000);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }, "jar-pump");
+            mPumpThread.setDaemon(true);
+            mPumpThread.start();
             return;
         }
         mPumpThread = new Thread(() -> {
@@ -602,6 +760,11 @@ public final class MaximaService extends Service {
         MaximaNode n = sNode;
         if (n != null) {
             n.stop();
+        }
+        com.eurobuddha.maxima.app.jar.JarEngine je = sJarEngine;
+        if (je != null) {
+            je.shutdown();
+            sJarEngine = null;
         }
         // Publish "fully torn down" LAST, after every component above has
         // flushed its state to disk. A restore waits for node()==null before it

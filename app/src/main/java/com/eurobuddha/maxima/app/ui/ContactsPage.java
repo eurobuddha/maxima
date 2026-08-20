@@ -78,7 +78,7 @@ public final class ContactsPage implements Page {
 
     @Override
     public void render() {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             mHostInfo.setText("starting…");
             return;
@@ -323,7 +323,7 @@ public final class ContactsPage implements Page {
                         + "This only removes them from your list.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Remove", (d, w) -> {
-                    MaximaNode n = MaximaService.node();
+                    com.eurobuddha.maxima.core.ChatPort n = MaximaService.port();
                     if (n != null) {
                         n.removeContact(c.publicKey);
                     }
@@ -366,7 +366,7 @@ public final class ContactsPage implements Page {
         body.addView(shareBtn, sbp);
 
         int hosts = 1;
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node != null) {
             hosts = Math.max(1, node.myAddresses().size());
         }
@@ -466,7 +466,7 @@ public final class ContactsPage implements Page {
             mAct.toast("Not a Parlons address");
             return false;
         }
-        final MaximaNode node = MaximaService.node();
+        final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             mAct.toast("Transport not running");
             return false;
@@ -501,7 +501,7 @@ public final class ContactsPage implements Page {
 
     /** Prefer an address whose host is already an IP; else the first one. */
     private String pickShareAddrRaw() {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             return null;
         }
@@ -730,7 +730,7 @@ public final class ContactsPage implements Page {
 
             public void afterTextChanged(Editable e) {
                 mSearchQuery = e.toString();
-                MaximaNode node = MaximaService.node();
+                com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
                 rebuildList(node == null ? new ArrayList<>() : node.contacts());
             }
         });

@@ -12,11 +12,12 @@ java {
 }
 
 dependencies {
+    api project(':minima-common')
     // The Minima Winternitz/crypto stack needs bcprov-jdk15on:1.69 EXACTLY -
     // 1.71+ (all jdk18on) removed the classes. Workspace rule: never upgrade.
     api 'org.bouncycastle:bcprov-jdk15on:1.69'
     // MaximaDB is H2 SQL, two tables, exactly as classic runs it.
-    api 'com.h2database:h2:2.2.224'
+    api 'com.h2database:h2:2.1.214'
 
     testImplementation 'junit:junit:4.13.2'
 }
@@ -27,6 +28,7 @@ jar {
 
 // Self-contained runnable jar for the CLI node / parity gates.
 tasks.register('fatJar', Jar) {
+    dependsOn configurations.runtimeClasspath
     archiveBaseName = 'maxima-all'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {

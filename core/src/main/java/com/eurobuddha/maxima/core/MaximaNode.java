@@ -37,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * foreground service and exact alarms, a server wants a plain loop. Imposing a
  * thread model here would fight both.
  */
-public final class MaximaNode {
+public final class MaximaNode implements ChatPort {
 
     private final MaximaIdentity mIdentity;
     private final String mVersion;
@@ -260,6 +260,12 @@ public final class MaximaNode {
     }
 
     /** Our display name - what contacts (including classic peers) see. */
+    /** ChatPort: my identity public key hex. */
+    @Override
+    public String publicKeyHex() {
+        return mIdentity.publicKeyHex();
+    }
+
     public String name() {
         return mName;
     }

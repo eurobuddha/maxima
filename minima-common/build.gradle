@@ -1,0 +1,17 @@
+// Shared vendored classic Minima classes - the base types, crypto, json and
+// (chain-stripped) params that BOTH the wallet engine in :app and the classic
+// Maxima brain in :maxjar are built from. One copy, one source of truth; the
+// versions here are the ones already proven on Android (the wallet's M0 slice).
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+    // Crypto (SHA2/SHA3) - pinned per the workspace rule; never upgrade.
+    api 'org.bouncycastle:bcprov-jdk15on:1.69'
+}

@@ -80,6 +80,12 @@ public final class MaximaSender {
             return status == Frame.RESPONSE_OK;
         }
 
+        /** Factory for alternative engines (the maxjar adapter) whose sends
+         *  complete outside this class but must speak the same Result. */
+        public static Result of(int zStatus) {
+            return new Result(zStatus, null, 0);
+        }
+
         static String name(int s) {
             switch (s) {
                 case Frame.RESPONSE_FAIL: return "FAIL";

@@ -83,6 +83,18 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
                     android.widget.Toast.LENGTH_LONG).show();
         }
 
+        // DEV-ONLY jar-engine toggle (no UI): Parlons rides maxima.jar -
+        //   am start -n .../.MainActivity --es engine_jar on|off
+        // Force-stop + relaunch afterwards so the service reboots on it.
+        String jarFlag = getIntent().getStringExtra("engine_jar");
+        if (jarFlag != null) {
+            boolean on = "on".equalsIgnoreCase(jarFlag.trim());
+            getSharedPreferences("maxima_relays", MODE_PRIVATE).edit()
+                    .putBoolean("engine_jar", on).apply();
+            android.widget.Toast.makeText(this, "engine_jar = " + (on ? "ON (classic)" : "off"),
+                    android.widget.Toast.LENGTH_LONG).show();
+        }
+
         // targetSdk 35 is edge-to-edge. Extend the dark app bar UP into the
         // status bar (so the header colour fills the top, WhatsApp-style, not a
         // pale strip), and inset the sides + bottom on the shell.

@@ -77,7 +77,7 @@ public final class ChatNotifier {
      * read (the honest "new" set), oldest first, capped so a flood stays sane.
      */
     private static void postConversation(Context zCtx, ChatEngine zChat,
-                                         com.eurobuddha.maxima.core.MaximaNode zNode,
+                                         com.eurobuddha.maxima.core.ChatPort zNode,
                                          String zConversation) {
         NotificationManager nm = zCtx.getSystemService(NotificationManager.class);
         if (nm == null) {
@@ -171,7 +171,7 @@ public final class ChatNotifier {
      * line came from.
      */
     public static void onInbound(Context zCtx, ChatEngine zChat, ChatEngine.Entry zEntry,
-                                 com.eurobuddha.maxima.core.MaximaNode zNode) {
+                                 com.eurobuddha.maxima.core.ChatPort zNode) {
         String conv = zEntry.isGroup() ? zEntry.groupId : zEntry.peer;
         if (zEntry.mine || ChatHub.isForeground(conv)) {
             return;

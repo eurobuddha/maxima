@@ -103,7 +103,7 @@ public final class ChatsPage implements Page {
 
     @Override
     public void render() {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
             mEmpty.setText("Starting the transport…");
@@ -238,7 +238,7 @@ public final class ChatsPage implements Page {
 
     /** Create a group. We are its only admin - see Explain "groups". */
     private void newGroup() {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
             mAct.toast("Transport not running");

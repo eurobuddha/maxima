@@ -236,7 +236,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mSender.whenReady(() -> {
             String my = mSender.myAddress();
             ChatEngine c = MaximaService.chat();
-            MaximaNode node = MaximaService.node();
+            com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
             if (my == null || c == null || node == null) {
                 return;
             }
@@ -393,7 +393,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     /** Send Minima to this contact from inside the chat. */
     private void payContact() {
         final ChatEngine chat = MaximaService.chat();
-        final MaximaNode node = MaximaService.node();
+        final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
             toast("Transport not running");
             return;
@@ -527,7 +527,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
      *  its own button in the bar now, WhatsApp-style. */
     private void attachSheet() {
         ChatEngine chat = MaximaService.chat();
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         boolean canPay = chat != null && node != null
                 && chat.group(mConversation) == null
                 && node.contact(mConversation) != null;
@@ -652,7 +652,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     private void sendPhoto(final android.net.Uri uri, final String caption) {
         final ChatEngine chat = MaximaService.chat();
-        final MaximaNode node = MaximaService.node();
+        final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
             toast("Transport not running");
             return;
@@ -866,7 +866,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     // ---------------------------------------------------------------
 
     private void render() {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
             return;
@@ -878,7 +878,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         Group g = chat.group(mConversation);
         if (g != null) {
             mSubtitle.setText(g.size() + " member(s)"
-                    + (g.isAdmin(node.identity().publicKeyHex()) ? "  ·  you are an admin" : ""));
+                    + (g.isAdmin(node.publicKeyHex()) ? "  ·  you are an admin" : ""));
             mSubtitle.setTextColor(getColor(R.color.ux_subtext));
         } else {
             Contact c = node.contact(mConversation);
@@ -1007,7 +1007,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (text.isEmpty()) {
             return;
         }
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
             toast("Transport not running");
@@ -1039,7 +1039,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     /** Group roster, or the contact's addresses. */
     private void showInfo() {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
             return;
@@ -1075,7 +1075,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 .setPositiveButton("Close", null)
                 .setNegativeButton("What do the ticks mean?", (d, w) ->
                         com.eurobuddha.maxima.app.ui.Explain.show(this, "ticks"));
-        if (g != null && g.isAdmin(node.identity().publicKeyHex())) {
+        if (g != null && g.isAdmin(node.publicKeyHex())) {
             b.setNeutralButton("Edit members", (d, w) -> editMembers(g));
         }
         b.show();
@@ -1083,7 +1083,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     /** Only an admin gets here, and only an admin is obeyed at the other end. */
     private void editMembers(Group zGroup) {
-        MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         List<Contact> contacts = node.contacts();
         String[] labels = new String[contacts.size()];
         boolean[] checked = new boolean[contacts.size()];
@@ -1105,7 +1105,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         }
                     }
                     // We must stay in our own group, and stay its admin.
-                    zGroup.addAdmin(node.identity().publicKeyHex());
+                    zGroup.addAdmin(node.publicKeyHex());
                     new Thread(() -> {
                         try {
                             MaximaService.chat().updateGroup(zGroup);
@@ -1152,7 +1152,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     private void showMessageInfo(ChatEngine.Entry e) {
         StringBuilder sb = new StringBuilder();
-        sb.append(e.mine ? "You" : Names.contact(MaximaService.node(), e.sender)).append('\n');
+        sb.append(e.mine ? "You" : Names.contact(MaximaService.port(), e.sender)).append('\n');
         sb.append(new SimpleDateFormat("d MMM yyyy, HH:mm", Locale.UK)
                 .format(new Date(e.time)));
         if (e.mine) {
@@ -1386,7 +1386,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             // In a group, name the sender once at the top of their run.
             if (!e.mine && e.isGroup() && r.firstInCluster) {
                 h.who.setVisibility(View.VISIBLE);
-                h.who.setText(Names.contact(MaximaService.node(), e.sender));
+                h.who.setText(Names.contact(MaximaService.port(), e.sender));
             } else {
                 h.who.setVisibility(View.GONE);
             }

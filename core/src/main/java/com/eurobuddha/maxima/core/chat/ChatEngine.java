@@ -80,7 +80,7 @@ public final class ChatEngine {
         void onGroupChanged(Group zGroup);
     }
 
-    private final MaximaNode mNode;
+    private final com.eurobuddha.maxima.core.ChatPort mNode;
     private final Map<String, Group> mGroups = new ConcurrentHashMap<>();
     /**
      * Concurrent, not a LinkedHashMap.
@@ -161,7 +161,7 @@ public final class ChatEngine {
      */
     private volatile int mMaxPerConversation = 500;
 
-    public ChatEngine(MaximaNode zNode) {
+    public ChatEngine(com.eurobuddha.maxima.core.ChatPort zNode) {
         mNode = zNode;
     }
 
@@ -623,7 +623,7 @@ public final class ChatEngine {
     public Entry send(Contact zTo, String zBody) {
         String id = newId();
         Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",
-                Keys.norm(mNode.identity().publicKeyHex()), zBody,
+                Keys.norm(mNode.publicKeyHex()), zBody,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
 
@@ -700,7 +700,7 @@ public final class ChatEngine {
             }
             ChatMessage cm = ChatMessage.groupText(e.id, e.groupId, e.body, e.time);
             boolean any = false;
-            for (String m : g.others(mNode.identity().publicKeyHex())) {
+            for (String m : g.others(mNode.publicKeyHex())) {
                 if (e.deliveredBy.contains(Keys.norm(m))) {
                     continue;   // this member already confirmed
                 }
@@ -765,7 +765,7 @@ public final class ChatEngine {
         String id = newId();
         String body = ChatPay.wrap(zAmount, zTokenName, zTxid, zMemo);
         Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",
-                Keys.norm(mNode.identity().publicKeyHex()), body,
+                Keys.norm(mNode.publicKeyHex()), body,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
         return e;
@@ -799,7 +799,7 @@ public final class ChatEngine {
         String id = newId();
         String body = ChatPay.wrap(zAmount, zTokenName, zTxid, zMemo);
         Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",
-                Keys.norm(mNode.identity().publicKeyHex()), body,
+                Keys.norm(mNode.publicKeyHex()), body,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
         ChatMessage cm = ChatMessage.payment(id, zAmount, zTokenId, zTokenName, zMemo, zTxid, e.time);
@@ -819,7 +819,7 @@ public final class ChatEngine {
         if (g == null) {
             throw new IllegalArgumentException("unknown group " + zGroupId);
         }
-        String me = Keys.norm(mNode.identity().publicKeyHex());
+        String me = Keys.norm(mNode.publicKeyHex());
         String id = newId();
         Entry e = new Entry(id, "", zGroupId, me, zBody,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
@@ -839,7 +839,7 @@ public final class ChatEngine {
 
     /** Create a group and push the roster to every member. */
     public Group createGroup(String zName, List<String> zMemberKeys) {
-        String me = mNode.identity().publicKeyHex();
+        String me = mNode.publicKeyHex();
         Group g = new Group(newId());
         g.name = zName;
         g.addAdmin(me);
@@ -855,7 +855,7 @@ public final class ChatEngine {
 
     /** Change membership. Only an admin may, and only an admin is obeyed. */
     public void updateGroup(Group zGroup) {
-        String me = mNode.identity().publicKeyHex();
+        String me = mNode.publicKeyHex();
         if (!zGroup.isAdmin(me)) {
             throw new IllegalStateException("only an admin can change the roster");
         }
@@ -866,7 +866,7 @@ public final class ChatEngine {
     }
 
     private void pushRoster(Group zGroup) {
-        String me = mNode.identity().publicKeyHex();
+        String me = mNode.publicKeyHex();
         ChatMessage roster = ChatMessage.roster(zGroup.id, zGroup.name,
                 new ArrayList<>(zGroup.members()), zGroup.adminsCsv());
         for (String member : zGroup.others(me)) {
@@ -1158,7 +1158,7 @@ public final class ChatEngine {
             // member stand in for a current one who never received it - which
             // would make the second tick a lie, and the second tick is only
             // worth having because it is not.
-            List<String> current = g.others(mNode.identity().publicKeyHex());
+            List<String> current = g.others(mNode.publicKeyHex());
             int confirmed = 0;
             for (String m : current) {
                 if (e.deliveredBy.contains(Keys.norm(m))) {
