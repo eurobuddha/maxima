@@ -35,6 +35,14 @@ public interface ChatPort {
 	/** Send a contact-ctrl introduction (or update) to an address. */
 	void introduce(String zPeerAddress, boolean zIntro) throws Exception;
 
+	/**
+	 * The peer at this key just demonstrably ran Parlons (they spoke our chat
+	 * protocol) - engines that gate features on capability should record it.
+	 * Default no-op so simple ports need not care.
+	 */
+	default void noteCapable(String zPublicKey) {
+	}
+
 	/** Remove a contact (and tell them, classic-style). */
 	boolean removeContact(String zPublicKey);
 

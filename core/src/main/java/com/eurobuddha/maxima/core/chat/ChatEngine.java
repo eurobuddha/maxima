@@ -967,6 +967,12 @@ public final class ChatEngine {
             return false;
         }
         String from = Keys.norm(zMsg.mFrom.to0xString());
+        // Speaking maxima_chat_v1 IS the capability proof - learn it even when
+        // the handshake couldn't carry flags (classic contact-ctrl drops them).
+        try {
+            mNode.noteCapable(from);
+        } catch (Exception ignored) {
+        }
         ChatMessage cm;
         try {
             cm = ChatMessage.decode(

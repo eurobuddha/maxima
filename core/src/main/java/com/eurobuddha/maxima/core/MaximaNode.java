@@ -339,6 +339,23 @@ public final class MaximaNode implements ChatPort {
         }
     }
 
+    /**
+     * A classic-style handshake (e.g. from the classic engine) carries no
+     * capability flags, so a Parlons peer can be mislabelled CLASSIC - which
+     * blocks capability-gated features like voice notes. Inbound chat traffic
+     * is PROOF they run Parlons; upgrade on first sight.
+     */
+    @Override
+    public void noteCapable(String zPublicKey) {
+        Contact c = contact(zPublicKey);
+        if (c != null && c.isClassic()) {
+            c.capabilities = com.eurobuddha.maxima.core.rpc.Capabilities.phoneDefaults();
+            storeContact(c);
+            log("capability learned: " + (c.name == null ? "contact" : c.name)
+                    + " runs Parlons");
+        }
+    }
+
     /** Add or update a contact and persist it. */
     public void storeContact(Contact zContact) {
         mContacts.put(Keys.norm(zContact.publicKey), zContact);
