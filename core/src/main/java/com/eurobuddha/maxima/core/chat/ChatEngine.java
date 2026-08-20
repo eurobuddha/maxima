@@ -535,6 +535,72 @@ public final class ChatEngine {
         return sendGroup(zGroupId, body);
     }
 
+    /**
+     * Turn a MaxSolo inline image (data-URL filedata) into one of OUR media
+     * bodies by republishing the bytes locally. Null when it cannot (no media
+     * service, malformed data-URL) - the caller falls back to a text marker.
+     */
+    private String ingestClassicImage(String zFiledata, String zCaption) {
+        if (mMedia == null || zFiledata == null || !zFiledata.startsWith("data:")) {
+            return null;
+        }
+        try {
+            int comma = zFiledata.indexOf(',');
+            if (comma < 6) {
+                return null;
+            }
+            String meta = zFiledata.substring(5, comma);   // e.g. image/png;base64
+            String mime = meta.split(";")[0].trim();
+            if (mime.isEmpty()) {
+                mime = "image/jpeg";
+            }
+            byte[] bytes = java.util.Base64.getMimeDecoder()
+                    .decode(zFiledata.substring(comma + 1).trim());
+            if (bytes.length == 0) {
+                return null;
+            }
+            return ChatMedia.wrap(mime, publishRef(bytes, mime), zCaption);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Build the MaxSolo inline-image wire for one of OUR media bodies, or null
+     * when it cannot bridge (no media service, blob missing, or over the
+     * {@link ClassicChat#MAX_INLINE_IMAGE_BYTES} inline cap).
+     */
+    private String classicImageWire(String zMediaBody) {
+        if (mMedia == null) {
+            return null;
+        }
+        try {
+            String ref = ChatMedia.ref(zMediaBody);
+            if (ref == null || !ref.startsWith("mx1:")) {
+                return null;
+            }
+            String json = new String(java.util.Base64.getUrlDecoder()
+                    .decode(ref.substring(4)), StandardCharsets.UTF_8);
+            com.eurobuddha.maxima.core.media.MediaManifest mf =
+                    com.eurobuddha.maxima.core.media.MediaManifest.decode(json);
+            byte[] plain = mMedia.fetch(mf);
+            if (plain == null || plain.length == 0
+                    || plain.length > ClassicChat.MAX_INLINE_IMAGE_BYTES) {
+                return null;
+            }
+            String mime = ChatMedia.mime(zMediaBody);
+            if (mime == null || mime.isEmpty()) {
+                mime = "image/jpeg";
+            }
+            String dataUrl = "data:" + mime + ";base64,"
+                    + java.util.Base64.getEncoder().encodeToString(plain);
+            return ClassicChat.buildImage(mNode.name(),
+                    ChatMedia.caption(zMediaBody), dataUrl);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** Publish bytes and return an mx1: ref (RFC4648 url-safe base64 manifest,
      *  matching android.util.Base64 URL_SAFE that the app UI decodes with). */
     private String publishRef(byte[] zBytes, String zMime) throws Exception {
@@ -810,7 +876,16 @@ public final class ChatEngine {
                             + (zMsg.memo.isEmpty() ? "" : " - " + zMsg.memo)
                             + " (txid " + zMsg.txid + ")";
                 } else if (ChatMedia.isMedia(zMsg.body)) {
-                    // A classic peer cannot fetch our blobs - send the caption.
+                    // Try to send the photo INLINE, MaxSolo-style (type:"image",
+                    // base64 data-URL) - classic <-> classic can do images, so
+                    // core <-> classic must too. Oversize falls back to caption.
+                    String wire = classicImageWire(zMsg.body);
+                    if (wire != null) {
+                        MaximaSender.Result ir = mNode.sendToContact(zTo,
+                                ClassicChat.APPLICATION,
+                                wire.getBytes(StandardCharsets.UTF_8));
+                        return ir.isOk();
+                    }
                     String cap = ChatMedia.caption(zMsg.body);
                     body = cap.isEmpty() ? "[photo]" : cap + " [photo]";
                 } else {
@@ -941,11 +1016,22 @@ public final class ChatEngine {
         }
         String type = m.getOrDefault("type", "text");
         String body = m.getOrDefault("message", "");
-        if (body.isEmpty()) {
+        if ("image".equals(type)) {
+            // A MaxSolo inline image: decode the data-URL, republish the bytes
+            // into OUR blob store, and the body becomes a standard media body -
+            // the photo then renders natively like any Parlons photo.
+            String filedata = m.getOrDefault("filedata", "");
+            String mediaBody = ingestClassicImage(filedata, body);
+            if (mediaBody != null) {
+                body = mediaBody;
+            } else {
+                body = body.isEmpty() ? "[image]" : body + " [image]";
+            }
+        } else if (body.isEmpty()) {
             if ("text".equals(type)) {
                 return;
             }
-            body = "[" + type + "]";   // an image/file we cannot fetch classically
+            body = "[" + type + "]";   // a file type we cannot bridge
         }
         long time = zMsg.mTimeMilli.getAsLong();
         String id = (zMsgid == null || zMsgid.isEmpty())

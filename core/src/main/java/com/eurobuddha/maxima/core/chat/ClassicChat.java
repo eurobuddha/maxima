@@ -40,4 +40,19 @@ public final class ClassicChat {
     public static Map<String, String> parse(String zJson) {
         return Json.parse(zJson);
     }
+
+    /** Largest image (plain bytes) we inline for a classic peer. MaxSolo holds
+     *  filedata in a 256K column; base64 inflates by 4/3, so this keeps the
+     *  data-URL safely inside it. */
+    public static final int MAX_INLINE_IMAGE_BYTES = 150_000;
+
+    /** Build a MaxSolo-format inline image ({@code type:"image"}, data-URL). */
+    public static String buildImage(String zUsername, String zCaption, String zDataUrl) {
+        return new Json.Writer()
+                .put("username", zUsername == null ? "noname" : zUsername)
+                .put("type", "image")
+                .put("message", zCaption == null ? "" : zCaption)
+                .put("filedata", zDataUrl == null ? "" : zDataUrl)
+                .done();
+    }
 }
