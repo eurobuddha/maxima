@@ -193,7 +193,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             if (mInput.getText().toString().trim().length() > 0) {
                 send();
             } else {
-                toast("Voice notes are coming soon");
+                // Empty field: the FAB shows a mic - it records a voice note.
+                startVoiceNote();
             }
         });
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> showInfo());
