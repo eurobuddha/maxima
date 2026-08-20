@@ -357,6 +357,13 @@ public final class JarEngine implements ChatPort {
 			try {
 				for (int pass = 0; pass < 2; pass++) {
 					Thread.sleep(pass == 0 ? 30_000 : 90_000);
+					// Never announce hostless - wait (bounded) for adoption.
+					for (int w = 0; w < 30 && connectedHosts().isEmpty(); w++) {
+						Thread.sleep(2_000);
+					}
+					if (connectedHosts().isEmpty()) {
+						continue;
+					}
 					mManager.PostMessage(MaximaManager.MAXIMA_REFRESH);
 					org.minima.utils.messages.Message chk =
 							new org.minima.utils.messages.Message(

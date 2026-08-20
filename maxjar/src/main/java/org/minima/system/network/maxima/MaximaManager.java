@@ -498,6 +498,16 @@ public class MaximaManager extends MessageProcessor {
 		
 		}else if(zMessage.getMessageType().equals(MAXIMA_REFRESH)) {
 			
+			//maxjar MARKED BUGFIX: with ZERO connected hosts the classic
+			//fallback advertises a hostless local address ("Mx...@") which
+			//POISONS every peer's record of us until the next good refresh
+			//(observed live). A refresh with nothing useful to say says
+			//nothing; the next loop (or reconnect) refreshes properly.
+			if(getAllConnectedHosts().size()==0) {
+				MinimaLogger.log("MAXIMA_REFRESH skipped - no connected hosts to advertise");
+				return;
+			}
+			
 			//Update the MLS Servers
 			updateMLSServers();
 			
