@@ -44,6 +44,12 @@ public final class ChatEngine {
         public final boolean mine;
         public volatile String state;
 
+        /** When this message ARRIVED on this device (epoch ms). 0 for our own
+         *  messages and for entries stored before this field existed. The
+         *  send-time lives in {@link #time}; showing both makes a late relay
+         *  delivery visible ("sent 13:56 · arrived 14:02"). */
+        public volatile long arrived;
+
         /** For a group: who has confirmed delivery so far. */
         public final java.util.Set<String> deliveredBy =
                 java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
@@ -247,6 +253,7 @@ public final class ChatEngine {
                 .put("sender", e.sender)
                 .put("body", e.body)
                 .put("time", Long.toString(e.time))
+                .put("arrived", Long.toString(e.arrived))
                 .put("mine", Boolean.toString(e.mine))
                 .put("state", e.state)
                 .put("delivered", String.join(",", e.deliveredBy))
@@ -264,6 +271,10 @@ public final class ChatEngine {
                 parseLong(m.get("time")),
                 Boolean.parseBoolean(m.getOrDefault("mine", "false")),
                 m.getOrDefault("state", Receipt.SENT));
+        try {
+            e.arrived = Long.parseLong(m.getOrDefault("arrived", "0"));
+        } catch (Exception ignored) {
+        }
         for (String d : m.getOrDefault("delivered", "").split(",")) {
             if (!d.trim().isEmpty()) {
                 e.deliveredBy.add(d.trim());
@@ -983,6 +994,7 @@ public final class ChatEngine {
         String body = ChatPay.wrap(zMsg.amount, zMsg.tokenName, zMsg.txid, zMsg.memo);
         Entry e = new Entry(zMsg.id, zFrom, "", zFrom, body,
                 inboundTime(zMsg), false, Receipt.DELIVERED);
+        e.arrived = System.currentTimeMillis();
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
@@ -1039,6 +1051,7 @@ public final class ChatEngine {
                 : zMsgid;
         Entry e = new Entry(id, from, "", from, body,
                 time > 0 ? time : System.currentTimeMillis(), false, Receipt.DELIVERED);
+        e.arrived = System.currentTimeMillis();
         if (record(e)) {
             fire(e);
         }
@@ -1047,6 +1060,7 @@ public final class ChatEngine {
     private void handleText(String zFrom, ChatMessage zMsg) {
         Entry e = new Entry(zMsg.id, zFrom, "", zFrom, zMsg.body,
                 inboundTime(zMsg), false, Receipt.DELIVERED);
+        e.arrived = System.currentTimeMillis();
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
@@ -1066,6 +1080,7 @@ public final class ChatEngine {
         }
         Entry e = new Entry(zMsg.id, "", zMsg.groupId, zFrom, zMsg.body,
                 inboundTime(zMsg), false, Receipt.DELIVERED);
+        e.arrived = System.currentTimeMillis();
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);

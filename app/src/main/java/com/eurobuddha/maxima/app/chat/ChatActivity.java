@@ -1413,7 +1413,17 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.meta.setText(stamp + "  " + ticks(e.state));
                 h.meta.setTextColor(pay ? payMetaColour() : sentMetaColour(e.state));
             } else {
-                h.meta.setText(stamp);
+                // A message that took its time shows BOTH clocks - the sender's
+                // send time (what the thread sorts by) and when it actually
+                // reached this device. Same-minute deliveries stay a single
+                // stamp; the second clock appears only when it tells you
+                // something ("sent 13:56 · arrived 14:02").
+                if (e.arrived > 0 && e.arrived - e.time >= 60_000) {
+                    h.meta.setText("sent " + stamp
+                            + " · arrived " + mTime.format(new Date(e.arrived)));
+                } else {
+                    h.meta.setText(stamp);
+                }
                 // On the accent payment card, grey is unreadable - use its ink.
                 h.meta.setTextColor(pay ? payMetaColour() : getColor(R.color.ux_subtext));
             }
