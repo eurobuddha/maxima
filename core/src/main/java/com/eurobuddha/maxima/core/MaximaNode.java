@@ -389,7 +389,8 @@ public final class MaximaNode implements ChatPort {
         return out;
     }
 
-    static String contactToJson(Contact c) {
+    /** Public: engine-flip sync writes jar contacts into this book's format. */
+    public static String contactToJson(Contact c) {
         return new Json.Writer()
                 .put("publickey", c.publicKey)
                 .put("name", c.name)

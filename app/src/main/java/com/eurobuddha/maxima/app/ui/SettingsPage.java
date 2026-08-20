@@ -158,9 +158,21 @@ public final class SettingsPage implements Page {
                 jarOn ? "Routing runs on classic Maxima (maxima.jar)"
                         : "Routing runs on the built-in engine - flip for classic Maxima",
                 jarOn, checked -> {
+                    if (!checked) {
+                        // Leaving classic: carry its book across BEFORE the
+                        // restart, or contacts added on the jar vanish.
+                        com.eurobuddha.maxima.app.jar.JarEngine j = MaximaService.jar();
+                        if (j != null) {
+                            int x = com.eurobuddha.maxima.app.jar.JarMigration
+                                    .exportContacts(mAct, j);
+                            EventLog.add("engine sync: " + x
+                                    + " contact(s) carried to the built-in book");
+                        }
+                    }
                     mAct.getSharedPreferences("maxima_relays",
                             android.content.Context.MODE_PRIVATE)
-                            .edit().putBoolean("engine_jar", checked).apply();
+                            .edit().putBoolean("engine_jar", checked)
+                            .putBoolean("engine_flip_announce", checked).apply();
                     EventLog.add("engine switch: "
                             + (checked ? "classic (jar)" : "built-in") + " - restarting");
                     android.widget.Toast.makeText(mAct,

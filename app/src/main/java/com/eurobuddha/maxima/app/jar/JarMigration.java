@@ -74,6 +74,33 @@ public final class JarMigration {
 	}
 
 	/** Move any pre-migration jar world aside (archived, not deleted). */
+	/**
+	 * The reverse of {@link #seedContacts}: write the jar's CURRENT contact
+	 * book into the built-in engine's store, so flipping engines never loses
+	 * a contact added (or re-added) while classic was running. Merge by
+	 * public key - the jar's record wins because its address is fresher.
+	 *
+	 * @return how many contacts were written across
+	 */
+	public static int exportContacts(Context zCtx, JarEngine zJar) {
+		int n = 0;
+		try {
+			FileStore store = new FileStore(new File(zCtx.getFilesDir(), "node"));
+			for (Contact c : zJar.contacts()) {
+				if (c.publicKey == null || c.publicKey.isEmpty()) {
+					continue;
+				}
+				store.put("contacts",
+						com.eurobuddha.maxima.core.identity.Keys.norm(c.publicKey),
+						MaximaNode.contactToJson(c));
+				n++;
+			}
+		} catch (Exception e) {
+			EventLog.add("engine sync: export failed: " + e);
+		}
+		return n;
+	}
+
 	public static void archiveOldJarData(Context zCtx) {
 		File data = new File(zCtx.getFilesDir(), "maxjar");
 		if (data.exists()) {

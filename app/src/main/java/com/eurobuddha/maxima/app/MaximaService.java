@@ -311,8 +311,23 @@ public final class MaximaService extends Service {
                                 .seedIdentity(this) : null);
         sJarEngine = jar;
         if (migrate) {
-            com.eurobuddha.maxima.app.jar.JarMigration.seedContacts(this, jar);
             com.eurobuddha.maxima.app.jar.JarMigration.markDone(this);
+        }
+        // EVERY boot, not just first migration: contacts added while the
+        // built-in engine ran live only in its book - merge them in
+        // (idempotent: known public keys are skipped).
+        int merged = com.eurobuddha.maxima.app.jar.JarMigration.seedContacts(this, jar);
+        if (merged > 0) {
+            EventLog.add("engine sync: merged " + merged
+                    + " contact(s) from the built-in book");
+        }
+        // One-shot after a Settings engine flip: push our address + force-pull
+        // everyone's current one, same heal as post-migration.
+        android.content.SharedPreferences flip =
+                getSharedPreferences("maxima_relays", MODE_PRIVATE);
+        if (flip.getBoolean("engine_flip_announce", false)) {
+            flip.edit().remove("engine_flip_announce").apply();
+            jar.announceContactsSoon();
         }
         // Post-migration heal window: push our new address AND force-pull
         // everyone's current one. Re-armed on every boot for 24h after
