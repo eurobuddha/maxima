@@ -166,6 +166,19 @@ public final class JarEngine implements ChatPort {
 				m.mApplication = new com.eurobuddha.maxima.core.codec.MiniString(app);
 				m.mData = new com.eurobuddha.maxima.core.codec.MiniData(
 						String.valueOf(zJson.get("data")));
+				// EVERY field, not just the ones the happy path reads - the
+				// maxsolo handler stamps arrival time from mTimeMilli, and a
+				// null here silently ate every inbound message.
+				long timemilli;
+				try {
+					timemilli = Long.parseLong(String.valueOf(zJson.get("timemilli")));
+				} catch (Exception nfe) {
+					timemilli = System.currentTimeMillis();
+				}
+				m.mTimeMilli = new com.eurobuddha.maxima.core.codec.MiniNumber(timemilli);
+				String rand = String.valueOf(zJson.get("random"));
+				m.mRandom = new com.eurobuddha.maxima.core.codec.MiniData(
+						rand != null && rand.startsWith("0x") ? rand : "0x00");
 				in.onMessage(m, String.valueOf(zJson.get("msgid")));
 			} catch (Exception e) {
 				EventLog.add("jar inbound map: " + e);
