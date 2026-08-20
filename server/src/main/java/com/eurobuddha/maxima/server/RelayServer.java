@@ -152,6 +152,16 @@ public final class RelayServer {
 
     private final AtomicLong mConnSeq = new AtomicLong();
     private final AtomicLong mRelayed = new AtomicLong();
+
+    /** Units that arrived WITHOUT the protocol's minimum proof-of-work. */
+    private volatile long mPowFails = 0;
+
+    /** Enforce the PoW floor (reject) vs log-only. Default LOG-ONLY so the
+     *  fleet can measure old-client traffic before flipping. */
+    private static final boolean POW_ENFORCE =
+            Boolean.parseBoolean(System.getProperty("maxima.pow.enforce",
+                    String.valueOf("true".equalsIgnoreCase(
+                            System.getenv("MAXIMA_POW_ENFORCE")))));
     private final AtomicLong mDropped = new AtomicLong();
     private final AtomicLong mStored = new AtomicLong();
     private final AtomicLong mKeepalives = new AtomicLong();
@@ -269,6 +279,11 @@ public final class RelayServer {
 
     public long droppedCount() {
         return mDropped.get();
+    }
+
+    /** Units that arrived without the protocol's minimum proof-of-work. */
+    public long powFailCount() {
+        return mPowFails;
     }
 
     public long storedCount() {
@@ -523,6 +538,22 @@ public final class RelayServer {
         if (!unit.checkValidTxPoW()) {
             zConn.write(Frame.ack(Frame.RESPONSE_WRONGHASH));
             return;
+        }
+
+        // PROOF OF WORK - Maxima's spam control (confirmed by the reference
+        // author: un-worked units are rejected on the relay path; classic
+        // senders always mine ~10k hashes). Enforcement is flag-gated so the
+        // fleet can run LOG-ONLY while older clients update, then flip:
+        //   -Dmaxima.pow.enforce=true  (or env MAXIMA_POW_ENFORCE=true)
+        if (!unit.mTxPoW.meetsMinWork()) {
+            mPowFails++;
+            log("NO-POW maxima unit from " + zConn.sourceIp
+                    + " (total " + mPowFails + ")"
+                    + (POW_ENFORCE ? " - REJECTED" : " - log-only, passed"));
+            if (POW_ENFORCE) {
+                zConn.write(Frame.ack(Frame.RESPONSE_WRONGHASH));
+                return;
+            }
         }
 
         MaximaPackage pkg = unit.mMaxima;
