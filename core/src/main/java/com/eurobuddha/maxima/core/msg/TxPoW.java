@@ -155,6 +155,16 @@ public final class TxPoW implements Streamable {
     public static final java.math.BigInteger MIN_TXPOW_VAL =
             MAX_VAL.divide(java.math.BigInteger.valueOf(MIN_HASHES));
 
+    /**
+     * What we MINE to: 10% past the floor, exactly like classic's
+     * createMaxTxPoW ("Add 10%.. to give yourself some space", ÷1.1). A stock
+     * host comparing against the LIVE chain Magic then accepts us even at the
+     * boundary. meetsMinWork() still checks the FLOOR - the enforcement bar.
+     */
+    public static final java.math.BigInteger MINE_TARGET =
+            MIN_TXPOW_VAL.multiply(java.math.BigInteger.valueOf(10))
+                    .divide(java.math.BigInteger.valueOf(11));
+
     /** Classic MaxTxPoW.mMaxTimeMilli - the mining time budget. */
     public static final long MINE_BUDGET_MS = 15_000;
 
@@ -189,7 +199,8 @@ public final class TxPoW implements Streamable {
         while (System.currentTimeMillis() < deadline) {
             for (int i = 0; i < 512; i++) {   // check the clock every 512 hashes
                 mHeader.mNonce = new MiniNumber(nonce++);
-                if (meetsMinWork()) {
+                if (new java.math.BigInteger(1, txPowId().getBytes())
+                        .compareTo(MINE_TARGET) <= 0) {
                     return true;
                 }
             }
