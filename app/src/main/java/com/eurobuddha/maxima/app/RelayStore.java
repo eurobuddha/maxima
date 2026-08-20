@@ -60,7 +60,32 @@ public final class RelayStore {
      * shadow the shipped fleet and strand the device with nothing live to seed
      * discovery from. User additions follow, deduped.
      */
+    /**
+     * CLASSIC-ONLY EXPERIMENT SWITCH (dev-only, no UI): when the pref
+     * "classic_only_hosts" holds a non-empty comma-separated host list, the
+     * fleet floor is dropped and ONLY those hosts are used - to demonstrate
+     * Parlons running on pure stock-Minima infrastructure. Set/cleared via
+     * adb: the pref lives in maxima_relays. Release users never touch it;
+     * the DEFAULTS floor is otherwise mandatory.
+     */
+    public static List<String> classicOnly(Context zCtx) {
+        String s = prefs(zCtx).getString("classic_only_hosts", "");
+        List<String> out = new ArrayList<>();
+        if (s != null && !s.trim().isEmpty()) {
+            for (String h : s.split(",")) {
+                if (!h.trim().isEmpty()) {
+                    out.add(h.trim());
+                }
+            }
+        }
+        return out;
+    }
+
     public static List<String> get(Context zCtx) {
+        List<String> classic = classicOnly(zCtx);
+        if (!classic.isEmpty()) {
+            return classic;
+        }
         Set<String> merged = new LinkedHashSet<>(DEFAULTS);
         Set<String> persisted = prefs(zCtx).getStringSet(KEY, null);
         if (persisted != null) {

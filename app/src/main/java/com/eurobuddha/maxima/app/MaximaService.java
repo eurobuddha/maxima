@@ -288,10 +288,15 @@ public final class MaximaService extends Service {
                 // Seed candidates from the trusted floor + the swarm we remember
                 // from last time; gossip grows this at runtime. The pool scores
                 // and picks the best RELAY_TARGET; dead entries just age out.
+                boolean classicOnly = !RelayStore.classicOnly(MaximaService.this).isEmpty();
                 java.util.LinkedHashSet<String> seed =
                         new java.util.LinkedHashSet<>(RelayStore.get(MaximaService.this));
                 SwarmStore.prune(MaximaService.this);
-                seed.addAll(SwarmStore.recent(MaximaService.this));
+                if (!classicOnly) {
+                    seed.addAll(SwarmStore.recent(MaximaService.this));
+                } else {
+                    EventLog.add("CLASSIC-ONLY MODE: " + seed.size() + " stock host(s), no fleet");
+                }
                 List<String> relays = new ArrayList<>(seed);
                 EventLog.add("attaching to " + relays.size() + " candidate relay(s)");
                 int attached = node.start(relays, 30000);
@@ -337,7 +342,7 @@ public final class MaximaService extends Service {
                 // of ours until their copy of our address heals. Visit each
                 // recent old home briefly - attach (the relay pushes held mail
                 // down on route-register, the reader ingests it), then detach.
-                {
+                if (!classicOnly) {
                     java.util.List<String> current = node.pool().activeHosts();
                     java.util.List<String> visits = new java.util.ArrayList<>();
                     for (String h : HomeStore.recent(MaximaService.this)) {
@@ -464,7 +469,7 @@ public final class MaximaService extends Service {
                         // bootstrap relays (up to 5s each) - blocking those on the
                         // pump thread would stall message delivery. The busy-flag
                         // stops a slow round from piling up behind the 60s heartbeat.
-                        if (sGossip != null && mGossipBusy.compareAndSet(false, true)) {
+                        if (!classicOnly && sGossip != null && mGossipBusy.compareAndSet(false, true)) {
                             final MaximaNode gnode = node;
                             Thread gt = new Thread(() -> {
                                 try {

@@ -68,6 +68,21 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // DEV-ONLY classic-only experiment hook (no UI): set/clear via adb -
+        //   am start -n .../.MainActivity --es classic_only_hosts "h1:9001,h2:9001"
+        //   am start -n .../.MainActivity --es classic_only_hosts clear
+        // Force-stop + relaunch afterwards so the service reseeds.
+        String classicHosts = getIntent().getStringExtra("classic_only_hosts");
+        if (classicHosts != null) {
+            getSharedPreferences("maxima_relays", MODE_PRIVATE).edit()
+                    .putString("classic_only_hosts",
+                            "clear".equalsIgnoreCase(classicHosts.trim()) ? "" : classicHosts.trim())
+                    .apply();
+            android.widget.Toast.makeText(this, "classic_only_hosts = "
+                    + ("clear".equalsIgnoreCase(classicHosts.trim()) ? "(cleared)" : classicHosts),
+                    android.widget.Toast.LENGTH_LONG).show();
+        }
+
         // targetSdk 35 is edge-to-edge. Extend the dark app bar UP into the
         // status bar (so the header colour fills the top, WhatsApp-style, not a
         // pale strip), and inset the sides + bottom on the shell.
