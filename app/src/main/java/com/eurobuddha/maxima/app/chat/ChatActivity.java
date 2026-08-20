@@ -667,6 +667,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         new Thread(() -> {
             try {
                 byte[] jpeg = readScaledJpeg(uri, 1400);
+                if (g == null && c != null && c.isClassic()) {
+                    // A classic peer gets the image INLINE on the maxsolo wire,
+                    // capped - shrink until it fits rather than degrading to a
+                    // "Photo" text summary they can't see.
+                    jpeg = fitClassicInline(jpeg);
+                }
                 if (g != null) {
                     chat.sendGroupMedia(g.id, jpeg, "image/jpeg", caption);
                 } else {
@@ -677,6 +683,37 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
             runOnUiThread(this::render);
         }, "chat-media").start();
+    }
+
+    /** Shrink a JPEG until it fits the classic inline cap
+     *  ({@link com.eurobuddha.maxima.core.chat.ClassicChat#MAX_INLINE_IMAGE_BYTES}):
+     *  first bound the long edge to 900px, then step quality down. Returns the
+     *  original on any decode failure - the send then falls back as before. */
+    private static byte[] fitClassicInline(byte[] zJpeg) {
+        final int cap = com.eurobuddha.maxima.core.chat.ClassicChat.MAX_INLINE_IMAGE_BYTES
+                - 10_000;   // headroom for the JSON wrapper
+        byte[] out = zJpeg;
+        int quality = 72;
+        while (out.length > cap && quality >= 30) {
+            android.graphics.Bitmap b =
+                    android.graphics.BitmapFactory.decodeByteArray(out, 0, out.length);
+            if (b == null) {
+                return zJpeg;
+            }
+            int w = b.getWidth();
+            int h = b.getHeight();
+            int big = Math.max(w, h);
+            if (big > 900) {
+                float s = 900f / big;
+                b = android.graphics.Bitmap.createScaledBitmap(
+                        b, Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s)), true);
+            }
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            b.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, bos);
+            out = bos.toByteArray();
+            quality -= 12;
+        }
+        return out;
     }
 
     /** Decode + downscale + re-encode a picked image to a modest JPEG. */
