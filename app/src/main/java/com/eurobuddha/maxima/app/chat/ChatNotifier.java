@@ -36,7 +36,7 @@ import java.util.Map;
  */
 public final class ChatNotifier {
 
-    public static final String CHANNEL_ID = "maxima_chat_v2";
+    public static final String CHANNEL_ID = "maxima_chat_v3";
 
     /**
      * Notification ids must be ints, conversation keys are hex strings. The
@@ -65,11 +65,12 @@ public final class ChatNotifier {
         ch.enableVibration(true);
         ch.setShowBadge(true);
         // The Parlons "pssssst!" - channel sound settings are immutable after
-        // creation, hence the _v2 channel id; the old channel is removed so
-        // Settings shows one Messages entry, not two.
+        // creation, hence the versioned channel id; superseded channels are
+        // removed so Settings shows one Messages entry, not several. The URI
+        // is NAME-based (raw/pssst): a numeric resource id is only stable
+        // within one build, and the channel keeps the URI forever.
         ch.setSound(android.net.Uri.parse("android.resource://"
-                        + zCtx.getPackageName() + "/"
-                        + com.eurobuddha.maxima.app.R.raw.pssst),
+                        + zCtx.getPackageName() + "/raw/pssst"),
                 new android.media.AudioAttributes.Builder()
                         .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
                         .setContentType(
@@ -78,6 +79,7 @@ public final class ChatNotifier {
         nm.createNotificationChannel(ch);
         try {
             nm.deleteNotificationChannel("maxima_chat");
+            nm.deleteNotificationChannel("maxima_chat_v2");
         } catch (Exception ignored) {
         }
     }
