@@ -221,6 +221,7 @@ public final class MaximaService extends Service {
         });
         sChat = chat;
         com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
+        com.eurobuddha.maxima.app.chat.Pssst.ensureAudible(this);
 
         // Surface inbound chat so the UI has something to show. Anything that
         // is not ours is logged too - silence is the enemy of debugging on a
@@ -359,6 +360,7 @@ public final class MaximaService extends Service {
         });
         sChat = chat;
         com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
+        com.eurobuddha.maxima.app.chat.Pssst.ensureAudible(this);
 
         jar.setInbound((msg, msgid) -> {
             String app = msg.mApplication.toString();

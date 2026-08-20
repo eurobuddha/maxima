@@ -167,8 +167,11 @@ public final class ChatNotifier {
         PendingIntent pi = PendingIntent.getActivity(zCtx, idFor(zConversation), open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        String channel = com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx)
-                ? CHANNEL_ID : CHANNEL_ID_MUTED;
+        boolean sound = com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx);
+        if (sound) {
+            Pssst.ensureAudible(zCtx);
+        }
+        String channel = sound ? CHANNEL_ID : CHANNEL_ID_MUTED;
         NotificationCompat.Builder b = new NotificationCompat.Builder(zCtx, channel)
                 .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setStyle(style)
@@ -214,6 +217,7 @@ public final class ChatNotifier {
             // No notification while you are looking at the conversation -
             // just the soft in-app pssst (if the toggle allows it).
             if (com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx)) {
+                Pssst.ensureAudible(zCtx);
                 Pssst.play(zCtx);
             }
             return;
