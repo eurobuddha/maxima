@@ -75,3 +75,30 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }
+
+// Every release APK lands in dist/ automatically - the sharing folder.
+// (Standing rule; SHA256SUMS gets the matching line, duplicates skipped.)
+tasks.register('publishToDist') {
+    doLast {
+        def ver = android.defaultConfig.versionName
+        def apk = file("build/outputs/apk/release/app-release.apk")
+        if (!apk.exists()) {
+            return
+        }
+        def out = rootProject.file("dist/maxima-app-${ver}-release.apk")
+        out.bytes = apk.bytes
+        def md = java.security.MessageDigest.getInstance("SHA-256")
+        def sha = md.digest(apk.bytes).collect { String.format("%02x", it) }.join()
+        def sums = rootProject.file("dist/SHA256SUMS")
+        def line = "${sha}  dist/maxima-app-${ver}-release.apk"
+        if (!sums.exists() || !sums.text.contains(line)) {
+            sums.append(line + "\n")
+        }
+        println "dist <- maxima-app-${ver}-release.apk (${sha})"
+    }
+}
+afterEvaluate {
+    tasks.matching { it.name == 'assembleRelease' }.configureEach {
+        finalizedBy 'publishToDist'
+    }
+}
