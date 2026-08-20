@@ -168,6 +168,8 @@ public class SocketTransport implements MaximaTransport {
 						peer.write(body(MSG_PING, MaximaManager.MAXIMA_WRONGHASH));
 						continue;
 					}
+					MinimaLogger.log("LAN direct: inbound unit from "
+							+ zSock.getInetAddress().getHostAddress());
 					Message msg = new Message(MaximaManager.MAXIMA_RECMESSAGE);
 					msg.addObject("maxtxpow", mx);
 					msg.addObject("nioclient", peer.nioc);

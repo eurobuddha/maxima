@@ -489,6 +489,8 @@ public final class JarEngine implements ChatPort {
 						MiniData lresp = MaxMsgHandler.sendMaxPacket(
 								lsend.getString("tohost"), lsend.getInteger("toport"), lwire);
 						if (lresp.isEqual(MaximaManager.MAXIMA_RESPONSE_OK)) {
+							EventLog.add("LAN direct: delivered to "
+									+ zContact.name + " at " + lan);
 							return MaximaSender.Result.of(1);
 						}
 					}
