@@ -64,12 +64,14 @@ public final class SettingsPage implements Page {
     @Override
     public void render() {
         MaximaNode node = MaximaService.node();
-        mKeyValue.setText(node == null ? "…" : node.identity().publicKeyHex());
+        // Either engine answers this - the jar's identity key shows the same way.
+        com.eurobuddha.maxima.core.ChatPort port = MaximaService.port();
+        mKeyValue.setText(port == null ? "…" : port.publicKeyHex());
 
         // The 2s heartbeat calls this repeatedly. Only the key field above is
         // cheap to refresh every tick; the sections below removeAllViews() +
         // rebuild, so skip that churn unless their inputs actually changed.
-        String heavySig = (node == null ? "-" : node.identity().publicKeyHex())
+        String heavySig = (port == null ? "-" : port.publicKeyHex())
                 + "|" + ChatPrefs.readReceipts(mAct)
                 + "|" + com.eurobuddha.maxima.app.AppLock.isEnabled(mAct)
                 + "|" + com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)
