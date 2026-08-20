@@ -58,6 +58,7 @@ public final class MaximaService extends Service {
     private final AtomicBoolean mPumping = new AtomicBoolean(false);
     private Thread mPumpThread;
     private ConnectivityManager.NetworkCallback mNetCallback;
+    private static volatile long sLanRestartAt;
 
     private static volatile com.eurobuddha.maxima.core.media.MediaService sMedia;
 
@@ -151,6 +152,7 @@ public final class MaximaService extends Service {
                 Log.e(TAG, "jar engine boot failed", e);
                 EventLog.add("JAR ENGINE BOOT FAILED: " + e);
             }
+            registerNetworkCallback();
             return;
         }
 
@@ -766,6 +768,28 @@ public final class MaximaService extends Service {
                     MaximaNode n = sNode;
                     if (n != null) {
                         new Thread(() -> n.maintain(20000), "maxima-renet").start();
+                    }
+                    // Jar mode: LAN records from the previous network are dead,
+                    // and NSD keeps advertising the old registration - clear and
+                    // re-register on the network we actually have. Debounced:
+                    // wifi+cellular coming up together fire this back to back.
+                    final com.eurobuddha.maxima.app.jar.JarEngine j = sJarEngine;
+                    final com.eurobuddha.maxima.app.direct.LanDiscovery lan = sLan;
+                    if (j != null && lan != null) {
+                        long now = System.currentTimeMillis();
+                        if (now - sLanRestartAt > 10_000) {
+                            sLanRestartAt = now;
+                            new Thread(() -> {
+                                try {
+                                    j.clearLanPeers();
+                                    lan.stop();
+                                    lan.start(j.lanPort());
+                                    EventLog.add("network changed - LAN discovery re-registered");
+                                } catch (Exception e) {
+                                    Log.w(TAG, "LAN re-register: " + e);
+                                }
+                            }, "jar-lan-renet").start();
+                        }
                     }
                     // A changed network means our mapped port is almost
                     // certainly dead; drop it before advertising a stale route.

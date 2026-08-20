@@ -497,6 +497,8 @@ public final class JarEngine implements ChatPort {
 				} catch (Exception fallthrough) {
 					// routed path below
 				}
+				EventLog.add("LAN path to " + zContact.name
+						+ " failed - falling back to routed");
 				forgetLanPeer(zContact.publicKey);
 			}
 		}
@@ -508,11 +510,19 @@ public final class JarEngine implements ChatPort {
 				mc.getCurrentAddress(), zApplication, new MiniData(zData));
 		MiniData wire = MaxMsgHandler.constructMaximaData(send);
 		if (wire == null) {
+			EventLog.add("send to " + zContact.name + " failed: could not mine in time");
 			throw new IllegalStateException("could not mine message in time");
 		}
 		String host = send.getString("tohost");
 		int port = send.getInteger("toport");
-		MiniData resp = MaxMsgHandler.sendMaxPacket(host, port, wire);
+		MiniData resp;
+		try {
+			resp = MaxMsgHandler.sendMaxPacket(host, port, wire);
+		} catch (Exception e) {
+			EventLog.add("send to " + zContact.name + " at " + host + ":" + port
+					+ " threw: " + e);
+			throw e;
+		}
 
 		int status;
 		if (resp.isEqual(MaximaManager.MAXIMA_RESPONSE_OK)) {
@@ -525,6 +535,16 @@ public final class JarEngine implements ChatPort {
 			status = 4;
 		} else {
 			status = 0;
+		}
+		if (status != 1) {
+			// The blind window that hid the 22:11 red-cross episode: every
+			// non-OK outcome now names the address and the classic response.
+			String why = status == 2 ? "UNKNOWN (host has no route to them)"
+					: status == 3 ? "TOOBIG"
+					: status == 4 ? "WRONGHASH"
+					: "no/invalid response";
+			EventLog.add("send to " + zContact.name + " at " + host + ":" + port
+					+ " failed: " + why);
 		}
 		return MaximaSender.Result.of(status);
 	}
@@ -589,6 +609,15 @@ public final class JarEngine implements ChatPort {
 	public int startLan() {
 		mTransport.startLanListener();
 		return mTransport.lanPort();
+	}
+
+	public int lanPort() {
+		return mTransport.lanPort();
+	}
+
+	/** A network change makes every LAN record from the old network a lie. */
+	public void clearLanPeers() {
+		mLanPeers.clear();
 	}
 
 	public String fingerprint() {
