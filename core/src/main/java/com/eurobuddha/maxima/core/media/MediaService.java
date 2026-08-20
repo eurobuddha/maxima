@@ -58,6 +58,9 @@ public final class MediaService {
     private final MaximaNode mNode;
     private final BlobStore mLocal;
 
+    /** @param zNode the routing engine for replicas/remote fetch, or NULL for
+     *  LOCAL-ONLY mode (the jar engine): media is stored and served from the
+     *  local BlobStore, and classic peers get it inline - no relay shelf. */
     public MediaService(MaximaNode zNode, BlobStore zLocalStore) {
         mNode = zNode;
         mLocal = zLocalStore;
@@ -99,7 +102,8 @@ public final class MediaService {
         // 3. sources: our DIRECTLY-dialable addresses first (public + LAN — the
         //    only places our own phone can serve these chunks, via DirectEndpoint),
         //    then the relay replicas. A same-LAN viewer pulls straight from us.
-        List<String> sources = new ArrayList<>(mNode.directAddresses());
+        List<String> sources = mNode == null ? new ArrayList<>()
+                : new ArrayList<>(mNode.directAddresses());
         sources.addAll(usedRelays);
 
         return new MediaManifest(enc.manifest.mime, enc.manifest.size,
@@ -202,7 +206,11 @@ public final class MediaService {
                 return b;
             }
         }
-        // the manifest's sources, in order (owner-direct first, then replicas)
+        // the manifest's sources, in order (owner-direct first, then replicas).
+        // Local-only mode has no wire to fetch over - local hit or nothing.
+        if (mNode == null) {
+            return null;
+        }
         for (String src : zSources) {
             byte[] b = MediaWire.get(mNode, src, zChunkId);
             if (b != null) {
@@ -232,6 +240,9 @@ public final class MediaService {
 
     private List<String> attachedRelayAddresses() {
         List<String> out = new ArrayList<>();
+        if (mNode == null) {
+            return out;
+        }
         for (String hp : mNode.pool().activeHosts()) {
             com.eurobuddha.maxima.core.net.HostConnection c = mNode.pool().connection(hp);
             if (c != null && c.getTheirMlsAddress() != null) {

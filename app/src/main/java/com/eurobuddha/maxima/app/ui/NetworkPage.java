@@ -92,12 +92,19 @@ public final class NetworkPage implements Page {
         MaximaNode node = MaximaService.node();
         com.eurobuddha.maxima.app.jar.JarEngine jarEngine = MaximaService.jar();
         if (node == null && jarEngine != null) {
-            // Classic engine: classic maintains the hosts itself; the hero just
-            // reflects its live connection set.
-            int jhosts = jarEngine.connectedHosts().size();
+            // Classic engine: classic maintains the hosts itself; the hero
+            // reflects its live connection set, and the host list shows
+            // connected + configured exactly like the old engine's.
+            List<String> jactive = jarEngine.connectedHosts();
+            int jhosts = jactive.size();
             mNodeSub.setText(jhosts + (jhosts == 1 ? " host" : " hosts")
                     + " · classic engine");
             setPill(jhosts > 0 ? "Reachable" : "Offline", jhosts > 0 ? Kit.OK : Kit.BAD);
+            String jarSig = "jar|" + jactive + "|" + RelayStore.get(mAct);
+            if (!jarSig.equals(mLastNetSig)) {
+                mLastNetSig = jarSig;
+                renderHostList(jactive);
+            }
             return;
         }
         if (node == null) {
@@ -163,7 +170,7 @@ public final class NetworkPage implements Page {
                 String.valueOf(node.services().methods().size()), 0, "services");
 
         // ---- hosts ----
-        renderHostList(node);
+        renderHostList(node.pool().activeHosts());
 
         // ---- help the network (one switch, automatic tiers, suggest the fix) ----
         AndroidContribution pol = MaximaService.policy();
@@ -230,9 +237,8 @@ public final class NetworkPage implements Page {
         renderDirect();
     }
 
-    private void renderHostList(MaximaNode node) {
+    private void renderHostList(List<String> active) {
         mHostList.removeAllViews();
-        List<String> active = node.pool().activeHosts();
         List<String> configured = RelayStore.get(mAct);
         int shown = 0;
         for (String h : active) {

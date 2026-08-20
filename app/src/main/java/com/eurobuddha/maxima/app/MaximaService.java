@@ -305,6 +305,14 @@ public final class MaximaService extends Service {
         chat.setStore(new com.eurobuddha.maxima.core.store.FileStore(
                 new java.io.File(getFilesDir(), "chat")));
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
+        // Media in LOCAL-ONLY mode (null node): inbound classic inline images
+        // are stored and displayed, and our photos go out inline to classic
+        // peers. The relay blob shelf needs the old engine and stays off.
+        sMedia = new com.eurobuddha.maxima.core.media.MediaService(null,
+                new com.eurobuddha.maxima.core.store.BlobStore(
+                        new java.io.File(getFilesDir(), "media"),
+                        512L * 1024 * 1024));
+        chat.setMediaService(sMedia);
         chat.setListener(new com.eurobuddha.maxima.core.chat.ChatEngine.Listener() {
             public void onMessage(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {
                 if (!e.mine) {
