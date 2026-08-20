@@ -407,38 +407,66 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     /** Tap a photo to open it full-screen in the system viewer (pinch-zoom,
      *  share, save all come for free there). We write the decoded bitmap to our
      *  own cache and hand it out through the existing FileProvider. */
+    /** Full-screen in-app viewer: pinch-zoom, pan, double-tap, save, share. */
     private void openImage(String id) {
         final android.graphics.Bitmap b = mImageCache.get(id);
         if (b == null) {
             return;
         }
-        // Compress + write the cache file off the main thread; only the launch
-        // itself has to be back on it.
-        new Thread(() -> {
-            try {
-                java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
-                dir.mkdirs();
-                java.io.File f = new java.io.File(dir, "view.jpg");
-                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
-                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
-                }
-                final android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
-                        this, "com.eurobuddha.maxima.app.payloads", f);
-                runOnUiThread(() -> {
-                    try {
-                        android.content.Intent i = new android.content.Intent(
-                                android.content.Intent.ACTION_VIEW);
-                        i.setDataAndType(uri, "image/jpeg");
-                        i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        startActivity(i);
-                    } catch (Exception e) {
-                        toast("Could not open image");
-                    }
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> toast("Could not open image"));
-            }
-        }, "chat-open-image").start();
+        final android.app.Dialog d = new android.app.Dialog(this,
+                android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        android.widget.FrameLayout root = new android.widget.FrameLayout(this);
+        root.setBackgroundColor(0xFF000000);
+
+        ZoomImageView z = new ZoomImageView(this);
+        z.setImageBitmap(b);
+        root.addView(z, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Chrome: close on the left, Save/Share on the right; single tap hides it.
+        final LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(0xB3000000);
+        bar.setPadding(dp(10), dp(14), dp(14), dp(10));
+
+        android.widget.ImageView close = new android.widget.ImageView(this);
+        close.setImageResource(R.drawable.ic_close);
+        close.setColorFilter(0xFFFFFFFF);
+        close.setPadding(dp(8), dp(8), dp(8), dp(8));
+        close.setOnClickListener(v -> d.dismiss());
+        bar.addView(close, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        View spacer = new View(this);
+        bar.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
+
+        TextView save = new TextView(this);
+        save.setText("Save");
+        save.setTextColor(0xFFFFFFFF);
+        save.setTextSize(15);
+        save.setTypeface(null, android.graphics.Typeface.BOLD);
+        save.setPadding(dp(14), dp(8), dp(14), dp(8));
+        save.setOnClickListener(v -> saveImage(id));
+        bar.addView(save);
+
+        TextView share = new TextView(this);
+        share.setText("Share");
+        share.setTextColor(0xFFFFFFFF);
+        share.setTextSize(15);
+        share.setTypeface(null, android.graphics.Typeface.BOLD);
+        share.setPadding(dp(14), dp(8), dp(14), dp(8));
+        share.setOnClickListener(v -> shareImage(id));
+        bar.addView(share);
+
+        root.addView(bar, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP));
+
+        z.setOnSingleTap(() -> bar.setVisibility(
+                bar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+
+        d.setContentView(root);
+        d.show();
     }
 
     /** Send Minima to this contact from inside the chat. */
