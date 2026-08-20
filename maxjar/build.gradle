@@ -24,3 +24,18 @@ dependencies {
 jar {
     archiveBaseName = 'maxima'
 }
+
+// Self-contained runnable jar for the CLI node / parity gates.
+tasks.register('fatJar', Jar) {
+    archiveBaseName = 'maxima-all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'org.minima.maxjar.MaxJarNode'
+    }
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    }
+}

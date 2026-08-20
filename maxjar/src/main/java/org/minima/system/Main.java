@@ -27,6 +27,12 @@ public class Main {
 
 	/** Create the singleton - the embedder calls this once at startup. */
 	public static Main init(MaximaTransport zTransport, NotifyListener zListener) {
+		// Classic Main starts the global timer thread that PostTimerMessage
+		// rides on - without it the 20-min MAXIMA_LOOP and the 30s
+		// check-connect verification never fire.
+		if (org.minima.utils.messages.TimerProcessor.getTimerProcessor() == null) {
+			org.minima.utils.messages.TimerProcessor.createTimerProcessor();
+		}
 		mMain = new Main(zTransport, zListener);
 		return mMain;
 	}
@@ -34,6 +40,10 @@ public class Main {
 	/** Tear down (tests). */
 	public static void clear() {
 		mMain = null;
+		try {
+			org.minima.utils.messages.TimerProcessor.stopTimerProcessor();
+		} catch (Exception ignored) {
+		}
 	}
 
 	private final MaximaTransport mTransport;
