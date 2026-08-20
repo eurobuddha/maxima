@@ -184,6 +184,34 @@ public class MaxJarNode {
 			break;
 		}
 
+		case "drop": {
+			// Kill the live connection to a host - the rotation-heal gate.
+			// The maintain sweep will reconnect after ~30s, exactly like a
+			// flapping host; MAXIMA_DISCONNECTED reassignment fires first.
+			org.minima.system.network.minima.NIOClient nioc =
+					zTransport.getNIOClient(parts[1]);
+			if (nioc == null) {
+				System.out.println("not connected to " + parts[1]);
+			} else {
+				zTransport.disconnect(nioc.getUID());
+				System.out.println("dropped " + parts[1]);
+			}
+			break;
+		}
+
+		case "unhost": {
+			// Remove a host from the maintain list AND drop it - a host that
+			// is gone for good, not flapping.
+			zTransport.removeHost(parts[1]);
+			org.minima.system.network.minima.NIOClient nioc =
+					zTransport.getNIOClient(parts[1]);
+			if (nioc != null) {
+				zTransport.disconnect(nioc.getUID());
+			}
+			System.out.println("unhosted " + parts[1]);
+			break;
+		}
+
 		case "quit":
 		case "exit":
 			zManager.shutdown();

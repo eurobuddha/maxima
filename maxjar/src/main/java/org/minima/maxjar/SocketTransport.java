@@ -97,6 +97,11 @@ public class SocketTransport implements MaximaTransport {
 		return new java.util.ArrayList<>(mByHost.keySet());
 	}
 
+	/** Stop maintaining a host (it stays dropped once disconnected). */
+	public void removeHost(String zHostPort) {
+		mHosts.remove(zHostPort);
+	}
+
 	// ---------------------------------------------------------------
 	// maintain: keep an outgoing connection to every configured host
 	// ---------------------------------------------------------------
