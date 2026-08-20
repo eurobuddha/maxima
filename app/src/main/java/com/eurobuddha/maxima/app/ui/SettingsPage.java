@@ -153,6 +153,33 @@ public final class SettingsPage implements Page {
                     render();
                 }));
         mPower.addView(k.divider());
+        boolean jarOn = MaximaService.jarMode(mAct);
+        mPower.addView(k.switchRow("Classic engine",
+                jarOn ? "Routing runs on classic Maxima (maxima.jar)"
+                        : "Routing runs on the built-in engine - flip for classic Maxima",
+                jarOn, checked -> {
+                    mAct.getSharedPreferences("maxima_relays",
+                            android.content.Context.MODE_PRIVATE)
+                            .edit().putBoolean("engine_jar", checked).apply();
+                    EventLog.add("engine switch: "
+                            + (checked ? "classic (jar)" : "built-in") + " - restarting");
+                    android.widget.Toast.makeText(mAct,
+                            "Switching engine - Parlons restarts in a moment",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                    // The engine is wired at service creation; a clean process
+                    // restart is the only honest way to swap it. Identity and
+                    // contacts carry over (one-time migration, already proven).
+                    new android.os.Handler(android.os.Looper.getMainLooper())
+                            .postDelayed(() -> {
+                        android.content.Intent i = new android.content.Intent(
+                                mAct, com.eurobuddha.maxima.app.MainActivity.class);
+                        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                | android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        mAct.startActivity(i);
+                        android.os.Process.killProcess(android.os.Process.myPid());
+                    }, 600);
+                }));
+        mPower.addView(k.divider());
         boolean exempt = isBatteryExempt();
         mPower.addView(k.kvPill("Battery exemption",
                 exempt ? "Android will let the connection stay up"
