@@ -382,6 +382,33 @@ public final class MaximaService extends Service {
             jar.setStaticMls(staticMls);
         }
 
+        // LAN direct: open the transport's direct endpoint and point the same
+        // NSD/mDNS fingerprint discovery at the jar - a same-WiFi peer's send
+        // lands straight on our socket, classic wire units end to end.
+        try {
+            int lanPort = jar.startLan();
+            if (lanPort > 0) {
+                sLan = new com.eurobuddha.maxima.app.direct.LanDiscovery(this,
+                        new com.eurobuddha.maxima.app.direct.LanDiscovery.Peers() {
+                            public String fingerprint() { return jar.fingerprint(); }
+                            public String publicKeyHex() { return jar.publicKeyHex(); }
+                            public com.eurobuddha.maxima.core.contacts.Contact
+                                    contactByFingerprint(String zFp) {
+                                return jar.contactByFingerprint(zFp);
+                            }
+                            public void noteLanPeer(String zPub, String zHostPort) {
+                                jar.noteLanPeer(zPub, zHostPort);
+                            }
+                            public void forgetLanPeer(String zPub) {
+                                jar.forgetLanPeer(zPub);
+                            }
+                        });
+                sLan.start(lanPort);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "jar LAN direct: " + e);
+        }
+
         // Wallet receive address into classic's contact handshake, then keep it
         // for the capability probes. Key derivation is heavy - own thread.
         Thread wt = new Thread(() -> {

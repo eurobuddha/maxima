@@ -88,8 +88,101 @@ public class SocketTransport implements MaximaTransport {
 
 	public void stop() {
 		mRunning = false;
+		java.net.ServerSocket lan = mLanServer;
+		if (lan != null) {
+			try {
+				lan.close();
+			} catch (Exception ignored) {
+			}
+		}
 		for (Peer p : mByUid.values()) {
 			p.close();
+		}
+	}
+
+	// ---------------------------------------------------------------
+	// LAN direct endpoint - same-WiFi instant delivery
+	//
+	// A same-LAN peer dials us DIRECTLY with the classic one-shot send
+	// (sendMaxPacket: one mined frame sealed to our IDENTITY key, await the
+	// ack, close). The vendored brain decrypts identity-sealed units natively
+	// (mpkg.mTo == mPublic), so this is just a better address for the same
+	// wire units - classic-invisible by construction.
+	// ---------------------------------------------------------------
+
+	private volatile java.net.ServerSocket mLanServer;
+	private volatile int mLanPort = 0;
+
+	public int lanPort() {
+		return mLanPort;
+	}
+
+	public void startLanListener() {
+		if (mLanServer != null) {
+			return;
+		}
+		try {
+			mLanServer = new java.net.ServerSocket(0);
+			mLanPort = mLanServer.getLocalPort();
+			Thread t = new Thread(() -> {
+				while (mRunning && !mLanServer.isClosed()) {
+					try {
+						java.net.Socket s = mLanServer.accept();
+						Thread h = new Thread(() -> handleLanConn(s), "maxjar-lan-conn");
+						h.setDaemon(true);
+						h.start();
+					} catch (Exception e) {
+						if (mRunning && !mLanServer.isClosed()) {
+							MinimaLogger.log("LAN accept: " + e);
+						}
+					}
+				}
+			}, "maxjar-lan-listen");
+			t.setDaemon(true);
+			t.start();
+			MinimaLogger.log("LAN direct endpoint listening on port " + mLanPort);
+		} catch (Exception e) {
+			MinimaLogger.log("LAN listener failed: " + e);
+		}
+	}
+
+	private void handleLanConn(java.net.Socket zSock) {
+		String uid = "lan" + mUidGen.getAndIncrement();
+		try {
+			zSock.setSoTimeout(30_000);
+			Peer peer = new Peer(uid, zSock.getInetAddress().getHostAddress(),
+					zSock.getPort(), zSock, true);
+			mByUid.put(uid, peer);
+			DataInputStream in = new DataInputStream(zSock.getInputStream());
+			while (!zSock.isClosed()) {
+				byte[] frame = readOrSkip(in, MAX_KEEP_FRAME);
+				if (frame == null || frame.length == 0) {
+					continue;
+				}
+				int type = frame[0] & 0xFF;
+				DataInputStream din = new DataInputStream(
+						new ByteArrayInputStream(frame, 1, frame.length - 1));
+				if (type == MSG_MAXIMA_TXPOW) {
+					MaxTxPoW mx = MaxTxPoW.ReadFromStream(din);
+					if (!mx.checkValidTxPoW()) {
+						peer.write(body(MSG_PING, MaximaManager.MAXIMA_WRONGHASH));
+						continue;
+					}
+					Message msg = new Message(MaximaManager.MAXIMA_RECMESSAGE);
+					msg.addObject("maxtxpow", mx);
+					msg.addObject("nioclient", peer.nioc);
+					Main.getInstance().getMaxima().PostMessage(msg);
+					// the brain acks via sendNetworkMessage(uid, MSG_PING, status)
+				}
+			}
+		} catch (Exception done) {
+			// one-shot classic socket: EOF/timeout is the normal end
+		} finally {
+			mByUid.remove(uid);
+			try {
+				zSock.close();
+			} catch (Exception ignored) {
+			}
 		}
 	}
 
@@ -414,7 +507,12 @@ public class SocketTransport implements MaximaTransport {
 		volatile long lastWrite = System.currentTimeMillis();
 
 		Peer(String zUid, String zHost, int zPort, Socket zSock) throws IOException {
-			nioc = new NIOClient(zUid, zHost, zPort, false);
+			this(zUid, zHost, zPort, zSock, false);
+		}
+
+		Peer(String zUid, String zHost, int zPort, Socket zSock, boolean zIncoming)
+				throws IOException {
+			nioc = new NIOClient(zUid, zHost, zPort, zIncoming);
 			socket = zSock;
 			out = new DataOutputStream(zSock.getOutputStream());
 		}

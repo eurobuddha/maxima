@@ -37,7 +37,7 @@ public final class LanDiscovery {
     private static final String TXT_IDENTITY = "id";
 
     private final Context mCtx;
-    private final MaximaNode mNode;
+    private final Peers mNode;
 
     private NsdManager mNsd;
     private NsdManager.RegistrationListener mReg;
@@ -57,9 +57,35 @@ public final class LanDiscovery {
     private final java.util.Map<String, String> mResolved =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    public LanDiscovery(Context zCtx, MaximaNode zNode) {
+    /** What discovery needs from a routing engine - either engine provides it. */
+    public interface Peers {
+        String fingerprint();
+        String publicKeyHex();
+        com.eurobuddha.maxima.core.contacts.Contact contactByFingerprint(String zFp);
+        void noteLanPeer(String zPublicKey, String zHostPort);
+        void forgetLanPeer(String zPublicKey);
+    }
+
+    public LanDiscovery(Context zCtx, Peers zPeers) {
         mCtx = zCtx;
-        mNode = zNode;
+        mNode = zPeers;
+    }
+
+    /** Old-engine convenience: wrap the MaximaNode. */
+    public LanDiscovery(Context zCtx, final MaximaNode zNode) {
+        this(zCtx, new Peers() {
+            public String fingerprint() { return zNode.identity().fingerprint(); }
+            public String publicKeyHex() { return zNode.identity().publicKeyHex(); }
+            public com.eurobuddha.maxima.core.contacts.Contact contactByFingerprint(String zFp) {
+                return zNode.contactByFingerprint(zFp);
+            }
+            public void noteLanPeer(String zPublicKey, String zHostPort) {
+                zNode.noteLanPeer(zPublicKey, zHostPort);
+            }
+            public void forgetLanPeer(String zPublicKey) {
+                zNode.forgetLanPeer(zPublicKey);
+            }
+        });
     }
 
     /**
@@ -158,7 +184,7 @@ public final class LanDiscovery {
             // made registerService throw and killed LAN discovery outright. The
             // 64-char SHA-256 fingerprint fits, and both peers derive it from the
             // same canonical key, so the discovery-side match is exact.
-            info.setAttribute(TXT_IDENTITY, mNode.identity().fingerprint());
+            info.setAttribute(TXT_IDENTITY, mNode.fingerprint());
         }
 
         mReg = new NsdManager.RegistrationListener() {
@@ -265,7 +291,7 @@ public final class LanDiscovery {
     }
 
     private String shortId() {
-        String hex = mNode.identity().publicKeyHex();
+        String hex = mNode.publicKeyHex();
         return hex.length() > 10 ? hex.substring(2, 10) : hex;
     }
 }

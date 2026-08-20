@@ -471,6 +471,34 @@ public final class JarEngine implements ChatPort {
 			throw new IllegalStateException("no classic address for " + zContact.name);
 		}
 
+		// LAN FIRST - if discovery found this contact on our network, deliver
+		// straight to their direct endpoint: same signed+encrypted+mined wire
+		// unit, sealed to their IDENTITY key (which the classic brain decrypts
+		// natively), just a better address. Probe fast, fall back to routed.
+		String lan = mLanPeers.get(norm(zContact.publicKey));
+		if (lan != null) {
+			if (!lanProbe(lan)) {
+				forgetLanPeer(zContact.publicKey);
+			} else {
+				try {
+					Message lsend = org.minima.system.commands.maxima.maxima
+							.createSendMessage(norm(zContact.publicKey) + "@" + lan,
+									zApplication, new MiniData(zData));
+					MiniData lwire = MaxMsgHandler.constructMaximaData(lsend);
+					if (lwire != null) {
+						MiniData lresp = MaxMsgHandler.sendMaxPacket(
+								lsend.getString("tohost"), lsend.getInteger("toport"), lwire);
+						if (lresp.isEqual(MaximaManager.MAXIMA_RESPONSE_OK)) {
+							return MaximaSender.Result.of(1);
+						}
+					}
+				} catch (Exception fallthrough) {
+					// routed path below
+				}
+				forgetLanPeer(zContact.publicKey);
+			}
+		}
+
 		// Classic's OWN pipeline - createSendMessage builds and signs, then
 		// construct (encrypt + MINE) and the raw-socket delivery, called
 		// synchronously so the receipt ladder sees a real SENT/FAILED.
@@ -545,6 +573,72 @@ public final class JarEngine implements ChatPort {
 	@Override
 	public void log(String zLine) {
 		EventLog.add(zLine);
+	}
+
+	// ---------------------------------------------------------------
+	// LAN direct - same-WiFi peers found by NSD/mDNS discovery.
+	// Ephemeral by design (true only while both devices share the network),
+	// so never persisted into the classic H2 contact rows.
+	// ---------------------------------------------------------------
+
+	private final Map<String, String> mLanPeers = new ConcurrentHashMap<>();
+
+	/** Start the transport's LAN direct endpoint; returns its port (0 = failed). */
+	public int startLan() {
+		mTransport.startLanListener();
+		return mTransport.lanPort();
+	}
+
+	public String fingerprint() {
+		return com.eurobuddha.maxima.core.identity.Keys.fingerprint(publicKeyHex());
+	}
+
+	/** Map an NSD TXT fingerprint back to the contact whose key hashes to it. */
+	public Contact contactByFingerprint(String zFp) {
+		if (zFp == null || zFp.isEmpty()) {
+			return null;
+		}
+		for (Contact c : contacts()) {
+			if (zFp.equals(com.eurobuddha.maxima.core.identity.Keys.fingerprint(c.publicKey))) {
+				return c;
+			}
+		}
+		return null;
+	}
+
+	public void noteLanPeer(String zPublicKey, String zHostPort) {
+		if (contactByKey(zPublicKey) == null) {
+			return;   // only peers we already know as contacts
+		}
+		String prev = mLanPeers.put(norm(zPublicKey), zHostPort);
+		if (prev == null) {
+			EventLog.add("LAN peer: contact reachable directly at " + zHostPort);
+		}
+	}
+
+	public void forgetLanPeer(String zPublicKey) {
+		mLanPeers.remove(norm(zPublicKey));
+	}
+
+	private Contact contactByKey(String zPublicKey) {
+		MaximaContact mc = MinimaDB.getDB().getMaximaDB()
+				.loadContactFromPublicKey(norm(zPublicKey));
+		return mc == null ? null : map(mc);
+	}
+
+	/** Sub-2s reachability check so a stale LAN entry never stalls a send. */
+	private static boolean lanProbe(String zHostPort) {
+		try {
+			int c = zHostPort.lastIndexOf(':');
+			String h = zHostPort.substring(0, c);
+			int po = Integer.parseInt(zHostPort.substring(c + 1));
+			java.net.Socket s = new java.net.Socket();
+			s.connect(new java.net.InetSocketAddress(h, po), 1500);
+			s.close();
+			return true;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 
 	private static String norm(String zKey) {
