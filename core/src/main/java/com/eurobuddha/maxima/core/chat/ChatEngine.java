@@ -998,6 +998,8 @@ public final class ChatEngine {
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
+        } else {
+            sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);   // re-ack (see handleText)
         }
     }
 
@@ -1064,6 +1066,11 @@ public final class ChatEngine {
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
+        } else {
+            // A duplicate IS proof the sender never got our receipt (they only
+            // resend while un-receipted) - re-ack, or the red-cross/resend loop
+            // never ends. This turns a lost receipt into a self-healing one.
+            sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
         }
     }
 
@@ -1084,6 +1091,8 @@ public final class ChatEngine {
         if (record(e)) {
             fire(e);
             sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
+        } else {
+            sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);   // re-ack (see handleText)
         }
     }
 
