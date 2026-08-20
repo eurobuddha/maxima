@@ -90,6 +90,16 @@ public final class ChatPrefs {
         prefs(zCtx).edit().putBoolean(ALLOW_SCREEN_SHARE, zOn).apply();
     }
 
+    private static final String MESSAGE_SOUND = "message_sound";
+
+    public static boolean messageSound(Context zCtx) {
+        return prefs(zCtx).getBoolean(MESSAGE_SOUND, true);
+    }
+
+    public static void setMessageSound(Context zCtx, boolean zOn) {
+        prefs(zCtx).edit().putBoolean(MESSAGE_SOUND, zOn).apply();
+    }
+
     public static boolean readReceipts(Context zCtx) {
         return prefs(zCtx).getBoolean(READ_RECEIPTS, false);
     }

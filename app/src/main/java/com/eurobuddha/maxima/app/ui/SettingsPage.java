@@ -73,6 +73,7 @@ public final class SettingsPage implements Page {
         // rebuild, so skip that churn unless their inputs actually changed.
         String heavySig = (port == null ? "-" : port.publicKeyHex())
                 + "|" + ChatPrefs.readReceipts(mAct)
+                + "|" + ChatPrefs.messageSound(mAct)
                 + "|" + com.eurobuddha.maxima.app.AppLock.isEnabled(mAct)
                 + "|" + com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)
                 + "|" + ChatPrefs.appearance(mAct)
@@ -94,6 +95,16 @@ public final class SettingsPage implements Page {
                 rr, checked -> {
                     ChatPrefs.setReadReceipts(mAct, checked);
                     EventLog.add("read receipts " + (checked ? "on" : "off"));
+                    render();
+                }));
+        mPrivacy.addView(k.divider());
+        boolean snd = ChatPrefs.messageSound(mAct);
+        mPrivacy.addView(k.switchRow("Message sound",
+                snd ? "Pssst! when a message arrives"
+                        : "Silent - notifications still appear and vibrate",
+                snd, checked -> {
+                    ChatPrefs.setMessageSound(mAct, checked);
+                    EventLog.add("message sound " + (checked ? "on" : "off"));
                     render();
                 }));
         mPrivacy.addView(k.divider());

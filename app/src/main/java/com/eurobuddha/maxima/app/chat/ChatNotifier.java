@@ -39,6 +39,13 @@ public final class ChatNotifier {
     public static final String CHANNEL_ID = "maxima_chat_v3";
 
     /**
+     * A channel's sound is immutable, so the Settings toggle cannot mute
+     * CHANNEL_ID - it posts on this silent sibling instead: same importance,
+     * still vibrates, no sound.
+     */
+    public static final String CHANNEL_ID_MUTED = "maxima_chat_v3_muted";
+
+    /**
      * Notification ids must be ints, conversation keys are hex strings. The
      * hash can in principle collide, which would merge two conversations into
      * one notification - annoying, never wrong, and far better than keeping a
@@ -56,7 +63,8 @@ public final class ChatNotifier {
             return;
         }
         NotificationManager nm = zCtx.getSystemService(NotificationManager.class);
-        if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) {
+        if (nm == null || (nm.getNotificationChannel(CHANNEL_ID) != null
+                && nm.getNotificationChannel(CHANNEL_ID_MUTED) != null)) {
             return;
         }
         NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Messages",
@@ -77,6 +85,13 @@ public final class ChatNotifier {
                                 android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build());
         nm.createNotificationChannel(ch);
+        NotificationChannel muted = new NotificationChannel(CHANNEL_ID_MUTED,
+                "Messages (muted)", NotificationManager.IMPORTANCE_HIGH);
+        muted.setDescription("Incoming Parlons messages, sound off");
+        muted.enableVibration(true);
+        muted.setShowBadge(true);
+        muted.setSound(null, null);
+        nm.createNotificationChannel(muted);
         try {
             nm.deleteNotificationChannel("maxima_chat");
             nm.deleteNotificationChannel("maxima_chat_v2");
@@ -152,7 +167,9 @@ public final class ChatNotifier {
         PendingIntent pi = PendingIntent.getActivity(zCtx, idFor(zConversation), open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        NotificationCompat.Builder b = new NotificationCompat.Builder(zCtx, CHANNEL_ID)
+        String channel = com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx)
+                ? CHANNEL_ID : CHANNEL_ID_MUTED;
+        NotificationCompat.Builder b = new NotificationCompat.Builder(zCtx, channel)
                 .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setStyle(style)
                 .setAutoCancel(true)
@@ -195,8 +212,10 @@ public final class ChatNotifier {
         }
         if (ChatHub.isForeground(conv)) {
             // No notification while you are looking at the conversation -
-            // just the soft in-app pssst.
-            Pssst.play(zCtx);
+            // just the soft in-app pssst (if the toggle allows it).
+            if (com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx)) {
+                Pssst.play(zCtx);
+            }
             return;
         }
         postConversation(zCtx, zChat, zNode, conv);
