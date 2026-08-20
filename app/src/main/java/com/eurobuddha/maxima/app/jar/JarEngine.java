@@ -119,6 +119,136 @@ public final class JarEngine implements ChatPort {
 		mTransport.addHost(zHostPort);
 	}
 
+	// ---------------------------------------------------------------
+	// static MLS + permanent MAX# addresses (classic-native)
+	// ---------------------------------------------------------------
+
+	/** Pin (or clear, with "") a static MLS - classic's own feature, so the
+	 *  20-min loop publishes our location there from now on. */
+	public void setStaticMls(String zIdentity) {
+		boolean on = zIdentity != null && !zIdentity.trim().isEmpty();
+		mManager.setStaticMLS(on, on ? zIdentity.trim() : "");
+		EventLog.add(on ? "static MLS pinned (classic)" : "static MLS cleared (classic)");
+	}
+
+	public boolean isStaticMls() {
+		return mManager.isStaticMLS();
+	}
+
+	/** The MLS host our location publishes to right now (static or rotating). */
+	public String mlsHost() {
+		String h = mManager.getMLSHost();
+		return h == null ? "" : h;
+	}
+
+	/** Our permanent shareable address - only meaningful with a static MLS. */
+	public String permanentAddress() {
+		if (!mManager.isStaticMLS()) {
+			return "";
+		}
+		return "MAX#" + mManager.getPublicKey().to0xString() + "#" + mlsHost();
+	}
+
+	/** Resolve a MAX#publickey#mlshost permanent address to the peer's CURRENT
+	 *  address via a classic MLS GET straight to the named host. Blocking -
+	 *  call off the main thread. Returns null when the host has no (visible)
+	 *  record. Runs its own socket so the vendored response path (which expects
+	 *  the key to already be a contact) is never involved. */
+	public String resolveMax(String zMaxAddress) {
+		try {
+			String clean = zMaxAddress.trim();
+			if (!clean.startsWith("MAX#")) {
+				return null;
+			}
+			int split = clean.indexOf('#', 4);
+			if (split < 0) {
+				return null;
+			}
+			String pubkey = clean.substring(4, split);
+			String mlshost = clean.substring(split + 1);
+
+			org.minima.system.network.maxima.mls.MLSPacketGETReq req =
+					new org.minima.system.network.maxima.mls.MLSPacketGETReq(
+							pubkey, MaximaManager.MLS_RANDOM_UID);
+			Message send = org.minima.system.commands.maxima.maxima.createSendMessage(
+					mlshost, MaximaManager.MAXIMA_MLS_GETAPP,
+					MiniData.getMiniDataVersion(req));
+			MiniData wire = MaxMsgHandler.constructMaximaData(send);
+			if (wire == null) {
+				return null;
+			}
+			String host = send.getString("tohost");
+			int port = send.getInteger("toport");
+
+			try (java.net.Socket sock = new java.net.Socket()) {
+				sock.connect(new java.net.InetSocketAddress(host, port), 20000);
+				sock.setSoTimeout(20000);
+				java.io.DataOutputStream dos =
+						new java.io.DataOutputStream(sock.getOutputStream());
+				java.io.DataInputStream dis =
+						new java.io.DataInputStream(sock.getInputStream());
+				wire.writeDataStream(dos);
+				dos.flush();
+				long deadline = System.currentTimeMillis() + 20000;
+				while (System.currentTimeMillis() < deadline) {
+					MiniData resp = MiniData.ReadFromStream(dis);
+					try {
+						java.io.DataInputStream rdis = new java.io.DataInputStream(
+								new java.io.ByteArrayInputStream(resp.getBytes()));
+						org.minima.objects.base.MiniByte.ReadFromStream(rdis);
+						MiniData data = MiniData.ReadFromStream(rdis);
+						org.minima.system.network.maxima.mls.MLSPacketGETResp mls =
+								org.minima.system.network.maxima.mls.MLSPacketGETResp
+										.convertMiniDataVersion(data);
+						if (!mls.getRandomUID().equals(MaximaManager.MLS_RANDOM_UID)) {
+							return null;   // not our request - security check
+						}
+						return mls.getAddress();
+					} catch (Exception notMls) {
+						// a bare status byte (OK/UNKNOWN...) - keep reading briefly
+						if (resp.getLength() <= 8) {
+							continue;
+						}
+						return null;
+					}
+				}
+			}
+			return null;
+		} catch (Exception e) {
+			EventLog.add("MAX# resolve failed: " + e);
+			return null;
+		}
+	}
+
+	/** Register our key with a staticMLS pool server (the eurobuddha API) so
+	 *  STRANGERS can resolve our MAX# there, then pin it. Blocking. */
+	public boolean registerWithPool(String zApiBase, String zServerId, String zIdentity) {
+		try {
+			java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+					new java.net.URL(zApiBase + "?action=register&publickey="
+							+ publicKeyHex() + "&server_id=" + zServerId).openConnection();
+			c.setConnectTimeout(15000);
+			c.setReadTimeout(25000);
+			java.io.InputStream in = c.getInputStream();
+			byte[] buf = new byte[4096];
+			StringBuilder sb = new StringBuilder();
+			int n;
+			while ((n = in.read(buf)) > 0) {
+				sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+			}
+			in.close();
+			boolean ok = sb.toString().contains("\"status\":true");
+			if (ok) {
+				setStaticMls(zIdentity);
+			}
+			EventLog.add("pool register " + zServerId + ": " + (ok ? "OK" : sb));
+			return ok;
+		} catch (Exception e) {
+			EventLog.add("pool register failed: " + e);
+			return false;
+		}
+	}
+
 	/** Our Mx wallet address into classic's contact handshake (minimaaddress). */
 	public void setWalletAddress(String zMxAddress) {
 		try {
@@ -269,6 +399,9 @@ public final class JarEngine implements ChatPort {
 			addrs.add(zMc.getCurrentAddress());
 		}
 		c.setAddresses(addrs);
+		// Presence: classic bumps lastseen on every inbound from them - without
+		// this mapping every contact reads as permanently offline.
+		c.lastSeen = zMc.getLastSeen();
 		// Capability is LEARNED (see class comment) - default classic.
 		c.capabilities = mCapable.contains(norm(zMc.getPublicKey()))
 				? Capabilities.phoneDefaults() : Capabilities.none();
@@ -315,11 +448,22 @@ public final class JarEngine implements ChatPort {
 
 	@Override
 	public void introduce(String zPeerAddress, boolean zIntro) throws Exception {
+		String address = zPeerAddress;
+		// A MAX# permanent address resolves to the peer's CURRENT address via
+		// their static MLS first - that is the whole point of it.
+		if (address != null && address.trim().startsWith("MAX#")) {
+			address = resolveMax(address);
+			if (address == null) {
+				throw new IllegalStateException(
+						"MAX# did not resolve - is the peer registered at that MLS?");
+			}
+			EventLog.add("MAX# resolved to " + address);
+		}
 		// classic maxcontacts action:add, verbatim flow
 		JSONObject info = mManager.getContactsManager().getMaximaContactInfo(zIntro, false);
 		MiniData mdata = new MiniData(new MiniString(info.toString()).getData());
 		mManager.PostMessage(org.minima.system.commands.maxima.maxima.createSendMessage(
-				zPeerAddress, MaximaContactManager.CONTACT_APPLICATION, mdata));
+				address, MaximaContactManager.CONTACT_APPLICATION, mdata));
 	}
 
 	@Override

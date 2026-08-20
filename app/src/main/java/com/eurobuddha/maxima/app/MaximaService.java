@@ -356,6 +356,13 @@ public final class MaximaService extends Service {
         });
         jar.setContactsChanged(() -> EventLog.add("contacts changed (jar)"));
 
+        // A pinned static MLS carries over - classic's own feature, so the
+        // 20-min loop publishes our location there and our MAX# stays live.
+        String staticMls = MlsStore.get(this);
+        if (staticMls.startsWith("Mx") && staticMls.contains("@")) {
+            jar.setStaticMls(staticMls);
+        }
+
         // Wallet receive address into classic's contact handshake, then keep it
         // for the capability probes. Key derivation is heavy - own thread.
         Thread wt = new Thread(() -> {

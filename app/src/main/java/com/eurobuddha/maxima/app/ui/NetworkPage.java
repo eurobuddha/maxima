@@ -100,10 +100,34 @@ public final class NetworkPage implements Page {
             mNodeSub.setText(jhosts + (jhosts == 1 ? " host" : " hosts")
                     + " · classic engine");
             setPill(jhosts > 0 ? "Reachable" : "Offline", jhosts > 0 ? Kit.OK : Kit.BAD);
-            String jarSig = "jar|" + jactive + "|" + RelayStore.get(mAct);
+            String jarSig = "jar|" + jactive + "|" + RelayStore.get(mAct)
+                    + "|" + jarEngine.isStaticMls();
             if (!jarSig.equals(mLastNetSig)) {
                 mLastNetSig = jarSig;
                 renderHostList(jactive);
+            }
+            // ---- MLS (classic): rotating by default, static when pinned; a
+            // static MLS mints a permanent MAX# address worth copying. ----
+            if (mMlsText != null) {
+                final String perm = jarEngine.permanentAddress();
+                if (!perm.isEmpty()) {
+                    mMlsText.setText("Static MLS: " + jarEngine.mlsHost()
+                            + "\n\nYour PERMANENT address (tap to copy):\n" + perm);
+                    mMlsText.setOnClickListener(x -> {
+                        ((android.content.ClipboardManager) mAct.getSystemService(
+                                android.content.Context.CLIPBOARD_SERVICE))
+                                .setPrimaryClip(android.content.ClipData
+                                        .newPlainText("maxima-max-address", perm));
+                        mAct.toast("Permanent MAX# address copied");
+                    });
+                } else {
+                    String mh = jarEngine.mlsHost();
+                    mMlsText.setText(mh.isEmpty()
+                            ? "Rotating with your hosts (classic default)."
+                            : "Rotating (classic default):\n" + mh
+                              + "\n\nPin a static MLS below for a permanent MAX# address.");
+                    mMlsText.setOnClickListener(null);
+                }
             }
             return;
         }
@@ -510,6 +534,14 @@ public final class NetworkPage implements Page {
         body.addView(f, k.mb(k.dp(4)));
         TextView pin = k.primaryButton("Pin this MLS");
         body.addView(pin, k.mb(k.dp(8)));
+        final com.eurobuddha.maxima.app.jar.JarEngine jarEngine = MaximaService.jar();
+        TextView pool = null;
+        if (jarEngine != null) {
+            // One tap: register with the eurobuddha staticMLS pool and pin it -
+            // registration is what lets STRANGERS resolve your MAX# address.
+            pool = k.primaryButton("Use the eurobuddha pool (register)");
+            body.addView(pool, k.mb(k.dp(8)));
+        }
         TextView clear = k.ghostButton("Use the host's directory");
         body.addView(clear);
         BottomSheetDialog d = k.sheet("Location service", body);
@@ -517,6 +549,15 @@ public final class NetworkPage implements Page {
             String m = f.getText().toString().trim();
             if (!m.startsWith("Mx") || !m.contains("@") || !m.contains(":")) {
                 mAct.toast("Needs the form Mx…@host:port");
+                return;
+            }
+            if (jarEngine != null) {
+                jarEngine.setStaticMls(m);
+                MlsStore.save(mAct, m);
+                mAct.toast("MLS pinned");
+                d.dismiss();
+                mLastNetSig = "";
+                render();
                 return;
             }
             MaximaNode node = MaximaService.node();
@@ -532,7 +573,47 @@ public final class NetworkPage implements Page {
             d.dismiss();
             render();
         });
+        if (pool != null) {
+            pool.setOnClickListener(v -> {
+                mAct.toast("Registering with the pool…");
+                new Thread(() -> {
+                    try {
+                        // First server in the pool list; the API is the source
+                        // of truth for identities post-move.
+                        String json = httpGet(
+                                "https://eurobuddha.com/staticmls/api.php?action=servers");
+                        java.util.regex.Matcher idm = java.util.regex.Pattern
+                                .compile("\"id\":\"([^\"]+)\"").matcher(json);
+                        java.util.regex.Matcher pm = java.util.regex.Pattern
+                                .compile("\"p2pidentity\":\"([^\"]+)\"").matcher(json);
+                        if (!idm.find() || !pm.find()) {
+                            throw new Exception("pool list unavailable");
+                        }
+                        String sid = idm.group(1);
+                        String ident = pm.group(1);
+                        boolean ok = jarEngine.registerWithPool(
+                                "https://eurobuddha.com/staticmls/api.php", sid, ident);
+                        if (ok) {
+                            MlsStore.save(mAct, ident);
+                        }
+                        mAct.runOnUiThread(() -> {
+                            mAct.toast(ok ? "Registered — you have a permanent MAX# address"
+                                    : "Pool registration failed — see the log");
+                            d.dismiss();
+                            mLastNetSig = "";
+                            render();
+                        });
+                    } catch (Exception e) {
+                        EventLog.add("pool register: " + e);
+                        mAct.runOnUiThread(() -> mAct.toast("Pool unavailable: " + e.getMessage()));
+                    }
+                }, "mls-pool-register").start();
+            });
+        }
         clear.setOnClickListener(v -> {
+            if (jarEngine != null) {
+                jarEngine.setStaticMls("");
+            }
             MaximaNode node = MaximaService.node();
             if (node != null) {
                 node.setStaticMls("");
@@ -541,6 +622,7 @@ public final class NetworkPage implements Page {
             EventLog.add("static MLS cleared");
             mAct.toast("Using the host's directory");
             d.dismiss();
+            mLastNetSig = "";
             render();
         });
     }
