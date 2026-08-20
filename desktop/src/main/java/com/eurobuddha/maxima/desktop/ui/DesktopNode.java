@@ -107,6 +107,10 @@ public final class DesktopNode {
             }
         });
 
+        // Core's own diagnostics (dead fan-outs, failed MLS lookups, resend
+        // tallies) land in the network log, same as the phone.
+        mNode.setLogListener(DesktopEventLog::add);
+
         // Route inbound chat traffic into the engine (the phone does the same).
         mNode.setMessageListener((msg, msgid) -> {
             try {

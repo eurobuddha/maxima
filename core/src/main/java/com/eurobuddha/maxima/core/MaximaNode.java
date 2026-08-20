@@ -182,8 +182,14 @@ public final class MaximaNode {
         void onHostsChanged(String zHostPort, boolean zConnected);
     }
 
+    /** Diagnostic lines for the embedder's event log. Optional; unset = silent. */
+    public interface LogListener {
+        void onLog(String zLine);
+    }
+
     private volatile MessageListener mListener;
     private volatile EventListener mEvents;
+    private volatile LogListener mLog;
 
     public MaximaNode(MaximaIdentity zIdentity, String zVersion, int zRelayTarget) {
         mIdentity = zIdentity;
@@ -776,6 +782,24 @@ public final class MaximaNode {
         mEvents = zListener;
     }
 
+    public void setLogListener(LogListener zListener) {
+        mLog = zListener;
+    }
+
+    /** Hand a diagnostic line to the embedder's log; no-op when none is set.
+     *  Failures used to be swallowed here in core (fanOut, mlsLookup, resend)
+     *  which left a dead outbound path completely invisible - the 15-minute
+     *  blind window of 2026-08-20. Silence is never a valid failure mode. */
+    public void log(String zLine) {
+        LogListener l = mLog;
+        if (l != null) {
+            try {
+                l.onLog(zLine);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     private void fireContacts(Contact zContact, boolean zRemoved) {
         EventListener l = mEvents;
         if (l != null) {
@@ -1209,6 +1233,10 @@ public final class MaximaNode {
      *  if nothing accepted. */
     private MaximaSender.Result fanOut(Contact zContact, String zApplication, byte[] zData) {
         MaximaSender.Result okResult = null;
+        // Per-address outcome, reported ONLY on total failure. A silent
+        // all-addresses-dead fan-out is how an outbound path stays invisibly
+        // broken for minutes while inbound flows.
+        StringBuilder fails = new StringBuilder();
         for (String addr : zContact.addresses) {
             try {
                 MaximaSender.Result r = sendRaw(addr, zApplication, zData,
@@ -1216,8 +1244,20 @@ public final class MaximaNode {
                 if (r.isOk() && okResult == null) {
                     okResult = r;
                 }
-            } catch (Exception ignored) {
+                if (!r.isOk()) {
+                    fails.append(fails.length() == 0 ? "" : " | ")
+                            .append(addr).append(" -> ").append(r.statusName);
+                }
+            } catch (Exception e) {
+                fails.append(fails.length() == 0 ? "" : " | ")
+                        .append(addr).append(" -> ")
+                        .append(e.getClass().getSimpleName())
+                        .append(e.getMessage() == null ? "" : ": " + e.getMessage());
             }
+        }
+        if (okResult == null) {
+            log("send DEAD to " + zContact.name + " (" + zContact.addresses.size()
+                    + " addr): " + fails);
         }
         return okResult;
     }
@@ -1234,6 +1274,7 @@ public final class MaximaNode {
     public boolean mlsLookup(Contact zContact) {
         String mls = zContact.mls;
         if (mls == null || mls.isEmpty() || zContact.publicKey == null) {
+            log("mls lookup " + zContact.name + ": no mls address stored");
             return false;
         }
         try {
@@ -1247,6 +1288,7 @@ public final class MaximaNode {
                     com.eurobuddha.maxima.core.codec.Codec.serialise(req),
                     SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
             if (r == null || !r.hasPayload()) {
+                log("mls lookup " + zContact.name + " @ " + mls + ": no answer");
                 return false;
             }
             com.eurobuddha.maxima.core.msg.MLSPacketGETResp resp =
@@ -1255,6 +1297,8 @@ public final class MaximaNode {
             String addr = resp.getAddress();
             if (addr == null || addr.isEmpty()
                     || !Keys.same(resp.getPublicKey(), zContact.publicKey)) {
+                log("mls lookup " + zContact.name + " @ " + mls
+                        + ": empty or mismatched record");
                 return false;
             }
             if (!addr.equals(zContact.primaryAddress())) {
@@ -1267,6 +1311,9 @@ public final class MaximaNode {
             }
             return true;
         } catch (Exception e) {
+            log("mls lookup " + zContact.name + " @ " + mls + ": "
+                    + e.getClass().getSimpleName()
+                    + (e.getMessage() == null ? "" : ": " + e.getMessage()));
             return false;
         }
     }

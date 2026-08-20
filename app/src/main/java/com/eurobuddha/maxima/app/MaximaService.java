@@ -210,6 +210,10 @@ public final class MaximaService extends Service {
                     MaximaService.this, msg, msgid);
         });
 
+        // Core's own diagnostics (dead fan-outs, failed MLS lookups, resend
+        // tallies) land in the same in-app log as everything else.
+        sNode.setLogListener(EventLog::add);
+
         // Classic publishes MAXIMACONTACTS and MAXIMAHOSTS; apps using us as
         // transport need both to react to a contact appearing or a host going.
         sNode.setEventListener(new MaximaNode.EventListener() {
@@ -422,10 +426,10 @@ public final class MaximaService extends Service {
                                 final com.eurobuddha.maxima.core.chat.ChatEngine rchat = sChat;
                                 Thread rt = new Thread(() -> {
                                     try {
-                                        int re = rchat.resendUndelivered();
-                                        if (re > 0) {
-                                            EventLog.add("re-sent " + re + " undelivered");
-                                        }
+                                        // Tally is logged inside resendUndelivered
+                                        // ("resend: n/tried delivered") - failures
+                                        // included, unlike the old success-only line.
+                                        rchat.resendUndelivered();
                                     } catch (Exception e) {
                                         Log.w(TAG, "resend: " + e);
                                     } finally {

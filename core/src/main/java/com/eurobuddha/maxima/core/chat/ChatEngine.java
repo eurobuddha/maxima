@@ -649,6 +649,7 @@ public final class ChatEngine {
     public int resendUndelivered() {
         long now = System.currentTimeMillis();
         int n = 0;
+        int tried = 0;
         for (Entry e : new ArrayList<>(mMessages.values())) {
             if (!e.mine) {
                 continue;
@@ -670,12 +671,18 @@ public final class ChatEngine {
                     continue;
                 }
             }
+            tried++;
             if (redeliver(e)) {
                 n++;
                 if (Receipt.FAILED.equals(e.state)) {
                     setState(e, Receipt.SENT);   // it went somewhere this time
                 }
             }
+        }
+        // ALWAYS report when something needed retrying. "0/4 delivered" every
+        // beat is the outbound-path-dead alarm that used to be pure silence.
+        if (tried > 0) {
+            mNode.log("resend: " + n + "/" + tried + " delivered");
         }
         return n;
     }
