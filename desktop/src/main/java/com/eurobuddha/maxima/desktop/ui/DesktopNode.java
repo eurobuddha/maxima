@@ -32,7 +32,8 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopNode {
 
     private static final String PROTOCOL = "1.0.48";
-    private static final int RELAY_TARGET = 4;
+    /** Two home relays, classic-scale (see MaximaService.RELAY_TARGET). */
+    private static final int RELAY_TARGET = 2;
     /** The desktop's own inbound direct port, and its relay port when it relays. */
     public static final int DIRECT_PORT = 9536;
     public static final int RELAY_PORT = 9535;

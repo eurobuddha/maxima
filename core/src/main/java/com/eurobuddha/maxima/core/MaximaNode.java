@@ -919,19 +919,11 @@ public final class MaximaNode {
                 out.add(a);
             }
         }
-        // STATIC fleet addressing: also advertise our mailbox at EVERY bootstrap
-        // relay, attached right now or not. The per-host routing key is derived
-        // deterministically from our seed, so these addresses are valid forever,
-        // and with the pool targeting the whole fleet each mailbox is drained by
-        // a live reader. This is what ends the "sender fans out to a stale
-        // snapshot" strand: the advertisement cannot go stale because it no
-        // longer depends on the moment's attachments.
-        for (String h : com.eurobuddha.maxima.core.session.Bootstrap.RELAYS) {
-            String a = mIdentity.contactAddress(h);
-            if (!out.contains(a) && !isInternalAddress(a)) {
-                out.add(a);
-            }
-        }
+        // Classic-scale addressing: advertise ONLY the home relays we actually
+        // attend (k is small). Staleness after a home move is healed the classic
+        // way - refreshContacts() pushes the new set on change, and a failed
+        // send does an on-demand MLS lookup (mlsLookup) - instead of being
+        // papered over by attending the whole fleet.
         return out;
     }
 
@@ -1183,26 +1175,91 @@ public final class MaximaNode {
         //    the peer is actually listening, a copy lands. The peer dedups by message id
         //    (ChatMessage.id), so the extra copies are harmless. This is the reliability
         //    guarantee: as long as the peer is reachable via ANY of its relays, it wins.
+        MaximaSender.Result okResult = fanOut(zContact, zApplication, zData);
+        if (okResult != null) {
+            return okResult;
+        }
+
+        // 3. THE CLASSIC HEAL: every address failed, so the contact's advertised
+        //    set is stale (they moved homes while we weren't told). Ask their MLS
+        //    - the phone book classic uses for exactly this - for their CURRENT
+        //    address, and retry once. This is what lets a small home-relay set
+        //    (k=2, not the whole fleet) stay reliable: staleness is healed on
+        //    demand instead of being papered over with redundancy.
+        if (mlsLookup(zContact)) {
+            okResult = fanOut(zContact, zApplication, zData);
+            if (okResult != null) {
+                return okResult;
+            }
+        }
+        throw new IllegalStateException("no reachable address for " + zContact.name);
+    }
+
+    /** One pass over the contact's advertised addresses. First OK wins the
+     *  return but every address still gets a copy (mailbox redundancy). Null
+     *  if nothing accepted. */
+    private MaximaSender.Result fanOut(Contact zContact, String zApplication, byte[] zData) {
         MaximaSender.Result okResult = null;
-        Exception last = null;
         for (String addr : zContact.addresses) {
             try {
                 MaximaSender.Result r = sendRaw(addr, zApplication, zData,
                         SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
                 if (r.isOk() && okResult == null) {
-                    okResult = r;   // first acceptance wins the return, but keep fanning out
+                    okResult = r;
                 }
-            } catch (Exception e) {
-                last = e;
+            } catch (Exception ignored) {
             }
         }
-        if (okResult != null) {
-            return okResult;
+        return okResult;
+    }
+
+    /**
+     * Ask a contact's MLS server for their CURRENT address (classic's
+     * {@code **maxima_mls_get**}; the answer rides back in the ack channel as a
+     * serialised MLSPacketGETResp - see {@link MaximaSender.Result#replyData}).
+     * On success the fresh address is put at the FRONT of the contact's set
+     * (old ones kept as fallback) and persisted.
+     *
+     * @return true if the contact's address set was updated
+     */
+    public boolean mlsLookup(Contact zContact) {
+        String mls = zContact.mls;
+        if (mls == null || mls.isEmpty() || zContact.publicKey == null) {
+            return false;
         }
-        if (last != null) {
-            throw last;
+        try {
+            com.eurobuddha.maxima.core.msg.MLSPacketGETReq req =
+                    new com.eurobuddha.maxima.core.msg.MLSPacketGETReq(
+                            zContact.publicKey,
+                            new MiniData(com.eurobuddha.maxima.core.crypto.MaximaCrypto
+                                    .randomBytes(16)).to0xString());
+            MaximaSender.Result r = sendRaw(mls,
+                    com.eurobuddha.maxima.core.directory.MlsService.APP_GET,
+                    com.eurobuddha.maxima.core.codec.Codec.serialise(req),
+                    SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+            if (r == null || !r.hasPayload()) {
+                return false;
+            }
+            com.eurobuddha.maxima.core.msg.MLSPacketGETResp resp =
+                    com.eurobuddha.maxima.core.msg.MLSPacketGETResp
+                            .fromBytes(r.replyData.getBytes());
+            String addr = resp.getAddress();
+            if (addr == null || addr.isEmpty()
+                    || !Keys.same(resp.getPublicKey(), zContact.publicKey)) {
+                return false;
+            }
+            if (!addr.equals(zContact.primaryAddress())) {
+                java.util.List<String> merged = new ArrayList<>();
+                merged.add(addr);
+                merged.addAll(zContact.addresses);
+                zContact.setAddresses(merged);
+                saveContact(zContact);
+                fireContacts(zContact, false);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
         }
-        throw new IllegalStateException("no reachable address for " + zContact.name);
     }
 
     /**

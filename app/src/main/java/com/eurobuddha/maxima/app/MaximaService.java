@@ -73,10 +73,11 @@ public final class MaximaService extends Service {
     private final AtomicBoolean mMaintainBusy = new AtomicBoolean(false);
     private final AtomicBoolean mResendBusy = new AtomicBoolean(false);
 
-    /** STATIC fleet routing: attend EVERY fleet relay (capped), so every mailbox
-     *  we advertise is drained by a live push reader — no rotation lottery. */
-    private static final int RELAY_TARGET = Math.min(8,
-            com.eurobuddha.maxima.core.session.Bootstrap.RELAYS.size());
+    /** Classic-scale routing: TWO home relays (primary + failover), like a
+     *  classic node's host — not the whole fleet. One kept-alive pushed socket
+     *  is already instant; the second is failover. Staleness after a home move
+     *  heals classic-style: refreshContacts() on change + MLS lookup-on-failure. */
+    private static final int RELAY_TARGET = 2;
 
     /** The media publish/fetch service (self-hosted blobs), or null if not up. */
     public static com.eurobuddha.maxima.core.media.MediaService media() {
@@ -309,6 +310,45 @@ public final class MaximaService extends Service {
                 }
                 Log.i(TAG, "attached to " + attached + " relays: " + node.myAddresses());
 
+                // OLD-HOME DRAIN: contacts may fan mail to a PREVIOUS home relay
+                // of ours until their copy of our address heals. Visit each
+                // recent old home briefly - attach (the relay pushes held mail
+                // down on route-register, the reader ingests it), then detach.
+                {
+                    java.util.List<String> current = node.pool().activeHosts();
+                    java.util.List<String> visits = new java.util.ArrayList<>();
+                    for (String h : HomeStore.recent(MaximaService.this)) {
+                        if (!current.contains(h)) {
+                            visits.add(h);
+                        }
+                    }
+                    if (!visits.isEmpty()) {
+                        final MaximaNode dn = node;
+                        Thread dt = new Thread(() -> {
+                            for (String h : visits) {
+                                try {
+                                    if (dn.pool().attachOne(h, 8000)) {
+                                        EventLog.add("drain visit: " + h);
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                            }
+                            try {
+                                Thread.sleep(10_000);   // let held mail push down
+                            } catch (InterruptedException ignored) {
+                            }
+                            for (String h : visits) {
+                                try {
+                                    dn.pool().detach(h);
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        }, "maxima-drain");
+                        dt.setDaemon(true);
+                        dt.start();
+                    }
+                }
+
                 long lastMaintain = System.currentTimeMillis();
                 // Receiving is PUSH now: every attached host has a dedicated
                 // reader thread in :core (25s NAT keep-alive + instant inbound).
@@ -439,6 +479,10 @@ public final class MaximaService extends Service {
                         }
                         lastMaintain = System.currentTimeMillis();
                         updateNotification(node.pool().activeCount() + " relay(s) connected");
+                        // Remember our current homes for the old-home drain.
+                        for (String h : node.pool().activeHosts()) {
+                            HomeStore.attached(MaximaService.this, h);
+                        }
                     }
                     Thread.sleep(1000);
                 }
