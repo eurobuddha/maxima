@@ -90,6 +90,16 @@ public final class NetworkPage implements Page {
     public void render() {
         mLog.setText(EventLog.asText(40));
         MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.app.jar.JarEngine jarEngine = MaximaService.jar();
+        if (node == null && jarEngine != null) {
+            // Classic engine: classic maintains the hosts itself; the hero just
+            // reflects its live connection set.
+            int jhosts = jarEngine.connectedHosts().size();
+            mNodeSub.setText(jhosts + (jhosts == 1 ? " host" : " hosts")
+                    + " · classic engine");
+            setPill(jhosts > 0 ? "Reachable" : "Offline", jhosts > 0 ? Kit.OK : Kit.BAD);
+            return;
+        }
         if (node == null) {
             mNodeSub.setText("starting…");
             setPill("Starting", Kit.WARN);
@@ -305,6 +315,28 @@ public final class NetworkPage implements Page {
     /** Connect to (or add + connect to) an external host, with an up-front
      *  explanation and an after-the-fact confirmation of the relay + count. */
     private void connectHost(final String host, final boolean alreadyConfigured) {
+        // Classic engine: adopt the host LIVE - no transport restart needed,
+        // classic proves it with a mined check-connect and just uses it.
+        final com.eurobuddha.maxima.app.jar.JarEngine jarEngine = MaximaService.jar();
+        if (MaximaService.node() == null && jarEngine != null) {
+            new AlertDialog.Builder(mAct)
+                    .setTitle(alreadyConfigured ? "Connect to this host?" : "Add and connect?")
+                    .setMessage(host + "\n\nThe classic engine will connect and prove this host "
+                            + "with a mined check-connect. No restart needed.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Connect", (d, w) -> {
+                        if (!alreadyConfigured) {
+                            RelayStore.add(mAct, host);
+                            mNewRelay.setText("");
+                        }
+                        EventLog.add("connecting to host: " + host + " (classic engine)");
+                        mAct.toast("Connecting to " + host + "…");
+                        jarEngine.connectHost(host);
+                        mView.postDelayed(() -> confirmConnected(host), 6000);
+                    })
+                    .show();
+            return;
+        }
         MaximaNode node = MaximaService.node();
         int now = node == null ? 0 : node.pool().activeCount();
         new AlertDialog.Builder(mAct)
@@ -333,8 +365,17 @@ public final class NetworkPage implements Page {
             return;
         }
         MaximaNode node = MaximaService.node();
-        int n = node == null ? 0 : node.pool().activeCount();
-        boolean up = node != null && node.pool().activeHosts().contains(host);
+        com.eurobuddha.maxima.app.jar.JarEngine jarEngine = MaximaService.jar();
+        int n;
+        boolean up;
+        if (node == null && jarEngine != null) {
+            java.util.List<String> jh = jarEngine.connectedHosts();
+            n = jh.size();
+            up = jh.contains(host);
+        } else {
+            n = node == null ? 0 : node.pool().activeCount();
+            up = node != null && node.pool().activeHosts().contains(host);
+        }
         render();
         new AlertDialog.Builder(mAct)
                 .setTitle(up ? "Connected" : "Reconnecting")

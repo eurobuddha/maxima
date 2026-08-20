@@ -228,15 +228,17 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
 
     private void renderPill() {
         MaximaNode node = MaximaService.node();
+        com.eurobuddha.maxima.app.jar.JarEngine jar = MaximaService.jar();
         ChatEngine chat = MaximaService.chat();
-        if (node == null) {
+        if (node == null && jar == null) {
             setDotColour(R.color.ux_subtext);
             stopPulse();
             mPill.setText("starting…");
             mPill.setTextColor(getResources().getColor(R.color.ux_subtext, getTheme()));
             return;
         }
-        int hosts = node.pool().activeCount();
+        int hosts = node != null ? node.pool().activeCount()
+                : jar.connectedHosts().size();
         int unread = chat == null ? 0 : chat.totalUnread();
         // The dot carries the online/offline state now (and breathes when live),
         // so the label no longer needs a glyph.

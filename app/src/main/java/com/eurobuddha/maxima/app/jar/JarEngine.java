@@ -113,6 +113,12 @@ public final class JarEngine implements ChatPort {
 		return mTransport.connectedHosts();
 	}
 
+	/** Connect to an additional host LIVE - no service restart. Classic adopts
+	 *  it via the mined check-connect like any other. */
+	public void connectHost(String zHostPort) {
+		mTransport.addHost(zHostPort);
+	}
+
 	/** Our Mx wallet address into classic's contact handshake (minimaaddress). */
 	public void setWalletAddress(String zMxAddress) {
 		try {

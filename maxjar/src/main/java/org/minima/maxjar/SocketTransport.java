@@ -102,6 +102,15 @@ public class SocketTransport implements MaximaTransport {
 		mHosts.remove(zHostPort);
 	}
 
+	/** Start maintaining a host - connects on the spot, then the sweep owns it. */
+	public void addHost(String zHostPort) {
+		if (zHostPort == null || zHostPort.isEmpty() || mHosts.contains(zHostPort)) {
+			return;
+		}
+		mHosts.add(zHostPort);
+		requestNewConnection();
+	}
+
 	// ---------------------------------------------------------------
 	// maintain: keep an outgoing connection to every configured host
 	// ---------------------------------------------------------------
