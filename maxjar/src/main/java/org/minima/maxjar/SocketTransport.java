@@ -205,6 +205,15 @@ public class SocketTransport implements MaximaTransport {
 
 				} else if (type == MSG_MAXIMA_CTRL) {
 					MaximaCTRLMessage ctrl = MaximaCTRLMessage.ReadFromStream(din);
+					// OUR mailbox handshake (relay extension, never sent by
+					// classic nodes) is handled HERE so the vendored brain
+					// stays byte-verbatim: the relay held mail for us while we
+					// were offline, just delivered it, and asks us to prove we
+					// hold the routing key so it can DELETE the copies.
+					if (ctrl.getType().getValue() == CTRL_MAILBOX_INFO) {
+						answerMailboxChallenge(zPeer, ctrl);
+						continue;
+					}
 					Message msg = new Message(MaximaManager.MAXIMA_CTRLMESSAGE);
 					msg.addObject("maximactrl", ctrl);
 					msg.addObject("nioclient", zPeer.nioc);
@@ -308,6 +317,59 @@ public class SocketTransport implements MaximaTransport {
 	@Override
 	public String getP2PAddress() {
 		return mP2PAddress;
+	}
+
+	// ---------------------------------------------------------------
+	// mailbox handshake (relay extension - classic-invisible)
+	// ---------------------------------------------------------------
+
+	/** Relay->client after a drain: [key][maxSeq]. Client->relay reply:
+	 *  [key][seq][signature by the routing PRIVATE key]. Same values as the
+	 *  relay's RelayServer.CTRL_MAILBOX_* - keep in lockstep. */
+	private static final int CTRL_MAILBOX_INFO = 40;
+	private static final int CTRL_MAILBOX_ACK = 41;
+
+	private void answerMailboxChallenge(Peer zPeer, MaximaCTRLMessage zCtrl) {
+		try {
+			java.io.DataInputStream d = new java.io.DataInputStream(
+					new java.io.ByteArrayInputStream(zCtrl.getData().getBytes()));
+			MiniData key = MiniData.ReadFromStream(d);
+			long seq = org.minima.objects.base.MiniNumber.ReadFromStream(d).getAsLong();
+
+			// Only ack a key we actually hold - the host keypair we created for
+			// this relay. Anything else is not ours to destroy.
+			org.minima.database.maxima.MaximaHost host =
+					org.minima.database.MinimaDB.getDB().getMaximaDB()
+							.loadHostFromPublicKey(key.to0xString());
+			if (host == null) {
+				return;
+			}
+
+			// canonical: "maxack" + key DER + 8-byte big-endian seq (relay mirrors)
+			java.io.ByteArrayOutputStream cb = new java.io.ByteArrayOutputStream();
+			java.io.DataOutputStream cd = new java.io.DataOutputStream(cb);
+			cd.write("maxack".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+			cd.write(key.getBytes());
+			cd.writeLong(seq);
+			cd.flush();
+			byte[] sig = org.minima.utils.encrypt.SignVerify.sign(
+					host.getPrivateKey().getBytes(), cb.toByteArray());
+
+			java.io.ByteArrayOutputStream ab = new java.io.ByteArrayOutputStream();
+			java.io.DataOutputStream ad = new java.io.DataOutputStream(ab);
+			key.writeDataStream(ad);
+			new org.minima.objects.base.MiniNumber(seq).writeDataStream(ad);
+			new MiniData(sig).writeDataStream(ad);
+			ad.flush();
+			MaximaCTRLMessage ack = new MaximaCTRLMessage(
+					new org.minima.objects.base.MiniByte(CTRL_MAILBOX_ACK));
+			ack.setData(new MiniData(ab.toByteArray()));
+			zPeer.write(body(MSG_MAXIMA_CTRL, ack));
+			MinimaLogger.log("mailbox: held mail collected - signed ack sent to "
+					+ zPeer.nioc.getFullAddress());
+		} catch (Exception e) {
+			MinimaLogger.log("mailbox ack failed: " + e);
+		}
 	}
 
 	// ---------------------------------------------------------------

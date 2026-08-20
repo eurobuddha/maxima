@@ -486,6 +486,10 @@ public final class RelayServer {
             }
             case Frame.MSG_MAXIMA_CTRL: {
                 MaximaCTRLMessage ctrl = MaximaCTRLMessage.fromBytes(payload);
+                if (ctrl.getType().getAsInt() == CTRL_MAILBOX_ACK) {
+                    handleMailboxAck(ctrl);
+                    return;
+                }
                 if (ctrl.getType().getAsInt() == MaximaCTRLMessage.TYPE_ID) {
                     // A valid routing key is a full RSA-1024 public-key DER.
                     // Anything else is junk - the 1-byte-key spam that filled the
@@ -606,8 +610,12 @@ public final class RelayServer {
                 Mailbox.Result r = mMailbox.store(to, Codec.serialise(pkg));
                 if (r == Mailbox.Result.STORED || r == Mailbox.Result.DUPLICATE) {
                     mStored.incrementAndGet();
-                    // Still UNKNOWN on the wire: a classic sender must see
-                    // classic behaviour, and knows nothing of a mailbox.
+                    // OK on the wire: the mailbox WILL deliver on reconnect, so
+                    // telling the sender "unknown" was a lie that made MaxSolo
+                    // show failures for messages that arrive. A sender that
+                    // wants proof-of-receipt uses receipts (Parlons does).
+                    zConn.write(Frame.ack(Frame.RESPONSE_OK));
+                    return;
                 }
             }
             mDropped.incrementAndGet();
@@ -809,35 +817,89 @@ public final class RelayServer {
      * frame, and only acknowledge on a clean write, so a socket that dies
      * mid-drain leaves the mail in place for next time rather than losing it.
      */
+    /** Mailbox handshake CTRL types - OURS, never sent by classic nodes.
+     *  INFO (relay->client) carries [key][maxSeq] after a drain; ACK
+     *  (client->relay) carries [key][seq][signature] where the signature - made
+     *  with the ROUTING PRIVATE KEY - is the proof-of-possession that makes
+     *  destructive delete safe (see the drain comment). */
+    static final int CTRL_MAILBOX_INFO = 40;
+    static final int CTRL_MAILBOX_ACK = 41;
+
+    /** The exact bytes both sides sign/verify for a mailbox ack. */
+    static byte[] mailboxAckCanonical(byte[] zKeyDer, long zSeq) throws Exception {
+        java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream d = new java.io.DataOutputStream(b);
+        d.write("maxack".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        d.write(zKeyDer);
+        d.writeLong(zSeq);
+        d.flush();
+        return b.toByteArray();
+    }
+
+    /** A signed ack: verify possession of the routing key, then delete. This is
+     *  the "proper full fix" the old drain comment deferred - the jar client
+     *  cooperates, classic clients never send it and keep TTL semantics. */
+    private void handleMailboxAck(MaximaCTRLMessage zCtrl) {
+        try {
+            java.io.DataInputStream d = new java.io.DataInputStream(
+                    new java.io.ByteArrayInputStream(zCtrl.getData().getBytes()));
+            MiniData key = MiniData.readFromStream(d);
+            long seq = com.eurobuddha.maxima.core.codec.MiniNumber
+                    .readFromStream(d).getAsLong();
+            MiniData sig = MiniData.readFromStream(d);
+            if (!com.eurobuddha.maxima.core.crypto.MaximaCrypto.verify(
+                    key.getBytes(), mailboxAckCanonical(key.getBytes(), seq),
+                    sig.getBytes())) {
+                log("mailbox ack BAD SIGNATURE for " + safe(key.to0xString()));
+                return;
+            }
+            int cleared = mMailbox.acknowledge(key.to0xString(), seq);
+            if (cleared > 0) {
+                log("mailbox acked+cleared " + cleared + " item(s) for "
+                        + safe(key.to0xString()));
+            }
+        } catch (Exception e) {
+            log("mailbox ack error: " + e);
+        }
+    }
+
     private void drainMailbox(Conn zConn, String zKey) {
         try {
             java.util.List<Mailbox.Item> held = mMailbox.fetch(zKey, 0, 100);
-            long acked = 0;
+            long maxSeq = 0;
             int sent = 0;
             for (Mailbox.Item item : held) {
                 try {
                     MaxTxPoW unit = MaxTxPoW.fromBytes(
                             reWrapForDelivery(item.ciphertext));
                     zConn.write(Frame.body(Frame.MSG_MAXIMA_TXPOW, unit));
+                    maxSeq = Math.max(maxSeq, item.sequence);
                     sent++;
                 } catch (Exception e) {
                     break;
                 }
             }
-            // Deliberately do NOT acknowledge/delete here. Route registration is
-            // unauthenticated (a routing key is public and there is no
-            // proof-of-possession on the wire, an interop constraint), so an
-            // attacker could register an OFFLINE victim's key and, by acking,
-            // DESTROY their held mail while reading nothing. Non-destructive
-            // delivery means the worst a hijacker achieves is opaque ciphertext
-            // they cannot decrypt; the real recipient still collects it when
-            // they hold the key. Re-delivery on reconnect is deduped by msgid;
-            // the box clears on TTL. (A signed fetch/ack that proves identity
-            // possession is the proper full fix - deferred, needs client
-            // cooperation; see THREAT-MODEL.)
+            // Deletion needs proof-of-possession: route registration is
+            // unauthenticated, so acking on registration alone would let anyone
+            // who announces a victim's PUBLIC key destroy their held mail. We
+            // challenge instead - a client holding the routing PRIVATE key
+            // answers with a signed ack (CTRL_MAILBOX_ACK) and the box clears;
+            // a classic client says nothing and keeps TTL + dedup semantics.
             if (sent > 0) {
+                try {
+                    java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                    java.io.DataOutputStream d = new java.io.DataOutputStream(b);
+                    new MiniData(zKey).writeDataStream(d);
+                    new com.eurobuddha.maxima.core.codec.MiniNumber(maxSeq)
+                            .writeDataStream(d);
+                    d.flush();
+                    MaximaCTRLMessage info = new MaximaCTRLMessage(CTRL_MAILBOX_INFO);
+                    info.setData(new MiniData(b.toByteArray()));
+                    zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL, info));
+                } catch (Exception ignored) {
+                }
                 log("delivered " + sent + " held item(s) to "
-                        + safe(zKey) + " (not acked - unauthenticated route)");
+                        + safe(zKey) + " (signed-ack challenge sent)");
             }
         } catch (Exception e) {
             log("mailbox drain error: " + e);
