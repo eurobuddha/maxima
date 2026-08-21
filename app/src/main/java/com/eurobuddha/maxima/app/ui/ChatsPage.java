@@ -237,7 +237,8 @@ public final class ChatsPage implements Page {
     }
 
     /** Create a group. We are its only admin - see Explain "groups". */
-    private void newGroup() {
+    /** Public: the main overflow menu starts a group from any tab. */
+    public void newGroup() {
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {

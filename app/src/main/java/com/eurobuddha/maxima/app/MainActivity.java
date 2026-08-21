@@ -125,7 +125,34 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         findViewById(R.id.btn_main_search).setOnClickListener(v ->
                 startActivity(new android.content.Intent(this,
                         com.eurobuddha.maxima.app.ui.SearchActivity.class)));
-        findViewById(R.id.btn_main_more).setOnClickListener(v -> showTab(4));
+        // A three-dot icon promises a MENU - give it one instead of a tab jump.
+        findViewById(R.id.btn_main_more).setOnClickListener(v -> {
+            android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);
+            m.getMenu().add("New group");
+            m.getMenu().add("Scan QR");
+            m.getMenu().add("Search");
+            m.getMenu().add("Settings");
+            m.setOnMenuItemClickListener(item -> {
+                CharSequence t = item.getTitle();
+                if ("New group".contentEquals(t)) {
+                    showTab(0);
+                    for (Page pg : mPages) {
+                        if (pg instanceof com.eurobuddha.maxima.app.ui.ChatsPage) {
+                            ((com.eurobuddha.maxima.app.ui.ChatsPage) pg).newGroup();
+                        }
+                    }
+                } else if ("Scan QR".contentEquals(t)) {
+                    scanQr();
+                } else if ("Search".contentEquals(t)) {
+                    startActivity(new android.content.Intent(this,
+                            com.eurobuddha.maxima.app.ui.SearchActivity.class));
+                } else {
+                    showTab(4);
+                }
+                return true;
+            });
+            m.show();
+        });
         android.widget.ImageButton themeBtn = findViewById(R.id.btn_main_theme);
         themeBtn.setImageResource(ChatPrefs.appearanceIcon(this));
         themeBtn.setOnClickListener(v -> {
