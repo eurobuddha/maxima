@@ -217,9 +217,19 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         JLabel pr = new JLabel(presence(c));
         pr.setFont(t.font(11.5f));
         pr.setForeground(t.subtext);
-        pr.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel prRow = new JPanel();
+        prRow.setOpaque(false);
+        prRow.setLayout(new BoxLayout(prRow, BoxLayout.X_AXIS));
+        prRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        prRow.add(pr);
+        JComponent pill = peerPill(c);
+        if (pill != null) {
+            prRow.add(Box.createRigidArea(new Dimension(8, 0)));
+            prRow.add(pill);
+        }
+        prRow.add(Box.createHorizontalGlue());
         mid.add(nm);
-        mid.add(pr);
+        mid.add(prRow);
         row.add(mid, BorderLayout.CENTER);
         Icons.Btn info = new Icons.Btn(Icons.CONTACTS, t.subtext, DKit.alpha(t.subtext, 40), 30, 17, 1.6f);
         info.onClick(() -> showContactCard(c));
@@ -259,18 +269,36 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
         new Thread(() -> {
             final String ip = toIpForm(myAddress());
+            String pm = "";
+            try { pm = node.permanentAddress(); } catch (Exception ignored) { }
+            final String perm = pm == null ? "" : pm;
             javax.swing.SwingUtilities.invokeLater(() -> {
-                if (ip == null || ip.isEmpty()) {
-                    qrHolder.setText("Couldn't resolve a shareable IP. Try again when online.");
+                // Prefer the permanent MAX# when a static MLS is pinned — it keeps
+                // resolving even after you move networks. Fall back to the live IP.
+                String share = !perm.isEmpty() ? perm : ip;
+                if (share == null || share.isEmpty()) {
+                    qrHolder.setText("Couldn't resolve a shareable address. Try again when online.");
                     return;
                 }
-                java.awt.image.BufferedImage qr = DesktopQr.encode(ip, 230,
+                java.awt.image.BufferedImage qr = DesktopQr.encode(share, 230,
                         0xFF000000 | (t.text.getRGB() & 0xFFFFFF), 0xFFFFFFFF);
                 if (qr != null) {
                     qrHolder.setText(null);
                     qrHolder.setIcon(new javax.swing.ImageIcon(qr));
                 }
-                copyHolder.add(k.copyField("maxima address", ip, false), BorderLayout.CENTER);
+                JPanel fields = new JPanel();
+                fields.setOpaque(false);
+                fields.setLayout(new BoxLayout(fields, BoxLayout.Y_AXIS));
+                if (!perm.isEmpty()) {
+                    fields.add(k.copyField("permanent MAX# address", perm, false));
+                    if (ip != null && !ip.isEmpty()) {
+                        fields.add(k.vgap(8));
+                        fields.add(k.copyField("current address", ip, false));
+                    }
+                } else {
+                    fields.add(k.copyField("maxima address", ip, false));
+                }
+                copyHolder.add(fields, BorderLayout.CENTER);
                 copyHolder.revalidate();
                 d.pack();
                 d.setLocationRelativeTo(window.frame());
@@ -358,6 +386,12 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
             body.add(k.vgap(6));
             body.add(k.copyField("payment address (MINIMA)", c.minimaAddress, false));
         }
+        body.add(k.vgap(10));
+        DKit.RoundPanel meta = k.card();
+        meta.add(k.kvLine("Software", softwareLabel(c)));
+        meta.add(k.divider());
+        meta.add(k.kvLine("Last seen", c.lastSeen > 0 ? presence(c) : "never"));
+        body.add(meta);
         body.add(k.vgap(12));
         DKit.HoverButton remove = k.dangerButton("Remove contact");
         JPanel rr = new JPanel();
@@ -380,8 +414,14 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private boolean introduce(String address) {
-        if (address.isEmpty() || !address.contains("@")) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Needs the form Mx…@host:port");
+        // Accept BOTH forms the phone accepts: a live Mx…@host:port address AND a
+        // permanent MAX#… address (which the engine resolves through the MLS).
+        boolean ok = !address.isEmpty()
+                && ((address.startsWith("Mx") && address.contains("@") && address.contains(":"))
+                    || address.startsWith("MAX#"));
+        if (!ok) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Paste an Mx…@host:port address or a permanent MAX#… address.");
             return false;
         }
         new Thread(() -> {
@@ -453,6 +493,30 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** core / classic pill next to a contact's presence; null for a plain peer. */
+    private JComponent peerPill(Contact c) {
+        String label;
+        boolean core;
+        if (c.isClassic()) { label = "classic"; core = false; }
+        else if ("core".equals(c.kind)) { label = "core"; core = true; }
+        else return null;
+        DKit.RoundPanel p = k.round(core ? DKit.alpha(t.accent, 45) : t.input, 999);
+        p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
+        p.setBorder(new EmptyBorder(1, 8, 1, 8));
+        JLabel l = new JLabel(label);
+        l.setFont(t.semibold(9.5f));
+        l.setForeground(core ? t.text : t.subtext);
+        p.add(l);
+        p.setMaximumSize(p.getPreferredSize());
+        return p;
+    }
+
+    private String softwareLabel(Contact c) {
+        if (c.isClassic()) return "Classic Maxima";
+        if ("core".equals(c.kind)) return "Minima Core";
+        return "Parlons app";
     }
 
     private String presence(Contact c) {
