@@ -100,8 +100,12 @@ public final class MaximaWindow {
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.setBackground(t.header);
         header.add(buildAppBar());
-        String[] labels = new String[mTabs.size()];
-        for (int i = 0; i < mTabs.size(); i++) labels[i] = mTabs.get(i).label();
+        // Phone parity: FOUR visible tabs (Chats/Contacts/Wallet/Network).
+        // Settings is the last panel (index 4) and is reached via the ⋮ overflow,
+        // never shown as a tab — so the strip carries every tab but the last.
+        int stripCount = mTabs.size() - 1;
+        String[] labels = new String[stripCount];
+        for (int i = 0; i < stripCount; i++) labels[i] = mTabs.get(i).label();
         mStrip = new TabStrip(labels, t, this::select);
         header.add(mStrip);
 

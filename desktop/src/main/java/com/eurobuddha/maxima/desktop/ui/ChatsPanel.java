@@ -353,11 +353,30 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mInput.requestFocusInWindow();
     }
 
+    private static final long CLUSTER_GAP_MS = 5 * 60 * 1000L;   // phone: 5-min clustering
+
     private void rebuildThread(List<ChatEngine.Entry> conv) {
         mThread.removeAll();
-        for (ChatEngine.Entry e : conv) {
-            mThread.add(bubble(e));
-            mThread.add(k.vgap(6));
+        String lastDay = null;
+        for (int i = 0; i < conv.size(); i++) {
+            ChatEngine.Entry e = conv.get(i);
+            ChatEngine.Entry prev = i > 0 ? conv.get(i - 1) : null;
+            ChatEngine.Entry next = i < conv.size() - 1 ? conv.get(i + 1) : null;
+
+            // Date separator when the calendar day changes (Today / Yesterday / date).
+            String day = dayKey(e.time);
+            if (!day.equals(lastDay)) {
+                mThread.add(dateSeparator(e.time));
+                mThread.add(k.vgap(4));
+                lastDay = day;
+            }
+
+            // iMessage-style clustering: same sender within 5 min on the same day.
+            boolean first = prev == null || !sameCluster(prev, e);
+            boolean last = next == null || !sameCluster(e, next);
+
+            mThread.add(bubble(e, first, last));
+            mThread.add(k.vgap(last ? 6 : 1));   // roomy between clusters, tight within
         }
         mThread.add(Box.createVerticalGlue());
         mThread.revalidate();
@@ -377,7 +396,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         for (Component row : mThread.getComponents()) {
             if (row instanceof JPanel) {
                 for (Component c : ((JPanel) row).getComponents()) {
-                    if (c instanceof DKit.RoundPanel) {
+                    if (c instanceof Bubble) {
                         Dimension d = c.getPreferredSize();
                         c.setMaximumSize(new Dimension(Math.min(max, d.width), Integer.MAX_VALUE));
                     }
@@ -387,7 +406,95 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mThread.revalidate();
     }
 
-    private JComponent bubble(ChatEngine.Entry e) {
+    /** Two messages cluster if same author, same day, within the 5-min window. */
+    private static boolean sameCluster(ChatEngine.Entry a, ChatEngine.Entry b) {
+        return a.mine == b.mine
+                && a.sender.equals(b.sender)
+                && dayKey(a.time).equals(dayKey(b.time))
+                && Math.abs(b.time - a.time) <= CLUSTER_GAP_MS;
+    }
+
+    private static String dayKey(long ms) {
+        return new java.text.SimpleDateFormat("yyyyMMdd").format(new java.util.Date(ms));
+    }
+
+    /** "Today" / "Yesterday" / weekday-in-the-last-week / "d MMM yyyy". */
+    private static String dateLabel(long ms) {
+        java.util.Calendar day = java.util.Calendar.getInstance();
+        day.setTimeInMillis(ms);
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        String key = dayKey(ms);
+        if (key.equals(dayKey(now.getTimeInMillis()))) return "Today";
+        now.add(java.util.Calendar.DAY_OF_YEAR, -1);
+        if (key.equals(dayKey(now.getTimeInMillis()))) return "Yesterday";
+        long ageDays = (System.currentTimeMillis() - ms) / (24L * 3600 * 1000);
+        if (ageDays < 7) {
+            return new java.text.SimpleDateFormat("EEEE", java.util.Locale.UK)
+                    .format(new java.util.Date(ms));
+        }
+        return new java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
+                .format(new java.util.Date(ms));
+    }
+
+    /** Centered date pill, phone-style. */
+    private JComponent dateSeparator(long ms) {
+        JPanel line = new JPanel();
+        line.setOpaque(false);
+        line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
+        line.setAlignmentX(Component.LEFT_ALIGNMENT);
+        DKit.RoundPanel pill = k.round(t.input, 12);
+        pill.setLayout(new BoxLayout(pill, BoxLayout.X_AXIS));
+        pill.setBorder(new EmptyBorder(3, 12, 3, 12));
+        JLabel lbl = new JLabel(dateLabel(ms));
+        lbl.setFont(t.font(10.5f));
+        lbl.setForeground(t.subtext);
+        pill.add(lbl);
+        pill.setMaximumSize(pill.getPreferredSize());
+        line.add(Box.createHorizontalGlue());
+        line.add(pill);
+        line.add(Box.createHorizontalGlue());
+        return line;
+    }
+
+    /** A message bubble with independent corner radii, so the first bubble of a
+     *  cluster can carry a small 3px "tail" corner exactly like the phone. */
+    static final class Bubble extends JPanel {
+        private final Color bg;
+        private final int tl, tr, br, bl;
+
+        Bubble(Color bg, int tl, int tr, int br, int bl) {
+            this.bg = bg;
+            this.tl = tl;
+            this.tr = tr;
+            this.br = br;
+            this.bl = bl;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth(), h = getHeight();
+            java.awt.geom.Path2D.Float p = new java.awt.geom.Path2D.Float();
+            p.moveTo(tl, 0);
+            p.lineTo(w - tr, 0);
+            p.quadTo(w, 0, w, tr);
+            p.lineTo(w, h - br);
+            p.quadTo(w, h, w - br, h);
+            p.lineTo(bl, h);
+            p.quadTo(0, h, 0, h - bl);
+            p.lineTo(0, tl);
+            p.quadTo(0, 0, tl, 0);
+            p.closePath();
+            g2.setColor(bg);
+            g2.fill(p);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private JComponent bubble(ChatEngine.Entry e, boolean first, boolean last) {
         boolean mine = e.mine;
         boolean media = ChatMedia.isMedia(e.body);
         boolean pay = ChatPay.isPayment(e.body);
@@ -397,13 +504,28 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
         line.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        Color bg = mine ? t.bubbleOut : t.bubbleIn;
         Color fg = mine ? t.bubbleOutText : t.bubbleInText;
-        DKit.RoundPanel b = new DKit.RoundPanel(bg, 16);
+        // Phone geometry: 8px corners, a 3px "tail" on the first bubble of a
+        // cluster (top-outer corner), payment cards a uniform 16px accent.
+        Bubble b;
+        if (pay) {
+            b = new Bubble(t.accent, 16, 16, 16, 16);
+            fg = t.onAccent;
+        } else {
+            Color bg = mine ? t.bubbleOut : t.bubbleIn;
+            int R = 8, tail = 3;
+            if (!first) {
+                b = new Bubble(bg, R, R, R, R);
+            } else if (mine) {
+                b = new Bubble(bg, R, tail, R, R);   // tail top-right
+            } else {
+                b = new Bubble(bg, tail, R, R, R);   // tail top-left
+            }
+        }
         b.setLayout(new BoxLayout(b, BoxLayout.Y_AXIS));
         b.setBorder(new EmptyBorder(8, 13, 7, 13));
 
-        if (mOpenGroup && !mine) {
+        if (mOpenGroup && !mine && first) {
             JLabel who = new JLabel(nameFor(e.sender));
             who.setFont(t.semibold(11f));
             who.setForeground(DKit.alpha(fg, 200));
@@ -432,11 +554,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             b.add(body);
         }
 
-        JLabel meta = new JLabel(time(e.time) + (mine ? "  " + stateGlyph(e) : ""));
-        meta.setFont(t.font(10f));
-        meta.setForeground(DKit.alpha(fg, 160));
-        meta.setAlignmentX(Component.LEFT_ALIGNMENT);
-        b.add(meta);
+        if (last) {   // phone: timestamp + ticks only on the last bubble of a cluster
+            JLabel meta = new JLabel(time(e.time) + (mine ? "  " + stateGlyph(e) : ""));
+            meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10));
+            meta.setForeground(DKit.alpha(fg, 160));
+            meta.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(meta);
+        }
 
         Dimension pref = b.getPreferredSize();
         b.setMaximumSize(new Dimension(Math.min(bubbleMax(), pref.width), Integer.MAX_VALUE));
@@ -609,7 +733,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     // ---- media ----
 
-    private void addMediaTo(DKit.RoundPanel b, String body, Color fg) {
+    private void addMediaTo(JPanel b, String body, Color fg) {
         String caption = ChatMedia.caption(body);
         String mime = ChatMedia.mime(body);
         final String ref = ChatMedia.ref(body);
@@ -730,10 +854,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private String stateGlyph(ChatEngine.Entry e) {
         String st = e.state == null ? "" : e.state;
+        if (st.contains("fail")) return "✗";                       // phone: ic_error ✗
         if (st.contains("read")) return "✓✓";
         if (st.contains("deliver") || !e.deliveredBy.isEmpty()) return "✓✓";
         if (st.contains("sent")) return "✓";
-        return "·";
+        return "⋯";                                                // sending (phone: ⋯)
     }
 
     private static String shortKey(String kk) {
