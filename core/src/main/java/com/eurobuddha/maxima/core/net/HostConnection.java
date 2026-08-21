@@ -171,6 +171,45 @@ public final class HostConnection implements Closeable {
     /** All post-attach writes go through here: keep-alive runs on the maintain
      *  thread while acks run on the pump thread, so writes to the one socket
      *  must be serialised or two frames interleave into garbage. */
+    /** Relay CTRL types for the mailbox/possession handshake - keep in lockstep
+     *  with RelayServer.CTRL_MAILBOX_* and the jar client's SocketTransport. */
+    private static final int CTRL_MAILBOX_INFO = 40;
+    private static final int CTRL_MAILBOX_ACK = 41;
+
+    private void answerMailboxChallenge(MaximaCTRLMessage zCtrl) {
+        try {
+            java.io.DataInputStream d = new java.io.DataInputStream(
+                    new java.io.ByteArrayInputStream(zCtrl.getData().getBytes()));
+            MiniData key = MiniData.readFromStream(d);
+            long seq = com.eurobuddha.maxima.core.codec.MiniNumber
+                    .readFromStream(d).getAsLong();
+            // Only answer for the routing key we actually hold on this host.
+            if (!key.to0xString().equalsIgnoreCase(
+                    new MiniData(routingKey()).to0xString())) {
+                return;
+            }
+            // canonical: "maxack" + key DER + 8-byte big-endian seq (relay mirrors)
+            java.io.ByteArrayOutputStream cb = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream cd = new java.io.DataOutputStream(cb);
+            cd.write("maxack".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            cd.write(key.getBytes());
+            cd.writeLong(seq);
+            cd.flush();
+            byte[] sig = com.eurobuddha.maxima.core.crypto.MaximaCrypto.sign(
+                    mPerHostKey.getPrivate(), cb.toByteArray());
+            java.io.ByteArrayOutputStream ab = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream ad = new java.io.DataOutputStream(ab);
+            key.writeDataStream(ad);
+            new com.eurobuddha.maxima.core.codec.MiniNumber(seq).writeDataStream(ad);
+            new MiniData(sig).writeDataStream(ad);
+            ad.flush();
+            MaximaCTRLMessage ack = new MaximaCTRLMessage(CTRL_MAILBOX_ACK);
+            ack.setData(new MiniData(ab.toByteArray()));
+            writeFrame(Frame.body(Frame.MSG_MAXIMA_CTRL, ack));
+        } catch (Exception ignored) {
+        }
+    }
+
     private synchronized void writeFrame(byte[] zBody) throws Exception {
         Frame.write(mOut, zBody);
         mLastWrite = System.currentTimeMillis();
@@ -211,6 +250,14 @@ public final class HostConnection implements Closeable {
             MaximaCTRLMessage ctrl = MaximaCTRLMessage.fromBytes(payload);
             if (ctrl.getType().getAsInt() == MaximaCTRLMessage.TYPE_MLS) {
                 mTheirMlsAddress = MaximaCTRLMessage.mlsAddressFrom(ctrl, mHost + ":" + mPort);
+            } else if (ctrl.getType().getAsInt() == CTRL_MAILBOX_INFO) {
+                // The relay probes us to prove we hold this route's private key
+                // (route hijack defence) and to authorize deleting delivered
+                // mail. Sign "maxack"+keyDER+seq with our per-host key - the
+                // relay verifies against the routing PUBLIC key it has. Only
+                // the holder of the private key can answer, so a squatter who
+                // announced our public key can neither be served nor drain us.
+                answerMailboxChallenge(ctrl);
             }
             return true;
         }

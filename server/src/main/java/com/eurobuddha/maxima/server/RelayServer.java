@@ -219,6 +219,13 @@ public final class RelayServer {
         /** Every route this conn registered, so cleanup removes ALL of them. */
         final java.util.Set<String> routes =
                 java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+        /** Routes for which this conn PROVED possession of the private key
+         *  (answered the possession probe). Only a verified route is
+         *  non-displaceable and eligible for a mailbox drain - this is what
+         *  stops anyone announcing a victim's public key from intercepting
+         *  their ciphertext or blackholing their inbound. */
+        final java.util.Set<String> verifiedKeys =
+                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
         /** cleanup() runs its body once even if two threads reach it. */
         final java.util.concurrent.atomic.AtomicBoolean cleaned =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -487,7 +494,7 @@ public final class RelayServer {
             case Frame.MSG_MAXIMA_CTRL: {
                 MaximaCTRLMessage ctrl = MaximaCTRLMessage.fromBytes(payload);
                 if (ctrl.getType().getAsInt() == CTRL_MAILBOX_ACK) {
-                    handleMailboxAck(ctrl);
+                    handleMailboxAck(zConn, ctrl);
                     return;
                 }
                 if (ctrl.getType().getAsInt() == MaximaCTRLMessage.TYPE_ID) {
@@ -504,14 +511,16 @@ public final class RelayServer {
                     if (!zConn.routes.contains(key) && zConn.routes.size() >= MAX_ROUTES_PER_CONN) {
                         return;
                     }
-                    // Do NOT displace a live binding for the same key. A routing
-                    // key is public, so without this anyone could announce
-                    // someone else's key and hijack/blackhole their traffic. The
-                    // first live holder keeps the route until it actually drops.
+                    // A routing key is PUBLIC, so registration alone proves
+                    // nothing. Refuse only to displace a holder that has PROVEN
+                    // possession (the real owner) - an unverified/provisional
+                    // squatter can always be taken over, so the true owner
+                    // reclaims its key the moment it proves possession below.
                     Conn existing = mRoutes.get(key);
                     if (existing != null && existing != zConn
-                            && !existing.socket.isClosed()) {
-                        log("ignoring duplicate route claim for "
+                            && !existing.socket.isClosed()
+                            && existing.verifiedKeys.contains(key)) {
+                        log("ignoring route claim for verified holder "
                                 + safe(key) + " from " + zConn.sourceIp);
                         return;
                     }
@@ -519,9 +528,14 @@ public final class RelayServer {
                     zConn.routes.add(key);
                     mRoutes.put(key, zConn);
                     mKnownRoutes.put(key, Boolean.TRUE);
-                    log("route registered " + safe(key) + " conn=" + zConn.id);
-                    // Deliver anything held while they were away.
-                    drainMailbox(zConn, key);
+                    log("route registered (provisional) " + safe(key)
+                            + " conn=" + zConn.id);
+                    // Do NOT drain mail yet - draining to an unproven claimant
+                    // would hand a victim's held ciphertext to an attacker.
+                    // Send a possession PROBE (mailbox-info seq 0); the client
+                    // holding the routing PRIVATE key answers with a signed ack
+                    // and only then is the route verified + its mailbox drained.
+                    sendPossessionProbe(zConn, key);
                 }
                 return;
             }
@@ -598,9 +612,14 @@ public final class RelayServer {
             return;
         }
 
-        // Otherwise relay it, byte-identical, exactly one hop.
+        // Otherwise relay it, byte-identical, exactly one hop - but ONLY to a
+        // route whose holder proved possession of the key. An unverified
+        // provisional claimant is treated as "not here": the message falls
+        // through to the mailbox, so a squatter announcing a victim's public
+        // key receives nothing and the real owner collects it on reconnect.
         Conn dest = mRoutes.get(to);
-        if (dest == null || dest.socket.isClosed()) {
+        if (dest == null || dest.socket.isClosed()
+                || !dest.verifiedKeys.contains(to)) {
             // The classic outcome is a silent loss. We can do better: if the
             // recipient is a KNOWN user of this relay (has attached before),
             // hold it for them. We do NOT store for a key that has never
@@ -839,7 +858,25 @@ public final class RelayServer {
     /** A signed ack: verify possession of the routing key, then delete. This is
      *  the "proper full fix" the old drain comment deferred - the jar client
      *  cooperates, classic clients never send it and keep TTL semantics. */
-    private void handleMailboxAck(MaximaCTRLMessage zCtrl) {
+    /** Possession probe: a mailbox-info with seq 0. The client holding the
+     *  routing PRIVATE key answers with a signed ack over key+0 (its normal
+     *  mailbox-ack path handles any seq), proving possession without deleting
+     *  anything (seq 0 clears no mail). */
+    private void sendPossessionProbe(Conn zConn, String zKey) {
+        try {
+            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream d = new java.io.DataOutputStream(b);
+            new MiniData(zKey).writeDataStream(d);
+            new com.eurobuddha.maxima.core.codec.MiniNumber(0).writeDataStream(d);
+            d.flush();
+            MaximaCTRLMessage info = new MaximaCTRLMessage(CTRL_MAILBOX_INFO);
+            info.setData(new MiniData(b.toByteArray()));
+            zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL, info));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void handleMailboxAck(Conn zConn, MaximaCTRLMessage zCtrl) {
         try {
             java.io.DataInputStream d = new java.io.DataInputStream(
                     new java.io.ByteArrayInputStream(zCtrl.getData().getBytes()));
@@ -853,10 +890,26 @@ public final class RelayServer {
                 log("mailbox ack BAD SIGNATURE for " + safe(key.to0xString()));
                 return;
             }
-            int cleared = mMailbox.acknowledge(key.to0xString(), seq);
+            String k = key.to0xString();
+            // A valid signature over key+seq PROVES possession of the routing
+            // private key, whatever the seq. Mark this conn verified for the
+            // key: it is now the non-displaceable owner and eligible to drain.
+            boolean firstProof = zConn.verifiedKeys.add(k);
+            if (firstProof) {
+                log("route VERIFIED " + safe(k) + " conn=" + zConn.id);
+            }
+            if (seq == 0) {
+                // Possession probe answered - deliver held mail now that the
+                // claimant is proven, then the drain sends the real deletion
+                // challenge (seq = maxSeq) via the branch below on its reply.
+                if (mRoutes.get(k) == zConn) {
+                    drainMailbox(zConn, k);
+                }
+                return;
+            }
+            int cleared = mMailbox.acknowledge(k, seq);
             if (cleared > 0) {
-                log("mailbox acked+cleared " + cleared + " item(s) for "
-                        + safe(key.to0xString()));
+                log("mailbox acked+cleared " + cleared + " item(s) for " + safe(k));
             }
         } catch (Exception e) {
             log("mailbox ack error: " + e);
@@ -1011,7 +1064,9 @@ public final class RelayServer {
             // reconnect that swarm relay-switching may send elsewhere. Re-draining
             // here on a slow cadence closes that gap; the client dedups by msgid,
             // and an empty mailbox makes this a cheap no-op.
-            if (zNow - c.lastDrain > DRAIN_INTERVAL_MS) {
+            if (zNow - c.lastDrain > DRAIN_INTERVAL_MS
+                    && c.routingKey != null
+                    && c.verifiedKeys.contains(c.routingKey)) {
                 c.lastDrain = zNow;
                 drainMailbox(c, c.routingKey);
             }
