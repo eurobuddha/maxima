@@ -61,7 +61,7 @@ public final class SearchActivity extends Activity {
         root.setBackgroundColor(getColor(R.color.ux_bg));
 
         // Top bar: back + query field + clear.
-        LinearLayout bar = new LinearLayout(this);
+        final LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setBackgroundColor(getColor(R.color.ux_header));
@@ -101,6 +101,18 @@ public final class SearchActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         setContentView(root);
+
+        // Edge-to-edge (targetSdk 35): the header extends up under the status
+        // bar, the results clear the nav bar / keyboard - same treatment as
+        // the main shell, or the page renders flush under the system bars.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            androidx.core.graphics.Insets sys = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                            | androidx.core.view.WindowInsetsCompat.Type.ime());
+            bar.setPadding(dp(4), dp(8) + sys.top, dp(8), dp(8));
+            mResults.setPadding(0, 0, 0, sys.bottom + dp(8));
+            return insets;
+        });
 
         mQuery.addTextChangedListener(new TextWatcher() {
             @Override
