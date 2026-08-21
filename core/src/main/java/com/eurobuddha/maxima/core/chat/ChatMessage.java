@@ -145,6 +145,9 @@ public final class ChatMessage {
         m.ref = zCallId;
         m.state = zKind;
         m.body = zPayload == null ? "" : zPayload;
+        // Send time guards against the mailbox re-pushing a stale offer at a
+        // phone that reconnects hours later - a call is only live for seconds.
+        m.time = System.currentTimeMillis();
         return m;
     }
 

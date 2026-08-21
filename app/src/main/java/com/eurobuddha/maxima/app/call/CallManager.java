@@ -87,6 +87,8 @@ public final class CallManager {
     private Runnable mRingTimeout;
     private boolean mMuted;
     private boolean mSpeaker;
+    private String mLastEndedCallId = "";
+    private Runnable mConnectTimeout;
 
     private CallManager(Context zCtx) {
         mCtx = zCtx;
@@ -129,6 +131,9 @@ public final class CallManager {
             }
             Contact c = contact(zPeerKey);
             if (c == null) {
+                mPeerKey = zPeerKey;
+                setState(State.ENDED, "no route to them");
+                mState = State.IDLE;
                 return;
             }
             mCallId = UUID.randomUUID().toString().substring(0, 13);
@@ -161,6 +166,17 @@ public final class CallManager {
             String kind = zMsg.state;
             switch (kind) {
                 case "offer": {
+                    // The relay mailbox re-pushes held units on reconnect: a
+                    // stale offer must never ghost-ring a call long dead.
+                    if (zMsg.time > 0
+                            && System.currentTimeMillis() - zMsg.time > 90_000) {
+                        EventLog.add("stale call offer ignored ("
+                                + name(zFromKey) + ")");
+                        return;
+                    }
+                    if (zMsg.ref.equals(mLastEndedCallId)) {
+                        return;   // re-delivered signaling for an ended call
+                    }
                     if (mState != State.IDLE && mState != State.ENDED) {
                         // one call at a time - tell the second caller we're busy
                         signalTo(zFromKey, zMsg.ref, "busy", "");
@@ -182,6 +198,7 @@ public final class CallManager {
                     }
                     stopRingTimeout();
                     setState(State.CONNECTING, null);
+                    armConnectTimeout();
                     mPc.setRemoteDescription(new Sdp("answer-remote"),
                             new SessionDescription(
                                     SessionDescription.Type.ANSWER, zMsg.body));
@@ -237,6 +254,7 @@ public final class CallManager {
             stopRinging();
             stopRingTimeout();
             setState(State.CONNECTING, null);
+            armConnectTimeout();
             ensureFactory();
             createPeer();
             mPc.setRemoteDescription(new Sdp("offer-remote"),
@@ -328,6 +346,7 @@ public final class CallManager {
             public void onConnectionChange(PeerConnection.PeerConnectionState s) {
                 mExec.execute(() -> {
                     if (s == PeerConnection.PeerConnectionState.CONNECTED) {
+                        stopConnectTimeout();
                         mLiveSince = System.currentTimeMillis();
                         AudioManager am = (AudioManager)
                                 mCtx.getSystemService(Context.AUDIO_SERVICE);
@@ -369,9 +388,32 @@ public final class CallManager {
         mPendingIce.clear();
     }
 
+    private void armConnectTimeout() {
+        stopConnectTimeout();
+        mConnectTimeout = () -> mExec.execute(() -> {
+            if (mState == State.CONNECTING) {
+                signal("bye", "");
+                end("couldn't connect", false);
+            }
+        });
+        mMain.postDelayed(mConnectTimeout, 20_000);
+    }
+
+    private void stopConnectTimeout() {
+        if (mConnectTimeout != null) {
+            mMain.removeCallbacks(mConnectTimeout);
+            mConnectTimeout = null;
+        }
+    }
+
     private void end(String zReason, boolean zSignalBye) {
         stopRinging();
         stopRingTimeout();
+        stopConnectTimeout();
+        mLastEndedCallId = mCallId;
+        // The lock-screen call notification must die with the call, whether or
+        // not the call screen is open to dismiss it.
+        IncomingCallScreen.dismiss(mCtx);
         if (zSignalBye) {
             signal("bye", "");
         }

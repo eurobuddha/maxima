@@ -120,6 +120,11 @@ public final class CallActivity extends Activity implements CallManager.Listener
 
         setContentView(root);
 
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{android.Manifest.permission.RECORD_AUDIO}, 1);
+        }
         CallManager cm = CallManager.get(this);
         cm.setListener(this);
         if (getIntent().getBooleanExtra(EXTRA_OUTGOING, false)
@@ -131,6 +136,9 @@ public final class CallActivity extends Activity implements CallManager.Listener
 
     @Override
     public void onCallState(CallManager.State zState, String zPeerKey, String zReason) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
         renderState(zState, zReason);
     }
 
@@ -209,10 +217,9 @@ public final class CallActivity extends Activity implements CallManager.Listener
     protected void onDestroy() {
         super.onDestroy();
         mTick.removeCallbacksAndMessages(null);
-        CallManager cm = CallManager.get(this);
-        if (cm.state() == CallManager.State.IDLE
-                || cm.state() == CallManager.State.ENDED) {
-            cm.setListener(null);
-        }
+        // Always detach - a destroyed activity must never receive callbacks.
+        // Re-opening the call screen re-registers; CallManager itself keeps
+        // the call (and dismisses the notification on end) without a UI.
+        CallManager.get(this).setListener(null);
     }
 }

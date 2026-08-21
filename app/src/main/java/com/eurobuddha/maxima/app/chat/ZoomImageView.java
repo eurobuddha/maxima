@@ -131,8 +131,16 @@ public final class ZoomImageView extends android.widget.ImageView {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+            performClick();
+        }
         mScale.onTouchEvent(e);
         mGest.onTouchEvent(e);
         return true;
+    }
+
+    @Override
+    public boolean performClick() {
+        return super.performClick();
     }
 }
