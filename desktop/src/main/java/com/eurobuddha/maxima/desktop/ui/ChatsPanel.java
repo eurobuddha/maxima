@@ -45,6 +45,7 @@ import javax.swing.border.EmptyBorder;
 public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, MaximaWindow.Responsive {
 
     private static final int NARROW = 640;   // below this, single-column phone mode
+    private static final int HEADER_H = 58;  // list search band == conversation header band (alignment)
 
     private final DesktopNode node;
     private final Theme t;
@@ -93,17 +94,35 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mListPane.setBackground(t.card);
         mListPane.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, t.divider));
 
-        JPanel searchWrap = new JPanel(new BorderLayout());
+        // The list's top band. Fixed to HEADER_H so it lines up EXACTLY with the
+        // conversation header band in the other pane (GridBag centers the pill).
+        JPanel searchWrap = new JPanel(new java.awt.GridBagLayout());
         searchWrap.setBackground(t.card);
-        searchWrap.setBorder(new EmptyBorder(10, 12, 8, 12));
-        DKit.RoundPanel searchPill = k.round(t.input, DKit.R_FIELD);
+        searchWrap.setPreferredSize(new Dimension(10, HEADER_H));
+        searchWrap.setBorder(new EmptyBorder(0, 12, 0, 12));
+        DKit.RoundPanel searchPill = k.round(t.input, 18);
         searchPill.setLayout(new BoxLayout(searchPill, BoxLayout.X_AXIS));
-        searchPill.setBorder(new EmptyBorder(2, 12, 2, 12));
-        searchPill.add(new Icons.Btn(Icons.SEARCH, t.subtext, null, 22, 15, 1.8f));
+        searchPill.setBorder(new EmptyBorder(7, 12, 7, 12));
+        searchPill.add(new Icons.Btn(Icons.SEARCH, t.subtext, null, 20, 14, 1.8f));
         searchPill.add(Box.createRigidArea(new Dimension(8, 0)));
-        mSearch = new JTextField();
+        mSearch = new JTextField() {   // paints a "Search chats" hint when empty
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (getText().isEmpty() && !isFocusOwner()) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                            RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g2.setColor(DKit.alpha(t.subtext, 170));
+                    g2.setFont(getFont());
+                    java.awt.FontMetrics fm = g2.getFontMetrics();
+                    g2.drawString("Search chats", 1,
+                            (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+                    g2.dispose();
+                }
+            }
+        };
         mSearch.setOpaque(false);
-        mSearch.setBorder(new EmptyBorder(8, 0, 8, 0));
+        mSearch.setBorder(new EmptyBorder(4, 0, 4, 0));
         mSearch.setFont(t.font(13f));
         mSearch.setForeground(t.text);
         mSearch.setCaretColor(t.text);
@@ -112,8 +131,15 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             public void removeUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }
         });
+        mSearch.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent e) { mSearch.repaint(); }
+            public void focusLost(java.awt.event.FocusEvent e) { mSearch.repaint(); }
+        });
         searchPill.add(mSearch);
-        searchWrap.add(searchPill, BorderLayout.CENTER);
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        gc.weightx = 1;
+        searchWrap.add(searchPill, gc);
         mListPane.add(searchWrap, BorderLayout.NORTH);
 
         // Floating new-chat FAB over the list. A JLayeredPane with a null layout does
@@ -139,7 +165,9 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         JPanel head = new JPanel();
         head.setLayout(new BoxLayout(head, BoxLayout.X_AXIS));
         head.setBackground(t.header);
-        head.setBorder(new EmptyBorder(10, 12, 10, 16));
+        head.setBorder(new EmptyBorder(0, 12, 0, 16));
+        head.setPreferredSize(new Dimension(10, HEADER_H));   // == list search band
+        head.setMaximumSize(new Dimension(Integer.MAX_VALUE, HEADER_H));
         mBack = new Icons.Btn(Icons.CHEVRON_LEFT, t.onHeader, DKit.alpha(t.onHeader, 24), 32, 20, 2.2f);
         mBack.onClick(() -> { mShowList = true; applyLayout(); });
         head.add(mBack);
@@ -249,6 +277,12 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
         if (mOpen != null) {
             List<ChatEngine.Entry> conv = ce.conversation(mOpen);
+            // The engine returns messages in HashMap order ("every reader sorts
+            // explicitly"). Sort chronologically like the phone, else photos/voice
+            // notes land wherever their id hashes instead of by time.
+            conv.sort(java.util.Comparator
+                    .comparingLong((ChatEngine.Entry e) -> e.time)
+                    .thenComparing(e -> e.id));
             StringBuilder ts = new StringBuilder();
             for (ChatEngine.Entry e : conv) {
                 ts.append(e.id).append(e.state).append(e.deliveredBy.size()).append('|');

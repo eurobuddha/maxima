@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.4.1";
+    public static final String APP_VERSION = "1.4.2";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -210,7 +210,7 @@ public final class DesktopMain {
 
         java.util.prefs.Preferences prefs =
                 java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
-        String name = prefs.get("name", "Maxima Desktop");
+        String name = prefs.get("name", "Parlons Desktop");
 
         com.eurobuddha.maxima.desktop.ui.DesktopNode dnode =
                 new com.eurobuddha.maxima.desktop.ui.DesktopNode(id, dataDir, name);
@@ -251,7 +251,7 @@ public final class DesktopMain {
                     new com.eurobuddha.maxima.desktop.ui.Theme(mode);
             com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
                     new com.eurobuddha.maxima.desktop.ui.MaximaWindow(dnode, theme);
-            w.frame().setTitle("Maxima — " + name);
+            w.frame().setTitle("Parlons — " + name);
             w.show();
         });
     }

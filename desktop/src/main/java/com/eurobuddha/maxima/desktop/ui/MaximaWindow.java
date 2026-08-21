@@ -73,7 +73,7 @@ public final class MaximaWindow {
         t = zTheme;
         k = new DKit(zTheme);
 
-        mFrame = new JFrame("Maxima");
+        mFrame = new JFrame("Parlons");
         mFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mFrame.setMinimumSize(new Dimension(360, 560));   // phone-narrow floor
         mFrame.setSize(Integer.getInteger("maxima.w", 1040), Integer.getInteger("maxima.h", 720));
@@ -220,19 +220,40 @@ public final class MaximaWindow {
         JPanel bar = new JPanel();
         bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
         bar.setBackground(t.header);
-        bar.setBorder(new EmptyBorder(14, 16, 12, 10));
+        bar.setBorder(new EmptyBorder(10, 16, 10, 10));
         bar.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel brand = new JLabel("Maxima");
-        brand.setFont(t.extrabold(22f));
-        brand.setForeground(t.onHeader);
-        bar.add(brand);
+        // Two-line brand block, exactly like the phone: "Parlons" + version on the
+        // first line, "Powered by Maxima" tiny below. Feels intentional, not heavy.
+        JPanel brandCol = new JPanel();
+        brandCol.setOpaque(false);
+        brandCol.setLayout(new BoxLayout(brandCol, BoxLayout.Y_AXIS));
+        brandCol.setAlignmentY(Component.CENTER_ALIGNMENT);
 
+        JPanel line1 = new JPanel();
+        line1.setOpaque(false);
+        line1.setLayout(new BoxLayout(line1, BoxLayout.X_AXIS));
+        line1.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel brand = new JLabel("Parlons");
+        brand.setFont(t.extrabold(21f));
+        brand.setForeground(t.onHeader);
+        line1.add(brand);
         JLabel ver = new JLabel("v" + com.eurobuddha.maxima.desktop.DesktopMain.APP_VERSION);
-        ver.setFont(t.font(11f));
+        ver.setFont(t.font(10.5f));
         ver.setForeground(DKit.alpha(t.onHeader, 150));
-        ver.setBorder(new EmptyBorder(6, 7, 0, 0));
-        bar.add(ver);
+        ver.setBorder(new EmptyBorder(5, 8, 0, 0));
+        line1.add(ver);
+        brandCol.add(line1);
+
+        JLabel tagline = new JLabel("Powered by Maxima");
+        tagline.setFont(t.font(9f));
+        tagline.setForeground(DKit.alpha(t.onHeader, 110));
+        tagline.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tagline.setBorder(new EmptyBorder(1, 1, 0, 0));
+        brandCol.add(tagline);
+
+        brandCol.setMaximumSize(brandCol.getPreferredSize());
+        bar.add(brandCol);
 
         bar.add(javax.swing.Box.createHorizontalGlue());
 

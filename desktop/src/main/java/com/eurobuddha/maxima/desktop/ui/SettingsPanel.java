@@ -87,7 +87,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
             if (nm.isEmpty()) return;
             PREFS.put("name", nm);
             node.node().setName(nm);
-            window.frame().setTitle("Maxima — " + nm);
+            window.frame().setTitle("Parlons — " + nm);
             new Thread(() -> { try { node.node().refreshContacts(); } catch (Exception ignored) { } },
                     "refresh-contacts").start();
         });
@@ -325,7 +325,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
 
     private String currentName() {
         String p = PREFS.get("name", "");
-        return p.isEmpty() ? "Maxima Desktop" : p;
+        return p.isEmpty() ? "Parlons Desktop" : p;
     }
 
     /** The copyField's value JTextArea, so refresh can update the live publickey. */
