@@ -54,7 +54,7 @@ final class DesktopCalls implements ChatEngine.CallSignals {
         if (callId != null && !handled.add(callId)) {
             return;
         }
-        Contact c = node.node().contact(fromKey);
+        Contact c = node.port().contact(fromKey);
         boolean video = "video".equals(m.memo);
         if (c == null) {
             decline(fromKey, callId);   // unknown caller → polite immediate bye
@@ -120,7 +120,7 @@ final class DesktopCalls implements ChatEngine.CallSignals {
     /** Send a 'bye' so the caller stops ringing immediately. Fire-and-forget. */
     private void decline(String toKey, String callId) {
         try {
-            Contact c = node.node().contact(toKey);
+            Contact c = node.port().contact(toKey);
             if (c != null && callId != null) {
                 node.chat().sendCallSignal(c, ChatMessage.call(callId, "bye", ""));
             }

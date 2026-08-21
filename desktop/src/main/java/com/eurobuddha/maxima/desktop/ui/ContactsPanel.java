@@ -152,7 +152,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     public void refresh() {
-        List<Contact> all = node.node().contacts();
+        List<Contact> all = node.port().contacts();
         StringBuilder sig = new StringBuilder(myAddress()).append('#').append(mQuery);
         for (Contact c : all) {
             sig.append(c.publicKey).append(c.name).append(c.lastSeen).append('|');
@@ -163,7 +163,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mLastSig = sig.toString();
 
         int hosts = 0;
-        try { hosts = Math.max(0, node.node().myAddresses().size()); } catch (Exception ignored) { }
+        try { hosts = Math.max(0, node.port().myAddresses().size()); } catch (Exception ignored) { }
         mHostInfo.setText(hosts == 0 ? "waiting for a host…"
                 : "Reachable through " + hosts + (hosts == 1 ? " host" : " hosts"));
         mCount.setText("CONTACTS · " + all.size());
@@ -386,7 +386,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         }
         new Thread(() -> {
             try {
-                node.node().introduce(address, true);
+                node.port().introduce(address, true);
                 javax.swing.SwingUtilities.invokeLater(() ->
                         javax.swing.JOptionPane.showMessageDialog(this,
                                 "Introduction sent. They'll appear once they reply."));
@@ -421,7 +421,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
     private String myAddress() {
         try {
-            List<String> addrs = node.node().myAddresses();
+            List<String> addrs = node.port().myAddresses();
             for (String a : addrs) {
                 int at = a.lastIndexOf('@');
                 String host = at < 0 ? "" : a.substring(at + 1);

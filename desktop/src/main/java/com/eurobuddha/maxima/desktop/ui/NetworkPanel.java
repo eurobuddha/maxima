@@ -327,8 +327,12 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
     private void connectHost(String hp) {
         new Thread(() -> {
             try {
-                node.node().pool().addCandidate(hp);
-                node.node().pool().attachOne(hp, 15000);
+                if (node.isJar()) {
+                    node.jarEngine().connectHost(hp);           // classic engine
+                } else if (node.node() != null) {
+                    node.node().pool().addCandidate(hp);
+                    node.node().pool().attachOne(hp, 15000);
+                }
             } catch (Exception ignored) { }
             javax.swing.SwingUtilities.invokeLater(() -> { mSig = ""; refresh(); });
         }, "connect-host").start();

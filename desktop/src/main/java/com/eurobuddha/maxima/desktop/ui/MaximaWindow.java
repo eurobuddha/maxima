@@ -185,6 +185,11 @@ public final class MaximaWindow {
     public JFrame frame() { return mFrame; }
     public DesktopNode node() { return mNode; }
 
+    // Engine flip (built-in ↔ classic): DesktopMain wires the actual rebuild.
+    private Runnable mEngineRestart;
+    public void setEngineRestart(Runnable r) { mEngineRestart = r; }
+    public void restartEngine() { if (mEngineRestart != null) mEngineRestart.run(); }
+
     /** The single wallet-owning panel, so the chat can send a payment through the
      *  one wallet instance (never a second one — WOTS key-reuse hazard). */
     public WalletPanel wallet() {
@@ -321,7 +326,7 @@ public final class MaximaWindow {
     private void refreshStatus() {
         if (mStatusText == null) return;
         int hosts = 0;
-        try { hosts = mNode.node().pool().activeCount(); } catch (Exception ignored) { }
+        try { hosts = mNode.connectedCount(); } catch (Exception ignored) { }
         boolean ok = hosts > 0;
         mStatusText.setText(ok ? (hosts + (hosts == 1 ? " host" : " hosts")) : "offline");
         mStatusDot.setColor(ok ? t.success : t.error);

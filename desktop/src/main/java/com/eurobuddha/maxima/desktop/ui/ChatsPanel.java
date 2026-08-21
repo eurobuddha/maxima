@@ -749,7 +749,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 if (mOpenGroup) {
                     node.chat().sendGroup(mOpen, txt);
                 } else {
-                    Contact c = node.node().contact(mOpen);
+                    Contact c = node.port().contact(mOpen);
                     if (c != null) node.chat().send(c, txt);
                 }
             } catch (Exception ignored) { }
@@ -759,7 +759,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     /** The new-chat FAB: pick a contact to open (or start) a conversation. */
     private void showNewChat() {
-        List<Contact> cs = node.node().contacts();
+        List<Contact> cs = node.port().contacts();
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
@@ -937,7 +937,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
      *  payment bubble with the resulting txid. */
     private void showPaymentDialog() {
         if (mOpen == null || mOpenGroup) return;
-        final Contact contact = node.node().contact(mOpen);
+        final Contact contact = node.port().contact(mOpen);
         final String addr = node.chat().walletAddress(mOpen);
         if (contact == null) { info("Payments need a known contact."); return; }
         if (addr == null || addr.isEmpty() || addr.startsWith("Mx00")) {
@@ -1020,7 +1020,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 if (group) {
                     node.chat().sendGroupMedia(conv, wav, "audio/wav", caption);
                 } else {
-                    Contact c = node.node().contact(conv);
+                    Contact c = node.port().contact(conv);
                     if (c != null) node.chat().sendMedia(c, wav, "audio/wav", caption);
                 }
                 javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
@@ -1147,7 +1147,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 if (mime == null) mime = "application/octet-stream";
                 if (mOpenGroup) node.chat().sendGroupMedia(mOpen, bytes, mime, "");
                 else {
-                    Contact c = node.node().contact(mOpen);
+                    Contact c = node.port().contact(mOpen);
                     if (c != null) node.chat().sendMedia(c, bytes, mime, "");
                 }
                 javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
@@ -1169,13 +1169,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private String nameFor(String pubkey) {
-        Contact c = node.node().contact(pubkey);
+        Contact c = node.port().contact(pubkey);
         if (c != null && c.name != null && !c.name.isEmpty() && !"noname".equals(c.name)) return c.name;
         return shortKey(pubkey);
     }
 
     private String peerSub(String pubkey) {
-        Contact c = node.node().contact(pubkey);
+        Contact c = node.port().contact(pubkey);
         if (c == null) return "unknown contact";
         long ls = c.lastSeen;
         if (ls <= 0) return "offline";

@@ -7,7 +7,7 @@ plugins {
 // A fresh artifact line. macOS jpackage requires a major version >= 1
 // (independent of the relay protocol version). 1.1.0 adds the windowed chat
 // client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
-version = '1.4.2'
+version = '1.5.0'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
@@ -28,6 +28,7 @@ dependencies {
     implementation project(':core')
     implementation project(':server')   // RelayServer + RelayRuntime
     implementation project(':minima-common')  // shared vendored classic base (moved out of app's tree)
+    implementation project(':maxjar')          // classic Maxima engine, for the "Run as Maxima classic" mode
     // Pure-Java QR encoder (same lib the phone uses) for the "share my address" QR.
     implementation 'com.google.zxing:core:3.5.3'
     // The local Maxima wallet (same code the APK uses) needs the Winternitz signer.

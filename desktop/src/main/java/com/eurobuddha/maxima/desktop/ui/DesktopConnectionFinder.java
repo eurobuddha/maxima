@@ -75,7 +75,7 @@ public final class DesktopConnectionFinder {
                 finish(cb, done, node.pool().activeCount(), !reachable.isEmpty());
             } catch (Throwable t) {
                 int total = 0;
-                try { total = dnode.node().pool().activeCount(); } catch (Throwable ignored) { }
+                try { total = dnode.connectedCount(); } catch (Throwable ignored) { }
                 finish(cb, done, total, false);
             } finally {
                 BUSY.set(false);

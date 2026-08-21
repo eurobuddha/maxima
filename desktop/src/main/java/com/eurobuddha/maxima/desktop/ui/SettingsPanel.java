@@ -64,7 +64,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
     public void refresh() {
         if (!mBuilt) { mBuilt = true; build(); }
         if (mKeyValue != null) {
-            try { mKeyValue.setText(node.node().identity().publicKeyHex()); } catch (Exception ignored) { }
+            try { mKeyValue.setText(node.port().publicKeyHex()); } catch (Exception ignored) { }
         }
     }
 
@@ -86,15 +86,15 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
             String nm = name.getText().trim();
             if (nm.isEmpty()) return;
             PREFS.put("name", nm);
-            node.node().setName(nm);
+            if (node.node() != null) node.node().setName(nm);   // classic name is set at boot
             window.frame().setTitle("Parlons — " + nm);
-            new Thread(() -> { try { node.node().refreshContacts(); } catch (Exception ignored) { } },
-                    "refresh-contacts").start();
+            new Thread(() -> { try { if (node.node() != null) node.node().refreshContacts(); }
+                    catch (Exception ignored) { } }, "refresh-contacts").start();
         });
         nameRow.add(set);
         nameCard.add(nameRow);
         nameCard.add(k.vgap(10));
-        JComponent keyField = k.copyField("maxima publickey", node.node().identity().publicKeyHex(), false);
+        JComponent keyField = k.copyField("maxima publickey", node.port().publicKeyHex(), false);
         nameCard.add(keyField);
         mKeyValue = findValueLabel(keyField);
         mBody.add(nameCard);
@@ -153,8 +153,34 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
                 core ? "Shown to contacts as an always-on core node"
                         : "Shown to contacts as an ordinary node", core, on -> {
             PREFS.putBoolean("coreNode", on);
-            try { node.node().setNodeKind(on ? "core" : ""); } catch (Exception ignored) { }
+            try { if (node.node() != null) node.node().setNodeKind(on ? "core" : ""); }
+            catch (Exception ignored) { }
             rebuild();
+        }));
+        nodeCard.add(k.divider());
+        // Classic engine — the SAME flip the phone's Settings has: leaving classic
+        // exports its contact book to the built-in store FIRST (or contacts added
+        // on the jar vanish), then flips the pref and restarts the engine in place.
+        boolean jarOn = DesktopNode.jarMode();
+        nodeCard.add(switchRow("Classic engine",
+                jarOn ? "Routing runs on classic Maxima (maxima.jar)"
+                        : "Routing runs on the built-in engine — flip for classic Maxima",
+                jarOn, on -> {
+            java.util.prefs.Preferences pf =
+                    java.util.prefs.Preferences.userRoot().node(DesktopNode.PREFS);
+            if (!on && node.isJar() && node.jarEngine() != null) {
+                try {
+                    int x = com.eurobuddha.maxima.desktop.jar.DesktopJarMigration
+                            .exportContacts(node.dataDir().toFile(), node.jarEngine());
+                    DesktopEventLog.add("engine sync: " + x
+                            + " contact(s) carried to the built-in book");
+                } catch (Exception ignored) { }
+            }
+            pf.putBoolean(DesktopNode.KEY_ENGINE_JAR, on);
+            pf.putBoolean(DesktopNode.KEY_FLIP_ANNOUNCE, on);
+            DesktopEventLog.add("engine switch: "
+                    + (on ? "classic (jar)" : "built-in") + " — restarting");
+            window.restartEngine();
         }));
         mBody.add(nodeCard);
         mBody.add(k.vgap(14));

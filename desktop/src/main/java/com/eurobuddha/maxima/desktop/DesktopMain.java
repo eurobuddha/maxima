@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.4.2";
+    public static final String APP_VERSION = "1.5.0";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -64,6 +64,11 @@ public final class DesktopMain {
     private MenuItem mStatsItem;
     private FileLock mLock;
     private RandomAccessFile mLockFile;
+
+    // Live windowed-client state, so a Settings engine flip can rebuild in place.
+    private Path mDataDir;
+    private volatile com.eurobuddha.maxima.desktop.ui.DesktopNode mDnode;
+    private volatile com.eurobuddha.maxima.desktop.ui.MaximaWindow mWindow;
 
     public static void main(String[] args) throws Exception {
         DesktopMain m = new DesktopMain();
@@ -214,6 +219,8 @@ public final class DesktopMain {
 
         com.eurobuddha.maxima.desktop.ui.DesktopNode dnode =
                 new com.eurobuddha.maxima.desktop.ui.DesktopNode(id, dataDir, name);
+        mDataDir = dataDir;
+        mDnode = dnode;
 
         // Attach + pump on a background thread so the UI paints immediately.
         Thread starter = new Thread(() -> {
@@ -251,9 +258,65 @@ public final class DesktopMain {
                     new com.eurobuddha.maxima.desktop.ui.Theme(mode);
             com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
                     new com.eurobuddha.maxima.desktop.ui.MaximaWindow(dnode, theme);
+            w.setEngineRestart(this::restartEngine);
             w.frame().setTitle("Parlons — " + name);
             w.show();
+            mWindow = w;
         });
+    }
+
+    private static com.eurobuddha.maxima.desktop.ui.Theme.Mode currentMode(
+            java.util.prefs.Preferences prefs) {
+        String a = prefs.get("appearance", "");
+        return "dark".equals(a) ? com.eurobuddha.maxima.desktop.ui.Theme.Mode.DARK
+                : "light".equals(a) ? com.eurobuddha.maxima.desktop.ui.Theme.Mode.LIGHT
+                        : com.eurobuddha.maxima.desktop.ui.Theme.detectMode();
+    }
+
+    /**
+     * Swap the routing engine in place (built-in ↔ classic Maxima). The engine
+     * is chosen when DesktopNode is built, so we build a fresh node (which reads
+     * the flipped {@code engineJar} pref), start it off-EDT, then rebuild the
+     * window and dispose the old one. Identity + contacts carry over via
+     * DesktopJarMigration, exactly like the phone's process restart.
+     */
+    public void restartEngine() {
+        final com.eurobuddha.maxima.desktop.ui.MaximaWindow oldWin = mWindow;
+        final com.eurobuddha.maxima.desktop.ui.DesktopNode oldNode = mDnode;
+        new Thread(() -> {
+            try {
+                // Tear the OLD engine down FIRST. Classic Maxima's MinimaDB is a
+                // global singleton, so a new jar engine must not init while the
+                // old one is still alive — shut down, then build.
+                try { if (oldNode != null) oldNode.shutdown(); } catch (Exception ignored) { }
+                RelayRuntime.Seed seed = RelayRuntime.loadOrCreateSeed(mDataDir);
+                MaximaIdentity id = MaximaIdentity.fromPhrase(seed.phrase);
+                java.util.prefs.Preferences prefs =
+                        java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
+                String name = prefs.get("name", "Parlons Desktop");
+                com.eurobuddha.maxima.desktop.ui.DesktopNode nn =
+                        new com.eurobuddha.maxima.desktop.ui.DesktopNode(id, mDataDir, name);
+                nn.start();
+                mDnode = nn;
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
+                            new com.eurobuddha.maxima.desktop.ui.MaximaWindow(nn,
+                                    new com.eurobuddha.maxima.desktop.ui.Theme(currentMode(prefs)));
+                    w.setEngineRestart(this::restartEngine);
+                    if (oldWin != null) {
+                        w.frame().setBounds(oldWin.frame().getBounds());
+                        w.frame().setExtendedState(oldWin.frame().getExtendedState());
+                    }
+                    w.frame().setTitle("Parlons — " + name);
+                    w.show();
+                    mWindow = w;
+                    if (oldWin != null) oldWin.frame().dispose();
+                    try { if (oldNode != null) oldNode.shutdown(); } catch (Exception ignored) { }
+                });
+            } catch (Exception e) {
+                log("engine restart failed: " + e.getMessage());
+            }
+        }, "engine-restart").start();
     }
 
     // ---- pump loop for the reachability/gossip client ----

@@ -1,5 +1,6 @@
 package com.eurobuddha.maxima.desktop.ui;
 
+import com.eurobuddha.maxima.core.ChatPort;
 import com.eurobuddha.maxima.core.MaximaNode;
 import com.eurobuddha.maxima.core.chat.ChatEngine;
 import com.eurobuddha.maxima.core.chat.Group;
@@ -10,6 +11,8 @@ import com.eurobuddha.maxima.core.session.Bootstrap;
 import com.eurobuddha.maxima.core.session.RelayGossipClient;
 import com.eurobuddha.maxima.core.store.BlobStore;
 import com.eurobuddha.maxima.core.store.FileStore;
+import com.eurobuddha.maxima.desktop.jar.DesktopJarEngine;
+import com.eurobuddha.maxima.desktop.jar.DesktopJarMigration;
 import com.eurobuddha.maxima.server.RelayRuntime;
 
 import java.io.File;
@@ -19,45 +22,55 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.prefs.Preferences;
 
 /**
- * The desktop chat client's node — the same {@link MaximaNode} + {@link ChatEngine}
- * the phone runs in {@code MaximaService}, wired for a desktop process: persistent
- * stores under the data dir, a message pump, pool maintenance, relay discovery via
- * gossip, and a fan-out listener the Swing panels subscribe to.
- *
- * It shares the machine's Maxima identity (the seed under the data dir) so the
- * desktop is ONE identity whether it is relaying or chatting.
+ * The desktop chat client's node. It runs ONE of two engines behind
+ * {@link ChatPort}, exactly like the phone's {@code MaximaService}:
+ *  - the built-in {@link MaximaNode} (fleet routing, the default), or
+ *  - {@link DesktopJarEngine} — classic Maxima extracted whole ("Run as Maxima
+ *    classic"), selected by the {@code engineJar} preference.
+ * The {@link ChatEngine} rides whichever engine without knowing which. Flipping
+ * carries identity + contacts across via {@link DesktopJarMigration}, mirroring
+ * the phone's JarMigration one-for-one.
  */
 public final class DesktopNode {
 
     private static final String PROTOCOL = "1.0.48";
-    /** Two home relays, classic-scale (see MaximaService.RELAY_TARGET). */
     private static final int RELAY_TARGET = 2;
-    /** The desktop's own inbound direct port, and its relay port when it relays. */
     public static final int DIRECT_PORT = 9536;
     public static final int RELAY_PORT = 9535;
     public static final int RELAY_RATE = 600;
 
-    private final MaximaNode mNode;
+    /** Preferences node + keys shared with SettingsPanel's engine toggle. */
+    public static final String PREFS = "com/eurobuddha/maxima/desktop";
+    public static final String KEY_ENGINE_JAR = "engineJar";
+    public static final String KEY_FLIP_ANNOUNCE = "engineFlipAnnounce";
+
+    public static boolean jarMode() {
+        return Preferences.userRoot().node(PREFS).getBoolean(KEY_ENGINE_JAR, false);
+    }
+
+    private final boolean mJar;
+    private MaximaNode mNode;                 // built-in engine (null in classic mode)
+    private DesktopJarEngine mJarEngine;      // classic engine (null in built-in mode)
+    private final ChatPort mPort;             // the active engine
     private final ChatEngine mChat;
     private final MediaService mMedia;
-    private final RelayGossipClient mGossip;
+    private RelayGossipClient mGossip;        // built-in only
     private final MaximaIdentity mIdentity;
     private final Path mDataDir;
     private final DesktopRelayStore mRelayStore;
 
-    private Thread mPump;
     private volatile boolean mRunning = true;
     private ScheduledExecutorService mMaint;
 
-    // Direct reachability (map → prove → advertise) via the shared :core manager.
+    // Direct reachability (built-in engine only).
     private ReachabilityManager mReach;
     private volatile ReachabilityManager.State mReachState = ReachabilityManager.State.OFF;
     private volatile String mReachAddr = "";
     private volatile String mReachDetail = "not started";
 
-    // Optional in-process relay (desktop is always eligible).
     private RelayRuntime mRelay;
     private volatile boolean mRelayRunning;
     private volatile RelayRuntime.Stats mRelayStats;
@@ -68,72 +81,143 @@ public final class DesktopNode {
     public DesktopNode(MaximaIdentity zId, Path zDataDir, String zDisplayName) {
         mIdentity = zId;
         mDataDir = zDataDir;
-        mNode = new MaximaNode(zId, PROTOCOL, RELAY_TARGET);
-        mGossip = new RelayGossipClient(zId, PROTOCOL, 8);
         mRelayStore = new DesktopRelayStore(zDataDir.toFile());
-
         File base = zDataDir.toFile();
-        mNode.setStore(new FileStore(new File(base, "node")));
-        mNode.setName(zDisplayName);
-        mNode.setNodeKind("core");   // an always-on desktop is a core node
+        mJar = jarMode();
 
         BlobStore blobs = new BlobStore(new File(base, "media"), 512L * 1024 * 1024);
-        mMedia = new MediaService(mNode, blobs);
-        mNode.setLocalBlobs(blobs);
 
-        mChat = new ChatEngine(mNode);
-        mChat.setStore(new FileStore(new File(base, "chat")));
-        mChat.setMediaService(mMedia);
-        mChat.setListener(new ChatEngine.Listener() {
+        if (mJar) {
+            // ---- classic Maxima (jar) ----
+            java.util.List<String> hosts = new java.util.ArrayList<>();
+            for (String h : mRelayStore.get()) {
+                hosts.add(h);
+                if (hosts.size() >= 2) break;
+            }
+            if (hosts.isEmpty()) {
+                for (String h : Bootstrap.RELAYS) {
+                    hosts.add(h);
+                    if (hosts.size() >= 2) break;
+                }
+            }
+            boolean migrate = DesktopJarMigration.needed(base);
+            if (migrate) {
+                DesktopJarMigration.archiveOldJarData(base);
+            }
+            DesktopJarEngine jar;
+            try {
+                jar = new DesktopJarEngine(base, zDisplayName, hosts,
+                        migrate ? () -> DesktopJarMigration.seedIdentity(base, zId) : null);
+            } catch (Exception e) {
+                throw new RuntimeException("classic (jar) engine boot failed", e);
+            }
+            if (migrate) {
+                DesktopJarMigration.markDone(base);
+            }
+            int merged = DesktopJarMigration.seedContacts(base, jar);
+            if (merged > 0) {
+                DesktopEventLog.add("engine sync: merged " + merged
+                        + " contact(s) from the built-in book");
+            }
+            Preferences pf = Preferences.userRoot().node(PREFS);
+            if (pf.getBoolean(KEY_FLIP_ANNOUNCE, false)) {
+                pf.remove(KEY_FLIP_ANNOUNCE);
+                jar.announceContactsSoon();
+            }
+            if (DesktopJarMigration.inHealWindow(base)) {
+                jar.announceContactsSoon();
+            }
+
+            mJarEngine = jar;
+            mPort = jar;
+            mNode = null;
+            mGossip = null;
+            // Media LOCAL-ONLY (null node): inbound classic inline images are
+            // stored/shown and our photos go out inline — same as the phone.
+            mMedia = new MediaService(null, blobs);
+            mChat = new ChatEngine(jar);
+            mChat.setStore(new FileStore(new File(base, "chat")));
+            mChat.setMediaService(mMedia);
+            mChat.setListener(fanout());
+            jar.setInbound((msg, msgid) -> {
+                try { mChat.onInbound(msg, msgid == null ? "" : msgid); } catch (Exception ignored) { }
+            });
+            jar.setContactsChanged(() -> { DesktopEventLog.add("contacts changed (classic)"); fireChanged(); });
+            DesktopEventLog.add("ENGINE: classic Maxima (jar)");
+        } else {
+            // ---- built-in engine (default) ----
+            mNode = new MaximaNode(zId, PROTOCOL, RELAY_TARGET);
+            mGossip = new RelayGossipClient(zId, PROTOCOL, 8);
+            mNode.setStore(new FileStore(new File(base, "node")));
+            mNode.setName(zDisplayName);
+            mNode.setNodeKind("core");
+            mMedia = new MediaService(mNode, blobs);
+            mNode.setLocalBlobs(blobs);
+            mPort = mNode;
+            mChat = new ChatEngine(mNode);
+            mChat.setStore(new FileStore(new File(base, "chat")));
+            mChat.setMediaService(mMedia);
+            mChat.setListener(fanout());
+            mNode.setLogListener(DesktopEventLog::add);
+            mNode.setMessageListener((msg, msgid) -> {
+                try { mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString()); } catch (Exception ignored) { }
+            });
+            DesktopEventLog.add("ENGINE: built-in");
+        }
+    }
+
+    private ChatEngine.Listener fanout() {
+        return new ChatEngine.Listener() {
             public void onMessage(ChatEngine.Entry e) {
                 for (ChatEngine.Listener l : mChatListeners) {
                     try { l.onMessage(e); } catch (Exception ignored) { }
                 }
                 fireChanged();
             }
-
             public void onStateChanged(ChatEngine.Entry e) {
                 for (ChatEngine.Listener l : mChatListeners) {
                     try { l.onStateChanged(e); } catch (Exception ignored) { }
                 }
                 fireChanged();
             }
-
             public void onGroupChanged(Group g) {
                 for (ChatEngine.Listener l : mChatListeners) {
                     try { l.onGroupChanged(g); } catch (Exception ignored) { }
                 }
                 fireChanged();
             }
-        });
-
-        // Core's own diagnostics (dead fan-outs, failed MLS lookups, resend
-        // tallies) land in the network log, same as the phone.
-        mNode.setLogListener(DesktopEventLog::add);
-
-        // Route inbound chat traffic into the engine (the phone does the same).
-        mNode.setMessageListener((msg, msgid) -> {
-            try {
-                mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
-            } catch (Exception ignored) {
-            }
-        });
+        };
     }
 
-    public MaximaNode node()       { return mNode; }
+    public MaximaNode node()       { return mNode; }          // null in classic mode
+    public ChatPort port()         { return mPort; }          // the active engine (either)
+    public boolean isJar()         { return mJar; }
+    public DesktopJarEngine jarEngine() { return mJarEngine; }
     public ChatEngine chat()       { return mChat; }
     public MediaService media()    { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
     public DesktopRelayStore relayStore() { return mRelayStore; }
     public Path dataDir()          { return mDataDir; }
 
-    // ---- direct reachability ----
+    /** Connected host count, whichever engine is running. */
+    public int connectedCount() {
+        try {
+            if (mJar) {
+                return mJarEngine.connectedHosts().size();
+            }
+            return mNode != null && mNode.pool() != null ? mNode.pool().activeCount() : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    // ---- direct reachability (built-in engine only) ----
     public ReachabilityManager.State reachState() { return mReachState; }
     public String reachAddress() { return mReachAddr; }
-    public String reachDetail() { return mReachDetail; }
+    public String reachDetail() { return mJar ? "classic engine manages its own routing" : mReachDetail; }
 
-    /** User "make me reachable / check now": start (or re-run) the map→prove→advertise. */
     public void checkReachability() {
+        if (mJar || mNode == null) return;   // classic self-manages
         if (mReach == null) {
             startReachability();
         }
@@ -143,7 +227,7 @@ public final class DesktopNode {
     }
 
     private synchronized void startReachability() {
-        if (mReach != null) return;
+        if (mJar || mNode == null || mReach != null) return;
         try { mNode.startDirect(DIRECT_PORT); } catch (Exception ignored) { }
         mReach = new ReachabilityManager(mNode,
                 () -> { int p = mNode.directPort(); return p > 0 ? p : DIRECT_PORT; },
@@ -166,7 +250,6 @@ public final class DesktopNode {
                 fireChanged();
             }
         });
-        // Heartbeat: re-prove / renew every 60s.
         if (mMaint != null) {
             mMaint.scheduleWithFixedDelay(() -> {
                 try { mReach.tick(); } catch (Exception ignored) { }
@@ -174,7 +257,7 @@ public final class DesktopNode {
         }
     }
 
-    // ---- relay ----
+    // ---- relay (built-in engine only) ----
     public boolean relayRunning() { return mRelayRunning; }
     public RelayRuntime.Stats relayStats() { return mRelayStats; }
     public int relayPort() { return RELAY_PORT; }
@@ -205,7 +288,6 @@ public final class DesktopNode {
         fireChanged();
     }
 
-    /** Subscribe to "something changed" — fired on any inbound/state/group event. */
     public void addChangeListener(Runnable r) { mChangeListeners.add(r); }
     public void removeChangeListener(Runnable r) { mChangeListeners.remove(r); }
     public void addChatListener(ChatEngine.Listener l) { mChatListeners.add(l); }
@@ -216,44 +298,38 @@ public final class DesktopNode {
         }
     }
 
-    /** Attach to the configured + bootstrap relays and start pumping. */
+    /** Attach to relays (built-in) / confirm the classic engine is up, then pump. */
     public int start() {
-        java.util.LinkedHashSet<String> cands = new java.util.LinkedHashSet<>(mRelayStore.get());
-        cands.addAll(Bootstrap.RELAYS);
-        int attached = mNode.start(new java.util.ArrayList<>(cands), 30_000);
+        if (!mJar && mNode != null) {
+            java.util.LinkedHashSet<String> cands = new java.util.LinkedHashSet<>(mRelayStore.get());
+            cands.addAll(Bootstrap.RELAYS);
+            mNode.start(new java.util.ArrayList<>(cands), 30_000);
+        }
+        // The classic engine connects to its hosts inside its own constructor.
         startPump();
-        return attached;
+        return connectedCount();
     }
 
     private void startPump() {
-        // Receiving is PUSH now: :core runs a dedicated reader per attached host
-        // (25s NAT keep-alive + instant inbound), and the ChatEngine listener
-        // already fires the UI. No polling loop needed - only maintain below.
-
         mMaint = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "maxima-desktop-maint");
             t.setDaemon(true);
             return t;
         });
+        if (!mJar && mNode != null) {
+            mMaint.scheduleWithFixedDelay(() -> {
+                try { mNode.maintain(20_000); } catch (Exception ignored) { }
+                fireChanged();
+            }, 20, 20, TimeUnit.SECONDS);
+            mMaint.scheduleWithFixedDelay(() -> {
+                try { mGossip.tick(mNode); } catch (Exception ignored) { }
+            }, 15, 60, TimeUnit.SECONDS);
+        } else {
+            // Classic self-heals its hosts; still refresh the UI on a cadence.
+            mMaint.scheduleWithFixedDelay(this::fireChanged, 10, 10, TimeUnit.SECONDS);
+        }
         mMaint.scheduleWithFixedDelay(() -> {
-            try {
-                mNode.maintain(20_000);
-            } catch (Exception ignored) {
-            }
-            fireChanged();
-        }, 20, 20, TimeUnit.SECONDS);
-        mMaint.scheduleWithFixedDelay(() -> {
-            try {
-                mGossip.tick(mNode);
-            } catch (Exception ignored) {
-            }
-        }, 15, 60, TimeUnit.SECONDS);
-        // Resend anything that didn't get a delivery receipt.
-        mMaint.scheduleWithFixedDelay(() -> {
-            try {
-                mChat.resendUndelivered();
-            } catch (Exception ignored) {
-            }
+            try { mChat.resendUndelivered(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
     }
 
@@ -263,7 +339,6 @@ public final class DesktopNode {
 
     // ---- seed (identity = spendable wallet seed) ----
 
-    /** The 24 words, read from the seed file. Empty if unavailable. */
     public String seedPhrase() {
         try {
             return new String(java.nio.file.Files.readAllBytes(mDataDir.resolve("seed.txt")),
@@ -273,17 +348,13 @@ public final class DesktopNode {
         }
     }
 
-    /**
-     * Replace this machine's identity with the one the phrase derives: validate,
-     * stop the node, wipe node/chat/media so the old identity can't mix in, and
-     * write the new seed. The caller restarts the process to load it.
-     */
     public void restoreSeed(String phrase) throws Exception {
-        MaximaIdentity.fromPhrase(phrase.trim());   // throws if the phrase is invalid
+        MaximaIdentity.fromPhrase(phrase.trim());
         shutdown();
         wipe(mDataDir.resolve("node"));
         wipe(mDataDir.resolve("chat"));
         wipe(mDataDir.resolve("media"));
+        wipe(mDataDir.resolve("maxjar"));
         java.nio.file.Files.write(mDataDir.resolve("seed.txt"),
                 phrase.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
@@ -302,21 +373,18 @@ public final class DesktopNode {
 
     public void shutdown() {
         mRunning = false;
-        if (mPump != null) {
-            mPump.interrupt();
-        }
         if (mMaint != null) {
             mMaint.shutdownNow();
         }
         try { if (mReach != null) mReach.shutdown(); } catch (Exception ignored) { }
         try { stopRelay(); } catch (Exception ignored) { }
+        try { mChat.close(); } catch (Exception ignored) { }
         try {
-            mChat.close();
-        } catch (Exception ignored) {
-        }
-        try {
-            mNode.stop();
-        } catch (Exception ignored) {
-        }
+            if (mJar && mJarEngine != null) {
+                mJarEngine.shutdown();
+            } else if (mNode != null) {
+                mNode.stop();
+            }
+        } catch (Exception ignored) { }
     }
 }
