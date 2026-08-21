@@ -619,33 +619,43 @@ public final class RelayServer {
             return;
         }
 
-        // Otherwise relay it, byte-identical, exactly one hop - but ONLY to a
-        // route whose holder proved possession of the key. An unverified
-        // provisional claimant is treated as "not here": the message falls
-        // through to the mailbox, so a squatter announcing a victim's public
-        // key receives nothing and the real owner collects it on reconnect.
+        // Otherwise relay it, byte-identical, exactly one hop.
         Conn dest = mRoutes.get(to);
-        if (dest == null || dest.socket.isClosed()
-                || !dest.verifiedKeys.contains(to)) {
-            // The classic outcome is a silent loss. We can do better: if the
-            // recipient is a KNOWN user of this relay (has attached before),
-            // hold it for them. We do NOT store for a key that has never
-            // registered here - that is the mailbox-flood attack: messages to
-            // a million random keys, none of which will ever collect.
+        boolean verified = dest != null && !dest.socket.isClosed()
+                && dest.verifiedKeys.contains(to);
+        if (!verified) {
+            // Route-hijack defence WITHOUT breaking classic wire-compat:
+            //  - ALWAYS mailbox for a known key (drain still needs proof), so
+            //    the true owner NEVER loses a message even if a squatter holds
+            //    the route right now;
+            //  - ALSO deliver best-effort LIVE to whoever is present on an
+            //    unverified route - a legitimate stock/classic node cannot
+            //    answer our possession probe, and this keeps it receiving.
+            // A squatter only ever gets undecryptable E2E ciphertext for the
+            // brief window before the real owner reconnects and reclaims the
+            // route (verifiedKeys); it can never drain the mailbox (held mail).
+            boolean handled = false;
             if (mKnownRoutes.containsKey(to)) {
                 Mailbox.Result r = mMailbox.store(to, Codec.serialise(unit));
                 if (r == Mailbox.Result.STORED || r == Mailbox.Result.DUPLICATE) {
                     mStored.incrementAndGet();
-                    // OK on the wire: the mailbox WILL deliver on reconnect, so
-                    // telling the sender "unknown" was a lie that made MaxSolo
-                    // show failures for messages that arrive. A sender that
-                    // wants proof-of-receipt uses receipts (Parlons does).
-                    zConn.write(Frame.ack(Frame.RESPONSE_OK));
-                    return;
+                    handled = true;
                 }
             }
-            mDropped.incrementAndGet();
-            zConn.write(Frame.ack(Frame.RESPONSE_UNKNOWN));
+            if (dest != null && !dest.socket.isClosed() && allow(to)) {
+                try {
+                    dest.write(Frame.body(Frame.MSG_MAXIMA_TXPOW, unit));
+                    mRelayed.incrementAndGet();
+                    handled = true;
+                } catch (Exception e) {
+                    cleanup(dest);
+                }
+            }
+            zConn.write(Frame.ack(handled
+                    ? Frame.RESPONSE_OK : Frame.RESPONSE_UNKNOWN));
+            if (!handled) {
+                mDropped.incrementAndGet();
+            }
             return;
         }
 
