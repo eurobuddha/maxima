@@ -94,6 +94,7 @@ public final class MaximaWindow {
 
     private final Timer mBeat;
     private final Runnable mChangeHook;
+    private ChatEngine.Listener mChatHook;
 
     private JLabel mStatusText;
     private StatusDot mStatusDot;
@@ -177,8 +178,11 @@ public final class MaximaWindow {
         // Inbound "pssssst!" chirp — phone parity. Fires only for a message from
         // someone else that is NOT in the conversation you're currently reading
         // (and not while that thread is focused on screen). Gated by the
-        // Message-sound preference inside Chirp.
-        mNode.addChatListener(new ChatEngine.Listener() {
+        // Message-sound preference inside Chirp. Stored so switchTheme() (which
+        // disposes this window and builds a new one) can REMOVE it — otherwise
+        // each theme toggle leaves another live listener bound to a dead window,
+        // multiplying chirps/tray-flashes and pinning the old frames in memory.
+        mChatHook = new ChatEngine.Listener() {
             public void onMessage(ChatEngine.Entry e) {
                 if (e.mine) {
                     return;
@@ -194,7 +198,8 @@ public final class MaximaWindow {
             }
             public void onStateChanged(ChatEngine.Entry e) { }
             public void onGroupChanged(Group g) { }
-        });
+        };
+        mNode.addChatListener(mChatHook);
 
         // Tier-0 telephony: receive call signals and decline gracefully so a
         // phone caller gets an instant "unavailable" instead of ringing out.
@@ -245,6 +250,7 @@ public final class MaximaWindow {
     public void switchTheme(Theme.Mode m) {
         mBeat.stop();
         mNode.removeChangeListener(mChangeHook);
+        mNode.removeChatListener(mChatHook);   // else the old window's chirp listener leaks
         MaximaWindow w = new MaximaWindow(mNode, new Theme(m));
         w.frame().setBounds(mFrame.getBounds());
         w.frame().setExtendedState(mFrame.getExtendedState());

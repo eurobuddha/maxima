@@ -68,6 +68,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private JTextField mSearch;
     private String mQuery = "";
     private java.util.List<Hit> mHits = new java.util.ArrayList<>();
+    private String mSearchKey = "";      // query + store signature the cached mHits were built from
     private String mScrollToId;          // pending scroll-to-bubble after a search hit
 
     /** A cross-chat message search hit — mirrors the phone's SearchActivity.Hit. */
@@ -351,8 +352,25 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         for (ChatEngine.Summary s : all) if (matches(s)) sums.add(s);
         // Cross-chat message search: when there's a query, also scan message
         // bodies / captions / payment memos across every conversation — the
-        // phone's SearchActivity, folded into the same left pane.
-        List<Hit> hits = searchMessages(mQuery.trim());
+        // phone's SearchActivity, folded into the same left pane. The scan is
+        // O(all messages), so it must NOT run on every 2 s heartbeat: cache it
+        // keyed by query + a store signature, and rescan only when one changes.
+        String q = mQuery.trim();
+        List<Hit> hits;
+        if (q.isEmpty()) {
+            hits = new java.util.ArrayList<>();
+            mSearchKey = "";
+        } else {
+            StringBuilder sk = new StringBuilder(q).append('#');
+            for (ChatEngine.Summary s : all) sk.append(s.conversation).append(s.lastTime).append('|');
+            String key = sk.toString();
+            if (key.equals(mSearchKey)) {
+                hits = mHits;                 // nothing changed — reuse last results
+            } else {
+                hits = searchMessages(q);
+                mSearchKey = key;
+            }
+        }
         StringBuilder sig = new StringBuilder(mQuery).append('#');
         for (ChatEngine.Summary s : sums) {
             sig.append(s.conversation).append(s.lastTime).append(s.unread).append('|');

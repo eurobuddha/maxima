@@ -377,6 +377,8 @@ public final class DesktopNode {
     public void removeChangeListener(Runnable r) { mChangeListeners.remove(r); }
     public void addChatListener(ChatEngine.Listener l) { mChatListeners.add(l); }
 
+    public void removeChatListener(ChatEngine.Listener l) { mChatListeners.remove(l); }
+
     private void fireChanged() {
         for (Runnable r : mChangeListeners) {
             try { r.run(); } catch (Exception ignored) { }
