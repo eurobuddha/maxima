@@ -202,6 +202,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mThreadSub.setAlignmentX(Component.LEFT_ALIGNMENT);
         titleCol.add(mThreadTitle);
         titleCol.add(mThreadSub);
+        titleCol.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        titleCol.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) { showConversationInfo(); }
+        });
         head.add(titleCol);
         head.add(Box.createHorizontalGlue());
         // Call buttons (phone parity). Desktop is signaling-only, so these
@@ -1250,6 +1254,152 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
         d.setContentPane(wrap);
         d.setSize(360, Math.min(560, 200 + cs.size() * 30));
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    /** Tap the conversation title: group roster (+ Edit members for the admin),
+     *  or a contact's full key + addresses — the phone's showInfo. */
+    private void showConversationInfo() {
+        if (mOpen == null) return;
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+
+        com.eurobuddha.maxima.core.chat.Group g = node.chat().group(mOpen);
+        boolean iAmAdmin = false;
+        if (g != null) {
+            String me = node.port().publicKeyHex();
+            iAmAdmin = g.isAdmin(me);
+            JLabel h = k.sub("Members");
+            h.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(h);
+            body.add(k.vgap(4));
+            for (String m : g.members()) {
+                String label = nameFor(m) + (g.isAdmin(m) ? "   (admin)" : "");
+                // RULE 1: the member's full public key is one click away (copyField).
+                body.add(k.copyField(label, m, false));
+                body.add(k.vgap(6));
+            }
+            body.add(k.vgap(4));
+            JLabel note = k.sub("Every message is sealed separately to each member. "
+                    + "There is no shared group key, so removing someone removes them "
+                    + "immediately.");
+            note.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(note);
+        } else {
+            Contact c = node.port().contact(mOpen);
+            if (c == null) {
+                body.add(k.sub("Not in your contacts."));
+            } else {
+                JLabel nm = new JLabel(c.name == null ? "Contact" : c.name);
+                nm.setFont(t.semibold(15f));
+                nm.setForeground(t.text);
+                nm.setAlignmentX(Component.LEFT_ALIGNMENT);
+                body.add(nm);
+                body.add(k.vgap(8));
+                body.add(k.copyField("maxima publickey", c.publicKey, false));
+                if (c.addresses != null) {
+                    int i = 0;
+                    for (String a : c.addresses) {
+                        if (a == null || a.isEmpty()) continue;
+                        body.add(k.vgap(6));
+                        body.add(k.copyField("host " + (++i), a, false));
+                    }
+                }
+            }
+        }
+
+        JScrollPane sp = new JScrollPane(body,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(t.card);
+
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                titleFor(mOpen, g != null), java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(sp, BorderLayout.CENTER);
+        if (iAmAdmin) {
+            final com.eurobuddha.maxima.core.chat.Group fg = g;
+            JPanel bar = new JPanel();
+            bar.setOpaque(false);
+            bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+            bar.setBorder(new EmptyBorder(12, 0, 0, 0));
+            DKit.HoverButton edit = k.primaryButton("Edit members");
+            edit.onClick(() -> { d.dispose(); editMembers(fg); });
+            bar.add(Box.createHorizontalGlue());
+            bar.add(edit);
+            wrap.add(bar, BorderLayout.SOUTH);
+        }
+        d.setContentPane(wrap);
+        d.setSize(400, 460);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    /** Admin-only: add/remove members, then fan the updated roster out. */
+    private void editMembers(final com.eurobuddha.maxima.core.chat.Group zGroup) {
+        List<Contact> cs = node.port().contacts();
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        final java.util.List<javax.swing.JCheckBox> boxes = new java.util.ArrayList<>();
+        for (Contact c : cs) {
+            javax.swing.JCheckBox cb = new javax.swing.JCheckBox(nameFor(c.publicKey));
+            cb.setOpaque(false);
+            cb.setForeground(t.text);
+            cb.setFont(t.font(13f));
+            cb.setSelected(zGroup.isMember(c.publicKey));
+            cb.setAlignmentX(Component.LEFT_ALIGNMENT);
+            cb.putClientProperty("pk", c.publicKey);
+            boxes.add(cb);
+            body.add(cb);
+        }
+        JScrollPane sp = new JScrollPane(body,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(t.card);
+
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                "Members", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(sp, BorderLayout.CENTER);
+        JPanel bar = new JPanel();
+        bar.setOpaque(false);
+        bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+        bar.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton cancel = k.ghostButton("Cancel");
+        cancel.onClick(() -> d.dispose());
+        DKit.HoverButton save = k.primaryButton("Save");
+        save.onClick(() -> {
+            for (javax.swing.JCheckBox cb : boxes) {
+                String pk = (String) cb.getClientProperty("pk");
+                if (cb.isSelected()) zGroup.addMember(pk); else zGroup.removeMember(pk);
+            }
+            zGroup.addAdmin(node.port().publicKeyHex());   // we stay in, and stay admin
+            d.dispose();
+            new Thread(() -> {
+                try {
+                    node.chat().updateGroup(zGroup);
+                    javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
+                } catch (Exception ex) {
+                    javax.swing.SwingUtilities.invokeLater(() -> info("Failed: " + ex.getMessage()));
+                }
+            }, "update-group").start();
+        });
+        bar.add(Box.createHorizontalGlue());
+        bar.add(cancel);
+        bar.add(Box.createRigidArea(new Dimension(8, 0)));
+        bar.add(save);
+        wrap.add(bar, BorderLayout.SOUTH);
+        d.setContentPane(wrap);
+        d.setSize(360, Math.min(560, 160 + cs.size() * 30));
         d.setLocationRelativeTo(this);
         d.setVisible(true);
     }
