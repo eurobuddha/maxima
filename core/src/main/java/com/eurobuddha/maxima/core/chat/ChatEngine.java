@@ -53,6 +53,10 @@ public final class ChatEngine {
         /** For a group: who has confirmed delivery so far. */
         public final java.util.Set<String> deliveredBy =
                 java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+        /** Classic members we've already sent to once (redeliver dedup only -
+         *  NOT a delivery confirmation, kept out of deliveredBy). */
+        final java.util.Set<String> classicSent =
+                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
 
         Entry(String zId, String zPeer, String zGroupId, String zSender,
               String zBody, long zTime, boolean zMine, String zState) {
@@ -210,6 +214,7 @@ public final class ChatEngine {
                     continue;
                 }
                 mMessages.put(en.id, en);
+                mConvKeys.add(en.isGroup() ? en.groupId : en.peer);
             } catch (Exception ex) {
                 System.err.println("[chat] bad message record " + e.getKey() + ": " + ex);
             }
@@ -413,6 +418,8 @@ public final class ChatEngine {
         String k = key(zPeerOrGroup);
         mLastRead.remove(k);
         mStore.remove(C_READ, k);
+        // Free the conversation-cap slot so clearing a chat actually makes room.
+        mConvKeys.remove(zPeerOrGroup);
         return n;
     }
 
@@ -731,14 +738,16 @@ public final class ChatEngine {
                 }
                 // A classic member never receipts, so it would be re-sent to
                 // forever - one delivery is the honest final word (mirrors the
-                // 1:1 classic guard in resendUndelivered).
-                if (c.isClassic() && e.deliveredBy.contains("classic:" + Keys.norm(m))) {
+                // 1:1 classic guard in resendUndelivered). Track that in a
+                // SEPARATE set: deliveredBy must hold only real confirmations,
+                // or a reader (e.g. desktop ticks) shows a false delivered.
+                if (c.isClassic() && e.classicSent.contains(Keys.norm(m))) {
                     continue;
                 }
                 if (deliver(c, cm)) {
                     any = true;
                     if (c.isClassic()) {
-                        e.deliveredBy.add("classic:" + Keys.norm(m));
+                        e.classicSent.add(Keys.norm(m));
                     }
                 }
             }
@@ -1146,15 +1155,19 @@ public final class ChatEngine {
         }
     }
 
-    private void handleText(String zFrom, ChatMessage zMsg) {
-        // A TEXT message body that begins with a media/payment control marker
-        // was SENT as text - it must never be reinterpreted as media or a
-        // payment bubble (the in-band marker forgery vector). Neutralize the
-        // leading control run so isMedia/isPayment can't match it.
-        if (zMsg.body != null && !zMsg.body.isEmpty()
-                && zMsg.body.charAt(0) < 0x20) {
-            zMsg.body = "\uFFFD" + zMsg.body;
+    /** A TEXT body that WOULD parse as media/payment was sent as plain text -
+     *  neutralize the marker so it can't be reinterpreted (in-band forgery).
+     *  Narrow: only bodies isMedia/isPayment would match, so a legit message
+     *  starting with a newline/tab is untouched. */
+    private static String deMarker(String zBody) {
+        if (zBody != null && (ChatMedia.isMedia(zBody) || ChatPay.isPayment(zBody))) {
+            return "\uFFFD" + zBody;
         }
+        return zBody;
+    }
+
+    private void handleText(String zFrom, ChatMessage zMsg) {
+        zMsg.body = deMarker(zMsg.body);
         Entry e = new Entry(zMsg.id, zFrom, "", zFrom, zMsg.body,
                 inboundTime(zMsg), false, Receipt.DELIVERED);
         e.arrived = System.currentTimeMillis();
@@ -1170,6 +1183,7 @@ public final class ChatEngine {
     }
 
     private void handleGroupText(String zFrom, ChatMessage zMsg) {
+        zMsg.body = deMarker(zMsg.body);
         Group g = mGroups.get(zMsg.groupId);
         if (g == null) {
             // A group we know nothing about. Ignore rather than auto-join:
