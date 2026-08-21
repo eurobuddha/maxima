@@ -223,7 +223,7 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         usesHead.setOpaque(false);
         usesHead.setAlignmentX(Component.LEFT_ALIGNMENT);
         usesHead.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-        usesHead.add(k.sectionLabel("Sends remaining"), BorderLayout.WEST);
+        usesHead.add(k.sectionLabel("Signatures used"), BorderLayout.WEST);
         JLabel usesHelp = new JLabel("?");
         usesHelp.setFont(t.semibold(13f));
         usesHelp.setForeground(t.subtext);
@@ -241,15 +241,17 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         int used = 0;
         try { used = mWallet == null ? 0 : mWallet.uses(new java.io.File(node.dataDir().toFile(), "wallet")); }
         catch (Exception ignored) { }
-        int left = DesktopWallet.MAX_USES - used;
-        JLabel big = new JLabel(mWallet == null ? "…" : String.format("%,d", left));
+        // Count UP: the big number is signatures USED (0 → MAX), exactly like the
+        // phone. The remaining budget is the subtitle. A wallet spends key-uses;
+        // it never "loses" a remaining count.
+        JLabel big = new JLabel(mWallet == null ? "…" : String.format("%,d", used));
         big.setFont(t.extrabold(22f));
-        big.setForeground(t.text);
+        big.setForeground(t.accent);
         big.setAlignmentX(Component.LEFT_ALIGNMENT);
         uses.add(big);
         uses.add(k.vgap(2));
-        uses.add(k.sub("Each send spends one of this key's one-time signatures. "
-                + used + " used of " + String.format("%,d", DesktopWallet.MAX_USES) + "."));
+        uses.add(k.sub(String.format("%,d of %,d signatures left · each send spends one",
+                DesktopWallet.MAX_USES - used, DesktopWallet.MAX_USES)));
         mPaneHolder.add(uses);
         mPaneHolder.add(k.vgap(14));
 

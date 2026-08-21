@@ -199,10 +199,11 @@ public final class DesktopExplain {
         put("keyuses", "Key uses",
                 "Your wallet signs with one-time Winternitz keys: each signing key can "
                         + "be used a fixed number of times before it is unsafe to reuse.\n\n"
-                        + "The number shown is how many signatures remain on the current "
-                        + "key before the wallet must move to the next one. Sending a "
-                        + "payment spends one. It is a safety budget, not a balance — "
-                        + "running low never loses funds, the wallet just advances keys.");
+                        + "The number counts UP: it is how many of this key's one-time "
+                        + "signatures you have USED so far, and the caption shows how many "
+                        + "remain. Sending a payment spends one. It is a safety budget, not "
+                        + "a balance — running low never loses funds, the wallet just "
+                        + "advances keys.");
 
         put("nodekind", "Node type",
                 "Tell your contacts what this device is.\n\n"
