@@ -770,6 +770,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         String caption = ChatMedia.caption(body);
         String mime = ChatMedia.mime(body);
         final String ref = ChatMedia.ref(body);
+        if (mime != null && mime.startsWith("audio/") && ref != null) {
+            addVoiceNoteTo(b, ref, mime, caption, fg);   // voice note: waveform + play
+            return;
+        }
         JLabel img = new JLabel();
         img.setAlignmentX(Component.LEFT_ALIGNMENT);
         javax.swing.ImageIcon cached = ref == null ? null : mMediaCache.get(ref);
@@ -872,6 +876,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         javax.swing.JMenuItem photo = new javax.swing.JMenuItem("Photo…");
         photo.addActionListener(e -> attachFile());
         m.add(photo);
+        javax.swing.JMenuItem voice = new javax.swing.JMenuItem("Voice note");
+        voice.addActionListener(e -> VoiceNotes.record(
+                javax.swing.SwingUtilities.getWindowAncestor(this), t, this::sendVoice));
+        m.add(voice);
         if (!mOpenGroup) {
             javax.swing.JMenuItem pay = new javax.swing.JMenuItem("Send payment");
             pay.addActionListener(e -> showPaymentDialog());
@@ -956,6 +964,130 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private void info(String msg) {
         javax.swing.JOptionPane.showMessageDialog(this, msg);
+    }
+
+    /** Send a recorded voice note (WAV) with its "M:SS|hex" waveform caption. */
+    private void sendVoice(byte[] wav, String caption) {
+        if (mOpen == null) return;
+        final String conv = mOpen;
+        final boolean group = mOpenGroup;
+        new Thread(() -> {
+            try {
+                if (group) {
+                    node.chat().sendGroupMedia(conv, wav, "audio/wav", caption);
+                } else {
+                    Contact c = node.node().contact(conv);
+                    if (c != null) node.chat().sendMedia(c, wav, "audio/wav", caption);
+                }
+                javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
+            } catch (Exception ex) {
+                javax.swing.SwingUtilities.invokeLater(() ->
+                        javax.swing.JOptionPane.showMessageDialog(this, "Couldn't send: " + ex.getMessage()));
+            }
+        }, "chat-voice").start();
+    }
+
+    /** Blocking fetch of the bytes behind a media ref (mx1: manifest or data:). */
+    private byte[] fetchMediaBytes(String ref) throws Exception {
+        if (ref.startsWith("mx1:")) {
+            String json = new String(java.util.Base64.getUrlDecoder()
+                    .decode(ref.substring(4)), java.nio.charset.StandardCharsets.UTF_8);
+            return node.media().fetch(MediaManifest.decode(json));
+        }
+        if (ref.startsWith("data:")) {
+            int comma = ref.indexOf(',');
+            return java.util.Base64.getDecoder().decode(ref.substring(comma + 1));
+        }
+        throw new IllegalArgumentException("unknown ref");
+    }
+
+    /** A voice-note bubble: play/stop control + waveform + duration (phone shape). */
+    private void addVoiceNoteTo(JPanel b, String ref, String mime, String caption, Color fg) {
+        String[] parts = Waveform.splitCaption(caption);
+        int[] levels = Waveform.decode(parts[1]);
+        if (levels == null) levels = new int[Waveform.BAR_COUNT];
+        JPanel row = new JPanel();
+        row.setOpaque(false);
+        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        final Waveform.Bars bars = new Waveform.Bars(levels, fg);
+        bars.setPreferredSize(new Dimension(150, 26));
+        bars.setMaximumSize(new Dimension(150, 26));
+
+        final PlayButton play = new PlayButton(fg);
+        play.onToggle(playing -> {
+            if (!playing) { VoiceNotes.stop(); return; }
+            new Thread(() -> {
+                try {
+                    byte[] bytes = fetchMediaBytes(ref);
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        boolean inline = VoiceNotes.play(bytes, mime, bars);
+                        if (!inline) play.setPlaying(false);   // handed to the OS app
+                    });
+                } catch (Exception ex) {
+                    javax.swing.SwingUtilities.invokeLater(() -> play.setPlaying(false));
+                }
+            }, "voice-fetch").start();
+        });
+
+        JLabel dur = new JLabel(parts[0].isEmpty() ? "0:00" : parts[0]);
+        dur.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 11));
+        dur.setForeground(DKit.alpha(fg, 190));
+
+        row.add(play);
+        row.add(Box.createRigidArea(new Dimension(8, 0)));
+        row.add(bars);
+        row.add(Box.createRigidArea(new Dimension(8, 0)));
+        row.add(dur);
+        b.add(row);
+    }
+
+    /** Minimal play/stop control (drawn triangle / square, no icon font). */
+    private static final class PlayButton extends JComponent {
+        private final Color ink;
+        private boolean playing;
+        private java.util.function.Consumer<Boolean> cb;
+
+        PlayButton(Color ink) {
+            this.ink = ink;
+            setPreferredSize(new Dimension(30, 30));
+            setMaximumSize(new Dimension(30, 30));
+            setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                public void mouseClicked(MouseEvent e) {
+                    setPlaying(!playing);
+                    if (cb != null) cb.accept(playing);
+                }
+            });
+        }
+
+        void onToggle(java.util.function.Consumer<Boolean> c) { cb = c; }
+
+        void setPlaying(boolean p) { playing = p; repaint(); }
+
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth(), h = getHeight();
+            g2.setColor(DKit.alpha(ink, 40));
+            g2.fillOval(1, 1, w - 2, h - 2);
+            g2.setColor(ink);
+            if (playing) {
+                int bw = 3, bh = 10, gap = 4, x = (w - (bw * 2 + gap)) / 2, y = (h - bh) / 2;
+                g2.fillRect(x, y, bw, bh);
+                g2.fillRect(x + bw + gap, y, bw, bh);
+            } else {
+                java.awt.geom.Path2D.Float tri = new java.awt.geom.Path2D.Float();
+                int cx = w / 2 + 1, cy = h / 2;
+                tri.moveTo(cx - 4, cy - 6);
+                tri.lineTo(cx + 6, cy);
+                tri.lineTo(cx - 4, cy + 6);
+                tri.closePath();
+                g2.fill(tri);
+            }
+            g2.dispose();
+        }
     }
 
     private void attachFile() {
