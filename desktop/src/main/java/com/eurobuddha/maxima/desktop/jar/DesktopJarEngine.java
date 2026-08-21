@@ -424,7 +424,7 @@ public final class DesktopJarEngine implements ChatPort {
 			java.util.prefs.Preferences prefs =
 					java.util.prefs.Preferences.userRoot().node(PREFS_NODE);
 			writeKeySet(prefs, PREF_CAPS, mCapable);
-			com.eurobuddha.maxima.desktop.ui.DesktopEventLog.add("peer proven Parlons-capable: " + k.substring(0, Math.min(20, k.length())) + "...");
+			com.eurobuddha.maxima.desktop.ui.DesktopEventLog.add("peer proven Parlons-capable: " + k);   // RULE 1: full key
 		}
 	}
 

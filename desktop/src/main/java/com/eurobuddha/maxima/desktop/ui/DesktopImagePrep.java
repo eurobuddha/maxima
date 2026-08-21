@@ -167,7 +167,10 @@ final class DesktopImagePrep {
         else return 1;
         int ifdOff = readInt(b, off + 4, little);
         int ifd = off + ifdOff;
-        if (ifd + 2 > b.length) return 1;
+        // ifdOff is attacker-controlled: guard against negative/overflow so we
+        // never index with a negative offset (the outer catch would swallow the
+        // AIOOBE, but be explicit).
+        if (ifdOff < 0 || ifd < off || ifd + 2 > b.length) return 1;
         int count = readShort(b, ifd, little);
         int entry = ifd + 2;
         for (int e = 0; e < count && entry + 12 <= b.length; e++, entry += 12) {

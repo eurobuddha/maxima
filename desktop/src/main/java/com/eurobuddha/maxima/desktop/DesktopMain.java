@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.5.24";
+    public static final String APP_VERSION = "1.5.25";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -112,7 +112,7 @@ public final class DesktopMain {
         });
         mRuntime.start();
         log("relay up on port " + port + ", data " + dataDir + ", identity "
-                + id.mxIdentity().substring(0, 20) + "…");
+                + id.mxIdentity());   // RULE 1: full identity, never truncated
 
         // 2. the outbound client that proves our reachability (and, later, gossips)
         mProbeClient = new MaximaNode(id, PROTOCOL, 1);

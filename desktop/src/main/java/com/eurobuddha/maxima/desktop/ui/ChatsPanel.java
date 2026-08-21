@@ -93,8 +93,17 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private String mLastSig = "";
     private String mThreadSig = "";
 
+    // Bounded LRU: scaled ImageIcons accumulate over a long session viewing many
+    // images. Cap so heap can't grow without bound (full-res bytes aren't held).
+    private static final int MEDIA_CACHE_MAX = 80;
     private final java.util.Map<String, javax.swing.ImageIcon> mMediaCache =
-            new java.util.concurrent.ConcurrentHashMap<>();
+            java.util.Collections.synchronizedMap(
+                    new java.util.LinkedHashMap<String, javax.swing.ImageIcon>(128, 0.75f, true) {
+                        protected boolean removeEldestEntry(
+                                java.util.Map.Entry<String, javax.swing.ImageIcon> e) {
+                            return size() > MEDIA_CACHE_MAX;
+                        }
+                    });
 
     public ChatsPanel(DesktopNode zNode, Theme zTheme) {
         node = zNode;
