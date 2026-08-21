@@ -1248,6 +1248,14 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 byte[] bytes = java.nio.file.Files.readAllBytes(f.toPath());
                 String mime = java.nio.file.Files.probeContentType(f.toPath());
                 if (mime == null) mime = "application/octet-stream";
+                // Normalise photos exactly as the phone does: upright per EXIF,
+                // downscaled long-edge, re-encoded JPEG — else a phone photo
+                // ships sideways and full-size.
+                if (mime.startsWith("image/")) {
+                    DesktopImagePrep.Result r = DesktopImagePrep.prepare(bytes, mime);
+                    bytes = r.bytes;
+                    if (r.jpeg) mime = "image/jpeg";
+                }
                 if (mOpenGroup) node.chat().sendGroupMedia(mOpen, bytes, mime, "");
                 else {
                     Contact c = node.port().contact(mOpen);
