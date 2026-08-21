@@ -209,11 +209,29 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         tabs.setupWithViewPager(mPager);
         // Settings lives in the overflow menu now - four tabs read better than
         // five. The page stays in the pager (menu + edge-swipe reach it), only
-        // its tab is hidden.
-        View settingsTab = ((android.view.ViewGroup) tabs.getChildAt(0)).getChildAt(4);
-        if (settingsTab != null) {
-            settingsTab.setVisibility(View.GONE);
-        }
+        // its tab is hidden. TabLayout REBUILDS its tab views whenever it
+        // re-syncs with the pager (selecting a page does it), resurrecting the
+        // hidden one - so the hide re-applies on every hierarchy change.
+        final android.view.ViewGroup strip = (android.view.ViewGroup) tabs.getChildAt(0);
+        final Runnable hideSettingsTab = () -> {
+            if (strip.getChildCount() > 4) {
+                View t = strip.getChildAt(4);
+                if (t != null && t.getVisibility() != View.GONE) {
+                    t.setVisibility(View.GONE);
+                }
+            }
+        };
+        hideSettingsTab.run();
+        strip.setOnHierarchyChangeListener(new android.view.ViewGroup.OnHierarchyChangeListener() {
+            @Override
+            public void onChildViewAdded(View parent, View child) {
+                strip.post(hideSettingsTab);
+            }
+
+            @Override
+            public void onChildViewRemoved(View parent, View child) {
+            }
+        });
 
         mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override
