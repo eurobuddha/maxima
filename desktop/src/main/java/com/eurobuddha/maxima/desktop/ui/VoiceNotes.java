@@ -79,11 +79,26 @@ final class VoiceNotes {
                     int s = (short) ((buf[i] & 0xFF) | (buf[i + 1] << 8));
                     peak = Math.max(peak, Math.abs(s));
                 }
-                samples.add(peak);
+                synchronized (samples) { samples.add(peak); }
             }
         }
 
         long elapsedMs() { return System.currentTimeMillis() - startMs; }
+
+        /** The most recent {@code n} input peaks, normalised 0..100 — a live meter
+         *  for the record dialog (read on the EDT while the rec thread appends). */
+        int[] liveBars(int n) {
+            int[] out = new int[n];
+            synchronized (samples) {
+                int sz = samples.size();
+                for (int i = 0; i < n; i++) {
+                    int idx = sz - n + i;
+                    int peak = idx >= 0 ? samples.get(idx) : 0;
+                    out[i] = Math.min(100, (int) (peak * 100L / 32767));
+                }
+            }
+            return out;
+        }
 
         /** Stop and return the WAV bytes (null on failure). */
         byte[] stopToWav() {
@@ -106,6 +121,41 @@ final class VoiceNotes {
             long ms = elapsedMs();
             String dur = (ms / 60000) + ":" + String.format("%02d", (ms / 1000) % 60);
             return dur + "|" + Waveform.encode(Waveform.summarise(samples));
+        }
+    }
+
+    /** A moving live-input meter drawn from the recorder's recent peaks. */
+    private static final class LiveWave extends javax.swing.JComponent {
+        static final int BARS = 28;
+        private final Theme t;
+        private int[] levels = new int[BARS];
+        LiveWave(Theme t) {
+            this.t = t;
+            setPreferredSize(new Dimension(288, 44));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        }
+        void update(int[] zLevels) {
+            if (zLevels != null && zLevels.length == BARS) levels = zLevels;
+            repaint();
+        }
+        @Override
+        protected void paintComponent(java.awt.Graphics g) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth(), h = getHeight();
+            int mid = h / 2;
+            float slot = w / (float) BARS;
+            float bw = Math.max(2f, slot - 2f);
+            for (int i = 0; i < BARS; i++) {
+                int lvl = Math.max(3, Math.min(100, levels[i]));
+                int bh = Math.max(3, (int) (lvl / 100f * (h - 6)));
+                float x = i * slot + (slot - bw) / 2f;
+                g2.setColor(t.accent);
+                g2.fill(new java.awt.geom.RoundRectangle2D.Float(
+                        x, mid - bh / 2f, bw, bh, bw, bw));
+            }
+            g2.dispose();
         }
     }
 
@@ -133,6 +183,13 @@ final class VoiceNotes {
         body.add(dot);
         body.add(Box.createVerticalStrut(8));
         body.add(timer);
+        body.add(Box.createVerticalStrut(10));
+
+        // Live input meter: a moving waveform of the last ~2.8s of input, like
+        // the phone's record view — silence is obvious, so is a dead mic.
+        final LiveWave wave = new LiveWave(t);
+        wave.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(wave);
         body.add(Box.createVerticalStrut(14));
 
         JPanel row = new JPanel();
@@ -155,9 +212,10 @@ final class VoiceNotes {
 
         final Timer blink = new Timer(500, null);
         final boolean[] on = {true};
-        Timer tick = new Timer(200, e -> {
+        Timer tick = new Timer(100, e -> {
             long ms = rec.elapsedMs();
             timer.setText((ms / 60000) + ":" + String.format("%02d", (ms / 1000) % 60));
+            wave.update(rec.liveBars(LiveWave.BARS));
             on[0] = !on[0];
             dot.setForeground(on[0] ? new Color(0xE0, 0x52, 0x4D)
                     : new Color(0xE0, 0x52, 0x4D, 60));

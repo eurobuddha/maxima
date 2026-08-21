@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.5.13";
+    public static final String APP_VERSION = "1.5.14";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
