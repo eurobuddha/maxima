@@ -216,8 +216,20 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         final Runnable hideSettingsTab = () -> {
             if (strip.getChildCount() > 4) {
                 View t = strip.getChildAt(4);
-                if (t != null && t.getVisibility() != View.GONE) {
-                    t.setVisibility(View.GONE);
+                if (t != null) {
+                    // NOT setVisibility: TabView.update() (runs on selection)
+                    // resets visibility internally and resurrects the tab.
+                    // Layout params are ours alone - a zero-width, zero-weight
+                    // tab is gone for good, and the other four fill the strip.
+                    android.widget.LinearLayout.LayoutParams lp =
+                            (android.widget.LinearLayout.LayoutParams) t.getLayoutParams();
+                    if (lp.width != 0 || lp.weight != 0f) {
+                        lp.width = 0;
+                        lp.weight = 0f;
+                        t.setLayoutParams(lp);
+                        t.setMinimumWidth(0);
+                        t.setPadding(0, 0, 0, 0);
+                    }
                 }
             }
         };
