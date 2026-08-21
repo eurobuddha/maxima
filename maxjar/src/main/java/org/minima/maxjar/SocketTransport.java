@@ -60,6 +60,14 @@ public class SocketTransport implements MaximaTransport {
 	private static final long SILENCE_DROP_MS = 480_000;
 	/** Frames larger than this are chain traffic - consumed and dropped. */
 	private static final int MAX_KEEP_FRAME = 4 * 1024 * 1024;
+	/** Classic's MaximaPackage cap (NIOMessage): a unit above this is TOOBIG. */
+	private static final int MAX_MAXIMA_PACKAGE = 262144;
+	/** LAN listener is unauthenticated (anyone on the WiFi) - bound the blast
+	 *  radius: at most this many concurrent LAN connections, each a daemon
+	 *  thread + brain-queue producer. Excess accepts are closed immediately. */
+	private static final int MAX_LAN_CONNS = 24;
+	private final java.util.concurrent.atomic.AtomicInteger mLanConns =
+			new java.util.concurrent.atomic.AtomicInteger(0);
 
 	private final String mVersion;
 	private final List<String> mHosts = new CopyOnWriteArrayList<>();
@@ -128,6 +136,12 @@ public class SocketTransport implements MaximaTransport {
 				while (mRunning && !mLanServer.isClosed()) {
 					try {
 						java.net.Socket s = mLanServer.accept();
+						if (mLanConns.get() >= MAX_LAN_CONNS) {
+							// Over the cap: drop rather than spawn an unbounded
+							// thread/queue producer for a LAN flooder.
+							try { s.close(); } catch (Exception ignored) { }
+							continue;
+						}
 						Thread h = new Thread(() -> handleLanConn(s), "maxjar-lan-conn");
 						h.setDaemon(true);
 						h.start();
@@ -148,6 +162,7 @@ public class SocketTransport implements MaximaTransport {
 
 	private void handleLanConn(java.net.Socket zSock) {
 		String uid = "lan" + mUidGen.getAndIncrement();
+		mLanConns.incrementAndGet();
 		try {
 			zSock.setSoTimeout(30_000);
 			Peer peer = new Peer(uid, zSock.getInetAddress().getHostAddress(),
@@ -168,6 +183,11 @@ public class SocketTransport implements MaximaTransport {
 						peer.write(body(MSG_PING, MaximaManager.MAXIMA_WRONGHASH));
 						continue;
 					}
+					if (mx.getMaximaPackage() != null
+							&& mx.getMaximaPackage().mData.getLength() > MAX_MAXIMA_PACKAGE) {
+						peer.write(body(MSG_PING, MaximaManager.MAXIMA_TOOBIG));
+						continue;
+					}
 					MinimaLogger.log("LAN direct: inbound unit from "
 							+ zSock.getInetAddress().getHostAddress());
 					Message msg = new Message(MaximaManager.MAXIMA_RECMESSAGE);
@@ -180,6 +200,7 @@ public class SocketTransport implements MaximaTransport {
 		} catch (Exception done) {
 			// one-shot classic socket: EOF/timeout is the normal end
 		} finally {
+			mLanConns.decrementAndGet();
 			mByUid.remove(uid);
 			try {
 				zSock.close();
@@ -223,10 +244,14 @@ public class SocketTransport implements MaximaTransport {
 
 	private synchronized void sweep() {
 		long now = System.currentTimeMillis();
+		java.util.List<String> toConnect = new java.util.ArrayList<>();
 		for (String host : mHosts) {
 			Peer p = mByHost.get(host);
 			if (p == null) {
-				connect(host);
+				// Blocking connect() must NOT run under this monitor - one dead
+				// host would stall keepalives to healthy peers for the connect
+				// timeout. Collect now, dial after releasing the lock.
+				toConnect.add(host);
 			} else if (now - p.lastRead > SILENCE_DROP_MS) {
 				MinimaLogger.log("TRANSPORT silence-reap " + host);
 				p.close();   // reader thread posts DISCONNECTED
@@ -237,6 +262,10 @@ public class SocketTransport implements MaximaTransport {
 					p.close();
 				}
 			}
+		}
+		// Off-lock: each connect() blocks up to CONNECT_TIMEOUT_MS.
+		for (String host : toConnect) {
+			connect(host);
 		}
 	}
 
@@ -320,6 +349,13 @@ public class SocketTransport implements MaximaTransport {
 					// answered WRONGHASH and dropped.
 					if (!mx.checkValidTxPoW()) {
 						zPeer.write(body(MSG_PING, MaximaManager.MAXIMA_WRONGHASH));
+						continue;
+					}
+					// Classic's 256K MaximaPackage cap - a hostile host must not
+					// hand the brain a ~4MB package to RSA-decrypt and process.
+					if (mx.getMaximaPackage() != null
+							&& mx.getMaximaPackage().mData.getLength() > MAX_MAXIMA_PACKAGE) {
+						zPeer.write(body(MSG_PING, MaximaManager.MAXIMA_TOOBIG));
 						continue;
 					}
 					Message msg = new Message(MaximaManager.MAXIMA_RECMESSAGE);
