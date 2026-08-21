@@ -1101,6 +1101,29 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (cs.isEmpty()) {
             body.add(k.sub("No contacts yet. Add someone in the Contacts tab first."));
         } else {
+            // A group starts here too, exactly like the phone's overflow "New group".
+            JPanel grp = new JPanel(new BorderLayout(12, 0));
+            grp.setOpaque(false);
+            grp.setBorder(new EmptyBorder(9, 8, 9, 8));
+            grp.setMaximumSize(new Dimension(Integer.MAX_VALUE, 56));
+            grp.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            grp.add(new Icons.Btn(Icons.CONTACTS, t.accent, DKit.alpha(t.accent, 30), 38, 22, 1.8f),
+                    BorderLayout.WEST);
+            JLabel gl = new JLabel("New group");
+            gl.setFont(t.semibold(13.5f));
+            gl.setForeground(t.text);
+            grp.add(gl, BorderLayout.CENTER);
+            grp.addMouseListener(new MouseAdapter() {
+                public void mouseClicked(MouseEvent e) {
+                    if (ref.d != null) ref.d.dispose();
+                    newGroup();
+                }
+            });
+            body.add(grp);
+            JPanel sep = new JPanel();
+            sep.setBackground(t.divider);
+            sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+            body.add(sep);
             for (Contact c : cs) {
                 String name = nameFor(c.publicKey);
                 JPanel row = new JPanel(new BorderLayout(12, 0));
@@ -1141,6 +1164,95 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private static final class JDialogRef { JDialog d; }
+
+    /** Create a group — the phone's newGroup flow: pick members + name, then
+     *  chat.createGroup fans the roster out (a network op, off the EDT). We are
+     *  the sole admin. */
+    private void newGroup() {
+        List<Contact> cs = node.port().contacts();
+        if (cs.isEmpty()) { info("Add some contacts first."); return; }
+
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        body.setBorder(new EmptyBorder(2, 2, 2, 2));
+
+        final JTextField nameField = k.field("Group name");
+        nameField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(nameField);
+        body.add(k.vgap(10));
+        JLabel prompt = k.sub("Who is in the group?");
+        prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(prompt);
+        body.add(k.vgap(4));
+
+        final java.util.List<javax.swing.JCheckBox> boxes = new java.util.ArrayList<>();
+        for (Contact c : cs) {
+            javax.swing.JCheckBox cb = new javax.swing.JCheckBox(nameFor(c.publicKey));
+            cb.setOpaque(false);
+            cb.setForeground(t.text);
+            cb.setFont(t.font(13f));
+            cb.setAlignmentX(Component.LEFT_ALIGNMENT);
+            cb.putClientProperty("pk", c.publicKey);
+            boxes.add(cb);
+            body.add(cb);
+        }
+
+        JScrollPane sp = new JScrollPane(body,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(t.card);
+
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                "New group", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(sp, BorderLayout.CENTER);
+
+        JPanel buttons = new JPanel();
+        buttons.setOpaque(false);
+        buttons.setLayout(new BoxLayout(buttons, BoxLayout.X_AXIS));
+        buttons.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton cancel = k.ghostButton("Cancel");
+        cancel.onClick(() -> d.dispose());
+        DKit.HoverButton create = k.primaryButton("Create");
+        create.onClick(() -> {
+            java.util.List<String> members = new java.util.ArrayList<>();
+            for (javax.swing.JCheckBox cb : boxes) {
+                if (cb.isSelected()) members.add((String) cb.getClientProperty("pk"));
+            }
+            if (members.isEmpty()) { info("Pick at least one person."); return; }
+            String n = nameField.getText().trim();
+            final String name = n.isEmpty() ? "Group" : n;
+            d.dispose();
+            new Thread(() -> {
+                try {
+                    com.eurobuddha.maxima.core.chat.Group g =
+                            node.chat().createGroup(name, members);
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        mLastSig = "";
+                        refresh();
+                        open(g.id, true);
+                    });
+                } catch (Exception ex) {
+                    javax.swing.SwingUtilities.invokeLater(() ->
+                            info("Could not create: " + ex.getMessage()));
+                }
+            }, "create-group").start();
+        });
+        buttons.add(Box.createHorizontalGlue());
+        buttons.add(cancel);
+        buttons.add(Box.createRigidArea(new Dimension(8, 0)));
+        buttons.add(create);
+        wrap.add(buttons, BorderLayout.SOUTH);
+
+        d.setContentPane(wrap);
+        d.setSize(360, Math.min(560, 200 + cs.size() * 30));
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
 
     // ---- media ----
 
