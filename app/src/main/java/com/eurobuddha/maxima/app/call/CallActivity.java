@@ -30,6 +30,11 @@ public final class CallActivity extends Activity implements CallManager.Listener
 
     public static final String EXTRA_PEER = "peer";
     public static final String EXTRA_OUTGOING = "outgoing";
+    public static final String EXTRA_VIDEO = "video";
+
+    private org.webrtc.SurfaceViewRenderer mRemoteView;
+    private org.webrtc.SurfaceViewRenderer mLocalView;
+    private boolean mVideoUi;
 
     private String mPeer;
     private TextView mStatus;
@@ -52,6 +57,9 @@ public final class CallActivity extends Activity implements CallManager.Listener
             return;
         }
         String who = Names.contact(MaximaService.port(), mPeer);
+
+        CallManager pre = CallManager.get(this);
+        mVideoUi = getIntent().getBooleanExtra(EXTRA_VIDEO, false) || pre.isVideo();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -118,8 +126,48 @@ public final class CallActivity extends Activity implements CallManager.Listener
         mLiveRow.addView(mSpeakerBtn);
         root.addView(mLiveRow);
 
-        setContentView(root);
+        if (mVideoUi) {
+            // Video: remote feed fills the screen, local preview floats top-right,
+            // the same control rows overlay the bottom.
+            android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+            frame.setBackgroundColor(0xFF101113);
+            mRemoteView = new org.webrtc.SurfaceViewRenderer(this);
+            mRemoteView.init(CallManager.get(this).eglContext(), null);
+            frame.addView(mRemoteView, new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            mLocalView = new org.webrtc.SurfaceViewRenderer(this);
+            mLocalView.init(CallManager.get(this).eglContext(), null);
+            mLocalView.setZOrderMediaOverlay(true);
+            mLocalView.setMirror(true);
+            android.widget.FrameLayout.LayoutParams pip =
+                    new android.widget.FrameLayout.LayoutParams(dp(104), dp(140));
+            pip.gravity = Gravity.TOP | Gravity.END;
+            pip.topMargin = dp(48);
+            pip.rightMargin = dp(16);
+            frame.addView(mLocalView, pip);
+            // The audio layout becomes a translucent overlay (avatar hidden by
+            // the remote feed once frames arrive).
+            root.setBackgroundColor(0x00000000);
+            frame.addView(root, new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            // Flip-camera joins the live row.
+            mLiveRow.addView(gap());
+            mLiveRow.addView(roundButton("Flip", 0xFF3A3D42,
+                    v -> CallManager.get(this).switchCamera()));
+            setContentView(frame);
+            CallManager.get(this).attachVideoSinks(mLocalView, mRemoteView);
+        } else {
+            setContentView(root);
+        }
 
+        if (mVideoUi && checkSelfPermission(android.Manifest.permission.CAMERA)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{
+                    android.Manifest.permission.CAMERA,
+                    android.Manifest.permission.RECORD_AUDIO}, 2);
+        }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(
@@ -129,7 +177,7 @@ public final class CallActivity extends Activity implements CallManager.Listener
         cm.setListener(this);
         if (getIntent().getBooleanExtra(EXTRA_OUTGOING, false)
                 && cm.state() == CallManager.State.IDLE) {
-            cm.startCall(mPeer);
+            cm.startCall(mPeer, mVideoUi);
         }
         renderState(cm.state(), null);
     }
@@ -148,7 +196,8 @@ public final class CallActivity extends Activity implements CallManager.Listener
         mTick.removeCallbacksAndMessages(null);
         switch (zState) {
             case INCOMING_RINGING:
-                mStatus.setText("Incoming Parlons call");
+                mStatus.setText(mVideoUi ? "Incoming video call"
+                        : "Incoming Parlons call");
                 mIncomingRow.setVisibility(View.VISIBLE);
                 break;
             case OUTGOING_RINGING:
@@ -220,6 +269,16 @@ public final class CallActivity extends Activity implements CallManager.Listener
         // Always detach - a destroyed activity must never receive callbacks.
         // Re-opening the call screen re-registers; CallManager itself keeps
         // the call (and dismisses the notification on end) without a UI.
-        CallManager.get(this).setListener(null);
+        CallManager cm = CallManager.get(this);
+        cm.setListener(null);
+        if (mVideoUi) {
+            cm.detachVideoSinks();
+            if (mLocalView != null) {
+                mLocalView.release();
+            }
+            if (mRemoteView != null) {
+                mRemoteView.release();
+            }
+        }
     }
 }

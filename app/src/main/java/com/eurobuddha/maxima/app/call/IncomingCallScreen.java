@@ -39,15 +39,18 @@ public final class IncomingCallScreen {
             nm.createNotificationChannel(ch);
         }
         String who = Names.contact(MaximaService.port(), zPeerKey);
+        boolean video = CallManager.get(zCtx).isVideo();
         Intent open = new Intent(zCtx, CallActivity.class);
         open.putExtra(CallActivity.EXTRA_PEER, zPeerKey);
+        open.putExtra(CallActivity.EXTRA_VIDEO, video);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent pi = PendingIntent.getActivity(zCtx, NOTIF_ID, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification n = new Notification.Builder(zCtx, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setContentTitle(who)
-                .setContentText("Incoming Parlons call")
+                .setContentText(video ? "Incoming Parlons video call"
+                        : "Incoming Parlons call")
                 .setCategory(Notification.CATEGORY_CALL)
                 .setOngoing(true)
                 .setContentIntent(pi)

@@ -21,6 +21,15 @@ import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.SdpObserver;
 import org.webrtc.SessionDescription;
+import org.webrtc.Camera2Enumerator;
+import org.webrtc.CameraVideoCapturer;
+import org.webrtc.DefaultVideoDecoderFactory;
+import org.webrtc.DefaultVideoEncoderFactory;
+import org.webrtc.EglBase;
+import org.webrtc.SurfaceTextureHelper;
+import org.webrtc.VideoSink;
+import org.webrtc.VideoSource;
+import org.webrtc.VideoTrack;
 import org.webrtc.audio.JavaAudioDeviceModule;
 
 import java.util.ArrayList;
@@ -90,6 +99,17 @@ public final class CallManager {
     private String mLastEndedCallId = "";
     private Runnable mConnectTimeout;
 
+    // ---- video ----
+    private volatile boolean mVideo;
+    private EglBase mEgl;
+    private CameraVideoCapturer mCapturer;
+    private SurfaceTextureHelper mSurfaceHelper;
+    private VideoSource mVideoSource;
+    private VideoTrack mVideoTrack;
+    private volatile VideoTrack mRemoteVideoTrack;
+    private volatile VideoSink mLocalSink;
+    private volatile VideoSink mRemoteSink;
+
     private CallManager(Context zCtx) {
         mCtx = zCtx;
     }
@@ -112,6 +132,56 @@ public final class CallManager {
                 : (int) ((System.currentTimeMillis() - mLiveSince) / 1000);
     }
 
+    /** Is the current (or ringing) call a video call? */
+    public boolean isVideo() {
+        return mVideo;
+    }
+
+    /** Shared EGL context for the activity's SurfaceViewRenderers. */
+    public EglBase.Context eglContext() {
+        ensureFactory();
+        return mEgl.getEglBaseContext();
+    }
+
+    /** The call screen hands its renderers in; tracks attach as they exist. */
+    public void attachVideoSinks(VideoSink zLocal, VideoSink zRemote) {
+        mLocalSink = zLocal;
+        mRemoteSink = zRemote;
+        mExec.execute(() -> {
+            if (mVideoTrack != null && zLocal != null) {
+                mVideoTrack.addSink(zLocal);
+            }
+            if (mRemoteVideoTrack != null && zRemote != null) {
+                mRemoteVideoTrack.addSink(zRemote);
+            }
+        });
+    }
+
+    public void detachVideoSinks() {
+        final VideoSink l = mLocalSink, r = mRemoteSink;
+        mLocalSink = null;
+        mRemoteSink = null;
+        mExec.execute(() -> {
+            try {
+                if (mVideoTrack != null && l != null) {
+                    mVideoTrack.removeSink(l);
+                }
+                if (mRemoteVideoTrack != null && r != null) {
+                    mRemoteVideoTrack.removeSink(r);
+                }
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    public void switchCamera() {
+        mExec.execute(() -> {
+            if (mCapturer != null) {
+                mCapturer.switchCamera(null);
+            }
+        });
+    }
+
     public boolean muted() {
         return mMuted;
     }
@@ -125,6 +195,10 @@ public final class CallManager {
     // ------------------------------------------------------------------
 
     public void startCall(final String zPeerKey) {
+        startCall(zPeerKey, false);
+    }
+
+    public void startCall(final String zPeerKey, final boolean zVideo) {
         mExec.execute(() -> {
             if (mState != State.IDLE && mState != State.ENDED) {
                 return;
@@ -138,6 +212,7 @@ public final class CallManager {
             }
             mCallId = UUID.randomUUID().toString().substring(0, 13);
             mPeerKey = zPeerKey;
+            mVideo = zVideo;
             setState(State.OUTGOING_RINGING, null);
             armRingTimeout();
             ensureFactory();
@@ -145,6 +220,10 @@ public final class CallManager {
             MediaConstraints mc = new MediaConstraints();
             mc.mandatory.add(new MediaConstraints.KeyValuePair(
                     "OfferToReceiveAudio", "true"));
+            if (mVideo) {
+                mc.mandatory.add(new MediaConstraints.KeyValuePair(
+                        "OfferToReceiveVideo", "true"));
+            }
             mPc.createOffer(new Sdp("offer-create") {
                 @Override
                 public void onCreateSuccess(SessionDescription sdp) {
@@ -185,6 +264,7 @@ public final class CallManager {
                     mCallId = zMsg.ref;
                     mPeerKey = zFromKey;
                     mPendingOfferSdp = zMsg.body;
+                    mVideo = "video".equals(zMsg.memo);
                     mPendingIce.clear();
                     setState(State.INCOMING_RINGING, null);
                     armRingTimeout();
@@ -320,9 +400,14 @@ public final class CallManager {
         PeerConnectionFactory.initialize(
                 PeerConnectionFactory.InitializationOptions.builder(mCtx)
                         .createInitializationOptions());
+        mEgl = EglBase.create();
         mFactory = PeerConnectionFactory.builder()
                 .setAudioDeviceModule(JavaAudioDeviceModule.builder(mCtx)
                         .createAudioDeviceModule())
+                .setVideoEncoderFactory(new DefaultVideoEncoderFactory(
+                        mEgl.getEglBaseContext(), true, true))
+                .setVideoDecoderFactory(new DefaultVideoDecoderFactory(
+                        mEgl.getEglBaseContext()))
                 .createPeerConnectionFactory();
     }
 
@@ -357,6 +442,10 @@ public final class CallManager {
                                 mCtx.getSystemService(Context.AUDIO_SERVICE);
                         if (am != null) {
                             am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                            if (mVideo) {
+                                am.setSpeakerphoneOn(true);
+                                mSpeaker = true;
+                            }
                         }
                         setState(State.LIVE, null);
                     } else if (s == PeerConnection.PeerConnectionState.FAILED) {
@@ -378,12 +467,58 @@ public final class CallManager {
             @Override public void onDataChannel(org.webrtc.DataChannel d) { }
             @Override public void onRenegotiationNeeded() { }
             @Override public void onAddTrack(org.webrtc.RtpReceiver r,
-                    org.webrtc.MediaStream[] s) { }
+                    org.webrtc.MediaStream[] s) {
+                if (r.track() instanceof VideoTrack) {
+                    mRemoteVideoTrack = (VideoTrack) r.track();
+                    VideoSink sink = mRemoteSink;
+                    if (sink != null) {
+                        mRemoteVideoTrack.addSink(sink);
+                    }
+                }
+            }
         });
         mSource = mFactory.createAudioSource(new MediaConstraints());
         mTrack = mFactory.createAudioTrack("a0", mSource);
         mTrack.setEnabled(!mMuted);
         mPc.addTrack(mTrack);
+        if (mVideo) {
+            startCamera();
+        }
+    }
+
+    /** Front camera -> VideoTrack on the peer connection + the local preview. */
+    private void startCamera() {
+        try {
+            Camera2Enumerator en = new Camera2Enumerator(mCtx);
+            String dev = null;
+            for (String d : en.getDeviceNames()) {
+                if (en.isFrontFacing(d)) {
+                    dev = d;
+                    break;
+                }
+            }
+            if (dev == null && en.getDeviceNames().length > 0) {
+                dev = en.getDeviceNames()[0];
+            }
+            if (dev == null) {
+                return;
+            }
+            mCapturer = en.createCapturer(dev, null);
+            mSurfaceHelper = SurfaceTextureHelper.create("cam",
+                    mEgl.getEglBaseContext());
+            mVideoSource = mFactory.createVideoSource(false);
+            mCapturer.initialize(mSurfaceHelper, mCtx,
+                    mVideoSource.getCapturerObserver());
+            mCapturer.startCapture(960, 540, 24);
+            mVideoTrack = mFactory.createVideoTrack("v0", mVideoSource);
+            mPc.addTrack(mVideoTrack);
+            VideoSink l = mLocalSink;
+            if (l != null) {
+                mVideoTrack.addSink(l);
+            }
+        } catch (Exception e) {
+            EventLog.add("camera unavailable: " + e.getMessage());
+        }
     }
 
     private void drainIce() {
@@ -437,6 +572,34 @@ public final class CallManager {
             mSource = null;
         }
         mTrack = null;
+        if (mCapturer != null) {
+            try {
+                mCapturer.stopCapture();
+            } catch (Exception ignored) {
+            }
+            try {
+                mCapturer.dispose();
+            } catch (Exception ignored) {
+            }
+            mCapturer = null;
+        }
+        if (mVideoSource != null) {
+            try {
+                mVideoSource.dispose();
+            } catch (Exception ignored) {
+            }
+            mVideoSource = null;
+        }
+        if (mSurfaceHelper != null) {
+            try {
+                mSurfaceHelper.dispose();
+            } catch (Exception ignored) {
+            }
+            mSurfaceHelper = null;
+        }
+        mVideoTrack = null;
+        mRemoteVideoTrack = null;
+        mVideo = false;
         mPendingOfferSdp = null;
         mPendingIce.clear();
         mLiveSince = 0;
@@ -506,7 +669,11 @@ public final class CallManager {
             if (chat == null || c == null) {
                 return;
             }
-            chat.sendCallSignal(c, ChatMessage.call(zCallId, zKind, zPayload));
+            ChatMessage m = ChatMessage.call(zCallId, zKind, zPayload);
+            if (mVideo && "offer".equals(zKind)) {
+                m.memo = "video";   // the flat codec's spare field
+            }
+            chat.sendCallSignal(c, m);
         } catch (Exception e) {
             EventLog.add("call signal " + zKind + " failed: " + e.getMessage());
             if ("offer".equals(zKind) || "answer".equals(zKind)) {

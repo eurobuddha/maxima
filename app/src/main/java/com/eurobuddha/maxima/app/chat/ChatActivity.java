@@ -211,9 +211,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         });
         findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachSheet());
         findViewById(R.id.btn_chat_camera).setOnClickListener(v -> takePhoto());
-        findViewById(R.id.btn_chat_video).setOnClickListener(v ->
-                toast("Video calls are coming soon"));
-        findViewById(R.id.btn_chat_call).setOnClickListener(v -> startCall());
+        findViewById(R.id.btn_chat_video).setOnClickListener(v -> startCall(true));
+        findViewById(R.id.btn_chat_call).setOnClickListener(v -> startCall(false));
         findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> showEmojiPanel());
 
         // The FAB shows a mic when the field is empty and the send plane once
@@ -770,6 +769,17 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     /** Voice call: 1:1, Parlons-capable peers only, mic permission required. */
     private void startCall() {
+        startCall(false);
+    }
+
+    private boolean mCallWantsVideo;
+
+    private void startCall(boolean zVideo) {
+        mCallWantsVideo = zVideo;
+        startCallInner();
+    }
+
+    private void startCallInner() {
         ChatEngine chat = MaximaService.chat();
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
@@ -788,16 +798,24 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             toast("Calls need Parlons on both ends");
             return;
         }
+        java.util.List<String> need = new java.util.ArrayList<>();
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},
-                    REQ_CALL_AUDIO);
+            need.add(android.Manifest.permission.RECORD_AUDIO);
+        }
+        if (mCallWantsVideo && checkSelfPermission(android.Manifest.permission.CAMERA)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            need.add(android.Manifest.permission.CAMERA);
+        }
+        if (!need.isEmpty()) {
+            requestPermissions(need.toArray(new String[0]), REQ_CALL_AUDIO);
             return;
         }
         android.content.Intent i = new android.content.Intent(this,
                 com.eurobuddha.maxima.app.call.CallActivity.class);
         i.putExtra(com.eurobuddha.maxima.app.call.CallActivity.EXTRA_PEER, mConversation);
         i.putExtra(com.eurobuddha.maxima.app.call.CallActivity.EXTRA_OUTGOING, true);
+        i.putExtra(com.eurobuddha.maxima.app.call.CallActivity.EXTRA_VIDEO, mCallWantsVideo);
         startActivity(i);
     }
 
@@ -896,7 +914,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }
         if (zReq == REQ_CALL_AUDIO && zGrants.length > 0
                 && zGrants[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            startCall();
+            startCallInner();
         }
     }
 
