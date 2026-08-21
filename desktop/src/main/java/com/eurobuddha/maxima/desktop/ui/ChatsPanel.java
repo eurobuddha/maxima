@@ -67,6 +67,21 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private JTextField mSearch;
     private String mQuery = "";
+    private java.util.List<Hit> mHits = new java.util.ArrayList<>();
+    private String mScrollToId;          // pending scroll-to-bubble after a search hit
+
+    /** A cross-chat message search hit — mirrors the phone's SearchActivity.Hit. */
+    private static final class Hit {
+        final String conversation;
+        final String title;
+        final String snippet;
+        final long time;
+        final String entryId;
+        Hit(String zConv, String zTitle, String zSnippet, long zTime, String zEntryId) {
+            conversation = zConv; title = zTitle; snippet = zSnippet;
+            time = zTime; entryId = zEntryId;
+        }
+    }
 
     private String mOpen;
     private boolean mOpenGroup;
@@ -279,17 +294,70 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 || (s.lastBody != null && s.lastBody.toLowerCase().contains(q));
     }
 
+    private static final int MAX_HITS = 50;
+
+    /** Substring scan of every message across every chat — bodies, media captions
+     *  and payment memos, newest hits first, capped. Empty query → no hits (the
+     *  chat list already shows conversations). Mirrors the phone's SearchActivity. */
+    private List<Hit> searchMessages(String zQuery) {
+        List<Hit> hits = new java.util.ArrayList<>();
+        String q = zQuery.toLowerCase();
+        if (q.isEmpty()) return hits;
+        ChatEngine ce = node.chat();
+        outer:
+        for (ChatEngine.Summary s : ce.summaries()) {
+            String conv = s.conversation;
+            boolean group = ce.group(conv) != null;
+            String title = titleFor(conv, group);
+            for (ChatEngine.Entry e : ce.conversation(conv)) {
+                String text = searchable(e.body);
+                int at = text.toLowerCase().indexOf(q);
+                if (at < 0) continue;
+                hits.add(new Hit(conv, title, snippet(text, at, q.length()), e.time, e.id));
+                if (hits.size() >= MAX_HITS) break outer;
+            }
+        }
+        hits.sort((a, b) -> Long.compare(b.time, a.time));
+        return hits;
+    }
+
+    /** The human-readable text of a message body — never wire artefacts. */
+    private static String searchable(String zBody) {
+        if (zBody == null) return "";
+        if (ChatPay.isPayment(zBody)) return ChatPay.preview(zBody);
+        if (ChatMedia.isMedia(zBody)) {
+            String cap = ChatMedia.caption(zBody);
+            int bar = cap.indexOf('|');    // voice notes: "duration|waveformhex"
+            return bar >= 0 ? cap.substring(0, bar) : cap;
+        }
+        return zBody;
+    }
+
+    private static String snippet(String zText, int zAt, int zLen) {
+        int from = Math.max(0, zAt - 28);
+        int to = Math.min(zText.length(), zAt + zLen + 60);
+        return (from > 0 ? "…" : "") + zText.substring(from, to)
+                + (to < zText.length() ? "…" : "");
+    }
+
     public void refresh() {
         ChatEngine ce = node.chat();
         List<ChatEngine.Summary> all = ce.summaries();
         List<ChatEngine.Summary> sums = new java.util.ArrayList<>();
         for (ChatEngine.Summary s : all) if (matches(s)) sums.add(s);
+        // Cross-chat message search: when there's a query, also scan message
+        // bodies / captions / payment memos across every conversation — the
+        // phone's SearchActivity, folded into the same left pane.
+        List<Hit> hits = searchMessages(mQuery.trim());
         StringBuilder sig = new StringBuilder(mQuery).append('#');
         for (ChatEngine.Summary s : sums) {
             sig.append(s.conversation).append(s.lastTime).append(s.unread).append('|');
         }
+        sig.append("~H").append(hits.size());
+        for (Hit h : hits) sig.append(h.entryId).append('|');
         if (!sig.toString().equals(mLastSig)) {
             mLastSig = sig.toString();
+            mHits = hits;
             rebuildList(sums);
         }
         if (mOpen != null) {
@@ -313,20 +381,146 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private void rebuildList(List<ChatEngine.Summary> sums) {
         mList.removeAll();
-        if (sums.isEmpty()) {
+        boolean searching = !mQuery.trim().isEmpty();
+        if (sums.isEmpty() && mHits.isEmpty()) {
             JPanel empty = new JPanel();
             empty.setOpaque(false);
             empty.setBorder(new EmptyBorder(40, 20, 20, 20));
             empty.setLayout(new BoxLayout(empty, BoxLayout.Y_AXIS));
-            empty.add(k.sub("No conversations yet. Add a contact to start."));
+            empty.add(k.sub(searching ? "No matches."
+                    : "No conversations yet. Add a contact to start."));
             mList.add(empty);
         }
-        for (ChatEngine.Summary s : sums) {
-            mList.add(row(s));
+        if (!sums.isEmpty()) {
+            if (searching) mList.add(sectionLabel("Chats"));
+            for (ChatEngine.Summary s : sums) mList.add(row(s));
+        }
+        if (!mHits.isEmpty()) {
+            mList.add(sectionLabel("Messages"));
+            for (Hit h : mHits) mList.add(hitRow(h));
         }
         mList.add(Box.createVerticalGlue());
         mList.revalidate();
         mList.repaint();
+    }
+
+    private JComponent sectionLabel(String zText) {
+        JLabel l = new JLabel(zText.toUpperCase(java.util.Locale.UK));
+        l.setFont(t.semibold(10.5f));
+        l.setForeground(t.subtext);
+        l.setBorder(new EmptyBorder(14, 16, 5, 16));
+        l.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setOpaque(true);
+        wrap.setBackground(t.card);
+        wrap.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        wrap.add(l, BorderLayout.WEST);
+        return wrap;
+    }
+
+    /** A message-search hit row: avatar, chat title + date, bold-free snippet.
+     *  Clicking it opens the thread scrolled to that bubble, which then pulses. */
+    private JComponent hitRow(Hit h) {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(true);
+        row.setBackground(t.card);
+        row.setBorder(new EmptyBorder(9, 16, 9, 16));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
+        row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        row.add(k.avatar(h.conversation, h.title, 40), BorderLayout.WEST);
+
+        JPanel col = new JPanel();
+        col.setOpaque(false);
+        col.setLayout(new BoxLayout(col, BoxLayout.Y_AXIS));
+        JPanel head = new JPanel(new BorderLayout());
+        head.setOpaque(false);
+        head.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel title = new JLabel(h.title);
+        title.setFont(t.semibold(13.5f));
+        title.setForeground(t.text);
+        head.add(title, BorderLayout.CENTER);
+        if (h.time > 0) {
+            JLabel when = new JLabel(shortDate(h.time));
+            when.setFont(t.font(11f));
+            when.setForeground(t.subtext);
+            head.add(when, BorderLayout.EAST);
+        }
+        col.add(head);
+        JLabel sn = new JLabel(h.snippet);
+        sn.setFont(t.font(12f));
+        sn.setForeground(t.subtext);
+        sn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        col.add(sn);
+        row.add(col, BorderLayout.CENTER);
+
+        row.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) { jumpToMessage(h.conversation, h.entryId); }
+        });
+        return row;
+    }
+
+    private String shortDate(long zMs) {
+        return new java.text.SimpleDateFormat("d MMM", java.util.Locale.UK)
+                .format(new java.util.Date(zMs));
+    }
+
+    /** Open a conversation and scroll to a specific message, which then pulses. */
+    private void jumpToMessage(String zConv, String zEntryId) {
+        mScrollToId = zEntryId;
+        openConversation(zConv, node.chat().group(zConv) != null);
+        // If the thread was already built (no rebuild fires), scroll now anyway.
+        javax.swing.SwingUtilities.invokeLater(this::applyScrollTo);
+    }
+
+    /** Find the pending scroll-to bubble in the current thread, reveal + pulse it. */
+    private void applyScrollTo() {
+        if (mScrollToId == null) return;
+        JComponent target = null;
+        for (Component c : mThread.getComponents()) {
+            if (c instanceof JComponent
+                    && mScrollToId.equals(((JComponent) c).getClientProperty("entryId"))) {
+                target = (JComponent) c;
+                break;
+            }
+        }
+        if (target == null) return;
+        mScrollToId = null;
+        final JComponent ft = target;
+        java.awt.Rectangle r = ft.getBounds();
+        mThread.scrollRectToVisible(new java.awt.Rectangle(
+                r.x, Math.max(0, r.y - 40), r.width, r.height + 80));
+        pulse(ft);
+    }
+
+    /** A brief highlight flash so the located message is obvious. */
+    private void pulse(JComponent zRow) {
+        final Color hi = blend(t.chatBg, t.accent, 0.32f);
+        final Color lo = t.chatBg;
+        zRow.setOpaque(true);
+        zRow.setBackground(hi);
+        zRow.repaint();
+        final int[] n = {0};
+        javax.swing.Timer tm = new javax.swing.Timer(230, null);
+        tm.addActionListener(ev -> {
+            n[0]++;
+            if (n[0] >= 5) {
+                tm.stop();
+                zRow.setOpaque(false);
+                zRow.setBackground(null);
+            } else {
+                zRow.setBackground((n[0] % 2 == 0) ? hi : lo);
+            }
+            zRow.repaint();
+        });
+        tm.setInitialDelay(230);
+        tm.start();
+    }
+
+    private static Color blend(Color a, Color b, float f) {
+        return new Color(
+                Math.round(a.getRed() * (1 - f) + b.getRed() * f),
+                Math.round(a.getGreen() * (1 - f) + b.getGreen() * f),
+                Math.round(a.getBlue() * (1 - f) + b.getBlue() * f));
     }
 
     private JComponent row(ChatEngine.Summary s) {
@@ -458,6 +652,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
             v.setValue(atBottom ? v.getMaximum() : Math.min(keepVal, v.getMaximum()));
             updateScrollFab();
+            applyScrollTo();   // honour a pending search jump once the thread exists
         });
     }
 
@@ -702,6 +897,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             line.add(b);
             line.add(Box.createHorizontalGlue());
         }
+        line.putClientProperty("entryId", e.id);   // for search scroll-to-bubble
         return line;
     }
 
