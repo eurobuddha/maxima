@@ -746,9 +746,17 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         JLabel img = new JLabel();
         img.setAlignmentX(Component.LEFT_ALIGNMENT);
         javax.swing.ImageIcon cached = ref == null ? null : mMediaCache.get(ref);
+        boolean isImage = mime != null && mime.startsWith("image/");
+        if (isImage && ref != null) {
+            // Click the thumbnail to open the full-screen viewer (phone parity).
+            img.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            img.addMouseListener(new MouseAdapter() {
+                public void mouseClicked(MouseEvent ev) { openImage(ref, mime); }
+            });
+        }
         if (cached != null) {
             img.setIcon(cached);
-        } else if (mime != null && mime.startsWith("image/")) {
+        } else if (isImage) {
             img.setText("Loading image…");
             img.setFont(t.font(12f));
             img.setForeground(DKit.alpha(fg, 170));
@@ -796,6 +804,35 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 javax.swing.SwingUtilities.invokeLater(() -> target.setText("Image unavailable"));
             }
         }, "media-fetch").start();
+    }
+
+    /** Fetch the full-resolution image behind a media ref and open the viewer. */
+    private void openImage(String ref, String mime) {
+        new Thread(() -> {
+            try {
+                byte[] bytes;
+                if (ref.startsWith("mx1:")) {
+                    String json = new String(java.util.Base64.getUrlDecoder()
+                            .decode(ref.substring(4)), java.nio.charset.StandardCharsets.UTF_8);
+                    bytes = node.media().fetch(MediaManifest.decode(json));
+                } else if (ref.startsWith("data:")) {
+                    int comma = ref.indexOf(',');
+                    bytes = java.util.Base64.getDecoder().decode(ref.substring(comma + 1));
+                } else {
+                    return;
+                }
+                java.awt.image.BufferedImage full =
+                        javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+                if (full == null) return;
+                String ext = mime != null && mime.contains("png") ? "png" : "jpg";
+                javax.swing.SwingUtilities.invokeLater(() -> ImageViewer.open(
+                        javax.swing.SwingUtilities.getWindowAncestor(this), full, "image." + ext));
+            } catch (Exception ex) {
+                javax.swing.SwingUtilities.invokeLater(() ->
+                        javax.swing.JOptionPane.showMessageDialog(this,
+                                "Couldn't open image: " + ex.getMessage()));
+            }
+        }, "image-open").start();
     }
 
     private void attachFile() {
