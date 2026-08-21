@@ -69,6 +69,11 @@ public final class JarEngine implements ChatPort {
 	private final Map<String, Long> mProbed = new ConcurrentHashMap<>();
 
 	private volatile Inbound mInbound;
+	/** Inbound MAXIMA events that arrive between transport start and the sink
+	 *  being wired (mailbox re-push races construction). Buffered and drained
+	 *  on setInbound so held offline mail is never dropped-then-acked. */
+	private final java.util.List<JSONObject> mPreSinkBuffer =
+			java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 	private volatile Runnable mContactsChanged;
 
 	public JarEngine(Context zCtx, String zName, List<String> zHosts) throws Exception {
@@ -111,6 +116,15 @@ public final class JarEngine implements ChatPort {
 
 	public void setInbound(Inbound zInbound) {
 		mInbound = zInbound;
+		// Drain anything that arrived before the sink existed.
+		java.util.List<JSONObject> pending;
+		synchronized (mPreSinkBuffer) {
+			pending = new java.util.ArrayList<>(mPreSinkBuffer);
+			mPreSinkBuffer.clear();
+		}
+		for (JSONObject j : pending) {
+			onNotifyEvent("MAXIMA", j);
+		}
 	}
 
 	public void setContactsChanged(Runnable zRun) {
@@ -297,6 +311,12 @@ public final class JarEngine implements ChatPort {
 			}
 			Inbound in = mInbound;
 			if (in == null) {
+				// No sink yet - buffer, don't drop. Dropping here while the
+				// transport ACKs the relay's delete challenge destroys held
+				// offline mail.
+				if (mPreSinkBuffer.size() < 500) {
+					mPreSinkBuffer.add(zJson);
+				}
 				return;
 			}
 			try {

@@ -967,8 +967,10 @@ public final class MaximaService extends Service {
         }
     }
 
+    /** Identifiers are printed IN FULL (workspace RULE 1): a truncated key in
+     *  the debug feed can't be pasted, compared, or grepped. */
     static String shortKey(String zHex) {
-        return zHex.length() > 20 ? zHex.substring(0, 20) + "..." : zHex;
+        return zHex;
     }
 
     /** This device's site-local IPv4 (192.168/10./172.16-31) on the current

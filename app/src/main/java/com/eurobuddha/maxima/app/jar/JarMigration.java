@@ -138,10 +138,13 @@ public final class JarMigration {
 			udb.setData(CLASSIC_PRIVKEY,
 					new MiniData(id.keyPair().getPrivate().getEncoded()));
 			MinimaDB.getDB().saveUserDB();
-			EventLog.add("migration: identity carried over ("
-					+ id.publicKeyHex().substring(0, 20) + "...)");
+			EventLog.add("migration: identity carried over (" + id.publicKeyHex() + ")");
 		} catch (Exception e) {
+			// MUST propagate: a swallowed failure lets classic mint a NEW
+			// keypair and boot as a different person forever (markDone would
+			// then bar any retry). Boot catches this and does not markDone.
 			EventLog.add("migration: identity seed FAILED: " + e);
+			throw new RuntimeException("identity seed failed", e);
 		}
 	}
 

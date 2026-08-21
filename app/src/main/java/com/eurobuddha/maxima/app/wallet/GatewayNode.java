@@ -81,24 +81,37 @@ public class GatewayNode {
 
     /** Publish a locally-signed txn: txnimport -> txnbasics -> txnpost (mine:true). Phase 2. */
     public void publish(final String zImportCmd, final String zId, final String zPostCmd, final Cb zCb) {
+        // Family hard rule: every txn error path runs txndelete, or the
+        // imported signed txn is left on the node and its coins can be
+        // re-selected into a second, conflicting spend (double-spend / wasted
+        // WOTS leaf). fail() cleans up before reporting.
+        final Cb self = zCb;
         cmd(zImportCmd, new Cb() {
             @Override public void onResult(JSONObject r1) {
-                if (!r1.optBoolean("status", false)) { zCb.onError("txnimport: " + r1.optString("error", r1.toString())); return; }
+                if (!r1.optBoolean("status", false)) { fail(zId, "txnimport: " + r1.optString("error", r1.toString()), self); return; }
                 cmd("txnbasics id:" + zId, new Cb() {
                     @Override public void onResult(JSONObject r2) {
-                        if (!r2.optBoolean("status", false)) { zCb.onError("txnbasics: " + r2.optString("error", r2.toString())); return; }
+                        if (!r2.optBoolean("status", false)) { fail(zId, "txnbasics: " + r2.optString("error", r2.toString()), self); return; }
                         cmd(zPostCmd, new Cb() {
                             @Override public void onResult(JSONObject r3) {
-                                if (!r3.optBoolean("status", false)) { zCb.onError("txnpost: " + r3.optString("error", r3.toString())); return; }
+                                if (!r3.optBoolean("status", false)) { fail(zId, "txnpost: " + r3.optString("error", r3.toString()), self); return; }
                                 zCb.onResult(r3);
                             }
-                            @Override public void onError(String m) { zCb.onError(m); }
+                            @Override public void onError(String m) { fail(zId, m, self); }
                         });
                     }
-                    @Override public void onError(String m) { zCb.onError(m); }
+                    @Override public void onError(String m) { fail(zId, m, self); }
                 });
             }
-            @Override public void onError(String m) { zCb.onError(m); }
+            @Override public void onError(String m) { fail(zId, m, self); }
+        });
+    }
+
+    /** Clean the half-built txn off the node, THEN report the failure. */
+    private void fail(final String zId, final String zMsg, final Cb zCb) {
+        cmd("txndelete id:" + zId, new Cb() {
+            @Override public void onResult(JSONObject r) { zCb.onError(zMsg); }
+            @Override public void onError(String m) { zCb.onError(zMsg); }
         });
     }
 
