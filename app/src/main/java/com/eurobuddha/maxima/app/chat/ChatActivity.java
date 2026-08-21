@@ -950,8 +950,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }
     }
 
+    private VoiceNote mActiveRecorder;
+
     private void recordVoiceDialog() {
         final VoiceNote rec = new VoiceNote(this);
+        mActiveRecorder = rec;
         try {
             rec.start();
         } catch (Exception e) {
@@ -1053,6 +1056,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         dlg.setOnDismissListener(d -> {
             h.removeCallbacksAndMessages(null);
             rec.stopQuiet();
+            if (mActiveRecorder == rec) {
+                mActiveRecorder = null;
+            }
         });
     }
 
@@ -1122,15 +1128,23 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         h.audio.setOnClickListener(v -> toggleAudio(e));
     }
 
+    private volatile int mAudioToken;
+
     private void toggleAudio(final ChatEngine.Entry e) {
         if (e.id.equals(mAudioPlayingId)) {
             stopAudio();
             return;
         }
         stopAudio();
+        final int token = ++mAudioToken;
         new Thread(() -> {
             final java.io.File f = audioCacheFile(e.id, e.body);
             runOnUiThread(() -> {
+                // A newer tap (or leaving the screen) invalidated this decode:
+                // do not create a second player or play on a stopped activity.
+                if (token != mAudioToken || isFinishing() || isDestroyed()) {
+                    return;
+                }
                 if (f == null) {
                     toast("Could not decode voice note");
                     return;
@@ -1162,6 +1176,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private void stopAudio() {
+        mAudioToken++;   // invalidate any in-flight decode runnable
         mAudioTicker.removeCallbacksAndMessages(null);
         if (mAudioPlayer != null) {
             try {
@@ -1457,18 +1472,50 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         ChatHub.unregister(this);
         mHandler.removeCallbacks(mRender);
         mHandler.removeCallbacks(mPayWatch);
-        ChatEngine chat = MaximaService.chat();
+        final ChatEngine chat = MaximaService.chat();
         if (chat != null) {
             chat.markRead(mConversation);
-            // Leaving the thread is a natural point to write out the ticks that
-            // arrived while it was open.
-            chat.flushState();
+            // flushState() rewrites+fsyncs the whole messages file (with
+            // embedded media) once per dirty entry - NEVER on the main thread,
+            // or back-navigation freezes/ANRs. Off-thread; the heartbeat also
+            // flushes, so a missed one here is harmless.
+            new Thread(() -> {
+                try {
+                    chat.flushState();
+                } catch (Exception ignored) {
+                }
+            }, "chat-flush").start();
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(android.os.Bundle zOut) {
+        super.onSaveInstanceState(zOut);
+        if (mCaptureUri != null) {
+            zOut.putString("capture_uri", mCaptureUri.toString());
+        }
+    }
+
+    @Override
+    protected void onRestoreInstanceState(android.os.Bundle zIn) {
+        super.onRestoreInstanceState(zIn);
+        String u = zIn.getString("capture_uri");
+        if (u != null) {
+            mCaptureUri = android.net.Uri.parse(u);
         }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // Rotation/OS-kill of the record dialog would otherwise leak the
+        // MediaRecorder + mic; close it defensively.
+        VoiceNote rec = mActiveRecorder;
+        if (rec != null) {
+            rec.cancel();
+            mActiveRecorder = null;
+        }
+        stopAudio();
         if (mSender != null) {
             mSender.close();
             mSender = null;
