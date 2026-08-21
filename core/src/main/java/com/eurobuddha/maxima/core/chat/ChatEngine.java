@@ -1120,6 +1120,14 @@ public final class ChatEngine {
     }
 
     private void handleText(String zFrom, ChatMessage zMsg) {
+        // A TEXT message body that begins with a media/payment control marker
+        // was SENT as text - it must never be reinterpreted as media or a
+        // payment bubble (the in-band marker forgery vector). Neutralize the
+        // leading control run so isMedia/isPayment can't match it.
+        if (zMsg.body != null && !zMsg.body.isEmpty()
+                && zMsg.body.charAt(0) < 0x20) {
+            zMsg.body = "\uFFFD" + zMsg.body;
+        }
         Entry e = new Entry(zMsg.id, zFrom, "", zFrom, zMsg.body,
                 inboundTime(zMsg), false, Receipt.DELIVERED);
         e.arrived = System.currentTimeMillis();

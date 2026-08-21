@@ -100,7 +100,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             if (tx.isEmpty() || isPayConfirmed(tx)) {
                 continue;
             }
-            mSender.hasIncomingCoin(
+            // Verify by the EXACT txid, never by amount coincidence - an
+            // unrelated coin of equal value must not confirm a payment, and a
+            // fabricated payment claim must never confirm at all.
+            mSender.verifyIncomingPayment(tx,
                     com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body), arrived -> {
                         if (arrived) {
                             markPayConfirmed(tx);

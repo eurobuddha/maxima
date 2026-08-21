@@ -129,6 +129,70 @@ public final class PaymentSender {
         });
     }
 
+    /**
+     * Verify a RECEIVED payment by its txid - not by amount coincidence. A
+     * fabricated TYPE_PAYMENT claim carries an arbitrary txid; only a real
+     * on-chain TxPoW with that exact id, carrying an output that pays OUR
+     * address the claimed amount, confirms. This is what makes the received
+     * "Confirmed" badge an on-chain fact rather than the sender's word.
+     */
+    public void verifyIncomingPayment(final String zTxid, final String zAmount,
+            final Arrival zCb) {
+        final MaximaWallet w = mWallet;
+        if (w == null || zTxid == null || zTxid.isEmpty()
+                || zAmount == null || zAmount.isEmpty()) {
+            zCb.onArrived(false);
+            return;
+        }
+        final String want = zAmount;
+        final String ours = w.hexAddress();
+        mPub.gcmd("txpow txpowid:" + zTxid, new WalletPublisher.Cb() {
+            public void onResult(JSONObject r) {
+                boolean ok = false;
+                try {
+                    org.minima.utils.json.JSONObject full =
+                            (org.minima.utils.json.JSONObject) new org.minima.utils.json.parser
+                                    .JSONParser().parse(r.toString());
+                    Object status = full.get("status");
+                    org.minima.utils.json.JSONObject resp =
+                            (org.minima.utils.json.JSONObject) full.get("response");
+                    if (Boolean.TRUE.equals(status) && resp != null) {
+                        org.minima.utils.json.JSONObject txpow =
+                                (org.minima.utils.json.JSONObject) resp.get("txpow");
+                        org.minima.utils.json.JSONObject body = txpow == null ? null
+                                : (org.minima.utils.json.JSONObject) txpow.get("body");
+                        org.minima.utils.json.JSONObject txn = body == null ? null
+                                : (org.minima.utils.json.JSONObject) body.get("txn");
+                        org.minima.utils.json.JSONArray outs = txn == null ? null
+                                : (org.minima.utils.json.JSONArray) txn.get("outputs");
+                        MiniNumber wantN = new MiniNumber(want);
+                        if (outs != null) {
+                            for (Object o : outs) {
+                                org.minima.utils.json.JSONObject out =
+                                        (org.minima.utils.json.JSONObject) o;
+                                String addr = String.valueOf(out.get("address"));
+                                MiniNumber amt = new MiniNumber(
+                                        String.valueOf(out.get("amount")));
+                                // The exact txid resolved to a real TxPoW that
+                                // pays our address the claimed amount.
+                                if (ours.equalsIgnoreCase(addr) && amt.isEqual(wantN)) {
+                                    ok = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                zCb.onArrived(ok);
+            }
+
+            public void onError(String m) {
+                zCb.onArrived(false);
+            }
+        });
+    }
+
     /** Release the worker thread and any bound node service. */
     public void close() {
         mIo.shutdownNow();
