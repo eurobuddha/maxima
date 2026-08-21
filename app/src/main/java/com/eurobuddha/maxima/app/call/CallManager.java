@@ -79,6 +79,15 @@ public final class CallManager {
                 return t;
             });
     private final Handler mMain = new Handler(Looper.getMainLooper());
+    /** Signaling sends are SYNCHRONOUS mined socket sends - to an offline
+     *  peer each one blocks up to its timeouts. They get their own thread so
+     *  hangup/decline/mute on mExec are never queued behind a dead send. */
+    private final ExecutorService mSendExec = Executors.newSingleThreadExecutor(
+            r -> {
+                Thread t = new Thread(r, "call-signal");
+                t.setDaemon(true);
+                return t;
+            });
 
     private PeerConnectionFactory mFactory;
     private PeerConnection mPc;
@@ -662,24 +671,36 @@ public final class CallManager {
         signalTo(mPeerKey, mCallId, zKind, zPayload);
     }
 
-    private void signalTo(String zPeerKey, String zCallId, String zKind, String zPayload) {
-        try {
-            ChatEngine chat = MaximaService.chat();
-            Contact c = contact(zPeerKey);
-            if (chat == null || c == null) {
-                return;
+    private void signalTo(final String zPeerKey, final String zCallId,
+            final String zKind, final String zPayload) {
+        final boolean video = mVideo;
+        mSendExec.execute(() -> {
+            try {
+                ChatEngine chat = MaximaService.chat();
+                Contact c = contact(zPeerKey);
+                if (chat == null || c == null) {
+                    return;
+                }
+                ChatMessage m = ChatMessage.call(zCallId, zKind, zPayload);
+                if (video && "offer".equals(zKind)) {
+                    m.memo = "video";   // the flat codec's spare field
+                }
+                chat.sendCallSignal(c, m);
+            } catch (Exception e) {
+                EventLog.add("call signal " + zKind + " failed: " + e.getMessage());
+                if ("offer".equals(zKind) || "answer".equals(zKind)) {
+                    // Back on the state thread - and only if this call is
+                    // still the current one (a late failure from a hung-up
+                    // call must not kill a new one).
+                    mExec.execute(() -> {
+                        if (zCallId.equals(mCallId)
+                                && mState != State.IDLE && mState != State.ENDED) {
+                            end("couldn't reach them", false);
+                        }
+                    });
+                }
             }
-            ChatMessage m = ChatMessage.call(zCallId, zKind, zPayload);
-            if (mVideo && "offer".equals(zKind)) {
-                m.memo = "video";   // the flat codec's spare field
-            }
-            chat.sendCallSignal(c, m);
-        } catch (Exception e) {
-            EventLog.add("call signal " + zKind + " failed: " + e.getMessage());
-            if ("offer".equals(zKind) || "answer".equals(zKind)) {
-                end("couldn't reach them", false);
-            }
-        }
+        });
     }
 
     private Contact contact(String zKey) {
