@@ -284,7 +284,24 @@ public final class DKit {
             setLineWrap(true);
             setWrapStyleWord(false);
             setAlignmentX(Component.LEFT_ALIGNMENT);
+            // CRITICAL: a JTextArea's DefaultCaret calls scrollRectToVisible on
+            // every setText, which scrolls the ENCLOSING JScrollPane to the caret.
+            // The Network event log setText's this every 2 s heartbeat, so the
+            // viewport kept snapping down to the log. This is read-only display
+            // text — the caret must never drive scrolling.
+            javax.swing.text.Caret caret = getCaret();
+            if (caret instanceof javax.swing.text.DefaultCaret) {
+                ((javax.swing.text.DefaultCaret) caret)
+                        .setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
+            }
         }
+
+        // A read-only display area must NEVER scroll its enclosing JScrollPane —
+        // not via the caret, not via any other path. Belt-and-suspenders with the
+        // NEVER_UPDATE caret above: the event log setText's every heartbeat, and
+        // this guarantees the page can't be yanked down to it.
+        @Override
+        public void scrollRectToVisible(java.awt.Rectangle r) { /* no-op by design */ }
 
         public Dimension getMaximumSize() {
             return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
