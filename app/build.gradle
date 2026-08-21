@@ -11,8 +11,8 @@ android {
         applicationId "com.eurobuddha.maxima.app"
         minSdk 28
         targetSdk 35
-        versionCode 604
-        versionName "0.6.4"
+        versionCode 605
+        versionName "0.6.5"
     }
 
     signingConfigs {

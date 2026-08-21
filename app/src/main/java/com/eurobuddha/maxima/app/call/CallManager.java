@@ -265,9 +265,23 @@ public final class CallManager {
                     if (zMsg.ref.equals(mLastEndedCallId)) {
                         return;   // re-delivered signaling for an ended call
                     }
+                    // A duplicate of the call we are ALREADY ringing (mailbox
+                    // re-push) must be a no-op - NOT a busy, which would kill
+                    // the caller's live call while we ring.
+                    if (zMsg.ref.equals(mCallId)
+                            && mState == State.INCOMING_RINGING) {
+                        return;
+                    }
                     if (mState != State.IDLE && mState != State.ENDED) {
                         // one call at a time - tell the second caller we're busy
                         signalTo(zFromKey, zMsg.ref, "busy", "");
+                        return;
+                    }
+                    // Only a known contact may ring us - an authenticated
+                    // stranger who knows our key must not drive a full-screen
+                    // ring (nuisance/keY-probe). accept() would fail anyway.
+                    if (contact(zFromKey) == null) {
+                        EventLog.add("call offer from non-contact ignored");
                         return;
                     }
                     mCallId = zMsg.ref;
@@ -282,7 +296,7 @@ public final class CallManager {
                     break;
                 }
                 case "answer": {
-                    if (!zMsg.ref.equals(mCallId) || mPc == null) {
+                    if (!zMsg.ref.equals(mCallId) || !zFromKey.equals(mPeerKey) || mPc == null) {
                         return;
                     }
                     stopRingTimeout();
@@ -295,7 +309,7 @@ public final class CallManager {
                     break;
                 }
                 case "ice": {
-                    if (!zMsg.ref.equals(mCallId)) {
+                    if (!zMsg.ref.equals(mCallId) || !zFromKey.equals(mPeerKey)) {
                         return;
                     }
                     String[] p = zMsg.body.split("\n", 3);
@@ -312,13 +326,14 @@ public final class CallManager {
                     break;
                 }
                 case "busy": {
-                    if (zMsg.ref.equals(mCallId)) {
+                    if (zMsg.ref.equals(mCallId) && zFromKey.equals(mPeerKey)) {
                         end("busy", false);
                     }
                     break;
                 }
                 case "bye": {
-                    if (zMsg.ref.equals(mCallId)) {
+                    if (zMsg.ref.equals(mCallId) && zFromKey.equals(mPeerKey)
+                            && mState != State.IDLE) {
                         end(mState == State.INCOMING_RINGING
                                 || mState == State.OUTGOING_RINGING
                                 ? "missed" : "ended", false);
@@ -437,6 +452,7 @@ public final class CallManager {
         PeerConnection.RTCConfiguration cfg =
                 new PeerConnection.RTCConfiguration(servers);
         cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
+        final String callAtCreate = mCallId;
         mPc = mFactory.createPeerConnection(cfg, new PeerConnection.Observer() {
             @Override
             public void onIceCandidate(IceCandidate c) {
@@ -447,6 +463,12 @@ public final class CallManager {
             @Override
             public void onConnectionChange(PeerConnection.PeerConnectionState s) {
                 mExec.execute(() -> {
+                    // Stale callback from a closed PC (WebRTC can deliver one
+                    // around close): ignore unless it belongs to the CURRENT
+                    // call, else a dead call's FAILED would bye the next one.
+                    if (!callAtCreate.equals(mCallId)) {
+                        return;
+                    }
                     if (s == PeerConnection.PeerConnectionState.CONNECTED) {
                         stopConnectTimeout();
                         mLiveSince = System.currentTimeMillis();
@@ -563,6 +585,7 @@ public final class CallManager {
         stopRingTimeout();
         stopConnectTimeout();
         mLastEndedCallId = mCallId;
+        mCallId = "";   // ended: late/duplicate frames must no longer match
         // The lock-screen call notification must die with the call, whether or
         // not the call screen is open to dismiss it.
         IncomingCallScreen.dismiss(mCtx);
