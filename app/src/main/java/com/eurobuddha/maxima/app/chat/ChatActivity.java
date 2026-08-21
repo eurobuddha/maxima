@@ -816,9 +816,20 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             return;
         }
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
-        box.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(18), dp(22), dp(6));
+        final WaveformView wave = new WaveformView(this);
+        wave.setInk(getColor(R.color.ux_accent));
+        android.widget.LinearLayout.LayoutParams wlp =
+                new android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
+        wlp.bottomMargin = dp(10);
+        box.addView(wave, wlp);
+        android.widget.LinearLayout rowBox = new android.widget.LinearLayout(this);
+        rowBox.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        rowBox.setGravity(Gravity.CENTER_VERTICAL);
+        box.addView(rowBox);
+        final java.util.List<Integer> samples = new java.util.ArrayList<>();
         final TextView dot = new TextView(this);
         dot.setText("\u25cf");
         dot.setTextColor(0xFFE0524D);
@@ -829,8 +840,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         timer.setTextColor(getColor(R.color.ux_text));
         timer.setPadding(dp(14), 0, 0, 0);
         timer.setText("0:00");
-        box.addView(dot);
-        box.addView(timer);
+        rowBox.addView(dot);
+        rowBox.addView(timer);
 
         final AlertDialog dlg = new AlertDialog.Builder(this)
                 .setTitle("Voice note")
@@ -843,6 +854,18 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
         final android.os.Handler h =
                 new android.os.Handler(android.os.Looper.getMainLooper());
+        final Runnable sampler = new Runnable() {
+            @Override
+            public void run() {
+                int a = rec.amplitude();
+                samples.add(a);
+                wave.append(a);
+                if (rec.elapsedSeconds() < VoiceNote.MAX_SECONDS) {
+                    h.postDelayed(this, 100);
+                }
+            }
+        };
+        h.post(sampler);
         final Runnable tick = new Runnable() {
             @Override
             public void run() {
@@ -876,7 +899,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 toast("Too short - hold on a moment longer");
                 return;
             }
-            sendVoice(bytes, rec.mime(), secs);
+            sendVoice(bytes, rec.mime(), secs,
+                    WaveformView.encode(WaveformView.summarise(samples)));
         });
         dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
             h.removeCallbacksAndMessages(null);
@@ -889,7 +913,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         });
     }
 
-    private void sendVoice(final byte[] zBytes, final String zMime, final int zSecs) {
+    private void sendVoice(final byte[] zBytes, final String zMime, final int zSecs,
+            final String zWave) {
         final ChatEngine chat = MaximaService.chat();
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
@@ -905,12 +930,15 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mLastSendWasMine = true;
         new Thread(() -> {
             try {
-                // The duration rides in the caption slot - the bubble shows it
-                // without decoding, and previews read "Voice note 0:12".
+                // Caption slot carries "duration|waveformhex" - the bubble
+                // draws the real shape without decoding the audio, and
+                // previews show only the duration.
+                String cap = fmtSecs(zSecs)
+                        + (zWave == null || zWave.isEmpty() ? "" : "|" + zWave);
                 if (g != null) {
-                    chat.sendGroupMedia(g.id, zBytes, zMime, fmtSecs(zSecs));
+                    chat.sendGroupMedia(g.id, zBytes, zMime, cap);
                 } else {
-                    chat.sendMedia(c, zBytes, zMime, fmtSecs(zSecs));
+                    chat.sendMedia(c, zBytes, zMime, cap);
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> toast("Voice note failed: " + e.getMessage()));
@@ -925,17 +953,28 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         h.audioBtn.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
         h.audioBtn.setColorFilter(ink);
         h.audioTime.setTextColor(ink);
-        String total = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+        String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
+        String total = cap;
+        int[] bars = null;
+        int sep = cap.indexOf('|');
+        if (sep >= 0) {
+            total = cap.substring(0, sep);
+            bars = WaveformView.decode(cap.substring(sep + 1));
+        }
+        if (bars == null) {
+            bars = new int[WaveformView.BAR_COUNT];
+            java.util.Arrays.fill(bars, 4);   // pre-waveform notes: flat bars
+        }
+        h.audioBar.setInk(ink);
+        h.audioBar.setBars(bars);
         if (playing) {
-            int pos = mAudioPlayer.getCurrentPosition() / 1000;
-            int dur = Math.max(1, mAudioPlayer.getDuration() / 1000);
-            h.audioTime.setText(fmtSecs(pos) + " / " + fmtSecs(dur));
-            h.audioBar.setMax(dur);
-            h.audioBar.setProgress(pos);
+            int pos = mAudioPlayer.getCurrentPosition();
+            int dur = Math.max(1, mAudioPlayer.getDuration());
+            h.audioTime.setText(fmtSecs(pos / 1000) + " / " + fmtSecs(dur / 1000));
+            h.audioBar.setProgress(pos / (float) dur);
         } else {
             h.audioTime.setText(total.isEmpty() ? "voice note" : total);
-            h.audioBar.setMax(1);
-            h.audioBar.setProgress(0);
+            h.audioBar.setProgress(0f);
         }
         h.audio.setOnClickListener(v -> toggleAudio(e));
     }
@@ -1778,7 +1817,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final LinearLayout audio;
         final android.widget.ImageView audioBtn;
         final TextView audioTime;
-        final android.widget.ProgressBar audioBar;
+        final WaveformView audioBar;
         MsgVH(View v) {
             super(v);
             row = v.findViewById(R.id.bubble_row);

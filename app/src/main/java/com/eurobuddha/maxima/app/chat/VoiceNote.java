@@ -55,6 +55,15 @@ public final class VoiceNote {
         mStoppedAt = 0;
     }
 
+    /** Instant mic level 0..32767 while recording (0 when stopped). */
+    public int amplitude() {
+        try {
+            return mRec != null ? mRec.getMaxAmplitude() : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public int elapsedSeconds() {
         if (mStartedAt == 0) {
             return 0;

@@ -76,7 +76,16 @@ public final class ChatMedia {
         String kind = p[0].startsWith("video") ? "🎥 Video"
                 : p[0].startsWith("audio") ? "🎤 Voice note"
                 : "📷 Photo";
-        return p[2].isEmpty() ? kind : kind + "  " + p[2];
+        String cap = p[2];
+        // Voice notes carry "duration|waveformhex" in the caption slot - only
+        // the duration is human-facing.
+        if (p[0].startsWith("audio")) {
+            int bar = cap.indexOf('|');
+            if (bar >= 0) {
+                cap = cap.substring(0, bar);
+            }
+        }
+        return cap.isEmpty() ? kind : kind + "  " + cap;
     }
 
     private static String safe(String s) {
