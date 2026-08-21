@@ -94,19 +94,14 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
     private void openWallet() {
         if (mBuilding) return;
         mBuilding = true;
-        java.io.File wdir = new java.io.File(node.dataDir().toFile(), "wallet");
-        mLedger = new DesktopWalletLedger(wdir);
-        mPub = new DesktopWalletPublisher(DesktopNodeLink.configured());
+        // ONE construction path only. Both this and the in-chat payment path go
+        // through ensureWalletOpenBlocking() (synchronized, null-guarded) so there
+        // is never a second DesktopWallet instance — two instances would each own
+        // a separate DesktopKeyUses lock and could reserve the SAME one-time WOTS
+        // leaf twice (key-reuse = catastrophic). Never build/assign mWallet here.
         new Thread(() -> {
             try {
-                DesktopWallet w = DesktopWallet.open(node.seedPhrase(), wdir);
-                w.ensureAddress();   // heavy WOTS walk
-                mWallet = w;
-                // Register our script so a coin funded before tracking is spendable.
-                mPub.trackScript(w.script(), new DesktopWalletPublisher.Cb() {
-                    public void onResult(org.json.JSONObject r) { }
-                    public void onError(String m) { }
-                });
+                ensureWalletOpenBlocking();   // heavy WOTS walk happens inside, under the lock
                 javax.swing.SwingUtilities.invokeLater(() -> { mLastFetch = 0; rebuildPanes(); });
             } catch (Exception e) {
                 javax.swing.SwingUtilities.invokeLater(() -> showError("Couldn't open wallet: " + e.getMessage()));
