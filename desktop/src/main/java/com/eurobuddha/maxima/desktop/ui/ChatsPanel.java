@@ -564,10 +564,45 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
         row.add(right, BorderLayout.EAST);
 
+        final String rowTitle = title;
         row.addMouseListener(new MouseAdapter() {
-            public void mouseClicked(MouseEvent e) { open(s.conversation, group); }
+            public void mouseClicked(MouseEvent e) {
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e)) open(s.conversation, group);
+            }
+            public void mousePressed(MouseEvent e) { if (e.isPopupTrigger()) rowMenu(s, rowTitle, e); }
+            public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger()) rowMenu(s, rowTitle, e); }
         });
         return row;
+    }
+
+    /** Right-click a conversation: mark read, or clear its history on this machine
+     *  — the phone's ChatsPage long-press menu. */
+    private void rowMenu(ChatEngine.Summary s, String zTitle, MouseEvent ev) {
+        javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
+        if (s.unread > 0) {
+            javax.swing.JMenuItem read = new javax.swing.JMenuItem("Mark as read");
+            read.addActionListener(a -> { node.chat().markRead(s.conversation); mLastSig = ""; refresh(); });
+            m.add(read);
+        }
+        javax.swing.JMenuItem clear = new javax.swing.JMenuItem("Clear messages");
+        clear.addActionListener(a -> confirmClear(s.conversation, zTitle));
+        m.add(clear);
+        m.show(ev.getComponent(), ev.getX(), ev.getY());
+    }
+
+    private void confirmClear(String zConv, String zTitle) {
+        int r = javax.swing.JOptionPane.showConfirmDialog(this,
+                "Delete every message with " + zTitle + " on THIS machine.\n"
+                        + "It won't unsend anything or leave a group — the thread just\n"
+                        + "starts empty again. This can't be undone.",
+                "Clear this chat?", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (r == javax.swing.JOptionPane.OK_OPTION) {
+            node.chat().clearConversation(zConv);
+            if (zConv.equals(mOpen)) mThreadSig = "";
+            mLastSig = "";
+            refresh();
+        }
     }
 
     private JComponent unreadBadge(int n) {
