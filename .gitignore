@@ -14,3 +14,7 @@ data/
 seed.txt
 
 .DS_Store
+
+# APKs are 60MB since WebRTC - they live in dist/ on disk and on GitHub
+# Releases, never in git history (server jars stay tracked - they are small).
+dist/*.apk
