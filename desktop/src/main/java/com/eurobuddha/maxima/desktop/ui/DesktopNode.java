@@ -440,8 +440,26 @@ public final class DesktopNode {
         wipe(mDataDir.resolve("chat"));
         wipe(mDataDir.resolve("media"));
         wipe(mDataDir.resolve("maxjar"));
-        java.nio.file.Files.write(mDataDir.resolve("seed.txt"),
-                phrase.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        // seed.txt is a wallet-grade secret — write it owner-only (0600) like the
+        // create path, and atomically so a crash mid-write can't truncate the only
+        // copy of the seed.
+        java.nio.file.Path seedFile = mDataDir.resolve("seed.txt");
+        java.nio.file.Path tmp = mDataDir.resolve("seed.txt.tmp");
+        byte[] bytes = phrase.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        java.nio.file.Files.write(tmp, bytes);
+        try {
+            java.nio.file.Files.setPosixFilePermissions(tmp,
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        } catch (UnsupportedOperationException ignored) {
+            // non-POSIX FS (Windows) — ACLs apply instead.
+        }
+        try {
+            java.nio.file.Files.move(tmp, seedFile,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            java.nio.file.Files.move(tmp, seedFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static void wipe(Path dir) {

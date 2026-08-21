@@ -306,13 +306,14 @@ public final class DesktopJarEngine implements ChatPort {
 	}
 
 	public void shutdown() {
-		try {
-			mManager.shutdown();
-		} catch (Exception ignored) {
-		}
-		mTransport.stop();
-		MinimaDB.clear();
-		Main.clear();
+		// Each step guarded independently: MinimaDB.clear()/Main.clear() MUST run
+		// even if mManager.shutdown() or mTransport.stop() throws — otherwise the
+		// classic global singleton is left initialised and the next classic boot
+		// bricks / force-archives the DB.
+		try { mManager.shutdown(); } catch (Throwable ignored) { }
+		try { mTransport.stop(); } catch (Throwable ignored) { }
+		try { MinimaDB.clear(); } catch (Throwable ignored) { }
+		try { Main.clear(); } catch (Throwable ignored) { }
 	}
 
 	// ---------------------------------------------------------------

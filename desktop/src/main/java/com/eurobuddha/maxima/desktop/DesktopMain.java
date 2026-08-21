@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.5.22";
+    public static final String APP_VERSION = "1.5.23";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -234,9 +234,13 @@ public final class DesktopMain {
         starter.setDaemon(true);
         starter.start();
 
+        // Read the CURRENT engine at exit (mDnode is swapped by restartEngine),
+        // not the one captured here — otherwise after an engine flip the new
+        // engine is never cleanly shut and classic H2 (MinimaDB) is left open.
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
-                dnode.shutdown();
+                com.eurobuddha.maxima.desktop.ui.DesktopNode cur = mDnode;
+                if (cur != null) cur.shutdown();
             } catch (Exception ignored) {
             }
             releaseLock();
@@ -280,7 +284,13 @@ public final class DesktopMain {
      * window and dispose the old one. Identity + contacts carry over via
      * DesktopJarMigration, exactly like the phone's process restart.
      */
+    private final java.util.concurrent.atomic.AtomicBoolean mFlipping =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
     public void restartEngine() {
+        // One flip at a time. Two overlapping flips could double-init the classic
+        // MinimaDB global singleton and brick the app.
+        if (!mFlipping.compareAndSet(false, true)) return;
         final com.eurobuddha.maxima.desktop.ui.MaximaWindow oldWin = mWindow;
         final com.eurobuddha.maxima.desktop.ui.DesktopNode oldNode = mDnode;
         new Thread(() -> {
@@ -288,33 +298,46 @@ public final class DesktopMain {
                 // Tear the OLD engine down FIRST. Classic Maxima's MinimaDB is a
                 // global singleton, so a new jar engine must not init while the
                 // old one is still alive — shut down, then build.
-                try { if (oldNode != null) oldNode.shutdown(); } catch (Exception ignored) { }
+                try { if (oldNode != null) oldNode.shutdown(); } catch (Throwable ignored) { }
                 RelayRuntime.Seed seed = RelayRuntime.loadOrCreateSeed(mDataDir);
                 MaximaIdentity id = MaximaIdentity.fromPhrase(seed.phrase);
                 java.util.prefs.Preferences prefs =
                         java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
                 String name = prefs.get("name", "Parlons Desktop");
+                // The constructor internally falls back to built-in if a jar boot
+                // fails, so this rarely throws; a jar-boot failure never bricks.
                 com.eurobuddha.maxima.desktop.ui.DesktopNode nn =
                         new com.eurobuddha.maxima.desktop.ui.DesktopNode(id, mDataDir, name);
-                nn.start();
+                // start() is a network attach — non-fatal, exactly as launchWindow
+                // treats it. A start failure must NOT abandon a dead window.
+                try { nn.start(); } catch (Exception se) { log("engine restart attach failed: " + se.getMessage()); }
                 mDnode = nn;
                 javax.swing.SwingUtilities.invokeLater(() -> {
-                    com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
-                            new com.eurobuddha.maxima.desktop.ui.MaximaWindow(nn,
-                                    new com.eurobuddha.maxima.desktop.ui.Theme(currentMode(prefs)));
-                    w.setEngineRestart(this::restartEngine);
-                    if (oldWin != null) {
-                        w.frame().setBounds(oldWin.frame().getBounds());
-                        w.frame().setExtendedState(oldWin.frame().getExtendedState());
+                    try {
+                        com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
+                                new com.eurobuddha.maxima.desktop.ui.MaximaWindow(nn,
+                                        new com.eurobuddha.maxima.desktop.ui.Theme(currentMode(prefs)));
+                        w.setEngineRestart(this::restartEngine);
+                        if (oldWin != null) {
+                            w.frame().setBounds(oldWin.frame().getBounds());
+                            w.frame().setExtendedState(oldWin.frame().getExtendedState());
+                        }
+                        w.frame().setTitle("Parlons — " + name);
+                        w.show();
+                        mWindow = w;
+                        if (oldWin != null) oldWin.frame().dispose();
+                        // NOTE: do NOT shut oldNode again here — it was torn down
+                        // above; a second shutdown could clear the NEW engine's
+                        // MinimaDB singleton in the jar→built-in-less-common case.
+                    } finally {
+                        mFlipping.set(false);
                     }
-                    w.frame().setTitle("Parlons — " + name);
-                    w.show();
-                    mWindow = w;
-                    if (oldWin != null) oldWin.frame().dispose();
-                    try { if (oldNode != null) oldNode.shutdown(); } catch (Exception ignored) { }
                 });
-            } catch (Exception e) {
-                log("engine restart failed: " + e.getMessage());
+            } catch (Throwable e) {
+                // Total construction failure (rare). Don't leave a zombie: keep the
+                // guard released so the user can retry, and log honestly.
+                log("engine restart failed: " + e);
+                mFlipping.set(false);
             }
         }, "engine-restart").start();
     }
