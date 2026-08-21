@@ -69,10 +69,12 @@ public class PrefsKeyUses implements KeyUses {
     }
 
     @Override
-    public synchronized int currentUses(int zKeyIndex) {
-        int a = mMirrorA.getInt(key(zKeyIndex), 0);
-        int b = mMirrorB.getInt(key(zKeyIndex), 0);
-        return Math.max(a, b);
+    public int currentUses(int zKeyIndex) {
+        synchronized (USES_LOCK) {
+            int a = mMirrorA.getInt(key(zKeyIndex), 0);
+            int b = mMirrorB.getInt(key(zKeyIndex), 0);
+            return Math.max(a, b);
+        }
     }
 
     /**
@@ -83,19 +85,21 @@ public class PrefsKeyUses implements KeyUses {
      * it is the one dangerous direction (it would reuse a leaf and expose the
      * key). Returns the resulting count. Persisted to both mirrors with commit().
      */
-    public synchronized int raiseTo(int zKeyIndex, int zValue) {
-        int cur = currentUses(zKeyIndex);
-        if (zValue <= cur) {
-            return cur;   // never lower
+    public int raiseTo(int zKeyIndex, int zValue) {
+        synchronized (USES_LOCK) {
+            int cur = currentUses(zKeyIndex);
+            if (zValue <= cur) {
+                return cur;   // never lower
+            }
+            boolean okA = mMirrorA.edit().putInt(key(zKeyIndex), zValue).commit();
+            boolean okB = mMirrorB.edit().putInt(key(zKeyIndex), zValue).commit();
+            if (!okA || !okB) {
+                throw new IllegalStateException(
+                    "KeyUses: failed to persist raiseTo for key " + zKeyIndex
+                        + " (mirrorA=" + okA + ", mirrorB=" + okB + ")");
+            }
+            return zValue;
         }
-        boolean okA = mMirrorA.edit().putInt(key(zKeyIndex), zValue).commit();
-        boolean okB = mMirrorB.edit().putInt(key(zKeyIndex), zValue).commit();
-        if (!okA || !okB) {
-            throw new IllegalStateException(
-                "KeyUses: failed to persist raiseTo for key " + zKeyIndex
-                    + " (mirrorA=" + okA + ", mirrorB=" + okB + ")");
-        }
-        return zValue;
     }
 
     @Override
