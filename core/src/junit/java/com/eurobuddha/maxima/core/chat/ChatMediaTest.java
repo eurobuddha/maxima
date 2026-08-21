@@ -62,18 +62,36 @@ public class ChatMediaTest {
     }
 
     /**
-     * REGRESSION GUARD (0.6.16 -> 0.6.20): media rides inside a TYPE_TEXT body.
-     * If any inbound-text guard prefixes/mangles the body, isMedia() breaks and
-     * the receiver renders a photo/voice note as a wall of base64 text. This
-     * asserts a freshly-wrapped media body still reads as media - the exact
-     * property the deMarker regression violated.
+     * REGRESSION GUARD (0.6.16 -> 0.6.20): media rides inside a TYPE_TEXT body,
+     * so every inbound text passes through ChatEngine.deMarker BEFORE render.
+     * 0.6.16 made deMarker neutralize any body that isMedia||isPayment, which
+     * prefixed a replacement char to every legit photo/voice note -> isMedia()
+     * then failed -> the receiver showed a wall of base64 text.
+     *
+     * This drives the ACTUAL fix site (deMarker), not ChatMedia in isolation:
+     * with the bug present this test goes red; with the fix it stays green.
      */
     @Test
-    public void mediaBodySurvivesAsMedia() {
+    public void mediaBodySurvivesDeMarker() {
         String body = ChatMedia.wrap("image/jpeg", "data:image/jpeg;base64,/9j/4AAQ", "");
-        assertTrue("a media body must always parse as media", ChatMedia.isMedia(body));
-        // And a payment marker must NOT be mistaken for media (different 2nd char).
-        String pay = ChatPay.wrap("100", "MINIMA", "0xtx", "");
-        assertFalse(ChatMedia.isMedia(pay));
+        String afterInbound = ChatEngine.deMarker(body);
+        assertEquals("deMarker must not touch a media body", body, afterInbound);
+        assertTrue("a media body must still parse as media after the inbound path",
+                ChatMedia.isMedia(afterInbound));
+    }
+
+    /**
+     * The other half of the deMarker contract: a payment marker inside a plain
+     * TYPE_TEXT body IS a forgery (real payments arrive as TYPE_PAYMENT), so it
+     * must be neutralized - no longer parse as a payment after deMarker.
+     */
+    @Test
+    public void forgedPaymentInTextIsNeutralized() {
+        String forged = ChatPay.wrap("1000000", "MINIMA", "0xdeadbeef", "gotcha");
+        assertTrue("precondition: the crafted body looks like a payment",
+                ChatPay.isPayment(forged));
+        String afterInbound = ChatEngine.deMarker(forged);
+        assertFalse("a payment marker smuggled in text must be neutralized",
+                ChatPay.isPayment(afterInbound));
     }
 }

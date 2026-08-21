@@ -1159,7 +1159,9 @@ public final class ChatEngine {
      *  neutralize the marker so it can't be reinterpreted (in-band forgery).
      *  Narrow: only bodies isMedia/isPayment would match, so a legit message
      *  starting with a newline/tab is untouched. */
-    private static String deMarker(String zBody) {
+    // Package-private (not private) so ChatMediaTest can pin the exact property
+    // the 0.6.16 regression violated: a media body must survive deMarker as media.
+    static String deMarker(String zBody) {
         // ONLY payment markers are a forgery vector: a real payment arrives as
         // TYPE_PAYMENT (never as text), so a payment marker inside a TYPE_TEXT
         // body is fabricated. MEDIA legitimately rides text bodies (sendMedia

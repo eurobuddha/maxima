@@ -1,0 +1,45 @@
+name: Unit tests (JVM)
+
+# The fast, hermetic JVM suite: :core, :server, :maxjar. No emulator, no signing,
+# no network — pure logic tests that gate every push and PR. The Android app and
+# the desktop installers have their own workflows; this one is about correctness
+# of the shared engine, transport, and relay code.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: core / server / maxjar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run JVM unit tests
+        shell: bash
+        # -PskipAndroid keeps the AGP :app module out of configuration entirely
+        # (no SDK on the runner). gradle.properties pins a local Android Studio
+        # JBR path that does not exist here, so point Gradle at the runner JDK.
+        run: |
+          ./gradlew :core:test :server:test :maxjar:test \
+            -PskipAndroid=true \
+            -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon
+
+      - name: Publish test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/build/test-results/test/*.xml'
+          if-no-files-found: warn

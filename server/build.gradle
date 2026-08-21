@@ -19,6 +19,17 @@ tasks.withType(JavaCompile).configureEach {
 
 dependencies {
     implementation project(':core')
+    testImplementation 'junit:junit:4.13.2'
+}
+
+/*
+ * JUnit tests live in src/junit/java, NOT src/test/java: the latter already
+ * holds the main()-style live integration harnesses (FullSendTest et al.) that
+ * attach real sockets and are run by hand, not by Gradle. Keeping the two apart
+ * means `./gradlew :server:test` runs only the fast, hermetic JUnit suite.
+ */
+sourceSets {
+    test { java.srcDirs = ['src/junit/java'] }
 }
 
 application {
