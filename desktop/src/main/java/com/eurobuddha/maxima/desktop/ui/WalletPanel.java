@@ -360,6 +360,37 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
 
     private void doSend(DesktopWallet w, String to, MiniNumber amount,
                         JLabel status, DKit.HoverButton sign, JDialog d) {
+        signAndPublish(w, to, amount, new PayResult() {
+            public void onStatus(String s) { uiStatus(status, s); }
+            public void onTxid(String txid) {
+                uiStatus(status, "Sent ⛏ (mining into a block)");
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    rebuildPanes();
+                    javax.swing.Timer tm = new javax.swing.Timer(1400, e -> d.dispose());
+                    tm.setRepeats(false); tm.start();
+                });
+            }
+            public void onError(String m) {
+                uiStatus(status, m.toLowerCase().contains("funds") ? m : "Send failed: " + m);
+                javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
+            }
+        });
+    }
+
+    /** Result of a payment (status ticks, then exactly one of txid/error). */
+    public interface PayResult {
+        void onStatus(String s);
+        void onTxid(String txid);
+        void onError(String e);
+    }
+
+    /**
+     * The ONE fund-signing path, shared by the Wallet send sheet and the in-chat
+     * "Send payment" flow. There is a single DesktopWallet instance (this panel
+     * owns it) so the one-time-signature key-use counter is never raced by two
+     * instances — the WOTS key-reuse fund-loss hazard. Call OFF the EDT.
+     */
+    private void signAndPublish(DesktopWallet w, String to, MiniNumber amount, PayResult cb) {
         try {
             // 1. coins for our address (read, via gateway/node).
             final org.json.JSONObject[] resp = new org.json.JSONObject[1];
@@ -390,36 +421,58 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
             }
 
             // 3. build + SIGN locally (this reserves a one-time key use).
-            uiStatus(status, "Signing on this device…");
+            cb.onStatus("Signing on this device…");
             TxnFactory factory = new TxnFactory(w.core());
             final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, amount,
                     TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
 
             // 4. publish the SIGNED txn (relay only) via gateway/node.
-            uiStatus(status, "Publishing via " + mPub.backendName() + "…");
+            cb.onStatus("Publishing via " + mPub.backendName() + "…");
             mPub.publish(built.getTxnImportCommand(), built.getID(), built.getTxnPostCommand(),
                     new DesktopWalletPublisher.Cb() {
                 public void onResult(org.json.JSONObject r) {
                     mLedger.add(true, amount.toString(), "MINIMA", to, built.getID(), "0x00");
                     mLastFetch = 0;
-                    uiStatus(status, "Sent ⛏ (mining into a block)");
-                    javax.swing.SwingUtilities.invokeLater(() -> {
-                        rebuildPanes();
-                        javax.swing.Timer tm = new javax.swing.Timer(1400, e -> d.dispose());
-                        tm.setRepeats(false); tm.start();
-                    });
+                    cb.onTxid(built.getID());
                 }
-                public void onError(String m) {
-                    uiStatus(status, "Publish failed: " + m);
-                    javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
-                }
+                public void onError(String m) { cb.onError(m); }
             });
         } catch (CoinSelector.InsufficientFundsException ife) {
-            uiStatus(status, "Not enough confirmed funds.");
-            javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
+            cb.onError("Not enough confirmed funds.");
         } catch (Exception e) {
-            uiStatus(status, "Send failed: " + e.getMessage());
-            javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
+            cb.onError(e.getMessage());
+        }
+    }
+
+    /** Open the single wallet instance if it isn't already (blocking; OFF the EDT). */
+    private synchronized DesktopWallet ensureWalletOpenBlocking() throws Exception {
+        java.io.File wdir = new java.io.File(node.dataDir().toFile(), "wallet");
+        if (mLedger == null) mLedger = new DesktopWalletLedger(wdir);
+        if (mPub == null) mPub = new DesktopWalletPublisher(DesktopNodeLink.configured());
+        if (mWallet == null) {
+            DesktopWallet w = DesktopWallet.open(node.seedPhrase(), wdir);
+            w.ensureAddress();
+            mPub.trackScript(w.script(), new DesktopWalletPublisher.Cb() {
+                public void onResult(org.json.JSONObject r) { }
+                public void onError(String m) { }
+            });
+            mWallet = w;
+        }
+        return mWallet;
+    }
+
+    /**
+     * In-chat "Send payment": sign+publish a MINIMA payment to an address using
+     * the same single wallet + key-use counter as the Wallet screen. Call OFF
+     * the EDT; the callback fires the resulting txid so the chat can post the
+     * payment bubble.
+     */
+    public void requestPayment(String toAddr, MiniNumber amount, PayResult cb) {
+        try {
+            DesktopWallet w = ensureWalletOpenBlocking();
+            signAndPublish(w, toAddr, amount, cb);
+        } catch (Exception e) {
+            cb.onError(e.getMessage() == null ? "wallet unavailable" : e.getMessage());
         }
     }
 

@@ -87,7 +87,9 @@ public final class MaximaWindow {
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(t.bg);
 
-        mTabs.add(new ChatsPanel(mNode, t));
+        ChatsPanel chats = new ChatsPanel(mNode, t);
+        chats.setHost(this);          // so the chat can borrow the single wallet
+        mTabs.add(chats);
         mTabs.add(new ContactsPanel(mNode, t, this));
         mTabs.add(new WalletPanel(mNode, t));
         mTabs.add(new NetworkPanel(mNode, t));
@@ -178,6 +180,15 @@ public final class MaximaWindow {
     public void show() { mFrame.setVisible(true); }
     public JFrame frame() { return mFrame; }
     public DesktopNode node() { return mNode; }
+
+    /** The single wallet-owning panel, so the chat can send a payment through the
+     *  one wallet instance (never a second one — WOTS key-reuse hazard). */
+    public WalletPanel wallet() {
+        for (Tab tab : mTabs) {
+            if (tab instanceof WalletPanel) return (WalletPanel) tab;
+        }
+        return null;
+    }
 
     /** Switch to the Chats tab and open a conversation with a contact (from Contacts). */
     public void openChat(String pubkey) {

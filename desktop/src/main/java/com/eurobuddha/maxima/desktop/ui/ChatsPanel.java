@@ -49,6 +49,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private final DesktopNode node;
     private final Theme t;
     private final DKit k;
+    private MaximaWindow mHost;   // set after construction; lets the chat borrow the single wallet
 
     private final JPanel mListPane = new JPanel(new BorderLayout());
     private final JPanel mList = new JPanel();
@@ -542,11 +543,37 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (media) {
             addMediaTo(b, e.body, fg);
         } else if (pay) {
-            JLabel body = new JLabel("💸  " + ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body));
-            body.setFont(t.semibold(13.5f));
+            JLabel dir = new JLabel(mine ? "↑ You sent" : "↓ You received");
+            dir.setFont(t.font(11f));
+            dir.setForeground(DKit.alpha(fg, 200));
+            dir.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(dir);
+            JLabel body = new JLabel(ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body));
+            body.setFont(t.semibold(16f));
             body.setForeground(fg);
             body.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(body);
+            String memo = ChatPay.memo(e.body);
+            if (memo != null && !memo.isEmpty()) {
+                JLabel mm = new JLabel(memo);
+                mm.setFont(t.font(12.5f));
+                mm.setForeground(DKit.alpha(fg, 210));
+                mm.setAlignmentX(Component.LEFT_ALIGNMENT);
+                b.add(mm);
+            }
+            // RULE 1: the transaction id must be recoverable in FULL. Click the
+            // card to copy the complete txid to the clipboard (never truncated).
+            final String txid = ChatPay.txid(e.body);
+            if (txid != null && !txid.isEmpty()) {
+                b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+                b.addMouseListener(new MouseAdapter() {
+                    public void mouseClicked(MouseEvent ev) {
+                        java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                                .setContents(new java.awt.datatransfer.StringSelection(txid), null);
+                        info("Transaction id copied:\n" + txid);
+                    }
+                });
+            }
         } else {
             JTextArea body = new JTextArea(e.body);
             body.setFont(t.font(13.5f));
@@ -593,7 +620,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         pill.setBorder(new EmptyBorder(4, 10, 4, 8));
 
         Icons.Btn attach = new Icons.Btn(Icons.PLUS, t.subtext, null, 30, 19, 2f);
-        attach.onClick(this::attachFile);
+        attach.onClick(() -> showAttachMenu(attach));
         pill.add(attach);
         pill.add(Box.createRigidArea(new Dimension(2, 0)));
         Icons.Btn emoji = new Icons.Btn(Icons.SMILE, t.subtext, null, 30, 19, 1.6f);
@@ -833,6 +860,102 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                                 "Couldn't open image: " + ex.getMessage()));
             }
         }, "image-open").start();
+    }
+
+    /** Host window, so the chat's "Send payment" can use the ONE wallet instance. */
+    public void setHost(MaximaWindow h) { mHost = h; }
+
+    /** Attach sheet: Photo, and (1:1 only) Send payment — mirrors the phone. */
+    private void showAttachMenu(Component anchor) {
+        if (mOpen == null) return;
+        javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem photo = new javax.swing.JMenuItem("Photo…");
+        photo.addActionListener(e -> attachFile());
+        m.add(photo);
+        if (!mOpenGroup) {
+            javax.swing.JMenuItem pay = new javax.swing.JMenuItem("Send payment");
+            pay.addActionListener(e -> showPaymentDialog());
+            m.add(pay);
+        }
+        m.show(anchor, 0, -m.getPreferredSize().height);
+    }
+
+    /** In-chat MINIMA payment. Signs through the SINGLE wallet the Wallet screen
+     *  owns (never a second instance — WOTS key-reuse hazard), then posts the
+     *  payment bubble with the resulting txid. */
+    private void showPaymentDialog() {
+        if (mOpen == null || mOpenGroup) return;
+        final Contact contact = node.node().contact(mOpen);
+        final String addr = node.chat().walletAddress(mOpen);
+        if (contact == null) { info("Payments need a known contact."); return; }
+        if (addr == null || addr.isEmpty() || addr.startsWith("Mx00")) {
+            info("No wallet address for this contact yet — they need to share one.");
+            return;
+        }
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        body.setBorder(new EmptyBorder(14, 14, 14, 14));
+        JLabel to = new JLabel("To " + nameFor(mOpen));
+        to.setFont(t.semibold(13.5f)); to.setForeground(t.text); to.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(to);
+        body.add(Box.createVerticalStrut(10));
+        JTextField amt = k.field("amount (MINIMA)");
+        amt.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); amt.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(amt); body.add(Box.createVerticalStrut(8));
+        JTextField memo = k.field("note (optional)");
+        memo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); memo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(memo); body.add(Box.createVerticalStrut(12));
+        JLabel status = new JLabel(" ");
+        status.setFont(t.font(12f)); status.setForeground(t.subtext); status.setAlignmentX(Component.LEFT_ALIGNMENT);
+        DKit.HoverButton send = k.primaryButton("Sign & send");
+        send.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(send); body.add(Box.createVerticalStrut(6)); body.add(status);
+
+        JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                "Send payment", java.awt.Dialog.ModalityType.MODELESS);
+        d.setContentPane(body);
+        d.setSize(380, 250);
+        d.setLocationRelativeTo(this);
+
+        send.onClick(() -> {
+            String a = amt.getText().trim();
+            final org.minima.objects.base.MiniNumber amount;
+            try { amount = new org.minima.objects.base.MiniNumber(a); }
+            catch (Exception ex) { status.setText("Bad amount."); return; }
+            if (!amount.isMore(org.minima.objects.base.MiniNumber.ZERO)) {
+                status.setText("Amount must be greater than 0."); return;
+            }
+            WalletPanel wallet = mHost == null ? null : mHost.wallet();
+            if (wallet == null) { status.setText("Wallet unavailable."); return; }
+            final String memoText = memo.getText().trim();
+            send.setButtonEnabled(false);
+            status.setText("Preparing…");
+            new Thread(() -> wallet.requestPayment(addr, amount, new WalletPanel.PayResult() {
+                public void onStatus(String s) {
+                    javax.swing.SwingUtilities.invokeLater(() -> status.setText(s));
+                }
+                public void onTxid(String txid) {
+                    // Fund moved — now post the payment bubble carrying the FULL txid.
+                    try { node.chat().sendPayment(contact, amount.toString(), "0x00",
+                            "MINIMA", memoText, txid); } catch (Exception ignored) { }
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        mThreadSig = ""; refresh(); d.dispose();
+                    });
+                }
+                public void onError(String e) {
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        status.setText(e == null ? "Send failed." : e);
+                        send.setButtonEnabled(true);
+                    });
+                }
+            }), "chat-pay").start();
+        });
+        d.setVisible(true);
+    }
+
+    private void info(String msg) {
+        javax.swing.JOptionPane.showMessageDialog(this, msg);
     }
 
     private void attachFile() {
