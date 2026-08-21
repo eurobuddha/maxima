@@ -159,6 +159,16 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         titleCol.add(mThreadSub);
         head.add(titleCol);
         head.add(Box.createHorizontalGlue());
+        // Call buttons (phone parity). Desktop is signaling-only, so these
+        // explain that calls run on the phone; incoming calls are declined
+        // gracefully by DesktopCalls.
+        Icons.Btn videoCall = new Icons.Btn(Icons.VIDEO, t.onHeader, DKit.alpha(t.onHeader, 24), 34, 20, 1.8f);
+        videoCall.onClick(() -> DesktopCalls.explainPlacingCalls(this));
+        Icons.Btn voiceCall = new Icons.Btn(Icons.CALL, t.onHeader, DKit.alpha(t.onHeader, 24), 34, 18, 1.8f);
+        voiceCall.onClick(() -> DesktopCalls.explainPlacingCalls(this));
+        head.add(videoCall);
+        head.add(Box.createRigidArea(new Dimension(2, 0)));
+        head.add(voiceCall);
         mConvPane.add(head, BorderLayout.NORTH);
 
         mThread.setLayout(new BoxLayout(mThread, BoxLayout.Y_AXIS));

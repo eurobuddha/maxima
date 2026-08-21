@@ -162,6 +162,10 @@ public final class MaximaWindow {
             public void onStateChanged(ChatEngine.Entry e) { }
             public void onGroupChanged(Group g) { }
         });
+
+        // Tier-0 telephony: receive call signals and decline gracefully so a
+        // phone caller gets an instant "unavailable" instead of ringing out.
+        new DesktopCalls(mNode, mFrame, t).attach();
     }
 
     /** Optional visual half of a notification: nudge the tray tooltip if a tray

@@ -42,6 +42,8 @@ public final class Icons {
     public static final String CHECK = "check";
     public static final String MORE = "more";
     public static final String THEME = "theme";
+    public static final String CALL = "call";
+    public static final String VIDEO = "video";
 
     /** Paint icon {@code name} centred in a {@code size}×{@code size} box at (x,y). */
     public static void paint(Graphics2D g, String name, int x, int y, int size, Color color, float stroke) {
@@ -81,6 +83,34 @@ public final class Icons {
                 g2.draw(new java.awt.geom.Line2D.Double(s * 0.44, s * 0.18, s * 0.56, s * 0.18));
                 g2.draw(new java.awt.geom.Line2D.Double(s * 0.56, s * 0.18, s * 0.64, s * 0.28));
                 g2.draw(new java.awt.geom.Ellipse2D.Double(s * 0.38, s * 0.42, s * 0.24, s * 0.24));
+                break;
+            }
+            case CALL: {
+                GeneralPath p = new GeneralPath();
+                p.moveTo(s * 0.30, s * 0.24);
+                p.lineTo(s * 0.42, s * 0.24);
+                p.lineTo(s * 0.48, s * 0.40);
+                p.lineTo(s * 0.40, s * 0.48);
+                p.curveTo(s * 0.46, s * 0.60, s * 0.54, s * 0.66, s * 0.62, s * 0.68);
+                p.lineTo(s * 0.70, s * 0.58);
+                p.lineTo(s * 0.84, s * 0.66);
+                p.lineTo(s * 0.84, s * 0.78);
+                p.curveTo(s * 0.84, s * 0.82, s * 0.80, s * 0.84, s * 0.72, s * 0.84);
+                p.curveTo(s * 0.44, s * 0.84, s * 0.20, s * 0.58, s * 0.20, s * 0.34);
+                p.curveTo(s * 0.20, s * 0.28, s * 0.24, s * 0.24, s * 0.30, s * 0.24);
+                p.closePath();
+                g2.fill(p);
+                break;
+            }
+            case VIDEO: {
+                g2.draw(new java.awt.geom.RoundRectangle2D.Double(s * 0.16, s * 0.34, s * 0.44, s * 0.32, 6, 6));
+                GeneralPath tri = new GeneralPath();
+                tri.moveTo(s * 0.66, s * 0.42);
+                tri.lineTo(s * 0.84, s * 0.34);
+                tri.lineTo(s * 0.84, s * 0.66);
+                tri.lineTo(s * 0.66, s * 0.58);
+                tri.closePath();
+                g2.draw(tri);
                 break;
             }
             case SUN: {
