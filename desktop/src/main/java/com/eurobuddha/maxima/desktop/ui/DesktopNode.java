@@ -83,51 +83,58 @@ public final class DesktopNode {
         mDataDir = zDataDir;
         mRelayStore = new DesktopRelayStore(zDataDir.toFile());
         File base = zDataDir.toFile();
-        mJar = jarMode();
 
         BlobStore blobs = new BlobStore(new File(base, "media"), 512L * 1024 * 1024);
 
-        if (mJar) {
-            // ---- classic Maxima (jar) ----
-            java.util.List<String> hosts = new java.util.ArrayList<>();
-            for (String h : mRelayStore.get()) {
-                hosts.add(h);
-                if (hosts.size() >= 2) break;
-            }
-            if (hosts.isEmpty()) {
-                for (String h : Bootstrap.RELAYS) {
+        // Build the classic engine if requested — but NEVER let its failure brick
+        // the app: on any boot error, archive the maybe-corrupt data and fall back
+        // to the built-in engine, exactly like the phone's MaximaService.
+        DesktopJarEngine jar = null;
+        if (jarMode()) {
+            try {
+                java.util.List<String> hosts = new java.util.ArrayList<>();
+                for (String h : mRelayStore.get()) {
                     hosts.add(h);
                     if (hosts.size() >= 2) break;
                 }
-            }
-            boolean migrate = DesktopJarMigration.needed(base);
-            if (migrate) {
-                DesktopJarMigration.archiveOldJarData(base);
-            }
-            DesktopJarEngine jar;
-            try {
+                if (hosts.isEmpty()) {
+                    for (String h : Bootstrap.RELAYS) {
+                        hosts.add(h);
+                        if (hosts.size() >= 2) break;
+                    }
+                }
+                boolean migrate = DesktopJarMigration.needed(base);
+                if (migrate) {
+                    DesktopJarMigration.archiveOldJarData(base);
+                }
                 jar = new DesktopJarEngine(base, zDisplayName, hosts,
                         migrate ? () -> DesktopJarMigration.seedIdentity(base, zId) : null);
-            } catch (Exception e) {
-                throw new RuntimeException("classic (jar) engine boot failed", e);
+                if (migrate) {
+                    DesktopJarMigration.markDone(base);
+                }
+                int merged = DesktopJarMigration.seedContacts(base, jar);
+                if (merged > 0) {
+                    DesktopEventLog.add("engine sync: merged " + merged
+                            + " contact(s) from the built-in book");
+                }
+                Preferences pf = Preferences.userRoot().node(PREFS);
+                if (pf.getBoolean(KEY_FLIP_ANNOUNCE, false)) {
+                    pf.remove(KEY_FLIP_ANNOUNCE);
+                    jar.announceContactsSoon();
+                }
+                if (DesktopJarMigration.inHealWindow(base)) {
+                    jar.announceContactsSoon();
+                }
+            } catch (Throwable e) {
+                DesktopEventLog.add("CLASSIC ENGINE BOOT FAILED, using built-in engine: " + e);
+                try { DesktopJarMigration.archiveOldJarData(base); } catch (Exception ignored) { }
+                jar = null;
             }
-            if (migrate) {
-                DesktopJarMigration.markDone(base);
-            }
-            int merged = DesktopJarMigration.seedContacts(base, jar);
-            if (merged > 0) {
-                DesktopEventLog.add("engine sync: merged " + merged
-                        + " contact(s) from the built-in book");
-            }
-            Preferences pf = Preferences.userRoot().node(PREFS);
-            if (pf.getBoolean(KEY_FLIP_ANNOUNCE, false)) {
-                pf.remove(KEY_FLIP_ANNOUNCE);
-                jar.announceContactsSoon();
-            }
-            if (DesktopJarMigration.inHealWindow(base)) {
-                jar.announceContactsSoon();
-            }
+        }
 
+        mJar = jar != null;
+        if (mJar) {
+            // ---- classic Maxima (jar) ----
             mJarEngine = jar;
             mPort = jar;
             mNode = null;
