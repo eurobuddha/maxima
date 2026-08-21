@@ -343,12 +343,16 @@ public final class ChatEngine {
         if (conv.size() <= mMaxPerConversation) {
             return;
         }
-        conv.sort((a, b) -> Long.compare(a.time, b.time));
+        // Prune by the LATER of send/arrival time so a spoofed far-future
+        // ts can't make spam "newest" and evict genuine messages first.
+        conv.sort((a, b) -> Long.compare(
+                Math.max(a.time, a.arrived), Math.max(b.time, b.arrived)));
         int drop = conv.size() - mMaxPerConversation;
         for (int i = 0; i < drop; i++) {
             Entry old = conv.get(i);
             mMessages.remove(old.id);
             mStore.remove(C_MESSAGES, old.id);
+            mSeenIds.add(old.id);   // remember it so a re-push isn't resurrected
         }
     }
 
@@ -722,8 +726,20 @@ public final class ChatEngine {
                     continue;   // this member already confirmed
                 }
                 Contact c = mNode.contact(m);
-                if (c != null && deliver(c, cm)) {
+                if (c == null) {
+                    continue;
+                }
+                // A classic member never receipts, so it would be re-sent to
+                // forever - one delivery is the honest final word (mirrors the
+                // 1:1 classic guard in resendUndelivered).
+                if (c.isClassic() && e.deliveredBy.contains("classic:" + Keys.norm(m))) {
+                    continue;
+                }
+                if (deliver(c, cm)) {
                     any = true;
+                    if (c.isClassic()) {
+                        e.deliveredBy.add("classic:" + Keys.norm(m));
+                    }
                 }
             }
             return any;
@@ -1070,7 +1086,14 @@ public final class ChatEngine {
      * thread instead of the bottom.
      */
     private static long inboundTime(ChatMessage zMsg) {
-        return zMsg.time > 0 ? zMsg.time : System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        // A sender-controlled time must never exceed now (+ small skew): an
+        // unclamped future ts poisons the read-watermark (nothing ever unread
+        // again) and prune ordering (real history evicted first).
+        if (zMsg.time > 0 && zMsg.time <= now + 300_000L) {
+            return zMsg.time;
+        }
+        return now;
     }
 
     /**
@@ -1168,6 +1191,9 @@ public final class ChatEngine {
         Group existing = mGroups.get(zMsg.groupId);
 
         if (existing == null) {
+            if (mGroups.size() >= 500) {
+                return;   // bound group count against roster spam
+            }
             // First time we hear of it: the sender must name themselves as an
             // admin, which is what an invitation looks like.
             Group g = new Group(zMsg.groupId);
@@ -1219,7 +1245,17 @@ public final class ChatEngine {
             // member stand in for a current one who never received it - which
             // would make the second tick a lie, and the second tick is only
             // worth having because it is not.
-            List<String> current = g.others(mNode.publicKeyHex());
+            // Classic (stock-node) members have no receipt protocol and can
+            // never confirm - exclude them from the denominator, or a group
+            // with any classic member never reaches DELIVERED and redeliver
+            // re-sends the full body to everyone every beat for 24h.
+            List<String> current = new java.util.ArrayList<>();
+            for (String m : g.others(mNode.publicKeyHex())) {
+                Contact mc = mNode.contact(m);
+                if (mc == null || !mc.isClassic()) {
+                    current.add(m);
+                }
+            }
             int confirmed = 0;
             for (String m : current) {
                 if (e.deliveredBy.contains(Keys.norm(m))) {
@@ -1235,7 +1271,12 @@ public final class ChatEngine {
             return;
         }
         if (zFrom.equalsIgnoreCase(e.peer)) {
-            setState(e, zMsg.state);
+            // A recipient may assert DELIVERED/READ, never FAILED - FAILED is a
+            // local send-outcome, and accepting it would let a peer flip our
+            // delivered tick to a red cross and re-arm the resend ladder.
+            if (!Receipt.FAILED.equals(zMsg.state)) {
+                setState(e, zMsg.state);
+            }
         }
     }
 
@@ -1303,12 +1344,36 @@ public final class ChatEngine {
 
     // ---------------------------------------------------------------
 
+    /** Bounded ring of message ids dropped by prune/clear, so a relay
+     *  mailbox re-push of an old message is recognised as a duplicate rather
+     *  than resurrected as a new bubble (or a duplicate money bubble). */
+    private final java.util.Set<String> mSeenIds =
+            java.util.Collections.newSetFromMap(
+                new java.util.LinkedHashMap<String, Boolean>(2048, 0.75f, false) {
+                    @Override
+                    protected boolean removeEldestEntry(
+                            java.util.Map.Entry<String, Boolean> e) {
+                        return size() > 4000;
+                    }
+                });
+
+    private static final int MAX_CONVERSATIONS = 1000;
+    private final java.util.Set<String> mConvKeys =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
     private synchronized boolean record(Entry zEntry) {
-        if (mMessages.containsKey(zEntry.id)) {
-            // Duplicate delivery - the transport dedups, but a resend after a
-            // dropped receipt can still reach us.
+        if (mMessages.containsKey(zEntry.id) || mSeenIds.contains(zEntry.id)) {
+            // Duplicate delivery - retained, or pruned/cleared but remembered.
             return false;
         }
+        // Bound the number of distinct conversations a peer can spin up: a
+        // brand-new conversation beyond the cap (spam to a fresh key each time)
+        // is dropped; conversations we already have always accept.
+        String conv = zEntry.isGroup() ? zEntry.groupId : zEntry.peer;
+        if (!mConvKeys.contains(conv) && mConvKeys.size() >= MAX_CONVERSATIONS) {
+            return false;
+        }
+        mConvKeys.add(conv);
         mMessages.put(zEntry.id, zEntry);
         persist(zEntry);
         prune(zEntry.isGroup() ? zEntry.groupId : zEntry.peer);
