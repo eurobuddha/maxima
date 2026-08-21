@@ -202,10 +202,16 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         if (perm != null && !perm.isEmpty()) {
             mls.add(k.vgap(8));
             mls.add(k.copyField("permanent MAX# address", perm, false));
+            mls.add(k.vgap(6));
+            mls.add(k.sub(node.isStaticMls()
+                    ? "Fixed to your pinned directory — this address never changes, "
+                      + "even as you roam between hosts."
+                    : "Host-assigned and usable right now. Pin a static MLS below to keep "
+                      + "THIS exact address when your host changes."));
         } else {
             mls.add(k.vgap(6));
-            mls.add(k.sub("Pin a static MLS below for a permanent MAX# address that strangers "
-                    + "can resolve even after you move networks."));
+            mls.add(k.sub("Your MAX# appears as soon as a host offers you a directory. "
+                    + "Pin a static MLS to fix it permanently."));
         }
         mls.add(k.vgap(10));
         DKit.HoverButton loc2 = k.ghostButton("Location settings");
