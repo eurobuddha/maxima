@@ -30,6 +30,9 @@ tasks.withType(JavaCompile).configureEach {
  * that a Samsung ART verifier rejected outright.
  */
 dependencies {
+    // Unit tests only (JUnit 4, matching :maxjar). :core's MAIN classpath stays
+    // dependency-free - this is testImplementation, never shipped.
+    testImplementation 'junit:junit:4.13.2'
 }
 
 /*
@@ -48,6 +51,11 @@ sourceSets {
         java.srcDirs = ['src/test/java']
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
+    }
+    // JUnit tests live in their OWN dir so they don't collide with the
+    // main()-style parity tests in src/test/java.
+    test {
+        java.srcDirs = ['src/junit/java']
     }
 }
 
@@ -102,6 +110,7 @@ tasks.register('generateVectors', JavaExec) {
 }
 
 check.dependsOn 'parityTest'
+check.dependsOn 'test'
 
 /**
  * Regenerate the byte-by-byte annotated frame used in WALKTHROUGH.md.
