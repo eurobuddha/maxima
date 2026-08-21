@@ -7,7 +7,7 @@ plugins {
 // A fresh artifact line. macOS jpackage requires a major version >= 1
 // (independent of the relay protocol version). 1.1.0 adds the windowed chat
 // client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
-version = '1.5.16'
+version = '1.5.17'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
@@ -102,6 +102,15 @@ runtime {
         // chat client, so do NOT force the macOS menu-bar-accessory flag (it hides
         // the Dock icon); relay mode still shows its tray icon regardless.
         jvmArgs = ['-Djava.awt.headless=false']
+
+        // App icon (Parlons: two amber mesh-M speech bubbles on a dark rounded
+        // square) — per-OS format, else jpackage ships the generic Java icon.
+        def iconFile = os.macOsX ? 'icons/Parlons.icns'
+                : (os.windows ? 'icons/Parlons.ico' : 'icons/parlons-512.png')
+        def iconPath = file(iconFile)
+        if (iconPath.exists()) {
+            imageOptions += ['--icon', iconPath.toString()]
+        }
 
         if (os.macOsX) {
             installerType = 'dmg'

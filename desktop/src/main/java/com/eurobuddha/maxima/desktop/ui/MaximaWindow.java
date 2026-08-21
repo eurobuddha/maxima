@@ -39,6 +39,36 @@ import javax.swing.border.EmptyBorder;
  */
 public final class MaximaWindow {
 
+    /** The Parlons app icon, loaded once from the classpath (null if absent). */
+    private static java.awt.image.BufferedImage sAppIcon;
+    private static java.awt.image.BufferedImage appIcon() {
+        if (sAppIcon == null) {
+            try (java.io.InputStream in =
+                         MaximaWindow.class.getResourceAsStream("/app-icon.png")) {
+                if (in != null) sAppIcon = javax.imageio.ImageIO.read(in);
+            } catch (Exception ignored) { }
+        }
+        return sAppIcon;
+    }
+
+    /** Window / taskbar icon (Windows + Linux read this; harmless on macOS). */
+    private static void applyAppIcon(javax.swing.JFrame f) {
+        java.awt.image.BufferedImage img = appIcon();
+        if (img != null) f.setIconImage(img);
+    }
+
+    /** macOS Dock icon — JFrame.setIconImage is ignored there; use Taskbar. */
+    private static void applyDockIcon() {
+        java.awt.image.BufferedImage img = appIcon();
+        if (img == null) return;
+        try {
+            if (java.awt.Taskbar.isTaskbarSupported()) {
+                java.awt.Taskbar.getTaskbar().setIconImage(img);
+            }
+        } catch (Throwable ignored) { }
+    }
+
+
     /** Every tab is a page that can repaint itself from current node state. */
     public interface Tab {
         String label();
@@ -74,6 +104,7 @@ public final class MaximaWindow {
         k = new DKit(zTheme);
 
         mFrame = new JFrame("Parlons");
+        applyAppIcon(mFrame);
         mFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mFrame.setMinimumSize(new Dimension(360, 560));   // phone-narrow floor
         mFrame.setSize(Integer.getInteger("maxima.w", 1040), Integer.getInteger("maxima.h", 720));
@@ -83,6 +114,8 @@ public final class MaximaWindow {
         if (px != null && py != null) {
             mFrame.setLocation(px, py);
         }
+
+        applyDockIcon();
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(t.bg);
