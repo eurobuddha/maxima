@@ -292,11 +292,39 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             new android.os.Handler(android.os.Looper.getMainLooper());
     private com.eurobuddha.maxima.app.wallet.PaymentSender mSender;
 
-    /** Decoded chat images, by message id — the WOTS-free path: fetch once. */
-    private final java.util.Map<String, android.graphics.Bitmap> mImageCache =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    /** Decoded chat images, by message id. LruCache bounded to a fraction of
+     *  the heap and holding DOWNSAMPLED bitmaps - an unbounded full-res cache
+     *  OOM-crashed photo-heavy threads. */
+    private final android.util.LruCache<String, android.graphics.Bitmap> mImageCache =
+            new android.util.LruCache<String, android.graphics.Bitmap>(
+                    (int) Math.min(Integer.MAX_VALUE,
+                            Runtime.getRuntime().maxMemory() / 8)) {
+                @Override
+                protected int sizeOf(String k, android.graphics.Bitmap b) {
+                    return b.getByteCount();
+                }
+            };
     private final java.util.Set<String> mImageFetching =
             java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    /** Decode within a ~1280px bound so one photo can't blow the heap - big
+     *  enough for the full-screen viewer on a phone, small enough to cache. */
+    private static android.graphics.Bitmap decodeBounded(byte[] zRaw) {
+        if (zRaw == null || zRaw.length == 0) {
+            return null;
+        }
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeByteArray(zRaw, 0, zRaw.length, o);
+        int sample = 1;
+        int max = Math.max(o.outWidth, o.outHeight);
+        while (max / sample > 1280) {
+            sample *= 2;
+        }
+        android.graphics.BitmapFactory.Options d = new android.graphics.BitmapFactory.Options();
+        d.inSampleSize = sample;
+        return android.graphics.BitmapFactory.decodeByteArray(zRaw, 0, zRaw.length, d);
+    }
 
     /** Show the image for a media bubble: cache hit, else fetch+decode off-main. */
     private void bindImage(android.widget.ImageView view, String body, String id) {
@@ -307,6 +335,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             return;
         }
         view.setImageResource(R.drawable.ic_photo);
+        // Recycled holder: clear any previous message's click target so a tap
+        // on this still-loading bubble can't open a DIFFERENT (cached) photo.
+        view.setOnClickListener(null);
         if (!mImageFetching.add(id)) {
             return;   // already fetching
         }
@@ -318,8 +349,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     int comma = ref.indexOf(',');
                     byte[] raw = android.util.Base64.decode(
                             ref.substring(comma + 1), android.util.Base64.DEFAULT);
-                    android.graphics.Bitmap dbmp = android.graphics.BitmapFactory
-                            .decodeByteArray(raw, 0, raw.length);
+                    android.graphics.Bitmap dbmp = decodeBounded(raw);
                     if (dbmp != null) {
                         mImageCache.put(id, dbmp);
                         runOnUiThread(this::render);
@@ -334,8 +364,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                                         android.util.Base64.URL_SAFE),
                                         java.nio.charset.StandardCharsets.UTF_8));
                 byte[] bytes = media.fetch(mf);
-                android.graphics.Bitmap bmp = android.graphics.BitmapFactory
-                        .decodeByteArray(bytes, 0, bytes.length);
+                android.graphics.Bitmap bmp = decodeBounded(bytes);
                 if (bmp != null) {
                     mImageCache.put(id, bmp);
                     runOnUiThread(this::render);
@@ -1360,6 +1389,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             if (chat != null) {
                 chat.markRead(previous);
             }
+            // New conversation: drop the old thread's decoded bitmaps (they
+            // accumulated across every notification-opened chat) and stop any
+            // voice note still playing from the previous thread.
+            mImageCache.evictAll();
+            mImageFetching.clear();
+            stopAudio();
             mRows.clear();
             mMsgCount = 0;
             mAdapter.notifyDataSetChanged();
@@ -1725,7 +1760,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         boolean media = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body);
         final String copyText = media
                 ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body) : e.body;
-        final boolean haveImage = media && mImageCache.containsKey(e.id);
+        final boolean haveImage = media && mImageCache.get(e.id) != null;
         final String txid = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
                 ? com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body) : "";
         final List<String> items = new ArrayList<>();
