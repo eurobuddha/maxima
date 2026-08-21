@@ -142,14 +142,22 @@ public final class MlsStore {
 
     public int flushExpired() {
         long now = System.currentTimeMillis();
-        int n = 0;
-        for (Map.Entry<String, Entry> e : mEntries.entrySet()) {
-            if (now - e.getValue().storedAt > mTtlMs) {
-                mEntries.remove(e.getKey());
-                n++;
+        // mEntries is a synchronizedMap over an access-order LinkedHashMap:
+        // iterating without the lock and removing mid-iteration throws CME
+        // (and even a concurrent get() is a structural mod here). Collect
+        // expired keys under the lock, then remove - so expiry actually runs.
+        java.util.List<String> expired = new java.util.ArrayList<>();
+        synchronized (mEntries) {
+            for (Map.Entry<String, Entry> e : mEntries.entrySet()) {
+                if (now - e.getValue().storedAt > mTtlMs) {
+                    expired.add(e.getKey());
+                }
+            }
+            for (String k : expired) {
+                mEntries.remove(k);
             }
         }
-        return n;
+        return expired.size();
     }
 
     public int size() {

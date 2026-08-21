@@ -71,7 +71,10 @@ public final class MxAddress {
                 throw new IllegalArgumentException(
                         "Invalid MxAddress - should start with 1: " + zMxAddress);
             }
-            int datalen = dis.readShort();
+            int datalen = dis.readUnsignedShort();   // signed readShort -> negative -> NegativeArraySizeException
+            if (datalen < 0 || datalen > 4096) {
+                throw new IllegalArgumentException("Invalid MxAddress length");
+            }
             data = new byte[datalen];
             dis.readFully(data);
             dis.readFully(checksum);

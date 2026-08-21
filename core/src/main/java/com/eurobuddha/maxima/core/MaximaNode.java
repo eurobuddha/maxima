@@ -1097,7 +1097,14 @@ public final class MaximaNode implements ChatPort {
         // keep-alives). The payload names the host it was sent through. Internal
         // - never surfaced to an app listener.
         if (CHECK_APP.equals(app)) {
-            mHostVerified.add(new String(msg.mData.getBytes(), StandardCharsets.UTF_8));
+            // The self-probe carries OUR OWN identity as the sender. Without
+            // this check any contact could forge a __maxchk to pin a
+            // black-holing relay as "verified", defeating the check-connect
+            // audit that would otherwise detach it.
+            if (Keys.same(msg.mFrom.to0xString(), mIdentity.publicKeyHex())) {
+                mHostVerified.add(new String(msg.mData.getBytes(),
+                        StandardCharsets.UTF_8));
+            }
             return;
         }
         if (ContactCtrl.APPLICATION.equals(app)) {
@@ -1310,11 +1317,12 @@ public final class MaximaNode implements ChatPort {
             return false;
         }
         try {
+            final String nonce = new MiniData(
+                    com.eurobuddha.maxima.core.crypto.MaximaCrypto
+                            .randomBytes(16)).to0xString();
             com.eurobuddha.maxima.core.msg.MLSPacketGETReq req =
                     new com.eurobuddha.maxima.core.msg.MLSPacketGETReq(
-                            zContact.publicKey,
-                            new MiniData(com.eurobuddha.maxima.core.crypto.MaximaCrypto
-                                    .randomBytes(16)).to0xString());
+                            zContact.publicKey, nonce);
             MaximaSender.Result r = sendRaw(mls,
                     com.eurobuddha.maxima.core.directory.MlsService.APP_GET,
                     com.eurobuddha.maxima.core.codec.Codec.serialise(req),
@@ -1328,9 +1336,17 @@ public final class MaximaNode implements ChatPort {
                             .fromBytes(r.replyData.getBytes());
             String addr = resp.getAddress();
             if (addr == null || addr.isEmpty()
-                    || !Keys.same(resp.getPublicKey(), zContact.publicKey)) {
+                    || !Keys.same(resp.getPublicKey(), zContact.publicKey)
+                    || !nonce.equals(resp.getRandomUID())) {
+                // The nonce check is the redirect-attack defence a malicious
+                // relay could otherwise use to hand us a forged address; the
+                // background resolve path (MlsClient) already enforces it.
                 log("mls lookup " + zContact.name + " @ " + mls
-                        + ": empty or mismatched record");
+                        + ": empty, mismatched, or replayed record");
+                return false;
+            }
+            // Never accept an internal-IP address from the directory.
+            if (isInternalAddress(addr)) {
                 return false;
             }
             if (!addr.equals(zContact.primaryAddress())) {

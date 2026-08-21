@@ -153,7 +153,12 @@ public final class ContactCtrl {
         }
         String extra = m.get(KEY_ADDRS);
         if (extra != null && !extra.trim().isEmpty()) {
+            // Cap the peer-supplied address set: an unbounded list is a blind
+            // SSRF fan-out (we dial every one) + an oversized persisted record.
             for (String a : extra.split(",")) {
+                if (addrs.size() >= 8) {
+                    break;
+                }
                 String t = a.trim();
                 if (!t.isEmpty() && !addrs.contains(t)) {
                     addrs.add(t);
