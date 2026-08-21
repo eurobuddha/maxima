@@ -1047,35 +1047,63 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         return bar;
     }
 
+    // Same six labelled categories as the phone's emoji panel.
+    private static final String[][] EMOJI = {
+        {"Smileys", "😀 😂 🤣 😊 😇 😉 😍 🥰 😘 😜 🤪 🤔 🤐 😐 🙄 😬 😴 🥵 🥶 🤯 😳 🥺 😢 😭 😡 🤬 🤢 🥳 😎 🤓 🙈 🙉 🙊 💀 🤡 💩"},
+        {"Gestures", "👍 👎 👌 ✌️ 🤞 🤟 🤘 👊 ✊ 👏 🙌 👐 🤲 🤝 🙏 💪 ☝️ 👆 👇 👈 👉 🖐️ 🤙 👋"},
+        {"Hearts", "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💋 💌"},
+        {"Animals & nature", "🐶 🐱 🐭 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐵 🐔 🐧 🦆 🦅 🦉 🦋 🐝 🐢 🐙 🐳 🐬 🌵 🌲 🌻 🌹 🍂 ☀️ 🌙 ⭐ 🌈 ⚡ 🔥 ❄️ 🌊"},
+        {"Food & drink", "🍎 🍌 🍇 🍓 🍋 🥑 🍕 🍔 🍟 🌭 🌮 🍜 🍣 🍦 🍰 🍫 🍿 ☕ 🍺 🍷 🥂 🍵"},
+        {"Objects & symbols", "🎉 🎁 🎈 ⚽ 🏀 🎸 🎮 🎲 🚗 ✈️ 🚀 ⛵ 🏠 💡 🔑 💰 💎 ⏰ 📱 💻 🎧 📷 ✅ ❌ ❗ ❓ 💯 🎖️ 🏆 🚩"},
+    };
+
     private void showEmojiPicker(JComponent anchor) {
-        javax.swing.JPopupMenu pop = new javax.swing.JPopupMenu();
+        final javax.swing.JPopupMenu pop = new javax.swing.JPopupMenu();
         pop.setBackground(t.card);
         pop.setBorder(new EmptyBorder(6, 6, 6, 6));
-        String[] emojis = {
-            "😀","😁","😂","🤣","😊","😍","😘","😎","🤔","😅","😉","🙂","🙃","😌","😴","🤗",
-            "👍","👎","👏","🙏","💪","🔥","✨","🎉","❤️","💜","💯","✅","❌","⚡","💸","📎",
-            "😢","😭","😡","😤","🥳","😱","🤯","👀","🙌","🤝","💀","🌟","☀️","🌙","⭐","🚀"
-        };
-        JPanel grid = new JPanel(new java.awt.GridLayout(0, 8, 2, 2));
-        grid.setBackground(t.card);
-        for (String em : emojis) {
-            JLabel l = new JLabel(em, javax.swing.SwingConstants.CENTER);
-            l.setFont(new java.awt.Font("Apple Color Emoji", java.awt.Font.PLAIN, 20));
-            l.setPreferredSize(new Dimension(30, 30));
-            l.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-            l.addMouseListener(new MouseAdapter() {
-                public void mouseClicked(MouseEvent e) {
-                    mInput.insert(em, mInput.getCaretPosition());
-                    pop.setVisible(false);
-                    mInput.requestFocusInWindow();
-                }
-                public void mouseEntered(MouseEvent e) { l.setOpaque(true); l.setBackground(t.selected); l.repaint(); }
-                public void mouseExited(MouseEvent e) { l.setOpaque(false); l.repaint(); }
-            });
-            grid.add(l);
+
+        JPanel box = new JPanel();
+        box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
+        box.setBackground(t.card);
+        for (String[] cat : EMOJI) {
+            JLabel label = new JLabel(cat[0].toUpperCase(java.util.Locale.UK));
+            label.setFont(t.semibold(10f));
+            label.setForeground(t.subtext);
+            label.setAlignmentX(Component.LEFT_ALIGNMENT);
+            label.setBorder(new EmptyBorder(8, 4, 3, 0));
+            box.add(label);
+            JPanel grid = new JPanel(new java.awt.GridLayout(0, 8, 2, 2));
+            grid.setBackground(t.card);
+            grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+            for (String em : cat[1].split(" ")) {
+                final String glyph = em;
+                JLabel l = new JLabel(glyph, javax.swing.SwingConstants.CENTER);
+                l.setFont(new java.awt.Font("Apple Color Emoji", java.awt.Font.PLAIN, 20));
+                l.setPreferredSize(new Dimension(30, 30));
+                l.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+                l.addMouseListener(new MouseAdapter() {
+                    public void mouseClicked(MouseEvent e) {
+                        // Insert at the cursor; the panel stays open (phone parity).
+                        mInput.insert(glyph, mInput.getCaretPosition());
+                        mInput.requestFocusInWindow();
+                    }
+                    public void mouseEntered(MouseEvent e) { l.setOpaque(true); l.setBackground(t.selected); l.repaint(); }
+                    public void mouseExited(MouseEvent e) { l.setOpaque(false); l.repaint(); }
+                });
+                grid.add(l);
+            }
+            grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, grid.getPreferredSize().height));
+            box.add(grid);
         }
-        pop.add(grid);
-        pop.show(anchor, 0, -pop.getPreferredSize().height - 6);
+        JScrollPane sp = new JScrollPane(box,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(t.card);
+        sp.setPreferredSize(new Dimension(300, 320));
+        sp.getVerticalScrollBar().setUnitIncrement(16);
+        pop.add(sp);
+        pop.show(anchor, 0, -320 - 6);
     }
 
     private void sendCurrent() {
