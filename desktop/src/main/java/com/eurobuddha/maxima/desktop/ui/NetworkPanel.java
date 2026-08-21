@@ -92,12 +92,15 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         // progress string are deliberately excluded, or the heartbeat rebuilds
         // every second and snaps the scroll position back.
         String sig = directNow + "|" + !node.reachAddress().isEmpty()
-                + "|" + relayOn + "|" + n.pool().activeHosts() + "|" + node.relayStore().get()
+                + "|" + relayOn + "|" + (relayOn && node.relayStats() != null)
+                + "|" + n.pool().activeHosts() + "|" + node.relayStore().get()
                 + "|" + n.mlsAddress() + "|" + node.isStaticMls()
                 + "|" + DesktopManualForward.enabled();
         if (sig.equals(mSig)) return;
-        mSig = sig;
+        // Set mSig only AFTER a successful rebuild — if rebuild() throws, mSig
+        // stays stale so the next heartbeat retries instead of freezing the tab.
         preserveScroll(() -> rebuild(n, hosts, directNow, relayOn));
+        mSig = sig;
     }
 
     /** Classic (jar) engine network view — hosts, MLS/MAX#, host add, event log. */
@@ -108,8 +111,8 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         String sig = "jar|" + hosts + "|" + node.mlsLocationAddress()
                 + "|" + node.permanentAddress() + "|" + node.relayStore().get();
         if (sig.equals(mSig)) return;
-        mSig = sig;
         preserveScroll(this::rebuildJar);
+        mSig = sig;   // only after a successful rebuild (see refresh())
     }
 
     /** Run a rebuild while holding the scroll position, so the heartbeat's
@@ -126,6 +129,11 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
     private void rebuildJar() {
         mBody.removeAll();
+        // The jar view doesn't own the built-in live labels — null them so a later
+        // flip-back to built-in never has updateLive() touch detached orphans.
+        mStatHosts = mStatContacts = mStatMailbox = mStatOutbox = mStatServices = null;
+        mDrDetail = mRelayRoutes = mRelayRelayed = null;
+        mHeroPill = null; mHeroSub = null;
         int hosts = node.connectedCount();
         // hero
         DKit.RoundPanel hero = k.card();
@@ -158,7 +166,14 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         hostCard.add(add);
         hostCard.add(k.vgap(8));
         DKit.HoverButton addBtn = k.primaryButton("Add & connect");
-        addBtn.onClick(() -> { String hp = add.getText().trim(); if (!hp.isEmpty()) connectHost(hp); });
+        addBtn.onClick(() -> {
+            String hp = add.getText().trim();
+            if (!DesktopRelayStore.isValid(hp)) {
+                javax.swing.JOptionPane.showMessageDialog(this, "Enter host:port, e.g. 31.125.188.214:9501");
+                return;
+            }
+            connectHost(hp);
+        });
         JPanel ar = rowX();
         ar.add(addBtn);
         ar.add(Box.createHorizontalGlue());
@@ -407,12 +422,25 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         c.setConnectTimeout(8000);
         c.setReadTimeout(8000);
         try (java.io.InputStream in = c.getInputStream()) {
-            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[4096];
-            int r;
-            while ((r = in.read(buf)) > 0) bo.write(buf, 0, r);
-            return new String(bo.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            return readAll(in);
+        } catch (java.io.IOException e) {
+            // Drain the error stream so the socket can be reused/closed, then rethrow
+            // — else a non-2xx leaves the connection undrained under keep-alive.
+            try (java.io.InputStream err = c.getErrorStream()) {
+                if (err != null) readAll(err);
+            } catch (Exception ignored) { }
+            throw e;
+        } finally {
+            c.disconnect();
         }
+    }
+
+    private static String readAll(java.io.InputStream in) throws java.io.IOException {
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int r;
+        while ((r = in.read(buf)) >= 0) { if (r > 0) bo.write(buf, 0, r); }
+        return new String(bo.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private void rebuild(MaximaNode n, int hosts, boolean directNow, boolean relayOn) {
@@ -686,11 +714,16 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         boolean ok = hosts > 0;
         mHeroBig.setText(mConnecting ? "Connecting…" : (ok ? "Connected" : "Offline"));
         mHeroBig.setForeground(mConnecting ? t.text : (ok ? t.success : t.error));
-        mHeroPill.removeAll();
-        mHeroPill.add(k.pill(hosts + (hosts == 1 ? " host" : " hosts"), ok ? DKit.OK : DKit.BAD));
-        mHeroPill.revalidate();
-        mHeroPill.repaint();
-        if (!mConnecting) {
+        // mHeroPill / mHeroSub only exist on the built-in rebuild() path; the
+        // classic (jar) rebuildJar() builds only mHeroBig. Guard so a jar-mode
+        // heartbeat can't NPE here and leave the whole tab half-built.
+        if (mHeroPill != null) {
+            mHeroPill.removeAll();
+            mHeroPill.add(k.pill(hosts + (hosts == 1 ? " host" : " hosts"), ok ? DKit.OK : DKit.BAD));
+            mHeroPill.revalidate();
+            mHeroPill.repaint();
+        }
+        if (mHeroSub != null && !mConnecting) {
             mHeroSub.setText(ok ? "Reachable through " + hosts + (hosts == 1 ? " route." : " independent routes.")
                     : "Not connected — tap Auto-connect to fix.");
         }
