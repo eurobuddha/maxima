@@ -68,6 +68,12 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // DEV-ONLY intent hooks below. MainActivity is the exported launcher,
+        // so ANY installed app could otherwise start it with these extras and
+        // silently rewrite our transport prefs (redirect classic hosts, flip
+        // the engine). Gate the whole block on a debuggable build - stripped
+        // entirely from release, where these are never needed.
+        if (BuildConfig.DEBUG) {
         // DEV-ONLY classic-only experiment hook (no UI): set/clear via adb -
         //   am start -n .../.MainActivity --es classic_only_hosts "h1:9001,h2:9001"
         //   am start -n .../.MainActivity --es classic_only_hosts clear
@@ -94,6 +100,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
             android.widget.Toast.makeText(this, "engine_jar = " + (on ? "ON (classic)" : "off"),
                     android.widget.Toast.LENGTH_LONG).show();
         }
+        }   // end BuildConfig.DEBUG dev hooks
 
         // targetSdk 35 is edge-to-edge. Extend the dark app bar UP into the
         // status bar (so the header colour fills the top, WhatsApp-style, not a
