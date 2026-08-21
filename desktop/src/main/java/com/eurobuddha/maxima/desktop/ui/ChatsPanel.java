@@ -1614,12 +1614,16 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     javax.swing.SwingUtilities.invokeLater(() -> status.setText(s));
                 }
                 public void onTxid(String txid) {
-                    // Fund moved — now post the payment bubble carrying the FULL txid.
-                    try { node.chat().sendPayment(contact, amount.toString(), "0x00",
-                            "MINIMA", memoText, txid); } catch (Exception ignored) { }
-                    javax.swing.SwingUtilities.invokeLater(() -> {
-                        mThreadSig = ""; refresh(); d.dispose();
-                    });
+                    // This callback arrives on the EDT (publish delivers via invokeLater),
+                    // so post the payment bubble — a Maxima NETWORK send — off the EDT,
+                    // then marshal only the UI refresh back.
+                    new Thread(() -> {
+                        try { node.chat().sendPayment(contact, amount.toString(), "0x00",
+                                "MINIMA", memoText, txid); } catch (Exception ignored) { }
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            mThreadSig = ""; refresh(); d.dispose();
+                        });
+                    }, "chat-pay-bubble").start();
                 }
                 public void onError(String e) {
                     javax.swing.SwingUtilities.invokeLater(() -> {

@@ -475,6 +475,8 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
             String addr = to.getText().trim();
             String a = amt.getText().trim();
             if (addr.isEmpty() || a.isEmpty()) { status.setText("Enter an address and amount."); return; }
+            String addrErr = validateRecipient(addr);
+            if (addrErr != null) { status.setText(addrErr); return; }
             final MiniNumber amount;
             try { amount = new MiniNumber(a); } catch (Exception e) { status.setText("Bad amount."); return; }
             if (!amount.isMore(MiniNumber.ZERO)) { status.setText("Amount must be greater than 0."); return; }
@@ -497,10 +499,37 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
                 });
             }
             public void onError(String m) {
-                uiStatus(status, m.toLowerCase().contains("funds") ? m : "Send failed: " + m);
+                String msg = (m == null || m.isEmpty()) ? "unknown error" : m;
+                uiStatus(status, msg.toLowerCase().contains("funds") ? msg : "Send failed: " + msg);
                 javax.swing.SwingUtilities.invokeLater(() -> sign.setButtonEnabled(true));
             }
         });
+    }
+
+    /** Validate a payment recipient before we ever select coins or sign — a
+     *  typo'd/short 0x address or a burn address would send funds into the void.
+     *  Returns an error string to show, or null if the address is well-formed. */
+    private static String validateRecipient(String zAddr) {
+        String s = zAddr.trim();
+        String low = s.toLowerCase();
+        if (low.startsWith("mx")) {
+            if (low.startsWith("mx00")) return "That looks like a burn address.";
+            try {
+                org.minima.objects.base.MiniData d = org.minima.objects.Address.convertMinimaAddress(s);
+                if (d == null) return "Invalid Mx address.";
+            } catch (Exception e) {
+                return "Invalid Mx address (bad checksum?).";
+            }
+            return null;
+        }
+        if (low.startsWith("0x")) {
+            if (!s.matches("(?i)0x[0-9a-f]{64}")) {
+                return "A 0x address must be 32 bytes (0x + 64 hex digits).";
+            }
+            if (low.substring(2).chars().allMatch(c -> c == '0')) return "That's the burn address.";
+            return null;
+        }
+        return "Address must start with Mx or 0x.";
     }
 
     /** Result of a payment (status ticks, then exactly one of txid/error). */
@@ -566,7 +595,8 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         } catch (CoinSelector.InsufficientFundsException ife) {
             cb.onError("Not enough confirmed funds.");
         } catch (Exception e) {
-            cb.onError(e.getMessage());
+            // Never hand a null message downstream — the UI does .toLowerCase() on it.
+            cb.onError(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
     }
 

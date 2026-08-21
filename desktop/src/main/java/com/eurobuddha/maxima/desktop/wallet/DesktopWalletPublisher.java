@@ -90,24 +90,35 @@ public final class DesktopWalletPublisher {
             try {
                 JSONObject r1 = one(zImportCmd);
                 if (!r1.optBoolean("status", false)) {
+                    // import failed — no row to clean, but harmless to try.
+                    cleanupTxn(zId);
                     fail(zCb, "txnimport: " + r1.optString("error", r1.toString()));
                     return;
                 }
                 JSONObject r2 = one("txnbasics id:" + zId);
                 if (!r2.optBoolean("status", false)) {
+                    cleanupTxn(zId);
                     fail(zCb, "txnbasics: " + r2.optString("error", r2.toString()));
                     return;
                 }
                 JSONObject r3 = one(zPostCmd);
                 if (!r3.optBoolean("status", false)) {
+                    cleanupTxn(zId);
                     fail(zCb, "txnpost: " + r3.optString("error", r3.toString()));
                     return;
                 }
                 javax.swing.SwingUtilities.invokeLater(() -> zCb.onResult(r3));
             } catch (Exception e) {
+                cleanupTxn(zId);
                 fail(zCb, e.getMessage() == null ? e.toString() : e.getMessage());
             }
         });
+    }
+
+    /** Family hard rule: every txn error path runs txndelete so a failed send
+     *  never leaves a dangling signed txn row on the node/relay. Best-effort. */
+    private void cleanupTxn(String zId) {
+        try { one("txndelete id:" + zId); } catch (Exception ignored) { }
     }
 
     private JSONObject one(String cmd) throws Exception {
