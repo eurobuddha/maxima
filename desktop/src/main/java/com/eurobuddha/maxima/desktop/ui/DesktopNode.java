@@ -292,9 +292,12 @@ public final class DesktopNode {
 
     private synchronized void startReachability() {
         if (mJar || mNode == null || mReach != null) return;
-        try { mNode.startDirect(DIRECT_PORT); } catch (Exception ignored) { }
+        // Bind the direct listener to the manually-forwarded port when manual mode
+        // is on, so the router rule lines up; else the default direct port.
+        int dp = DesktopManualForward.enabled() ? DesktopManualForward.port() : DIRECT_PORT;
+        try { mNode.startDirect(dp); } catch (Exception ignored) { }
         mReach = new ReachabilityManager(mNode,
-                () -> { int p = mNode.directPort(); return p > 0 ? p : DIRECT_PORT; },
+                () -> { int p = mNode.directPort(); return p > 0 ? p : dp; },
                 ReachabilityManager.Gates.ALWAYS, new ReachabilityManager.Listener() {
             public void onVerified(String ipPort, String via) {
                 mReachAddr = ipPort;
@@ -314,11 +317,29 @@ public final class DesktopNode {
                 fireChanged();
             }
         });
+        if (DesktopManualForward.enabled()) {
+            mReach.setManual(DesktopManualForward.publicIp(), DesktopManualForward.port());
+        }
         if (mMaint != null) {
             mMaint.scheduleWithFixedDelay(() -> {
                 try { mReach.tick(); } catch (Exception ignored) { }
             }, 2, 60, TimeUnit.SECONDS);
         }
+    }
+
+    /** Apply the current manual port-forward settings (UI called after a change). */
+    public void applyManualForward() {
+        if (mJar || mNode == null) return;
+        if (mReach == null) startReachability();
+        if (mReach == null) return;
+        if (DesktopManualForward.enabled()) {
+            try { mNode.startDirect(DesktopManualForward.port()); } catch (Exception ignored) { }
+            mReach.setManual(DesktopManualForward.publicIp(), DesktopManualForward.port());
+        } else {
+            try { mNode.startDirect(DIRECT_PORT); } catch (Exception ignored) { }
+            mReach.clearManual();
+        }
+        new Thread(mReach::tick, "manual-fwd-tick").start();
     }
 
     // ---- relay (built-in engine only) ----

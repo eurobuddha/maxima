@@ -105,12 +105,37 @@ public final class ReachabilityManager {
     private long mMappedAtMs;
     private long mProvenAtMs;
 
+    // Manual port-forward: when set, skip UPnP and prove this public IP + port.
+    private volatile String mManualIp;
+    private volatile int mManualPort;
+
     public ReachabilityManager(MaximaNode zProbeClient, IntSupplier zListenPort,
                                Gates zGates, Listener zListener) {
         mProbeClient = zProbeClient;
         mListenPort = zListenPort;
         mGates = zGates;
         mListener = zListener;
+    }
+
+    /** Enter manual port-forward mode: prove + advertise this public IP:port
+     *  instead of asking the router for a mapping. Re-verified periodically. */
+    public void setManual(String zPublicIp, int zPort) {
+        mManualIp = zPublicIp == null ? "" : zPublicIp.trim();
+        mManualPort = zPort;
+        mGen++;
+        submit(() -> { withdraw("switching to manual"); doTick(); });
+    }
+
+    /** Leave manual mode; the next tick returns to automatic (UPnP) mapping. */
+    public void clearManual() {
+        mManualIp = null;
+        mManualPort = 0;
+        mGen++;
+        submit(() -> withdraw("manual forward off"));
+    }
+
+    public boolean isManual() {
+        return mManualIp != null && !mManualIp.isEmpty();
     }
 
     public State state() {
@@ -190,6 +215,35 @@ public final class ReachabilityManager {
             return;
         }
 
+        // MANUAL PORT-FORWARD: the user forwarded a port on the router by hand and
+        // gave us the public IP, so skip UPnP entirely and PROVE that port from
+        // outside (a relay dials our source IP:port back) before advertising it —
+        // the same never-advertise-on-hope rule as the automatic path.
+        String manualIp = mManualIp;
+        if (manualIp != null && !manualIp.isEmpty()) {
+            int extPort = mManualPort > 0 ? mManualPort : listenPort;
+            setState(State.PROBING,
+                    "verifying " + manualIp + ":" + extPort + " (manual forward)…");
+            boolean ok = proveReachable(extPort);
+            if (mStopping || gen != mGen || !mGates.pass(mState)) {
+                setState(State.OFF, "network changed during verification");
+                return;
+            }
+            if (!ok) {
+                setState(State.OFF, "manual forward: port " + extPort
+                        + " is not open from outside — check the router rule");
+                return;
+            }
+            mMapping = null;   // manual: no UPnP lease to hold or renew
+            mPublicAddress = manualIp + ":" + extPort;
+            mProvenAtMs = System.currentTimeMillis();
+            mState = State.ADVERTISED;
+            mDetail = "reachable at " + mPublicAddress + " (manual forward)";
+            mListener.onState(mState, mDetail);
+            mListener.onVerified(mPublicAddress, "manual");
+            return;
+        }
+
         // 1. ask the router for a public mapping of that port
         setState(State.MAPPING, "asking the router for a public port…");
         mMapper.setGatewayHint(mGates.gatewayHint());
@@ -236,6 +290,15 @@ public final class ReachabilityManager {
     }
 
     private void renewIfDue() {
+        // Manual mode has no UPnP lease — just re-prove periodically so a changed
+        // WAN IP or a dropped router rule stops us advertising a dead address.
+        if (mManualIp != null && !mManualIp.isEmpty()) {
+            if (System.currentTimeMillis() - mProvenAtMs > REPROVE_INTERVAL_MS) {
+                withdraw("periodic re-verification");
+                attempt();
+            }
+            return;
+        }
         if (mMapping == null) {
             setState(State.OFF, "mapping lost");
             return;

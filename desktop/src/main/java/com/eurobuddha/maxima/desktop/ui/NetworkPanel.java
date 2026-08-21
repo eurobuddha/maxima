@@ -293,6 +293,97 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         }
     }
 
+    private void manualForward() {
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        body.setBorder(new EmptyBorder(16, 16, 16, 16));
+        body.add(k.sub("If your router won't open a port automatically, add a rule that forwards "
+                + "a TCP port to this computer, then enter your public IP so Parlons can prove "
+                + "and advertise it. The port is pinned so the rule survives restarts."));
+        body.add(k.vgap(10));
+        String lan = DesktopManualForward.localIp();
+        int curPort = DesktopManualForward.port();
+        body.add(k.copyField("Forward to this computer",
+                lan.isEmpty() ? "—" : lan + ":" + curPort, false));
+        body.add(k.vgap(10));
+        JTextField portF = k.field("Port to forward");
+        portF.setText(String.valueOf(curPort));
+        portF.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        portF.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(portF);
+        body.add(k.vgap(8));
+        JTextField ipF = k.field("Your public IP (found automatically)");
+        ipF.setText(DesktopManualForward.publicIp());
+        ipF.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        ipF.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(ipF);
+        body.add(k.vgap(10));
+        JLabel status = k.sub(" ");
+        status.setAlignmentX(Component.LEFT_ALIGNMENT);
+        if (ipF.getText().trim().isEmpty()) {
+            new Thread(() -> {
+                String ip = detectPublicIp();
+                if (ip != null) javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (ipF.getText().trim().isEmpty()) ipF.setText(ip);
+                });
+            }, "detect-ip").start();
+        }
+
+        DKit.HoverButton enable = k.primaryButton("Enable & verify");
+        enable.setAlignmentX(Component.LEFT_ALIGNMENT);
+        DKit.HoverButton off = k.ghostButton("Turn manual off");
+        off.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(enable);
+        body.add(k.vgap(8));
+        body.add(off);
+        body.add(k.vgap(6));
+        body.add(status);
+
+        JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                "Manual port-forward", java.awt.Dialog.ModalityType.MODELESS);
+        enable.onClick(() -> {
+            int p;
+            try { p = Integer.parseInt(portF.getText().trim()); }
+            catch (Exception e) { status.setText("Enter a port"); return; }
+            if (p <= 0 || p >= 65536) { status.setText("Port must be 1–65535"); return; }
+            if (p == DesktopNode.RELAY_PORT) {
+                status.setText("Port " + p + " is reserved for relay mode — pick another"); return;
+            }
+            String ip = ipF.getText().trim();
+            if (ip.isEmpty()) { status.setText("Enter your public IP (or wait for auto-detect)"); return; }
+            DesktopManualForward.set(true, ip, p);
+            node.applyManualForward();
+            DesktopEventLog.add("manual port-forward enabled: " + ip + ":" + p);
+            status.setText("Enabled — verifying " + ip + ":" + p + " from outside…");
+            mSig = ""; refresh();
+            javax.swing.Timer tm = new javax.swing.Timer(1600, e -> d.dispose());
+            tm.setRepeats(false); tm.start();
+        });
+        off.onClick(() -> {
+            DesktopManualForward.setEnabled(false);
+            node.applyManualForward();
+            DesktopEventLog.add("manual port-forward off");
+            mSig = ""; refresh(); d.dispose();
+        });
+        d.setContentPane(body);
+        d.setSize(450, 360);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    /** Find this machine's public IP so the user never has to look it up. */
+    private static String detectPublicIp() {
+        String[] urls = {"https://api.ipify.org", "https://icanhazip.com", "https://ifconfig.me/ip"};
+        for (String u : urls) {
+            try {
+                String ip = httpGet(u).trim();
+                if (ip.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return ip;
+            } catch (Exception ignored) { }
+        }
+        return null;
+    }
+
     private static String httpGet(String url) throws Exception {
         java.net.HttpURLConnection c =
                 (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
@@ -385,6 +476,15 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         cr.add(check);
         cr.add(Box.createHorizontalGlue());
         dr.add(cr);
+        // Manual port-forward — for routers with no UPnP (phone parity).
+        dr.add(k.vgap(8));
+        DKit.HoverButton mfBtn = k.ghostButton(DesktopManualForward.enabled()
+                ? "Manual port-forward · on" : "Set up manual port-forward");
+        mfBtn.onClick(this::manualForward);
+        JPanel mfr = rowX();
+        mfr.add(mfBtn);
+        mfr.add(Box.createHorizontalGlue());
+        dr.add(mfr);
         mBody.add(dr);
         mBody.add(k.vgap(14));
 
