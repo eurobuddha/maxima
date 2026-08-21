@@ -110,6 +110,12 @@ public final class JarEngine implements ChatPort {
 		while (!mManager.isInited() && System.currentTimeMillis() < deadline) {
 			Thread.sleep(50);
 		}
+		if (!mManager.isInited()) {
+			// Never run an uninitialised manager - publicKeyHex() etc. would
+			// NPE. Fail the boot so the service falls back to the built-in
+			// engine instead of becoming a silent zombie.
+			throw new IllegalStateException("jar engine did not initialise in 30s");
+		}
 		mTransport.start();
 		EventLog.add("JAR ENGINE up - classic Maxima, " + zHosts.size() + " host(s)");
 	}

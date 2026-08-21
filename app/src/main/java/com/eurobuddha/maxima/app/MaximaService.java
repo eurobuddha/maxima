@@ -148,12 +148,21 @@ public final class MaximaService extends Service {
         if (jarMode(this)) {
             try {
                 bootJarEngine();
-            } catch (Exception e) {
-                Log.e(TAG, "jar engine boot failed", e);
-                EventLog.add("JAR ENGINE BOOT FAILED: " + e);
+                registerNetworkCallback();
+                return;
+            } catch (Throwable e) {
+                // Do NOT zombie (no engine + a pump that NPEs and never
+                // restarts). Archive the possibly-corrupt jar data so a later
+                // boot retries fresh, drop the half-built engine, and fall
+                // through to the built-in engine below.
+                Log.e(TAG, "jar engine boot failed - falling back to built-in", e);
+                EventLog.add("JAR ENGINE BOOT FAILED, using built-in engine: " + e);
+                try {
+                    com.eurobuddha.maxima.app.jar.JarMigration.archiveOldJarData(this);
+                } catch (Exception ignored) {
+                }
+                sJarEngine = null;
             }
-            registerNetworkCallback();
-            return;
         }
 
         MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
@@ -764,6 +773,10 @@ public final class MaximaService extends Service {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
                 Log.e(TAG, "pump loop died", e);
+            } finally {
+                // Let the alarm/WorkManager belts restart the pump - leaving
+                // mPumping true would make every resurrection a silent no-op.
+                mPumping.set(false);
             }
         }, "maxima-pump");
         mPumpThread.setDaemon(true);
