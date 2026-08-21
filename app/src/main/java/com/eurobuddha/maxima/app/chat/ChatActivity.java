@@ -45,6 +45,9 @@ import java.util.Locale;
 public final class ChatActivity extends AppCompatActivity implements ChatEngine.Listener {
 
     public static final String EXTRA_CONVERSATION = "conversation";
+    /** Entry id to scroll to and briefly highlight - set by message search. */
+    public static final String EXTRA_SCROLL_TO = "scroll_to";
+    private String mScrollTo;
 
     private String mConversation = "";
     private RecyclerView mList;
@@ -1305,6 +1308,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     /** Read the conversation out of an intent. False if there is not one. */
     private boolean adopt(android.content.Intent zIntent) {
         String c = zIntent == null ? null : zIntent.getStringExtra(EXTRA_CONVERSATION);
+        if (zIntent != null && zIntent.hasExtra(EXTRA_SCROLL_TO)) {
+            mScrollTo = zIntent.getStringExtra(EXTRA_SCROLL_TO);
+        }
         if (c == null || c.trim().isEmpty()) {
             return false;
         }
@@ -1326,6 +1332,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             chat.markRead(mConversation);
         }
         render();
+        applyScrollTo();
         mHandler.postDelayed(mPayWatch, 3_000);
         mLock.onResume();
     }
@@ -1363,6 +1370,31 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     // ---------------------------------------------------------------
+
+    /** Search handed us a message id: jump there once, with a brief pulse. */
+    private void applyScrollTo() {
+        if (mScrollTo == null) {
+            return;
+        }
+        final String target = mScrollTo;
+        mScrollTo = null;
+        mList.post(() -> {
+            int i = rowIndexOf(target);
+            if (i < 0) {
+                return;
+            }
+            mList.scrollToPosition(i);
+            mList.postDelayed(() -> {
+                androidx.recyclerview.widget.RecyclerView.ViewHolder vh =
+                        mList.findViewHolderForAdapterPosition(rowIndexOf(target));
+                if (vh != null) {
+                    View v = vh.itemView;
+                    v.setAlpha(0.25f);
+                    v.animate().alpha(1f).setDuration(650).start();
+                }
+            }, 120);
+        });
+    }
 
     private void render() {
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();

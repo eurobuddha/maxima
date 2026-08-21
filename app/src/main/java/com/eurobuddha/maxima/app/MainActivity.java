@@ -122,7 +122,9 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
             ((TextView) findViewById(R.id.main_version)).setText("v" + v);
         } catch (Exception ignored) {
         }
-        findViewById(R.id.btn_main_search).setOnClickListener(v -> showTab(0));
+        findViewById(R.id.btn_main_search).setOnClickListener(v ->
+                startActivity(new android.content.Intent(this,
+                        com.eurobuddha.maxima.app.ui.SearchActivity.class)));
         findViewById(R.id.btn_main_more).setOnClickListener(v -> showTab(4));
         android.widget.ImageButton themeBtn = findViewById(R.id.btn_main_theme);
         themeBtn.setImageResource(ChatPrefs.appearanceIcon(this));

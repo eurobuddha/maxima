@@ -142,6 +142,10 @@
         </provider>
 
         <activity
+            android:name=".ui.SearchActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".call.CallActivity"
             android:exported="false"
             android:launchMode="singleTop"
