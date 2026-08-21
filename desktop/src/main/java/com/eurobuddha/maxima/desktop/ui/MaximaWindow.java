@@ -1,5 +1,8 @@
 package com.eurobuddha.maxima.desktop.ui;
 
+import com.eurobuddha.maxima.core.chat.ChatEngine;
+import com.eurobuddha.maxima.core.chat.Group;
+
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -135,6 +138,41 @@ public final class MaximaWindow {
             refreshStatus();
         });
         mNode.addChangeListener(mChangeHook);
+
+        // Inbound "pssssst!" chirp — phone parity. Fires only for a message from
+        // someone else that is NOT in the conversation you're currently reading
+        // (and not while that thread is focused on screen). Gated by the
+        // Message-sound preference inside Chirp.
+        mNode.addChatListener(new ChatEngine.Listener() {
+            public void onMessage(ChatEngine.Entry e) {
+                if (e.mine) {
+                    return;
+                }
+                String conv = e.isGroup() ? e.groupId : e.peer;
+                boolean reading = (mTabs.get(0) instanceof ChatsPanel)
+                        && ((ChatsPanel) mTabs.get(0)).isViewing(conv)
+                        && mFrame.isFocused();
+                if (!reading) {
+                    Chirp.play();
+                    SwingUtilities.invokeLater(MaximaWindow.this::flashTray);
+                }
+            }
+            public void onStateChanged(ChatEngine.Entry e) { }
+            public void onGroupChanged(Group g) { }
+        });
+    }
+
+    /** Optional visual half of a notification: nudge the tray tooltip if a tray
+     *  icon exists (windowed mode may have none — then this is a no-op). */
+    private void flashTray() {
+        try {
+            java.awt.SystemTray tray = java.awt.SystemTray.isSupported()
+                    ? java.awt.SystemTray.getSystemTray() : null;
+            if (tray != null && tray.getTrayIcons().length > 0) {
+                tray.getTrayIcons()[0].displayMessage(
+                        "Parlons", "New message", java.awt.TrayIcon.MessageType.NONE);
+            }
+        } catch (Exception ignored) { }
     }
 
     public void show() { mFrame.setVisible(true); }

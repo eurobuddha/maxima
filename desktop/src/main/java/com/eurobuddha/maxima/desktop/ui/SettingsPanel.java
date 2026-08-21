@@ -114,6 +114,14 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
             rebuild();
         }));
         priv.add(k.divider());
+        boolean snd = Chirp.enabled();
+        priv.add(switchRow("Message sound",
+                snd ? "Pssst! when a message arrives" : "Silent", snd, on -> {
+            Chirp.setEnabled(on);
+            if (on) Chirp.play();   // audition it, like flipping it on the phone
+            rebuild();
+        }));
+        priv.add(k.divider());
         priv.add(k.kvLine("Delivery receipts", "always on"));
         mBody.add(priv);
         mBody.add(k.vgap(14));

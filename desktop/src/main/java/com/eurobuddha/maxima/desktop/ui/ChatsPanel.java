@@ -332,6 +332,12 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         open(conversation, group);
     }
 
+    /** True when this exact conversation is open on screen (not the list). Used
+     *  to suppress the inbound chirp for the thread you're already reading. */
+    public boolean isViewing(String conversation) {
+        return !mShowList && conversation != null && conversation.equals(mOpen);
+    }
+
     /** Focus the conversation search field (top-bar magnifying glass). */
     public void focusSearch() {
         if (mSearch != null) {
