@@ -36,6 +36,15 @@ public class PrefsKeyUses implements KeyUses {
     /** Entry prefix for THIS derivation's counters — {@code "uses_"} or {@code "uses_<ns>_"}. */
     private final String mPrefix;
 
+    /** FUND-CRITICAL: the two mirror files are physically shared by EVERY
+     *  PrefsKeyUses instance in the process (one per PaymentSender, plus the
+     *  wallet tab). A per-instance monitor lets two instances reserve the same
+     *  one-time WOTS leaf and sign two different transactions with it - the
+     *  exact key-forgery the reserve-before-sign contract exists to prevent.
+     *  reserveNextUse locks on this ONE static monitor so the read-modify-write
+     *  is atomic across the whole process. */
+    private static final Object USES_LOCK = new Object();
+
     /** Legacy ({@link Derivation#V1}) store: entries stay {@code uses_<i>}, byte-identical to what
      *  already exists on every shipped install. */
     public PrefsKeyUses(Context zContext) {
@@ -90,7 +99,8 @@ public class PrefsKeyUses implements KeyUses {
     }
 
     @Override
-    public synchronized int reserveNextUse(int zKeyIndex) {
+    public int reserveNextUse(int zKeyIndex) {
+        synchronized (USES_LOCK) {
         int n = currentUses(zKeyIndex);
         int next = n + 1;
 
@@ -105,10 +115,12 @@ public class PrefsKeyUses implements KeyUses {
                     + " (mirrorA=" + okA + ", mirrorB=" + okB + ") — refusing to sign");
         }
         return n;
+        }
     }
 
     @Override
-    public synchronized java.util.Map<Integer, Integer> snapshotAllUses() {
+    public java.util.Map<Integer, Integer> snapshotAllUses() {
+      synchronized (USES_LOCK) {
         // Union the key indices recorded in EITHER mirror, then read each via the MAX-on-read path so
         // the returned value is the reconciled count. A torn/partial mirror can only add an index or
         // raise a value — never drop one — matching the store's raise-never-lower invariant.
@@ -120,6 +132,7 @@ public class PrefsKeyUses implements KeyUses {
             out.put(idx, currentUses(idx));
         }
         return out;
+      }
     }
 
     /** Indices recorded under THIS derivation's prefix only. Both derivations share the two mirror
@@ -136,13 +149,15 @@ public class PrefsKeyUses implements KeyUses {
     }
 
     @Override
-    public synchronized void recordExternalUses(int zKeyIndex, int zUses) {
-        int merged = Math.max(currentUses(zKeyIndex), zUses);
-        boolean okA = mMirrorA.edit().putInt(key(zKeyIndex), merged).commit();
-        boolean okB = mMirrorB.edit().putInt(key(zKeyIndex), merged).commit();
-        if (!okA || !okB) {
-            throw new IllegalStateException(
-                "KeyUses: failed to durably record external uses for key " + zKeyIndex);
+    public void recordExternalUses(int zKeyIndex, int zUses) {
+        synchronized (USES_LOCK) {
+            int merged = Math.max(currentUses(zKeyIndex), zUses);
+            boolean okA = mMirrorA.edit().putInt(key(zKeyIndex), merged).commit();
+            boolean okB = mMirrorB.edit().putInt(key(zKeyIndex), merged).commit();
+            if (!okA || !okB) {
+                throw new IllegalStateException(
+                    "KeyUses: failed to durably record external uses for key " + zKeyIndex);
+            }
         }
     }
 }

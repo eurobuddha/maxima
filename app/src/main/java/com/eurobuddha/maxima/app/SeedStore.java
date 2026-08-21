@@ -60,8 +60,14 @@ public final class SeedStore {
         prefs(zCtx).edit().putString(KEY_NAME, zName).apply();
     }
 
-    /** Load the existing identity, or generate one on first run. */
-    public static MaximaIdentity loadOrCreateIdentity(Context zCtx) {
+    /** Load the existing identity, or generate one on first run.
+     *  FUND-CRITICAL: unsynchronized, the service (main thread) and a wallet
+     *  worker could both see no phrase on a fresh install, each generate a
+     *  DIFFERENT 24-word seed, and the last writer wins - any funds sent to the
+     *  loser's derived address are unrecoverable. The whole check-generate-save
+     *  is serialized, and the phrase is re-read after acquiring the lock so the
+     *  second caller adopts the first's seed instead of minting its own. */
+    public static synchronized MaximaIdentity loadOrCreateIdentity(Context zCtx) {
         String phrase = loadPhrase(zCtx);
         if (phrase == null) {
             List<String> words = Bip39.generate(24);
