@@ -46,6 +46,12 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
     private DKit.HoverButton mAutoBtn;
     private boolean mConnecting;
 
+    // Live labels updated in place every heartbeat — so the panel is only fully
+    // rebuilt on a STRUCTURAL change (host list, direct on/off, relay on/off,
+    // MLS mode). Rebuilding every tick is what snapped the scroll back.
+    private JLabel mStatHosts, mStatContacts, mStatMailbox, mStatOutbox, mStatServices;
+    private JLabel mDrDetail, mRelayRoutes, mRelayRelayed;
+
     public NetworkPanel(DesktopNode zNode, Theme zTheme) {
         node = zNode;
         t = zTheme;
@@ -73,17 +79,22 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         int hosts = n.pool().activeCount();
         boolean directNow = node.reachState() == ReachabilityManager.State.ADVERTISED;
         boolean relayOn = node.relayRunning();
-        // Cheap live bits every tick: hero + event log.
+        // Cheap live bits every tick: hero, event log, counters, reach detail.
+        // NONE of these trigger a rebuild — they update existing labels in place.
         if (!mConnecting) {
             updateHero(hosts);
         }
         mLog.setText(DesktopEventLog.asText(40));
+        updateLive(n, hosts);
 
-        String sig = hosts + "|" + n.contacts().size() + "|" + n.mailbox().totalItems()
-                + "|" + n.outbox().size() + "|" + n.services().methods().size()
-                + "|" + directNow + "|" + node.reachAddress() + "|" + node.reachDetail()
+        // Structural signature ONLY — the things whose change alters the panel's
+        // shape (which cards/fields exist). Per-tick numbers and the reachability
+        // progress string are deliberately excluded, or the heartbeat rebuilds
+        // every second and snaps the scroll position back.
+        String sig = directNow + "|" + !node.reachAddress().isEmpty()
                 + "|" + relayOn + "|" + n.pool().activeHosts() + "|" + node.relayStore().get()
-                + "|" + n.mlsAddress();
+                + "|" + n.mlsAddress() + "|" + node.isStaticMls()
+                + "|" + DesktopManualForward.enabled();
         if (sig.equals(mSig)) return;
         mSig = sig;
         preserveScroll(() -> rebuild(n, hosts, directNow, relayOn));
@@ -431,18 +442,17 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.sectionLabel("Transport"));
         mBody.add(k.vgap(8));
         DKit.RoundPanel stats = k.card();
-        stats.add(stat("Hosts connected", "Independent routes to you. More is safer.", String.valueOf(hosts)));
+        mStatHosts = new JLabel(); mStatContacts = new JLabel();
+        mStatMailbox = new JLabel(); mStatOutbox = new JLabel(); mStatServices = new JLabel();
+        stats.add(statRow("Hosts connected", "Independent routes to you. More is safer.", mStatHosts));
         stats.add(k.divider());
-        stats.add(stat("Contacts", "People who can reach you and you them", String.valueOf(n.contacts().size())));
+        stats.add(statRow("Contacts", "People who can reach you and you them", mStatContacts));
         stats.add(k.divider());
-        stats.add(stat("Mailbox held for others", "Encrypted messages you store for offline peers",
-                String.valueOf(n.mailbox().totalItems())));
+        stats.add(statRow("Mailbox held for others", "Encrypted messages you store for offline peers", mStatMailbox));
         stats.add(k.divider());
-        stats.add(stat("Your outbox", "Your messages waiting to be accepted by a host",
-                String.valueOf(n.outbox().size())));
+        stats.add(statRow("Your outbox", "Your messages waiting to be accepted by a host", mStatOutbox));
         stats.add(k.divider());
-        stats.add(stat("Services you answer", "Requests this desktop can serve for others",
-                String.valueOf(n.services().methods().size())));
+        stats.add(statRow("Services you answer", "Requests this desktop can serve for others", mStatServices));
         mBody.add(stats);
         mBody.add(k.vgap(14));
 
@@ -461,7 +471,9 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         drRow.add(k.pill(directNow ? "on" : "off", directNow ? DKit.OK : DKit.NEUTRAL));
         dr.add(drRow);
         dr.add(k.vgap(6));
-        dr.add(k.sub(node.reachDetail()));
+        mDrDetail = k.sub(node.reachDetail());
+        mDrDetail.setAlignmentX(Component.LEFT_ALIGNMENT);
+        dr.add(mDrDetail);
         if (directNow && !node.reachAddress().isEmpty()) {
             dr.add(k.vgap(8));
             dr.add(k.copyField("your public address", node.reachAddress(), false));
@@ -516,11 +528,14 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         tw.add(relayToggle, BorderLayout.NORTH);
         switchRow.add(tw);
         relay.add(switchRow);
+        mRelayRoutes = null; mRelayRelayed = null;
         RelayRuntime.Stats rs = node.relayStats();
         if (relayOn && rs != null) {
             relay.add(k.vgap(8));
-            relay.add(k.kvLine("Clients attached", String.valueOf(rs.routes)));
-            relay.add(k.kvLine("Messages relayed", String.valueOf(rs.relayed)));
+            mRelayRoutes = new JLabel(String.valueOf(rs.routes));
+            mRelayRelayed = new JLabel(String.valueOf(rs.relayed));
+            relay.add(kvRow("Clients attached", mRelayRoutes));
+            relay.add(kvRow("Messages relayed", mRelayRelayed));
         }
         // tiers
         relay.add(k.vgap(8));
@@ -601,6 +616,63 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(Box.createVerticalGlue());
         mBody.revalidate();
         mBody.repaint();
+    }
+
+    /** Refresh the per-tick numbers/detail in place — never a rebuild, so the
+     *  scroll position is left completely alone. */
+    private void updateLive(MaximaNode n, int hosts) {
+        if (mStatHosts == null) return;   // not built yet
+        mStatHosts.setText(String.valueOf(hosts));
+        mStatContacts.setText(String.valueOf(n.contacts().size()));
+        mStatMailbox.setText(String.valueOf(n.mailbox().totalItems()));
+        mStatOutbox.setText(String.valueOf(n.outbox().size()));
+        mStatServices.setText(String.valueOf(n.services().methods().size()));
+        if (mDrDetail != null) mDrDetail.setText(node.reachDetail());
+        RelayRuntime.Stats rs = node.relayStats();
+        if (rs != null && mRelayRoutes != null) mRelayRoutes.setText(String.valueOf(rs.routes));
+        if (rs != null && mRelayRelayed != null) mRelayRelayed.setText(String.valueOf(rs.relayed));
+    }
+
+    /** A stat row whose value is a caller-owned label, so it can be updated in
+     *  place by {@link #updateLive} without rebuilding the card. */
+    private JComponent statRow(String title, String hint, JLabel value) {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(9, 2, 9, 2));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        JPanel left = new JPanel();
+        left.setOpaque(false);
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+        JLabel tl = new JLabel(title);
+        tl.setFont(t.semibold(13f));
+        tl.setForeground(t.text);
+        tl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel hl = k.sub(hint);
+        hl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        left.add(tl);
+        left.add(hl);
+        row.add(left, BorderLayout.CENTER);
+        value.setFont(t.extrabold(18f));
+        value.setForeground(t.text);
+        row.add(value, BorderLayout.EAST);
+        return row;
+    }
+
+    /** A label:value line whose value label the caller keeps for in-place updates. */
+    private JComponent kvRow(String label, JLabel value) {
+        JPanel row = new JPanel(new BorderLayout(10, 0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(4, 0, 4, 0));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel l = new JLabel(label);
+        l.setFont(t.font(12.5f));
+        l.setForeground(t.subtext);
+        value.setFont(t.semibold(12.5f));
+        value.setForeground(t.text);
+        row.add(l, BorderLayout.WEST);
+        row.add(value, BorderLayout.EAST);
+        return row;
     }
 
     private void updateHero(int hosts) {
