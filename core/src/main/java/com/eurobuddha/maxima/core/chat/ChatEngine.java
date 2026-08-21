@@ -1132,7 +1132,11 @@ public final class ChatEngine {
         }
         long time = zMsg.mTimeMilli.getAsLong();
         String id = (zMsgid == null || zMsgid.isEmpty())
-                ? "classic-" + from.hashCode() + "-" + time
+                // Include a content hash so two distinct messages from the same
+                // sender in the same millisecond don't collide to one id (the
+                // second was silently dropped by record()).
+                ? "classic-" + from.hashCode() + "-" + time + "-"
+                        + Integer.toHexString(body.hashCode())
                 : zMsgid;
         Entry e = new Entry(id, from, "", from, body,
                 time > 0 ? time : System.currentTimeMillis(), false, Receipt.DELIVERED);

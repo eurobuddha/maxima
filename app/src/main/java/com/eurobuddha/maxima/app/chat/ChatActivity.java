@@ -306,6 +306,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             };
     private final java.util.Set<String> mImageFetching =
             java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    private final java.util.Set<String> mImageFailed =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     /** Decode within a ~1280px bound so one photo can't blow the heap - big
      *  enough for the full-screen viewer on a phone, small enough to cache. */
@@ -338,6 +340,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         // Recycled holder: clear any previous message's click target so a tap
         // on this still-loading bubble can't open a DIFFERENT (cached) photo.
         view.setOnClickListener(null);
+        if (mImageFailed.contains(id)) {
+            return;   // decode already failed once - don't retry-storm
+        }
         if (!mImageFetching.add(id)) {
             return;   // already fetching
         }
@@ -369,8 +374,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     mImageCache.put(id, bmp);
                     runOnUiThread(this::render);
                 }
+                // Decode returned null: mark failed so a redraw doesn't
+                // spawn a fresh decode thread every tick forever.
+                mImageFailed.add(id);
             } catch (Exception e) {
-                // leave the placeholder; a redraw will retry
+                mImageFailed.add(id);
             } finally {
                 mImageFetching.remove(id);
             }
@@ -1233,7 +1241,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             java.io.File dir = new java.io.File(getCacheDir(), "maximavoice");
             dir.mkdirs();
             java.io.File f = new java.io.File(dir,
-                    "vn_" + Integer.toHexString(zId.hashCode()));
+                    "vn_" + zId.replaceAll("[^A-Za-z0-9_-]", "_"));
             if (f.exists() && f.length() > 0) {
                 return f;
             }

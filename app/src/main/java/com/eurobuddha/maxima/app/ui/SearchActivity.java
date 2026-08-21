@@ -332,6 +332,12 @@ public final class SearchActivity extends Activity {
         return r;
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mDebounce.removeCallbacksAndMessages(null);   // no search fires after finish()
+    }
+
     private int dp(int zDp) {
         return Math.round(zDp * getResources().getDisplayMetrics().density);
     }
