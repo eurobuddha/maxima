@@ -1160,7 +1160,13 @@ public final class ChatEngine {
      *  Narrow: only bodies isMedia/isPayment would match, so a legit message
      *  starting with a newline/tab is untouched. */
     private static String deMarker(String zBody) {
-        if (zBody != null && (ChatMedia.isMedia(zBody) || ChatPay.isPayment(zBody))) {
+        // ONLY payment markers are a forgery vector: a real payment arrives as
+        // TYPE_PAYMENT (never as text), so a payment marker inside a TYPE_TEXT
+        // body is fabricated. MEDIA legitimately rides text bodies (sendMedia
+        // -> ChatMessage.text with a media-marker body), so it must NOT be
+        // neutralized - doing so (0.6.16) rendered every inbound photo/voice
+        // note as a wall of base64 text.
+        if (zBody != null && ChatPay.isPayment(zBody) && !ChatMedia.isMedia(zBody)) {
             return "\uFFFD" + zBody;
         }
         return zBody;
