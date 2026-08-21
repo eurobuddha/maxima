@@ -59,6 +59,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private final JPanel mConvPane = new JPanel(new BorderLayout());
     private final JPanel mThread = new JPanel();
     private final JScrollPane mThreadScroll;
+    private JComponent mScrollFab;
     private final JLabel mThreadTitle;
     private final JLabel mThreadSub;
     private final JTextArea mInput;
@@ -205,7 +206,22 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mThread.setBorder(new EmptyBorder(16, 18, 12, 18));
         mThreadScroll = scroll(mThread, t.chatBg);
         mThreadScroll.setBorder(null);
-        mConvPane.add(mThreadScroll, BorderLayout.CENTER);
+        // Jump-to-latest FAB, shown only when scrolled up (phone parity).
+        final DownFab downFab = new DownFab(t);
+        downFab.onClick(this::jumpToLatest);
+        downFab.setVisible(false);
+        mScrollFab = downFab;
+        javax.swing.JLayeredPane threadLayer = new javax.swing.JLayeredPane() {
+            public void doLayout() {
+                int w = getWidth(), h = getHeight();
+                mThreadScroll.setBounds(0, 0, w, h);
+                mScrollFab.setBounds(w - 54, h - 54, 40, 40);
+            }
+        };
+        threadLayer.add(mThreadScroll, Integer.valueOf(javax.swing.JLayeredPane.DEFAULT_LAYER));
+        threadLayer.add(mScrollFab, Integer.valueOf(javax.swing.JLayeredPane.PALETTE_LAYER));
+        mThreadScroll.getVerticalScrollBar().addAdjustmentListener(e -> updateScrollFab());
+        mConvPane.add(threadLayer, BorderLayout.CENTER);
 
         mInput = new JTextArea(1, 10);
         mInput.setLineWrap(true);
@@ -408,6 +424,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private static final long CLUSTER_GAP_MS = 5 * 60 * 1000L;   // phone: 5-min clustering
 
     private void rebuildThread(List<ChatEngine.Entry> conv) {
+        // Follow the bottom ONLY if you're already there; otherwise keep your
+        // scroll position so a background refresh never yanks you out of history.
+        javax.swing.JScrollBar vbar = mThreadScroll.getVerticalScrollBar();
+        final boolean atBottom = vbar.getValue() + vbar.getVisibleAmount() >= vbar.getMaximum() - 48;
+        final int keepVal = vbar.getValue();
         mThread.removeAll();
         String lastDay = null;
         for (int i = 0; i < conv.size(); i++) {
@@ -435,8 +456,23 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mThread.repaint();
         javax.swing.SwingUtilities.invokeLater(() -> {
             javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
-            v.setValue(v.getMaximum());
+            v.setValue(atBottom ? v.getMaximum() : Math.min(keepVal, v.getMaximum()));
+            updateScrollFab();
         });
+    }
+
+    /** Show the jump-to-latest FAB only when scrolled up away from the bottom. */
+    private void updateScrollFab() {
+        if (mScrollFab == null) return;
+        javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
+        boolean atBottom = v.getValue() + v.getVisibleAmount() >= v.getMaximum() - 48;
+        mScrollFab.setVisible(!atBottom && mOpen != null && !mShowList);
+    }
+
+    private void jumpToLatest() {
+        javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
+        v.setValue(v.getMaximum());
+        updateScrollFab();
     }
 
     private int bubbleMax() {
@@ -633,12 +669,28 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
 
         if (last) {   // phone: timestamp + ticks only on the last bubble of a cluster
-            JLabel meta = new JLabel(time(e.time) + (mine ? "  " + stateGlyph(e) : ""));
+            String metaTxt;
+            if (mine) {
+                metaTxt = time(e.time) + "  " + stateGlyph(e);
+            } else if (e.arrived > 0 && e.arrived - e.time >= 60_000) {
+                // A late relay delivery: show both clocks, like the phone.
+                metaTxt = "sent " + time(e.time) + " · arrived " + time(e.arrived);
+            } else {
+                metaTxt = time(e.time);
+            }
+            JLabel meta = new JLabel(metaTxt);
             meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10));
             meta.setForeground(DKit.alpha(fg, 160));
             meta.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(meta);
         }
+
+        // Right-click a bubble for the message menu (copy / copy txid / open image / info).
+        final ChatEngine.Entry fe = e;
+        b.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent ev) { if (ev.isPopupTrigger()) showMessageMenu(b, fe, ev.getX(), ev.getY()); }
+            public void mouseReleased(MouseEvent ev) { if (ev.isPopupTrigger()) showMessageMenu(b, fe, ev.getX(), ev.getY()); }
+        });
 
         Dimension pref = b.getPreferredSize();
         b.setMaximumSize(new Dimension(Math.min(bubbleMax(), pref.width), Integer.MAX_VALUE));
@@ -651,6 +703,56 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             line.add(Box.createHorizontalGlue());
         }
         return line;
+    }
+
+    private void showMessageMenu(Component anchor, ChatEngine.Entry e, int x, int y) {
+        javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
+        boolean media = ChatMedia.isMedia(e.body);
+        boolean pay = ChatPay.isPayment(e.body);
+        if (!media && !pay) {
+            javax.swing.JMenuItem copy = new javax.swing.JMenuItem("Copy text");
+            copy.addActionListener(a -> clip(e.body));
+            m.add(copy);
+        }
+        if (pay) {
+            String txid = ChatPay.txid(e.body);
+            if (txid != null && !txid.isEmpty()) {
+                javax.swing.JMenuItem ct = new javax.swing.JMenuItem("Copy transaction id");
+                ct.addActionListener(a -> { clip(txid); info("Transaction id copied:\n" + txid); });
+                m.add(ct);
+            }
+        }
+        if (media) {
+            String mime = ChatMedia.mime(e.body), ref = ChatMedia.ref(e.body);
+            if (mime != null && mime.startsWith("image/") && ref != null) {
+                javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open image");
+                open.addActionListener(a -> openImage(ref, mime));
+                m.add(open);
+            }
+        }
+        javax.swing.JMenuItem info = new javax.swing.JMenuItem("Info");
+        info.addActionListener(a -> showMessageInfo(e));
+        m.add(info);
+        m.show(anchor, x, y);
+    }
+
+    private void clip(String s) {
+        java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new java.awt.datatransfer.StringSelection(s == null ? "" : s), null);
+    }
+
+    private void showMessageInfo(ChatEngine.Entry e) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("From: ").append(e.mine ? "you" : nameFor(e.sender)).append('\n');
+        sb.append("Sent: ").append(new java.util.Date(e.time)).append('\n');
+        if (e.arrived > 0) sb.append("Arrived: ").append(new java.util.Date(e.arrived)).append('\n');
+        sb.append("Status: ").append(e.state == null ? "—" : e.state);
+        if (ChatPay.isPayment(e.body)) {
+            sb.append("\nAmount: ").append(ChatPay.amount(e.body)).append(' ')
+                    .append(ChatPay.tokenName(e.body));
+            sb.append("\nTransaction id: ").append(ChatPay.txid(e.body));
+        }
+        info(sb.toString());
     }
 
     // ---- input bar (phone: attach + emoji + field + send FAB) ----
@@ -1306,6 +1408,39 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             g2.setColor(c);
             g2.fillOval(2, 2, d - 6, d - 6);
             Icons.paint(g2, Icons.PLUS, (d - 20) / 2 - 2, (d - 20) / 2 - 2, 20, theme.onAccent, 2.2f);
+            g2.dispose();
+        }
+    }
+
+    /** Jump-to-latest button: a small card disc with a down chevron. */
+    private static final class DownFab extends JComponent {
+        private final Theme theme;
+        private Runnable action;
+        DownFab(Theme t) {
+            theme = t;
+            setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                public void mouseClicked(MouseEvent e) { if (action != null) action.run(); }
+            });
+        }
+        DownFab onClick(Runnable r) { action = r; return this; }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int d = Math.min(getWidth(), getHeight());
+            g2.setColor(DKit.alpha(Color.BLACK, 45));
+            g2.fillOval(3, 5, d - 6, d - 6);
+            g2.setColor(theme.card);
+            g2.fillOval(2, 2, d - 6, d - 6);
+            g2.setColor(theme.divider);
+            g2.setStroke(new java.awt.BasicStroke(1f));
+            g2.drawOval(2, 2, d - 7, d - 7);
+            g2.setColor(theme.subtext);
+            g2.setStroke(new java.awt.BasicStroke(2f, java.awt.BasicStroke.CAP_ROUND,
+                    java.awt.BasicStroke.JOIN_ROUND));
+            int cx = d / 2, cy = d / 2;
+            g2.drawLine(cx - 5, cy - 2, cx, cy + 3);
+            g2.drawLine(cx, cy + 3, cx + 5, cy - 2);
             g2.dispose();
         }
     }
