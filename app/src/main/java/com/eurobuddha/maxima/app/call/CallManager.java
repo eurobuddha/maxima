@@ -402,7 +402,10 @@ public final class CallManager {
     // Internals
     // ------------------------------------------------------------------
 
-    private void ensureFactory() {
+    /** Synchronized: the call screen asks for eglContext() on the MAIN thread
+     *  while the state thread may be creating the factory for accept() - an
+     *  unsynchronized race builds two factories and leaks an EglBase. */
+    private synchronized void ensureFactory() {
         if (mFactory != null) {
             return;
         }
