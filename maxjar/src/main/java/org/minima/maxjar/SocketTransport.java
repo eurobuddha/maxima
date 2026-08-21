@@ -242,7 +242,16 @@ public class SocketTransport implements MaximaTransport {
 		}
 	}
 
-	private synchronized void sweep() {
+	private void sweep() {
+		java.util.List<String> toConnect = collectSweep();
+		// Off-lock: each connect() blocks up to CONNECT_TIMEOUT_MS, so it must
+		// NOT run under the monitor or one dead host stalls keepalives.
+		for (String host : toConnect) {
+			connect(host);
+		}
+	}
+
+	private synchronized java.util.List<String> collectSweep() {
 		long now = System.currentTimeMillis();
 		java.util.List<String> toConnect = new java.util.ArrayList<>();
 		for (String host : mHosts) {
@@ -263,10 +272,7 @@ public class SocketTransport implements MaximaTransport {
 				}
 			}
 		}
-		// Off-lock: each connect() blocks up to CONNECT_TIMEOUT_MS.
-		for (String host : toConnect) {
-			connect(host);
-		}
+		return toConnect;
 	}
 
 	private void connect(String zHostPort) {

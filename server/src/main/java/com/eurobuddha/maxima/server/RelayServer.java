@@ -904,6 +904,12 @@ public final class RelayServer {
             boolean firstProof = zConn.verifiedKeys.add(k);
             if (firstProof) {
                 log("route VERIFIED " + safe(k) + " conn=" + zConn.id);
+                // Reclaim the route from an unverified squatter that displaced
+                // us during our probe window - the proven owner wins.
+                Conn cur = mRoutes.get(k);
+                if (cur != zConn && (cur == null || !cur.verifiedKeys.contains(k))) {
+                    mRoutes.put(k, zConn);
+                }
             }
             if (seq == 0) {
                 // Possession probe answered - deliver held mail now that the
