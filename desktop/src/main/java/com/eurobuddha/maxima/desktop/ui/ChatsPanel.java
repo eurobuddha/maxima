@@ -94,16 +94,17 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mListPane.setBackground(t.card);
         mListPane.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, t.divider));
 
-        // The list's top band. Fixed to HEADER_H so it lines up EXACTLY with the
-        // conversation header band in the other pane (GridBag centers the pill).
+        // The list's top band — the SAME dark header colour and height as the
+        // conversation header in the other pane, so the two form one continuous
+        // top bar (no step). A translucent pill floats in it, phone header-style.
         JPanel searchWrap = new JPanel(new java.awt.GridBagLayout());
-        searchWrap.setBackground(t.card);
+        searchWrap.setBackground(t.header);
         searchWrap.setPreferredSize(new Dimension(10, HEADER_H));
         searchWrap.setBorder(new EmptyBorder(0, 12, 0, 12));
-        DKit.RoundPanel searchPill = k.round(t.input, 18);
+        DKit.RoundPanel searchPill = k.round(DKit.alpha(t.onHeader, 26), 16);
         searchPill.setLayout(new BoxLayout(searchPill, BoxLayout.X_AXIS));
-        searchPill.setBorder(new EmptyBorder(7, 12, 7, 12));
-        searchPill.add(new Icons.Btn(Icons.SEARCH, t.subtext, null, 20, 14, 1.8f));
+        searchPill.setBorder(new EmptyBorder(6, 12, 6, 12));
+        searchPill.add(new Icons.Btn(Icons.SEARCH, DKit.alpha(t.onHeader, 170), null, 20, 14, 1.8f));
         searchPill.add(Box.createRigidArea(new Dimension(8, 0)));
         mSearch = new JTextField() {   // paints a "Search chats" hint when empty
             protected void paintComponent(Graphics g) {
@@ -112,7 +113,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                             RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                    g2.setColor(DKit.alpha(t.subtext, 170));
+                    g2.setColor(DKit.alpha(t.onHeader, 150));
                     g2.setFont(getFont());
                     java.awt.FontMetrics fm = g2.getFontMetrics();
                     g2.drawString("Search chats", 1,
@@ -124,8 +125,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mSearch.setOpaque(false);
         mSearch.setBorder(new EmptyBorder(4, 0, 4, 0));
         mSearch.setFont(t.font(13f));
-        mSearch.setForeground(t.text);
-        mSearch.setCaretColor(t.text);
+        mSearch.setForeground(t.onHeader);
+        mSearch.setCaretColor(t.onHeader);
         mSearch.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { onSearch(); }

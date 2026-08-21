@@ -164,6 +164,7 @@ public final class DesktopNode {
             });
             DesktopEventLog.add("ENGINE: built-in");
         }
+        applySavedMls();   // re-pin a static MLS across restarts (phone parity)
     }
 
     private ChatEngine.Listener fanout() {
@@ -198,6 +199,62 @@ public final class DesktopNode {
     public MaximaIdentity identity() { return mIdentity; }
     public DesktopRelayStore relayStore() { return mRelayStore; }
     public Path dataDir()          { return mDataDir; }
+
+    // ---- location service (MLS), engine-agnostic ----
+
+    /** The current (rotating or pinned) location address, whichever engine. */
+    public String mlsLocationAddress() {
+        try {
+            return mJar ? mJarEngine.mlsHost()
+                    : (mNode != null ? mNode.mlsAddress() : "");
+        } catch (Exception e) { return ""; }
+    }
+
+    /** The permanent MAX# address (empty until a static MLS is set). */
+    public String permanentAddress() {
+        try {
+            return mJar ? mJarEngine.permanentAddress()
+                    : (mNode != null ? mNode.permanentAddress() : "");
+        } catch (Exception e) { return ""; }
+    }
+
+    public boolean isStaticMls() {
+        try { return mJar ? mJarEngine.isStaticMls()
+                : !Preferences.userRoot().node(PREFS).get("staticMls", "").isEmpty(); }
+        catch (Exception e) { return false; }
+    }
+
+    /** Pin a static MLS (Mx…@host:port), persisted and applied to the engine. */
+    public void setStaticMls(String m) {
+        try {
+            if (mJar) {
+                mJarEngine.setStaticMls(m);
+            } else if (mNode != null) {
+                mNode.setStaticMls(m);
+                new Thread(mNode::refreshContacts, "mls-refresh").start();
+            }
+            Preferences.userRoot().node(PREFS).put("staticMls", m == null ? "" : m);
+        } catch (Exception ignored) { }
+    }
+
+    /** Register with a static-MLS pool (classic engine only). */
+    public boolean registerWithPool(String apiBase, String serverId, String identity) {
+        try { return mJar && mJarEngine.registerWithPool(apiBase, serverId, identity); }
+        catch (Exception e) { return false; }
+    }
+
+    public boolean canRegisterPool() { return mJar; }
+
+    /** Re-apply the pinned static MLS after a (re)boot, so it survives restarts. */
+    private void applySavedMls() {
+        try {
+            String m = Preferences.userRoot().node(PREFS).get("staticMls", "");
+            if (!m.isEmpty()) {
+                if (mJar) mJarEngine.setStaticMls(m);
+                else if (mNode != null) mNode.setStaticMls(m);
+            }
+        } catch (Exception ignored) { }
+    }
 
     /** Connected host count, whichever engine is running. */
     public int connectedCount() {
