@@ -72,7 +72,88 @@ public class MaximaContactManager extends MessageProcessor {
 	public ArrayList<String> getAllowed(){
 		return mAllowedContacts;
 	}
-	
+
+	// ---------------------------------------------------------------
+	// User-deleted tombstones. Classic Maxima auto-heals contacts: a
+	// still-active peer's routine address refresh (intro=false) hits the
+	// checkcontact==null branch and re-adds a contact the user explicitly
+	// deleted, so deleted contacts "keep coming back". We keep a persistent set
+	// of user-deleted public keys and refuse to auto-re-add them - unless the
+	// user is actively (re)introducing (intro=true, or within a short grace
+	// window after the user tapped Add), which clears the tombstone.
+	// ---------------------------------------------------------------
+	private java.util.HashSet<String> mDeleted;
+	private volatile long mLastUserIntroduce = 0;
+
+	private static final String DELETED_FILE = "maxdeleted.txt";
+
+	private static String tkey(String zPublicKey) {
+		return zPublicKey == null ? "" : zPublicKey.trim().toUpperCase();
+	}
+
+	private synchronized java.util.HashSet<String> deleted() {
+		if(mDeleted == null) {
+			mDeleted = new java.util.HashSet<>();
+			try {
+				java.io.File f = org.minima.utils.MiniFile.createBaseFile(DELETED_FILE);
+				if(f.exists()) {
+					String all = new String(org.minima.utils.MiniFile.readCompleteFile(f),
+							java.nio.charset.StandardCharsets.UTF_8);
+					for(String line : all.split("\n")) {
+						String s = line.trim();
+						if(!s.isEmpty()) {
+							mDeleted.add(s.toUpperCase());
+						}
+					}
+				}
+			} catch(Exception e) {
+				MinimaLogger.log("maxdeleted load fail : "+e);
+			}
+		}
+		return mDeleted;
+	}
+
+	private synchronized void saveDeleted() {
+		try {
+			StringBuilder sb = new StringBuilder();
+			for(String s : deleted()) {
+				sb.append(s).append("\n");
+			}
+			java.io.File f = org.minima.utils.MiniFile.createBaseFile(DELETED_FILE);
+			org.minima.utils.MiniFile.writeDataToFile(f,
+					sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		} catch(Exception e) {
+			MinimaLogger.log("maxdeleted save fail : "+e);
+		}
+	}
+
+	/** Mark a public key as user-deleted (called from the delete path). */
+	public synchronized void addDeletedContact(String zPublicKey) {
+		if(zPublicKey == null || zPublicKey.isEmpty()) {
+			return;
+		}
+		if(deleted().add(tkey(zPublicKey))) {
+			saveDeleted();
+		}
+	}
+
+	/** Clear a tombstone (a deliberate re-add supersedes an earlier delete). */
+	public synchronized void clearDeletedContact(String zPublicKey) {
+		if(zPublicKey != null && deleted().remove(tkey(zPublicKey))) {
+			saveDeleted();
+		}
+	}
+
+	private synchronized boolean isDeletedContact(String zPublicKey) {
+		return deleted().contains(tkey(zPublicKey));
+	}
+
+	/** The user tapped Add/Introduce - open a short window in which an inbound
+	 *  contact (even one previously deleted) is welcome again. */
+	public void noteUserIntroduce() {
+		mLastUserIntroduce = System.currentTimeMillis();
+	}
+
 	public JSONObject getMaximaContactInfo(boolean zIntro, boolean zDelete) {
 		JSONObject ret = new JSONObject();
 		
@@ -196,7 +277,21 @@ public class MaximaContactManager extends MessageProcessor {
 			mxcontact.setLastSeen(System.currentTimeMillis());
 			
 			if(checkcontact == null) {
-				
+
+				//Did the user explicitly DELETE this contact? A routine address
+				//refresh (intro=false) must not silently re-add it - that is the
+				//"deleted contacts keep coming back" bug. A real (re)introduction
+				//- intro=true, or an inbound within the grace window right after
+				//the user tapped Add - is allowed and clears the tombstone.
+				boolean recentlyInvited =
+						(System.currentTimeMillis() - mLastUserIntroduce) < 120_000;
+				if(isDeletedContact(publickey) && !intro && !recentlyInvited) {
+					MinimaLogger.log("Ignoring auto re-add of deleted contact : "+publickey);
+					return;
+				}
+				//We are (re)adding it now - a live contact supersedes the tombstone.
+				clearDeletedContact(publickey);
+
 				//Are we allowing all contact requests
 				if(!mEnableOutsideContactRequest) {
 					

@@ -590,6 +590,10 @@ public final class JarEngine implements ChatPort {
 
 	@Override
 	public void introduce(String zPeerAddress, boolean zIntro) throws Exception {
+		// A deliberate user (re)introduction opens a grace window so a contact
+		// the user previously deleted is welcome again (their reply arrives as a
+		// routine intro=false message, which the tombstone would otherwise block).
+		mManager.getContactsManager().noteUserIntroduce();
 		String address = zPeerAddress;
 		// A MAX# permanent address resolves to the peer's CURRENT address via
 		// their static MLS first - that is the whole point of it.
@@ -615,6 +619,9 @@ public final class JarEngine implements ChatPort {
 		if (mc == null) {
 			return false;
 		}
+		// Tombstone the key so classic Maxima's auto-heal (a still-active peer's
+		// address refresh) can't silently re-add a contact the user deleted.
+		mManager.getContactsManager().addDeletedContact(mc.getPublicKey());
 		Message del = new Message(MaximaContactManager.MAXCONTACTS_DELETECONTACT);
 		del.addInteger("id", mc.getUID());
 		mManager.getContactsManager().PostMessage(del);
