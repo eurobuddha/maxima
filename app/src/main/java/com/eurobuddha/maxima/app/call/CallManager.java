@@ -328,10 +328,15 @@ public final class CallManager {
 
     private void createPeer() {
         List<PeerConnection.IceServer> servers = new ArrayList<>();
-        // Interim public STUN; a fleet STUN service replaces this later. Same
-        // WiFi never needs it - host candidates connect directly.
+        // OUR fleet answers STUN (relay 0.4.22, udp on the relay port) - no
+        // third party learns who is calling. Same WiFi never needs it: host
+        // candidates connect directly. Three relays for redundancy.
         servers.add(PeerConnection.IceServer
-                .builder("stun:stun.l.google.com:19302").createIceServer());
+                .builder("stun:95.179.179.181:9501").createIceServer());
+        servers.add(PeerConnection.IceServer
+                .builder("stun:65.109.31.226:9501").createIceServer());
+        servers.add(PeerConnection.IceServer
+                .builder("stun:45.77.246.226:9501").createIceServer());
         PeerConnection.RTCConfiguration cfg =
                 new PeerConnection.RTCConfiguration(servers);
         cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;

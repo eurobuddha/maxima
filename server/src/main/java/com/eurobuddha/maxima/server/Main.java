@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.21";
+    public static final String VERSION = "0.4.22";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -160,6 +160,15 @@ public final class Main {
                 "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
                 s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory));
         runtime.start();
+
+        // STUN on the same port number, UDP side: phones discover their public
+        // address for calls from OUR fleet instead of a third party. Disable
+        // with MAXIMA_STUN=false.
+        if (!"false".equalsIgnoreCase(System.getenv("MAXIMA_STUN"))) {
+            Thread stun = new Thread(new MiniStun(port), "ministun");
+            stun.setDaemon(true);
+            stun.start();
+        }
 
         System.out.println("  listening on 0.0.0.0:" + port);
         System.out.println();

@@ -90,9 +90,21 @@ public final class JarMigration {
 				if (c.publicKey == null || c.publicKey.isEmpty()) {
 					continue;
 				}
-				store.put("contacts",
-						com.eurobuddha.maxima.core.identity.Keys.norm(c.publicKey),
-						MaximaNode.contactToJson(c));
+				String key = com.eurobuddha.maxima.core.identity.Keys.norm(c.publicKey);
+				// The jar has no notion of the built-in engine's myAddress
+				// (which of MY addresses this peer was told) - keep the old
+				// record's value instead of blanking it.
+				String prev = store.get("contacts", key);
+				if (prev != null && (c.myAddress == null || c.myAddress.isEmpty())) {
+					try {
+						Contact old = MaximaNode.contactFromJson(prev);
+						if (old != null) {
+							c.myAddress = old.myAddress;
+						}
+					} catch (Exception ignored) {
+					}
+				}
+				store.put("contacts", key, MaximaNode.contactToJson(c));
 				n++;
 			}
 		} catch (Exception e) {
