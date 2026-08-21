@@ -221,6 +221,8 @@ public final class MaximaService extends Service {
                 com.eurobuddha.maxima.app.chat.ChatHub.dispatchGroup(g);
             }
         });
+        chat.setCallListener((from, cm) ->
+                com.eurobuddha.maxima.app.call.CallManager.get(this).onSignal(from, cm));
         sChat = chat;
         com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
         com.eurobuddha.maxima.app.chat.Pssst.ensureAudible(this);
@@ -375,6 +377,8 @@ public final class MaximaService extends Service {
                 com.eurobuddha.maxima.app.chat.ChatHub.dispatchGroup(g);
             }
         });
+        chat.setCallListener((from, cm) ->
+                com.eurobuddha.maxima.app.call.CallManager.get(this).onSignal(from, cm));
         sChat = chat;
         com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
         com.eurobuddha.maxima.app.chat.Pssst.ensureAudible(this);

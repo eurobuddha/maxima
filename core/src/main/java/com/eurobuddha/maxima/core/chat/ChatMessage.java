@@ -43,6 +43,10 @@ public final class ChatMessage {
     /** Silent control: the sender's WALLET receive address, so a contact can be
      *  paid without pasting an address. Never shown as a message. */
     public static final int TYPE_ADDRESS = 5;
+    /** Silent control: call signaling (offer/answer/ice/bye/busy). Never a
+     *  bubble, never a receipt - kind rides in {@code state}, call id in
+     *  {@code ref}, SDP or candidate payload in {@code body}. */
+    public static final int TYPE_CALL = 7;
     /** A payment made to this contact, shown in-thread as a payment bubble. */
     public static final int TYPE_PAYMENT = 6;
 
@@ -132,6 +136,15 @@ public final class ChatMessage {
         m.memo = zMemo;
         m.txid = zTxid;
         m.time = zTime;
+        return m;
+    }
+
+    public static ChatMessage call(String zCallId, String zKind, String zPayload) {
+        ChatMessage m = new ChatMessage();
+        m.type = TYPE_CALL;
+        m.ref = zCallId;
+        m.state = zKind;
+        m.body = zPayload == null ? "" : zPayload;
         return m;
     }
 

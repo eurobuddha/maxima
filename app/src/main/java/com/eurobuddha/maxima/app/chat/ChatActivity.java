@@ -208,8 +208,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         });
         findViewById(R.id.btn_chat_attach).setOnClickListener(v -> attachSheet());
         findViewById(R.id.btn_chat_camera).setOnClickListener(v -> takePhoto());
-        findViewById(R.id.btn_chat_video).setOnClickListener(v -> toast("Calls are coming soon"));
-        findViewById(R.id.btn_chat_call).setOnClickListener(v -> toast("Calls are coming soon"));
+        findViewById(R.id.btn_chat_video).setOnClickListener(v ->
+                toast("Video calls are coming soon"));
+        findViewById(R.id.btn_chat_call).setOnClickListener(v -> startCall());
         findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> {
             mInput.requestFocus();
             android.view.inputmethod.InputMethodManager imm =
@@ -771,6 +772,41 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }, "chat-media").start();
     }
 
+    /** Voice call: 1:1, Parlons-capable peers only, mic permission required. */
+    private void startCall() {
+        ChatEngine chat = MaximaService.chat();
+        com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
+        if (chat == null || node == null) {
+            toast("Transport not running");
+            return;
+        }
+        if (chat.group(mConversation) != null) {
+            toast("Group calls are not supported yet");
+            return;
+        }
+        Contact c = node.contact(mConversation);
+        if (c == null) {
+            return;
+        }
+        if (c.isClassic()) {
+            toast("Calls need Parlons on both ends");
+            return;
+        }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},
+                    REQ_CALL_AUDIO);
+            return;
+        }
+        android.content.Intent i = new android.content.Intent(this,
+                com.eurobuddha.maxima.app.call.CallActivity.class);
+        i.putExtra(com.eurobuddha.maxima.app.call.CallActivity.EXTRA_PEER, mConversation);
+        i.putExtra(com.eurobuddha.maxima.app.call.CallActivity.EXTRA_OUTGOING, true);
+        startActivity(i);
+    }
+
+    private static final int REQ_CALL_AUDIO = 74;
+
     // ------------------------------------------------------------------
     // Voice notes
     // ------------------------------------------------------------------
@@ -804,6 +840,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (zReq == REQ_RECORD_AUDIO && zGrants.length > 0
                 && zGrants[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             recordVoiceDialog();
+        }
+        if (zReq == REQ_CALL_AUDIO && zGrants.length > 0
+                && zGrants[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            startCall();
         }
     }
 

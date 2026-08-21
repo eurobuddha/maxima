@@ -948,6 +948,26 @@ public final class ChatEngine {
      *
      * @return true if it was ours
      */
+    /** Call signaling tap - offer/answer/ice/bye arrive here, nowhere else. */
+    public interface CallSignals {
+        void onCallSignal(String zFromKey, ChatMessage zMsg);
+    }
+
+    private volatile CallSignals mCallSignals;
+
+    public void setCallListener(CallSignals zListener) {
+        mCallSignals = zListener;
+    }
+
+    /**
+     * Fire-and-forget call signal - no resend ladder: stale signaling is worse
+     * than lost signaling (the caller keeps ringing / retries instead).
+     */
+    public void sendCallSignal(Contact zTo, ChatMessage zSignal) throws Exception {
+        mNode.sendToContact(zTo, ChatMessage.APPLICATION,
+                zSignal.encode().getBytes(StandardCharsets.UTF_8));
+    }
+
     public boolean onInbound(MaximaMessage zMsg) {
         return onInbound(zMsg, "");
     }
@@ -982,6 +1002,16 @@ public final class ChatEngine {
         }
 
         switch (cm.type) {
+            case ChatMessage.TYPE_CALL:
+                // Signaling only: no history entry, no receipt, no notification.
+                CallSignals cs = mCallSignals;
+                if (cs != null) {
+                    try {
+                        cs.onCallSignal(from, cm);
+                    } catch (Exception ignored) {
+                    }
+                }
+                return true;
             case ChatMessage.TYPE_TEXT:
                 handleText(from, cm);
                 return true;

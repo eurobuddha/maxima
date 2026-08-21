@@ -10,8 +10,8 @@ android {
         applicationId "com.eurobuddha.maxima.app"
         minSdk 28
         targetSdk 35
-        versionCode 567
-        versionName "0.5.67"
+        versionCode 568
+        versionName "0.5.68"
     }
 
     signingConfigs {
@@ -55,6 +55,8 @@ android {
 }
 
 dependencies {
+    // WebRTC for voice calls - maintained prebuilt of libwebrtc (audio+video).
+    implementation 'io.getstream:stream-webrtc-android:1.1.1'
     implementation project(':core')
     implementation project(':server')   // RelayRuntime — the phone can run a full relay when charging
     implementation project(':maxjar')   // classic Maxima extracted whole — the jar engine (hidden toggle)
