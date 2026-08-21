@@ -100,8 +100,13 @@ final class VoiceNotes {
             return out;
         }
 
-        /** Stop and return the WAV bytes (null on failure). */
+        private boolean stopped;
+
+        /** Stop and return the WAV bytes (null on failure). Idempotent: a second
+         *  call returns null rather than re-emitting the same buffer. */
         byte[] stopToWav() {
+            if (stopped) return null;
+            stopped = true;
             running = false;
             try { if (thread != null) thread.join(500); } catch (InterruptedException ignored) { }
             try { if (line != null) { line.stop(); line.close(); } } catch (Exception ignored) { }
@@ -210,8 +215,27 @@ final class VoiceNotes {
         d.setSize(320, 200);
         d.setLocationRelativeTo(owner);
 
-        final Timer blink = new Timer(500, null);
         final boolean[] on = {true};
+        // finish/cancel must be idempotent AND stop the tick timer — otherwise the
+        // leaked 100 ms timer keeps firing on the disposed dialog, and once
+        // wall-clock passes MAX_SECONDS the auto-stop branch re-sends the SAME WAV
+        // ~10×/second forever. `done` guards it; `tickRef` lets the timer stop
+        // itself from inside its own lambda.
+        final javax.swing.Timer[] tickRef = new javax.swing.Timer[1];
+        final boolean[] done = {false};
+        final Runnable finishOnce = () -> {
+            if (done[0]) return;
+            done[0] = true;
+            if (tickRef[0] != null) tickRef[0].stop();
+            finish(rec, d, sink);
+        };
+        final Runnable cancelOnce = () -> {
+            if (done[0]) return;
+            done[0] = true;
+            if (tickRef[0] != null) tickRef[0].stop();
+            rec.stopToWav();
+            d.dispose();
+        };
         Timer tick = new Timer(100, e -> {
             long ms = rec.elapsedMs();
             timer.setText((ms / 60000) + ":" + String.format("%02d", (ms / 1000) % 60));
@@ -220,22 +244,25 @@ final class VoiceNotes {
             dot.setForeground(on[0] ? new Color(0xE0, 0x52, 0x4D)
                     : new Color(0xE0, 0x52, 0x4D, 60));
             if (ms >= MAX_SECONDS * 1000L) {   // auto-stop at the cap
-                finish(rec, d, sink);
+                finishOnce.run();
             }
         });
+        tickRef[0] = tick;
         tick.start();
 
-        send.onClick(() -> finish(rec, d, sink));
-        cancel.onClick(() -> { rec.stopToWav(); tick.stop(); d.dispose(); });
+        send.onClick(finishOnce::run);
+        cancel.onClick(cancelOnce::run);
         d.addWindowListener(new java.awt.event.WindowAdapter() {
-            public void windowClosing(java.awt.event.WindowEvent e) { rec.stopToWav(); tick.stop(); }
+            public void windowClosing(java.awt.event.WindowEvent e) { cancelOnce.run(); }
         });
         d.setVisible(true);
     }
 
     private static void finish(Recorder rec, JDialog d, Sink sink) {
-        String caption = rec.caption();
+        // Stop the recorder FIRST, then read the caption — otherwise caption()
+        // iterates `samples` while the rec thread is still appending to it (CME).
         byte[] wav = rec.stopToWav();
+        String caption = rec.caption();
         d.dispose();
         if (wav != null && wav.length > 0) {
             sink.onRecorded(wav, caption);
