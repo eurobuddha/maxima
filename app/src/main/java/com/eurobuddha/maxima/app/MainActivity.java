@@ -205,7 +205,15 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         // All four are cheap and hold live state; recreating them on every swipe
         // would drop scroll position and re-run every lookup.
         mPager.setOffscreenPageLimit(4);
-        ((TabLayout) findViewById(R.id.tabs)).setupWithViewPager(mPager);
+        TabLayout tabs = findViewById(R.id.tabs);
+        tabs.setupWithViewPager(mPager);
+        // Settings lives in the overflow menu now - four tabs read better than
+        // five. The page stays in the pager (menu + edge-swipe reach it), only
+        // its tab is hidden.
+        View settingsTab = ((android.view.ViewGroup) tabs.getChildAt(0)).getChildAt(4);
+        if (settingsTab != null) {
+            settingsTab.setVisibility(View.GONE);
+        }
 
         mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override
