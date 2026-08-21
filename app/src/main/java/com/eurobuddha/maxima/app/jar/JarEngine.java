@@ -112,8 +112,21 @@ public final class JarEngine implements ChatPort {
 		}
 		if (!mManager.isInited()) {
 			// Never run an uninitialised manager - publicKeyHex() etc. would
-			// NPE. Fail the boot so the service falls back to the built-in
-			// engine instead of becoming a silent zombie.
+			// NPE. Clean the classic process-globals we set above BEFORE
+			// throwing, so a later in-process jar boot starts fresh instead of
+			// re-initialising an already-initialised singleton.
+			try {
+				mTransport.stop();
+			} catch (Exception ignored) {
+			}
+			try {
+				MinimaDB.clear();
+			} catch (Exception ignored) {
+			}
+			try {
+				Main.clear();
+			} catch (Exception ignored) {
+			}
 			throw new IllegalStateException("jar engine did not initialise in 30s");
 		}
 		mTransport.start();

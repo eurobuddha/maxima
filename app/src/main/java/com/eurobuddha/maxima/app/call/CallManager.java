@@ -265,11 +265,11 @@ public final class CallManager {
                     if (zMsg.ref.equals(mLastEndedCallId)) {
                         return;   // re-delivered signaling for an ended call
                     }
-                    // A duplicate of the call we are ALREADY ringing (mailbox
-                    // re-push) must be a no-op - NOT a busy, which would kill
-                    // the caller's live call while we ring.
-                    if (zMsg.ref.equals(mCallId)
-                            && mState == State.INCOMING_RINGING) {
+                    // A duplicate offer for the call we are already handling
+                    // (ringing, connecting, OR live) must be a no-op - a busy
+                    // reply would make the caller's busy handler end the live
+                    // call. Only a DIFFERENT callId while busy gets a busy.
+                    if (zMsg.ref.equals(mCallId)) {
                         return;
                     }
                     if (mState != State.IDLE && mState != State.ENDED) {
