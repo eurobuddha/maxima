@@ -1247,6 +1247,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         buttons.setOpaque(false);
         buttons.setLayout(new BoxLayout(buttons, BoxLayout.X_AXIS));
         buttons.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton how = k.ghostButton("How groups work");
+        how.onClick(() -> DesktopExplain.show(this, "groups"));
         DKit.HoverButton cancel = k.ghostButton("Cancel");
         cancel.onClick(() -> d.dispose());
         DKit.HoverButton create = k.primaryButton("Create");

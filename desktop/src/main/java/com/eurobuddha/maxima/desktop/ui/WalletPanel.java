@@ -219,7 +219,23 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         mPaneHolder.add(k.vgap(14));
 
         // Sends remaining (one-time-signature budget) — the wallet's life.
-        mPaneHolder.add(k.sectionLabel("Sends remaining"));
+        JPanel usesHead = new JPanel(new BorderLayout());
+        usesHead.setOpaque(false);
+        usesHead.setAlignmentX(Component.LEFT_ALIGNMENT);
+        usesHead.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        usesHead.add(k.sectionLabel("Sends remaining"), BorderLayout.WEST);
+        JLabel usesHelp = new JLabel("?");
+        usesHelp.setFont(t.semibold(13f));
+        usesHelp.setForeground(t.subtext);
+        usesHelp.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        usesHelp.setBorder(new EmptyBorder(0, 8, 0, 6));
+        usesHelp.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                DesktopExplain.show(WalletPanel.this, "keyuses");
+            }
+        });
+        usesHead.add(usesHelp, BorderLayout.EAST);
+        mPaneHolder.add(usesHead);
         mPaneHolder.add(k.vgap(8));
         DKit.RoundPanel uses = k.card();
         int used = 0;
