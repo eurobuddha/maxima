@@ -267,16 +267,53 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         bal.setForeground(t.text);
         row.add(bal, BorderLayout.EAST);
         card.add(row);
+        card.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        card.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) { showTokenDetail(tk); }
+        });
         return card;
     }
+
+    private void showTokenDetail(org.json.JSONObject tk) {
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        body.add(k.kvLine("Sendable", tk.optString("sendable", tk.optString("confirmed", "0"))));
+        body.add(k.kvLine("Confirmed", tk.optString("confirmed", "0")));
+        body.add(k.kvLine("Pending", tk.optString("unconfirmed", "0")));
+        if (tk.has("coins")) body.add(k.kvLine("Coins", tk.optString("coins", "0")));
+        if (tk.has("total")) body.add(k.kvLine("Total supply", tk.optString("total", "")));
+        body.add(k.vgap(10));
+        body.add(k.copyField("Token ID", tk.optString("tokenid", "0x00"), false));
+        dialog(tokenName(tk), body, 440);
+    }
+
+    private int mHistFilter = 0;   // 0 all · 1 sent · 2 received
 
     private void buildHistory() {
         mPaneHolder.add(k.sectionLabel("Transactions"));
         mPaneHolder.add(k.vgap(8));
-        List<DesktopWalletLedger.Row> rows = mLedger == null ? new ArrayList<>() : mLedger.list();
+        JPanel chips = rowX();
+        chips.add(filterChip("All", 0));
+        chips.add(Box.createRigidArea(new Dimension(8, 0)));
+        chips.add(filterChip("Sent", 1));
+        chips.add(Box.createRigidArea(new Dimension(8, 0)));
+        chips.add(filterChip("Received", 2));
+        chips.add(Box.createHorizontalGlue());
+        mPaneHolder.add(chips);
+        mPaneHolder.add(k.vgap(10));
+
+        List<DesktopWalletLedger.Row> all = mLedger == null ? new ArrayList<>() : mLedger.list();
+        List<DesktopWalletLedger.Row> rows = new ArrayList<>();
+        for (DesktopWalletLedger.Row r : all) {
+            if (mHistFilter == 1 && !r.sent) continue;
+            if (mHistFilter == 2 && r.sent) continue;
+            rows.add(r);
+        }
         if (rows.isEmpty()) {
             DKit.RoundPanel c = k.card();
-            c.add(k.sub("No transactions yet. Sends and receipts appear here."));
+            c.add(k.sub(mHistFilter == 0 ? "No transactions yet. Sends and receipts appear here."
+                    : "Nothing here yet."));
             mPaneHolder.add(c);
             return;
         }
@@ -289,10 +326,29 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         mPaneHolder.add(card);
     }
 
+    private JComponent filterChip(String label, int idx) {
+        boolean on = mHistFilter == idx;
+        DKit.RoundPanel chip = k.round(on ? t.accent : t.input, 999);
+        chip.setLayout(new BoxLayout(chip, BoxLayout.X_AXIS));
+        chip.setBorder(new EmptyBorder(6, 14, 6, 14));
+        JLabel l = new JLabel(label);
+        l.setFont(t.semibold(11.5f));
+        l.setForeground(on ? t.onAccent : t.subtext);
+        chip.add(l);
+        chip.setMaximumSize(chip.getPreferredSize());
+        chip.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        chip.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) { mHistFilter = idx; rebuildPanes(); }
+        });
+        return chip;
+    }
+
     private JComponent historyRow(DesktopWalletLedger.Row r) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(9, 6, 9, 6));
+        row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        row.add(directionDisc(r.sent), BorderLayout.WEST);
         JPanel mid = new JPanel();
         mid.setOpaque(false);
         mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
@@ -312,7 +368,64 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
         amt.setFont(t.bold(13.5f));
         amt.setForeground(r.sent ? t.text : t.success);
         row.add(amt, BorderLayout.EAST);
+        // RULE 1: the row truncates the address; the full to/from address + the
+        // full transaction id are one click away in the detail sheet.
+        row.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) { showHistoryDetail(r); }
+        });
         return row;
+    }
+
+    /** A 40px disc with an up (sent) / down (received) arrow. */
+    private JComponent directionDisc(boolean sent) {
+        final Color c = sent ? t.text : t.success;
+        JComponent disc = new JComponent() {
+            protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(DKit.alpha(c, 28));
+                g2.fillOval(2, 2, 36, 36);
+                g2.setColor(c);
+                g2.setStroke(new java.awt.BasicStroke(2f, java.awt.BasicStroke.CAP_ROUND,
+                        java.awt.BasicStroke.JOIN_ROUND));
+                int cx = 20, cy = 20;
+                if (sent) {
+                    g2.drawLine(cx, cy + 6, cx, cy - 6);
+                    g2.drawLine(cx, cy - 6, cx - 4, cy - 2);
+                    g2.drawLine(cx, cy - 6, cx + 4, cy - 2);
+                } else {
+                    g2.drawLine(cx, cy - 6, cx, cy + 6);
+                    g2.drawLine(cx, cy + 6, cx - 4, cy + 2);
+                    g2.drawLine(cx, cy + 6, cx + 4, cy + 2);
+                }
+                g2.dispose();
+            }
+        };
+        disc.setPreferredSize(new Dimension(40, 40));
+        return disc;
+    }
+
+    private void showHistoryDetail(DesktopWalletLedger.Row r) {
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        body.add(k.kvLine("Direction", r.sent ? "Sent" : "Received"));
+        body.add(k.kvLine("Amount", (r.sent ? "-" : "+") + r.amount + " " + r.token));
+        body.add(k.kvLine("When", new java.text.SimpleDateFormat("d MMM yyyy · HH:mm")
+                .format(new java.util.Date(r.time))));
+        body.add(k.vgap(10));
+        body.add(k.copyField(r.sent ? "To" : "From",
+                r.who == null || r.who.isEmpty() ? "—" : r.who, false));
+        if (r.tokenid != null && !r.tokenid.isEmpty()) {
+            body.add(k.vgap(8));
+            body.add(k.copyField("Token ID", r.tokenid, false));
+        }
+        if (r.txid != null && !r.txid.isEmpty()) {
+            body.add(k.vgap(8));
+            body.add(k.copyField("Transaction ID", r.txid, false));
+        }
+        dialog("Transaction", body, 460);
     }
 
     // ---- send / receive ----
