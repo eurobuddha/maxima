@@ -166,6 +166,13 @@ public final class RelayServer {
     }
 
     private final AtomicLong mConnSeq = new AtomicLong();
+    /** Bounded worker pool for mailbox drains - keeps blocking writes / any
+     *  legacy re-mine off the single maintain thread. */
+    private final java.util.concurrent.ExecutorService mDrainExec =
+            new java.util.concurrent.ThreadPoolExecutor(0, 4, 30,
+                    java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.LinkedBlockingQueue<>(256),
+                    new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy());
     private final AtomicLong mRelayed = new AtomicLong();
 
     /** Units that arrived WITHOUT the protocol's minimum proof-of-work. */
@@ -626,7 +633,7 @@ public final class RelayServer {
             // registered here - that is the mailbox-flood attack: messages to
             // a million random keys, none of which will ever collect.
             if (mKnownRoutes.containsKey(to)) {
-                Mailbox.Result r = mMailbox.store(to, Codec.serialise(pkg));
+                Mailbox.Result r = mMailbox.store(to, Codec.serialise(unit));
                 if (r == Mailbox.Result.STORED || r == Mailbox.Result.DUPLICATE) {
                     mStored.incrementAndGet();
                     // OK on the wire: the mailbox WILL deliver on reconnect, so
@@ -965,9 +972,19 @@ public final class RelayServer {
      * carrier the sender used, reconstructed so the recipient's checkValidTxPoW
      * passes exactly as if we had forwarded it live.
      */
-    private byte[] reWrapForDelivery(byte[] zStoredPackage) throws Exception {
-        MaximaPackage pkg = Codec.deserialise(new MaximaPackage(), zStoredPackage);
-        return Codec.serialise(MaxTxPoW.create(pkg, System.currentTimeMillis()));
+    /** Stored form is the ALREADY-MINED MaxTxPoW - deliver it verbatim, no
+     *  re-mining (which on the shared thread was an attacker-driven CPU
+     *  amplifier, worst on the Pi). Legacy items stored as a bare
+     *  MaximaPackage (pre-0.4.24, aging out within the 7-day TTL) fall back to
+     *  the old wrap-and-mine path. */
+    private byte[] reWrapForDelivery(byte[] zStored) throws Exception {
+        try {
+            MaxTxPoW.fromBytes(zStored);   // parses => already a full unit
+            return zStored;
+        } catch (Exception legacy) {
+            MaximaPackage pkg = Codec.deserialise(new MaximaPackage(), zStored);
+            return Codec.serialise(MaxTxPoW.create(pkg, System.currentTimeMillis()));
+        }
     }
 
     /** Per-destination relay rate limit. */
@@ -1068,7 +1085,12 @@ public final class RelayServer {
                     && c.routingKey != null
                     && c.verifiedKeys.contains(c.routingKey)) {
                 c.lastDrain = zNow;
-                drainMailbox(c, c.routingKey);
+                final Conn fc = c;
+                final String fk = c.routingKey;
+                // Off the maintain thread: a blocking write to a slow client
+                // (no write timeout on a socket) must not stall keepalives to
+                // everyone else.
+                mDrainExec.execute(() -> drainMailbox(fc, fk));
             }
         }
     }
