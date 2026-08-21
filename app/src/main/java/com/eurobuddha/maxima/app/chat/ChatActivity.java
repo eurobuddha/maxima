@@ -214,14 +214,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         findViewById(R.id.btn_chat_video).setOnClickListener(v ->
                 toast("Video calls are coming soon"));
         findViewById(R.id.btn_chat_call).setOnClickListener(v -> startCall());
-        findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> {
-            mInput.requestFocus();
-            android.view.inputmethod.InputMethodManager imm =
-                    getSystemService(android.view.inputmethod.InputMethodManager.class);
-            if (imm != null) {
-                imm.showSoftInput(mInput, 0);
-            }
-        });
+        findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> showEmojiPanel());
 
         // The FAB shows a mic when the field is empty and the send plane once
         // there's text (WhatsApp), swapping with a small punch.
@@ -809,6 +802,63 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private static final int REQ_CALL_AUDIO = 74;
+
+    // ------------------------------------------------------------------
+    // Emoji panel
+    // ------------------------------------------------------------------
+
+    private static final String[][] EMOJI = {
+            {"Smileys", "\ud83d\ude00 \ud83d\ude02 \ud83e\udd23 \ud83d\ude0a \ud83d\ude07 \ud83d\ude09 \ud83d\ude0d \ud83e\udd70 \ud83d\ude18 \ud83d\ude1c \ud83e\udd2a \ud83e\udd14 \ud83e\udd10 \ud83d\ude10 \ud83d\ude44 \ud83d\ude2c \ud83d\ude34 \ud83e\udd75 \ud83e\udd76 \ud83e\udd2f \ud83d\ude33 \ud83e\udd7a \ud83d\ude22 \ud83d\ude2d \ud83d\ude21 \ud83e\udd2c \ud83e\udd22 \ud83e\udd73 \ud83d\ude0e \ud83e\udd13 \ud83d\ude48 \ud83d\ude49 \ud83d\ude4a \ud83d\udc80 \ud83e\udd21 \ud83d\udca9"},
+            {"Gestures", "\ud83d\udc4d \ud83d\udc4e \ud83d\udc4c \u270c\ufe0f \ud83e\udd1e \ud83e\udd1f \ud83e\udd18 \ud83d\udc4a \u270a \ud83d\udc4f \ud83d\ude4c \ud83d\udc50 \ud83e\udd32 \ud83e\udd1d \ud83d\ude4f \ud83d\udcaa \u261d\ufe0f \ud83d\udc46 \ud83d\udc47 \ud83d\udc48 \ud83d\udc49 \ud83d\udd90\ufe0f \ud83e\udd19 \ud83d\udc4b"},
+            {"Hearts", "\u2764\ufe0f \ud83e\udde1 \ud83d\udc9b \ud83d\udc9a \ud83d\udc99 \ud83d\udc9c \ud83d\udda4 \ud83e\udd0d \ud83e\udd0e \ud83d\udc94 \u2763\ufe0f \ud83d\udc95 \ud83d\udc9e \ud83d\udc93 \ud83d\udc97 \ud83d\udc96 \ud83d\udc98 \ud83d\udc9d \ud83d\udc8b \ud83d\udc8c"},
+            {"Animals & nature", "\ud83d\udc36 \ud83d\udc31 \ud83d\udc2d \ud83d\udc30 \ud83e\udd8a \ud83d\udc3b \ud83d\udc3c \ud83d\udc28 \ud83d\udc2f \ud83e\udd81 \ud83d\udc2e \ud83d\udc37 \ud83d\udc35 \ud83d\udc14 \ud83d\udc27 \ud83e\udd86 \ud83e\udd85 \ud83e\udd89 \ud83e\udd8b \ud83d\udc1d \ud83d\udc22 \ud83d\udc19 \ud83d\udc33 \ud83d\udc2c \ud83c\udf35 \ud83c\udf32 \ud83c\udf3b \ud83c\udf39 \ud83c\udf42 \u2600\ufe0f \ud83c\udf19 \u2b50 \ud83c\udf08 \u26a1 \ud83d\udd25 \u2744\ufe0f \ud83c\udf0a"},
+            {"Food & drink", "\ud83c\udf4e \ud83c\udf4c \ud83c\udf47 \ud83c\udf53 \ud83c\udf4b \ud83e\udd51 \ud83c\udf55 \ud83c\udf54 \ud83c\udf5f \ud83c\udf2d \ud83c\udf2e \ud83c\udf5c \ud83c\udf63 \ud83c\udf66 \ud83c\udf70 \ud83c\udf6b \ud83c\udf7f \u2615 \ud83c\udf7a \ud83c\udf77 \ud83e\udd42 \ud83c\udf75"},
+            {"Objects & symbols", "\ud83c\udf89 \ud83c\udf81 \ud83c\udf88 \u26bd \ud83c\udfc0 \ud83c\udfb8 \ud83c\udfae \ud83c\udfb2 \ud83d\ude97 \u2708\ufe0f \ud83d\ude80 \u26f5 \ud83c\udfe0 \ud83d\udca1 \ud83d\udd11 \ud83d\udcb0 \ud83d\udc8e \u23f0 \ud83d\udcf1 \ud83d\udcbb \ud83c\udfa7 \ud83d\udcf7 \u2705 \u274c \u2757 \u2753 \ud83d\udcaf \ud83c\udf96\ufe0f \ud83c\udfc6 \ud83d\udea9"},
+    };
+
+    /** Bottom-sheet emoji grid: tap inserts at the cursor, panel stays open. */
+    private void showEmojiPanel() {
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(10), dp(8), dp(10), dp(12));
+        scroll.addView(box);
+
+        final android.app.Dialog dlg = new android.app.Dialog(this);
+        for (String[] cat : EMOJI) {
+            TextView label = new TextView(this);
+            label.setText(cat[0].toUpperCase(java.util.Locale.UK));
+            label.setTextSize(11);
+            label.setTypeface(null, android.graphics.Typeface.BOLD);
+            label.setTextColor(getResources().getColor(R.color.ux_subtext));
+            label.setPadding(dp(8), dp(10), 0, dp(2));
+            box.addView(label);
+
+            android.widget.GridLayout grid = new android.widget.GridLayout(this);
+            grid.setColumnCount(8);
+            for (String e : cat[1].split(" ")) {
+                TextView cell = new TextView(this);
+                cell.setText(e);
+                cell.setTextSize(26);
+                cell.setGravity(Gravity.CENTER);
+                cell.setPadding(dp(6), dp(6), dp(6), dp(6));
+                cell.setOnClickListener(v -> {
+                    int at = Math.max(0, mInput.getSelectionStart());
+                    mInput.getText().insert(at, e);
+                });
+                grid.addView(cell);
+            }
+            box.addView(grid);
+        }
+        dlg.setContentView(scroll);
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            w.setGravity(Gravity.BOTTOM);
+            w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(340));
+            w.setBackgroundDrawableResource(R.color.ux_bg);
+        }
+        dlg.show();
+    }
 
     // ------------------------------------------------------------------
     // Voice notes
