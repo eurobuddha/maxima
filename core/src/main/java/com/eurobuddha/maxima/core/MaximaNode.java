@@ -1295,7 +1295,14 @@ public final class MaximaNode implements ChatPort {
         // all-addresses-dead fan-out is how an outbound path stays invisibly
         // broken for minutes while inbound flows.
         StringBuilder fails = new StringBuilder();
+        // Expand each stored address into concrete sendable forms. A well-formed
+        // Mx…@host:port passes through unchanged; a BARE / hostless one (classic
+        // slave mode advertises "Mx…@") is re-homed onto relays we can reach.
+        java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>();
         for (String addr : zContact.addresses) {
+            targets.addAll(routableForms(addr, zContact));
+        }
+        for (String addr : targets) {
             try {
                 MaximaSender.Result r = sendRaw(addr, zApplication, zData,
                         SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
@@ -1314,10 +1321,55 @@ public final class MaximaNode implements ChatPort {
             }
         }
         if (okResult == null) {
-            log("send DEAD to " + zContact.name + " (" + zContact.addresses.size()
-                    + " addr): " + fails);
+            log("send DEAD to " + zContact.name + " (" + targets.size()
+                    + " target" + (targets.size() == 1 ? "" : "s") + "): " + fails);
         }
         return okResult;
+    }
+
+    /**
+     * Concrete sendable addresses for one stored contact address.
+     *
+     * A fully-qualified {@code Mx…@host:port} is returned as-is. A BARE / hostless
+     * address - classic slave mode advertises {@code Mx…@} with the host meant to
+     * be resolved via MLS, and the built-in engine used to CRASH parsing it - is
+     * re-homed: its routing key is registered on whatever relays the peer is
+     * attached to, and we typically share the fleet, so we address that key to
+     * the peer's own pinned static-MLS host AND to every relay WE hold. Wherever
+     * we share a relay with the peer, a copy lands (the peer dedups by msgid).
+     * This is how the built-in engine speaks classic's bare-address convention.
+     */
+    private java.util.List<String> routableForms(String zAddr, Contact zContact) {
+        java.util.List<String> out = new ArrayList<>();
+        if (zAddr == null || zAddr.isEmpty()) {
+            return out;
+        }
+        int at = zAddr.indexOf('@');
+        int colon = at < 0 ? -1 : zAddr.indexOf(':', at + 1);
+        if (at > 0 && colon > at + 1 && colon < zAddr.length() - 1) {
+            out.add(zAddr);   // already fully-qualified Mx…@host:port
+            return out;
+        }
+        String routing = at > 0 ? zAddr.substring(0, at) : zAddr;
+        if (routing.isEmpty()) {
+            return out;
+        }
+        java.util.LinkedHashSet<String> hosts = new java.util.LinkedHashSet<>();
+        // The peer's pinned static-MLS host first (a relay they are surely on).
+        if (zContact.mls != null) {
+            int a = zContact.mls.indexOf('@');
+            if (a >= 0 && a < zContact.mls.length() - 1) {
+                hosts.add(zContact.mls.substring(a + 1));
+            }
+        }
+        // …then every relay WE currently hold - we very likely share the fleet.
+        hosts.addAll(mPool.activeHosts());
+        for (String h : hosts) {
+            if (h != null && !h.isEmpty() && h.indexOf(':') > 0) {
+                out.add(routing + "@" + h);
+            }
+        }
+        return out;
     }
 
     /**
@@ -1430,7 +1482,15 @@ public final class MaximaNode implements ChatPort {
                                        int zConnectTimeoutMs, int zReadTimeoutMs)
             throws Exception {
         int at = zAddress.indexOf('@');
-        int colon = zAddress.indexOf(':');
+        int colon = at < 0 ? -1 : zAddress.indexOf(':', at + 1);
+        // Guard a bare / hostless address (e.g. classic slave mode advertises
+        // "Mx…@" with the host meant to be resolved via MLS). It is not directly
+        // sendable - callers re-home the routing key onto a real relay first via
+        // routableForms(). Refuse cleanly here rather than crash the parse below
+        // (the old substring(at+1, colon) threw StringIndexOutOfBounds on "-1").
+        if (at <= 0 || colon <= at + 1 || colon >= zAddress.length() - 1) {
+            return MaximaSender.Result.of(-1);
+        }
         MiniData routing = com.eurobuddha.maxima.core.identity.MxAddress
                 .convert(zAddress.substring(0, at));
         String host = zAddress.substring(at + 1, colon);
