@@ -172,6 +172,24 @@ public final class HostPool {
     }
 
     /**
+     * Active hosts ordered best-first by merit {@link HostRecord#score} -
+     * reliability x uptime x advertised capacity, with no node-type term. This
+     * is what MLS-anchor and directory selection walk, so the perm-address
+     * anchor and the directories we query are chosen by merit: a reliable,
+     * higher-capacity host (phone or jar, identical treatment) is preferred,
+     * while a classic host - capacity unspecified, factor 1.0 - is ranked on its
+     * reliability alone and never demoted below its history.
+     */
+    public List<String> activeHostsByScore() {
+        List<String> hosts = new ArrayList<>(mActive.keySet());
+        hosts.sort(Comparator.comparingDouble((String h) -> {
+            HostRecord r = mKnown.get(h);
+            return r == null ? 0.0 : r.score();
+        }).reversed());
+        return hosts;
+    }
+
+    /**
      * EVERY address we can currently be reached on.
      * This is what goes into contact metadata, and what an RPC request lists as
      * its reply-to set.

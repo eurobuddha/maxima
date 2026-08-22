@@ -540,7 +540,10 @@ public final class MaximaNode implements ChatPort {
     }
 
     private String firstHostMls() {
-        for (String h : mPool.activeHosts()) {
+        // Best-scoring host first (merit: reliability x uptime x capacity, no
+        // node type), so the MLS we adopt as our perm anchor is the most reliable
+        // directory we can reach - phone or jar, chosen the same way.
+        for (String h : mPool.activeHostsByScore()) {
             HostConnection c = mPool.connection(h);
             String m = c == null ? null : c.getTheirMlsAddress();
             if (m != null && !m.isEmpty()) {
@@ -1638,8 +1641,12 @@ public final class MaximaNode implements ChatPort {
     /** Every directory we can currently query: each attached relay's offered MLS,
      *  plus our own current/old MLS. Deduped. */
     private java.util.List<String> reachableDirectories() {
+        // Best-scoring hosts first (merit, no node type). The set is a
+        // LinkedHashSet so query order follows score: the most reliable / highest
+        // -capacity directories are tried first, and the 2-relay-agreement in
+        // resolveVia still governs which answer we trust.
         java.util.LinkedHashSet<String> dirs = new java.util.LinkedHashSet<>();
-        for (String h : mPool.activeHosts()) {
+        for (String h : mPool.activeHostsByScore()) {
             HostConnection hc = mPool.connection(h);
             String m = hc == null ? null : hc.getTheirMlsAddress();
             if (m != null && !m.isEmpty()) {
