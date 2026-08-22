@@ -91,6 +91,21 @@ public final class Greeting implements Streamable {
      */
     public static Greeting commsOnly(String zVersion, String zHost, int zPort,
                                      List<String> zPeers) {
+        return commsOnly(zVersion, zHost, zPort, zPeers, 0);
+    }
+
+    /**
+     * As above, but also advertise our host CAPACITY - how many peers we are
+     * willing to host as a relay. Rides as a {@code "cap"} key in the extraData
+     * JSON, exactly like {@code host}/{@code port}/{@code peers}: classic reads
+     * the keys it knows and ignores the rest, so this is invisible to a stock
+     * node and never required for classic comms. Capacity is a MERIT input for
+     * host selection (see {@code HostPool.HostRecord.score}), never a node type.
+     *
+     * @param zCapacity peers we will host; 0 (or less) omits the claim
+     */
+    public static Greeting commsOnly(String zVersion, String zHost, int zPort,
+                                     List<String> zPeers, int zCapacity) {
         boolean known = zHost != null && !zHost.isEmpty()
                 && !zHost.equals("0.0.0.0") && !zHost.equals("::");
         StringBuilder peers = new StringBuilder("[");
@@ -103,7 +118,9 @@ public final class Greeting implements Streamable {
         peers.append(']');
         String json = "{\"welcome\":\"Maxima\""
                 + (known ? ",\"host\":\"" + zHost + "\"" : "")
-                + ",\"port\":\"" + zPort + "\",\"peers\":" + peers + "}";
+                + ",\"port\":\"" + zPort + "\""
+                + (zCapacity > 0 ? ",\"cap\":\"" + zCapacity + "\"" : "")
+                + ",\"peers\":" + peers + "}";
         return new Greeting(zVersion, json, -1);
     }
 
@@ -145,6 +162,18 @@ public final class Greeting implements Streamable {
             return Integer.parseInt(flatValue(zExtraDataJson, "port"));
         } catch (NumberFormatException e) {
             return -1;
+        }
+    }
+
+    /** The "cap" (host capacity) claim from a greeting's extra data, or 0 if
+     *  absent/bad. A classic node never sends it, so 0 = "unspecified" and the
+     *  scorer applies a neutral capacity factor (never a penalty). */
+    public static int capOf(String zExtraDataJson) {
+        try {
+            int c = Integer.parseInt(flatValue(zExtraDataJson, "cap"));
+            return Math.max(0, c);
+        } catch (NumberFormatException e) {
+            return 0;
         }
     }
 

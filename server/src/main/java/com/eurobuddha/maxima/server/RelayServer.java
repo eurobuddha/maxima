@@ -331,6 +331,23 @@ public final class RelayServer {
         mMaxPerMinute = zPerMinute;
     }
 
+    /**
+     * Set how many peers this relay will host concurrently. This is BOTH the
+     * admission cap AND the capacity we advertise in our greeting - a big VPS
+     * sets a large number, a phone-as-host a small one, and the network weights
+     * host selection by it (merit, never node type). A phone and a jar run this
+     * same code; only the number differs.
+     */
+    public void setMaxConnections(int zMaxConnections) {
+        if (zMaxConnections > 0) {
+            mMaxConnections = zMaxConnections;
+        }
+    }
+
+    public int getMaxConnections() {
+        return mMaxConnections;
+    }
+
     public void start() throws Exception {
         mServer = new ServerSocket();
         mServer.setReuseAddress(true);
@@ -493,7 +510,8 @@ public final class RelayServer {
                 // every client that attaches learns the wider fleet — then offer
                 // ourselves as a directory, exactly as a classic node does.
                 zConn.write(Frame.body(Frame.MSG_GREETING,
-                        Greeting.commsOnly(mVersion, mPublicHost, mPort, mPeers.share())));
+                        Greeting.commsOnly(mVersion, mPublicHost, mPort, mPeers.share(),
+                                mMaxConnections)));
                 zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL,
                         MaximaCTRLMessage.mls(mIdentity.mxIdentity())));
                 return;

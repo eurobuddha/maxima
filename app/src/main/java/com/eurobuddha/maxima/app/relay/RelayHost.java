@@ -36,6 +36,11 @@ public final class RelayHost {
     /** …and keep going down to here before standing down (hysteresis). */
     private static final int STOP_BATTERY = 55;
     private static final int RATE = 600;          // messages/min per peer, server default
+    /** Concurrent peers a phone-as-host will carry - and the capacity it
+     *  advertises. Deliberately modest: a phone on Wi-Fi + charging genuinely
+     *  helps, but honestly advertises a small number so merit-weighted selection
+     *  leans on it lightly, exactly as its real capacity warrants. */
+    private static final int PHONE_HOST_CAP = 16;
     private static final String VERSION = "1.0.48";
 
     private final Context mCtx;
@@ -125,6 +130,7 @@ public final class RelayHost {
             RelayRuntime rt = new RelayRuntime(
                     mNode.identity(), RELAY_PORT, VERSION, RATE, "", dir.toPath());
             rt.setBlobBytes(0);   // forward messages + mailbox; no media shelf on a phone
+            rt.setMaxConnections(PHONE_HOST_CAP);   // honest, modest advertised capacity
             rt.start();
             mRuntime = rt;
             mState = State.RUNNING;

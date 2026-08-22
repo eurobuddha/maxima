@@ -58,6 +58,9 @@ public final class HostConnection implements Closeable {
 
     private Greeting mTheirGreeting;
     private String mTheirMlsAddress;
+    /** Host capacity this relay advertised in its greeting (peers it will host),
+     *  or 0 if unspecified (classic host). A MERIT input for host selection. */
+    private volatile int mTheirCapacity;
     private boolean mAttached;
 
     /** When we last read ANY frame from this host. Mirrors the reference's
@@ -106,6 +109,12 @@ public final class HostConnection implements Closeable {
     /** The MLS server this host offered us, if any (bare key + observed address). */
     public String getTheirMlsAddress() {
         return mTheirMlsAddress;
+    }
+
+    /** Host capacity this relay advertised (peers it will host), or 0 if the
+     *  host said nothing (classic). Used to weight host selection by merit. */
+    public int getTheirCapacity() {
+        return mTheirCapacity;
     }
 
     public byte[] routingKey() {
@@ -244,6 +253,7 @@ public final class HostConnection implements Closeable {
 
         if (type == Frame.MSG_GREETING) {
             mTheirGreeting = Greeting.fromBytes(payload);
+            mTheirCapacity = Greeting.capOf(mTheirGreeting.getExtraData());
             return true;
         }
         if (type == Frame.MSG_MAXIMA_CTRL) {

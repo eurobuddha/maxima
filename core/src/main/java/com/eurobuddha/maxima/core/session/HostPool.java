@@ -57,16 +57,32 @@ public final class HostPool {
         /** Failed attach attempts or drops. */
         public volatile int failures;
         public volatile long totalUptimeMs;
+        /**
+         * Host capacity this relay advertised in its greeting (peers it will
+         * host), or 0 if unspecified (a classic host, or an older peer). This is
+         * a MERIT input - a big VPS advertises a large number, a phone a small
+         * one - and it is NEVER a node-type flag: selection asks only "how much
+         * can you carry", so a reachable phone and a jar are ranked the same way.
+         */
+        public volatile int advertisedCapacity;
 
         HostRecord(String zHostPort) {
             hostPort = zHostPort;
         }
 
         /**
-         * Higher is better. Rewards observed uptime, penalises failures, and
-         * deliberately does NOT trust a relay just because it is currently up -
-         * a relay that has never dropped but has only been seen for a minute
-         * should not outrank one with hours behind it.
+         * Higher is better. Rewards observed uptime and advertised capacity,
+         * penalises failures, and deliberately does NOT trust a relay just
+         * because it is currently up - a relay that has never dropped but has
+         * only been seen for a minute should not outrank one with hours behind it.
+         *
+         * Capacity enters as a NEUTRAL-or-bonus factor: an unspecified capacity
+         * (0, i.e. a classic host) yields a factor of exactly 1.0, so a classic
+         * host keeps its full reliability x uptime standing and is never demoted
+         * below an extension host of equal history - the classic-only network
+         * still selects a working host. A host that advertises capacity earns a
+         * bonus on top, with heavy diminishing returns (log, /log(1024)) so one
+         * huge VPS cannot own the whole pool and the churn-native fan-out holds.
          */
         public double score() {
             double attempts = successes + failures;
@@ -74,7 +90,13 @@ public final class HostPool {
             double uptimeHours = totalUptimeMs / 3_600_000.0;
             // Diminishing returns on uptime so one long-lived relay cannot
             // dominate the pool forever.
-            return reliability * (1.0 + Math.log1p(uptimeHours));
+            double uptimeFactor = 1.0 + Math.log1p(uptimeHours);
+            // Capacity 0 -> factor 1.0 (neutral). Normalised by log1p(1024) so a
+            // ~1024-peer VPS roughly doubles its weight vs an equal-history phone
+            // - a real but bounded edge, never a landslide.
+            double capacityFactor = 1.0
+                    + Math.log1p(Math.max(0, advertisedCapacity)) / Math.log1p(1024.0);
+            return reliability * uptimeFactor * capacityFactor;
         }
 
         @Override
@@ -200,6 +222,10 @@ public final class HostPool {
             rec.successes++;
             rec.attachedAt = System.currentTimeMillis();
             rec.lastSeen = rec.attachedAt;
+            // The greeting has been exchanged by now, so the host's advertised
+            // capacity (0 for a classic host) is known - fold it into the record
+            // so score() can weight future selection by merit.
+            rec.advertisedCapacity = conn.getTheirCapacity();
             // Push receive: the reader owns this socket from here - inbound is
             // handled the instant the relay pushes it, and the 25s NAT
             // keep-alive stops the mapping being reaped.

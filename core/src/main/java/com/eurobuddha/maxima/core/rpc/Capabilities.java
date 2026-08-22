@@ -35,7 +35,24 @@ public final class Capabilities {
     /** Countersigns delivery receipts. */
     public static final String WITNESS = "wit";
 
+    /**
+     * Advertised host capacity - how many peers this node is willing to host as
+     * a relay/directory. Rides as a {@code cap:<n>} token in the same encoded
+     * list, so it degrades to "unspecified" on classic (which ignores mxcaps
+     * entirely). It is a MERIT input, not a type flag: a big VPS advertises a
+     * large number, a phone a small one, and selection weights by it - the
+     * network never asks "phone or server", only "how much can you carry".
+     */
+    private static final String CAP_PREFIX = "cap:";
+
+    /** Advertised capacity when a peer specifies none (classic / older peer).
+     *  Deliberately small: an unknown node is assumed low-capacity until it
+     *  proves otherwise, so it is never over-loaded on the strength of nothing. */
+    public static final int UNSPECIFIED_CAPACITY = 0;
+
     private final Set<String> mCaps = new LinkedHashSet<>();
+    /** 0 = unspecified (see {@link #capacity()}). */
+    private int mCapacity = UNSPECIFIED_CAPACITY;
 
     public Capabilities(String... zCaps) {
         mCaps.addAll(Arrays.asList(zCaps));
@@ -55,6 +72,18 @@ public final class Capabilities {
         return this;
     }
 
+    /** Advertise how many peers we are willing to host. Fluent. */
+    public Capabilities withCapacity(int zCapacity) {
+        mCapacity = Math.max(0, zCapacity);
+        return this;
+    }
+
+    /** Advertised host capacity, or {@link #UNSPECIFIED_CAPACITY} (0) if the
+     *  peer said nothing - the scorer treats 0 as a small conservative default. */
+    public int capacity() {
+        return mCapacity;
+    }
+
     public boolean has(String zCap) {
         return mCaps.contains(zCap);
     }
@@ -67,9 +96,15 @@ public final class Capabilities {
         return mCaps.isEmpty();
     }
 
-    /** Comma-separated, for the extradata value. */
+    /** Comma-separated, for the extradata value. Capacity (when set) rides as a
+     *  {@code cap:<n>} token; classic ignores the whole value anyway. */
     public String encode() {
-        return String.join(",", mCaps);
+        String flags = String.join(",", mCaps);
+        if (mCapacity <= 0) {
+            return flags;
+        }
+        return flags.isEmpty() ? CAP_PREFIX + mCapacity
+                : flags + "," + CAP_PREFIX + mCapacity;
     }
 
     public static Capabilities decode(String zValue) {
@@ -79,9 +114,18 @@ public final class Capabilities {
         }
         for (String s : zValue.split(",")) {
             String t = s.trim();
-            if (!t.isEmpty()) {
-                c.mCaps.add(t);
+            if (t.isEmpty()) {
+                continue;
             }
+            if (t.startsWith(CAP_PREFIX)) {
+                try {
+                    c.mCapacity = Math.max(0, Integer.parseInt(t.substring(CAP_PREFIX.length())));
+                } catch (NumberFormatException ignored) {
+                    // A malformed capacity is simply "unspecified" - never fatal.
+                }
+                continue;
+            }
+            c.mCaps.add(t);
         }
         return c;
     }

@@ -79,10 +79,21 @@ public final class RelayRuntime {
     private volatile boolean mRunning;
     private volatile Consumer<Stats> mTickListener;
     private volatile long mBlobBytes;
+    private volatile int mMaxConnections;
 
     /** Enable the media blob shelf at this byte cap (0 = off). Set before start(). */
     public void setBlobBytes(long zBytes) {
         mBlobBytes = zBytes;
+    }
+
+    /**
+     * Cap concurrent hosted peers AND the capacity we advertise (0 = leave the
+     * server default). A phone-as-host sets a small number so it advertises an
+     * honest, modest capacity; a VPS leaves the large default. Same code, merit
+     * -weighted by the number. Set before {@link #start()}.
+     */
+    public void setMaxConnections(int zMax) {
+        mMaxConnections = zMax;
     }
 
     public RelayRuntime(MaximaIdentity zIdentity, int zPort, String zProtocol,
@@ -149,6 +160,9 @@ public final class RelayRuntime {
     public void start() throws Exception {
         RelayServer relay = new RelayServer(mIdentity, mPort, mProtocol);
         relay.setRateLimit(mRate);
+        if (mMaxConnections > 0) {
+            relay.setMaxConnections(mMaxConnections);
+        }
         relay.setPublicHost(mHost);
         // Durable mailbox under <data>/relaystore, so a restart does not lose the
         // ciphertext we hold for offline peers.
