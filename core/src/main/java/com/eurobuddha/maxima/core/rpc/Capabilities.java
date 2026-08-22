@@ -36,6 +36,18 @@ public final class Capabilities {
     public static final String WITNESS = "wit";
 
     /**
+     * Roles that require being DIRECTLY REACHABLE to actually serve - a peer has
+     * to be able to connect to you to use them. A node behind NAT must not
+     * advertise these (it would strand the contacts relying on them), so they are
+     * gated on reachability by {@link #gateForReachability}. The client-side
+     * roles (RPC, RELIABLE, GOSSIP, WITNESS) work behind NAT - you answer them in
+     * messages addressed to you - and are always advertised, which also keeps a
+     * NAT'd Parlons node NON-classic so its feature gating still works.
+     */
+    public static final Set<String> SERVER_ROLES = java.util.Collections.unmodifiableSet(
+            new LinkedHashSet<>(Arrays.asList(MAILBOX, DIRECTORY, STORAGE)));
+
+    /**
      * Advertised host capacity - how many peers this node is willing to host as
      * a relay/directory. Rides as a {@code cap:<n>} token in the same encoded
      * list, so it degrades to "unspecified" on classic (which ignores mxcaps
@@ -94,6 +106,28 @@ public final class Capabilities {
 
     public boolean isClassic() {
         return mCaps.isEmpty();
+    }
+
+    /**
+     * The set to ADVERTISE given our current reachability. When directly
+     * reachable, everything (this instance). When NOT, the {@link #SERVER_ROLES}
+     * are dropped - we never promise a service we cannot serve - and so is host
+     * capacity (a NAT'd node hosts nothing). The client-side roles remain, so we
+     * stay non-classic and feature gating is unaffected. Reachability, a measured
+     * property, is the gate - never device type.
+     */
+    public Capabilities gateForReachability(boolean zReachable) {
+        if (zReachable) {
+            return this;
+        }
+        Capabilities c = new Capabilities();
+        for (String cap : mCaps) {
+            if (!SERVER_ROLES.contains(cap)) {
+                c.add(cap);
+            }
+        }
+        // capacity intentionally left at 0 - unreachable means no host capacity.
+        return c;
     }
 
     /** Comma-separated, for the extradata value. Capacity (when set) rides as a

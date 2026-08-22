@@ -941,6 +941,16 @@ public final class MaximaNode implements ChatPort {
         mDirectAddress = zIpPort == null ? "" : zIpPort.trim();
     }
 
+    /**
+     * Whether we currently have a PROVEN public direct address - the signal that
+     * we can actually serve the reachability-gated roles (directory/mailbox/
+     * storage). {@link #setDirectAddress} sets this only after the port has been
+     * shown reachable from outside, so it is never a guess.
+     */
+    public boolean isDirectlyReachable() {
+        return !mDirectAddress.isEmpty();
+    }
+
     public String directAddress() {
         // Sealed to the IDENTITY key, not a per-host key: on a direct link the
         // endpoint decrypts with the identity private key, and there is no relay
@@ -1187,7 +1197,13 @@ public final class MaximaNode implements ChatPort {
                 mIdentity.publicKeyHex(),
                 myAddresses(),   // externally-reachable, internal-IP-filtered set
                 mName, mIcon, mWalletAddress, mlsAddress(),
-                mCapabilities, mNodeKind, zIntro);
+                // Advertise the SERVER roles (directory/mailbox/storage) + host
+                // capacity only while we are actually directly reachable - a NAT'd
+                // node keeps its client-side roles (so it stays non-classic) but
+                // never promises a service it cannot serve. Reachability, not
+                // device type, is the gate.
+                mCapabilities.gateForReachability(isDirectlyReachable()),
+                mNodeKind, zIntro);
 
         sendRaw(zPeerAddress, ContactCtrl.APPLICATION,
                 json.getBytes(StandardCharsets.UTF_8));
