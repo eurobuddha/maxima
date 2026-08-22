@@ -61,12 +61,18 @@ public class ReachabilityGateTest {
     }
 
     @Test
-    public void gatedSetEncodesWithoutServerRoleTokens() {
-        String encoded = Capabilities.phoneDefaults().withCapacity(16)
-                .gateForReachability(false).encode();
-        assertFalse(encoded.contains(Capabilities.DIRECTORY));
-        assertFalse(encoded.contains(Capabilities.MAILBOX));
-        assertFalse(encoded.contains("cap:"));
-        assertTrue(encoded.contains(Capabilities.RPC));
+    public void gatedSetEncodesWithoutServerRolesOrCapacity() {
+        // Round-trip through the wire encoding and assert on the DECODED contract,
+        // not on substrings of the string (a cap code is a substring of longer
+        // words - "dir"/"box" - so contains() checks are fragile).
+        Capabilities back = Capabilities.decode(
+                Capabilities.phoneDefaults().withCapacity(16)
+                        .gateForReachability(false).encode());
+        assertFalse(back.has(Capabilities.DIRECTORY));
+        assertFalse(back.has(Capabilities.MAILBOX));
+        assertFalse(back.has(Capabilities.STORAGE));
+        assertEquals(0, back.capacity());
+        assertTrue(back.has(Capabilities.RPC));
+        assertFalse(back.isClassic());
     }
 }

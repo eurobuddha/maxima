@@ -115,6 +115,13 @@ public final class Capabilities {
      * capacity (a NAT'd node hosts nothing). The client-side roles remain, so we
      * stay non-classic and feature gating is unaffected. Reachability, a measured
      * property, is the gate - never device type.
+     *
+     * NOTE: the capacity-drop branch is DORMANT until a node advertises its own
+     * peer-channel capacity ({@link #withCapacity}), which nothing does yet - a
+     * node's own {@code mCapabilities} carries capacity 0 today, so in practice
+     * this method's live effect is dropping the SERVER_ROLES flags. The branch is
+     * kept correct for when peer-channel capacity is wired, so it never has to be
+     * revisited then.
      */
     public Capabilities gateForReachability(boolean zReachable) {
         if (zReachable) {

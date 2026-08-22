@@ -70,6 +70,16 @@ public final class HostPool {
             hostPort = zHostPort;
         }
 
+        /** Capacity beyond which the bonus stops growing. advertisedCapacity is a
+         *  peer's UNVERIFIED self-report, so it is clamped before it can weight
+         *  selection - otherwise a relay could claim a colossal number and inflate
+         *  its rank far past the intended envelope. At the clamp the bonus is
+         *  ~2.2x; without it, INT_MAX would reach ~4x. */
+        static final int MAX_SCORED_CAPACITY = 4096;
+        /** Normaliser so a ~1024-peer host roughly doubles its weight. Constant -
+         *  hoisted out of {@link #score()} so the sort does not recompute it. */
+        private static final double LOG_CAP_REF = Math.log1p(1024.0);
+
         /**
          * Higher is better. Rewards observed uptime and advertised capacity,
          * penalises failures, and deliberately does NOT trust a relay just
@@ -83,6 +93,9 @@ public final class HostPool {
          * still selects a working host. A host that advertises capacity earns a
          * bonus on top, with heavy diminishing returns (log, /log(1024)) so one
          * huge VPS cannot own the whole pool and the churn-native fan-out holds.
+         * Because capacity is self-reported and unverified, it is CLAMPED to
+         * {@link #MAX_SCORED_CAPACITY} first, so a lying relay cannot buy more
+         * than the intended edge.
          */
         public double score() {
             double attempts = successes + failures;
@@ -91,11 +104,11 @@ public final class HostPool {
             // Diminishing returns on uptime so one long-lived relay cannot
             // dominate the pool forever.
             double uptimeFactor = 1.0 + Math.log1p(uptimeHours);
-            // Capacity 0 -> factor 1.0 (neutral). Normalised by log1p(1024) so a
-            // ~1024-peer VPS roughly doubles its weight vs an equal-history phone
-            // - a real but bounded edge, never a landslide.
-            double capacityFactor = 1.0
-                    + Math.log1p(Math.max(0, advertisedCapacity)) / Math.log1p(1024.0);
+            // Capacity 0 -> factor 1.0 (neutral). Clamped self-report, log-
+            // normalised: a ~1024-peer VPS roughly doubles its weight vs an equal
+            // -history phone - a real but bounded edge, never a landslide.
+            int cap = Math.min(Math.max(0, advertisedCapacity), MAX_SCORED_CAPACITY);
+            double capacityFactor = 1.0 + Math.log1p(cap) / LOG_CAP_REF;
             return reliability * uptimeFactor * capacityFactor;
         }
 

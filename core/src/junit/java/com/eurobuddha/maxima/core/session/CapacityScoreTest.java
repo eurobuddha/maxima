@@ -114,4 +114,14 @@ public class CapacityScoreTest {
         HostPool.HostRecord vps = rec(20, 0, 3.0, 1024);
         assertTrue(vps.score() < phone.score() * 2.0);
     }
+
+    @Test
+    public void selfReportedCapacityIsClampedAgainstGaming() {
+        // Capacity is an UNVERIFIED self-report: a relay lying with a colossal
+        // number must not out-rank one that honestly advertises the clamp ceiling.
+        // Above the clamp the score is identical, so lying buys nothing.
+        HostPool.HostRecord honest = rec(20, 0, 3.0, HostPool.HostRecord.MAX_SCORED_CAPACITY);
+        HostPool.HostRecord liar = rec(20, 0, 3.0, Integer.MAX_VALUE);
+        assertEquals(honest.score(), liar.score(), EPS);
+    }
 }
