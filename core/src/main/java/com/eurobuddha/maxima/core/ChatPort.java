@@ -43,15 +43,6 @@ public interface ChatPort {
 	default void noteCapable(String zPublicKey) {
 	}
 
-	/**
-	 * The mirror of {@link #noteCapable}: the peer at this key just spoke the
-	 * CLASSIC wire, proving they are on the classic engine and cannot consume our
-	 * media-mesh / receipts / calls. Engines that gate features on capability
-	 * should downgrade them so media is sent inline. Default no-op.
-	 */
-	default void noteClassic(String zPublicKey) {
-	}
-
 	/** Remove a contact (and tell them, classic-style). */
 	boolean removeContact(String zPublicKey);
 
