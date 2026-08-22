@@ -356,6 +356,28 @@ public final class MaximaNode implements ChatPort {
         }
     }
 
+    /**
+     * The mirror of {@link #noteCapable}: a message arriving over the CLASSIC
+     * wire (MaxSolo/ClassicChat) is proof the peer is on the classic engine
+     * RIGHT NOW - it cannot fetch our media-mesh blobs, do receipts, voice notes
+     * or calls. Downgrade the contact to classic so our send path bridges to it
+     * (text + INLINE images, payment-as-text) instead of sending blob-refs it
+     * can never resolve (which arrive as a blank photo). Self-correcting: if the
+     * peer flips back to the built-in engine its next native-wire message
+     * re-upgrades it via {@link #noteCapable}. Only ever downgrades a contact
+     * that is currently non-classic, so it is a no-op in the steady state.
+     */
+    @Override
+    public void noteClassic(String zPublicKey) {
+        Contact c = contact(zPublicKey);
+        if (c != null && !c.isClassic()) {
+            c.capabilities = com.eurobuddha.maxima.core.rpc.Capabilities.none();
+            storeContact(c);
+            log("classic-engine peer: " + (c.name == null ? "contact" : c.name)
+                    + " - media will be sent inline");
+        }
+    }
+
     /** Add or update a contact and persist it. */
     public void storeContact(Contact zContact) {
         mContacts.put(Keys.norm(zContact.publicKey), zContact);

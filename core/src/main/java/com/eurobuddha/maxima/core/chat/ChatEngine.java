@@ -1005,6 +1005,14 @@ public final class ChatEngine {
     public boolean onInbound(MaximaMessage zMsg, String zMsgid) {
         String app = zMsg.mApplication.toString();
         if (ClassicChat.APPLICATION.equals(app)) {
+            // Speaking the classic wire IS proof the peer is on the classic
+            // engine right now: downgrade them so our sends bridge (text + INLINE
+            // images) instead of shipping media-mesh blob-refs they can never
+            // fetch (which land as a blank photo). Mirror of noteCapable below.
+            try {
+                mNode.noteClassic(Keys.norm(zMsg.mFrom.to0xString()));
+            } catch (Exception ignored) {
+            }
             handleClassic(zMsg, zMsgid);
             return true;
         }
