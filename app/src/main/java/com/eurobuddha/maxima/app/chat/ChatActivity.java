@@ -786,14 +786,16 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         new Thread(() -> {
             try {
                 byte[] jpeg = readScaledJpeg(uri, 1400);
-                // MaxSolo-style: shrink EVERY photo to fit the inline cap and let
-                // core send it INLINE (ChatEngine.deliver inlines any image that
-                // fits, for all recipients). This is the only form that lands on
-                // the classic/jar TRANSPORT, which has no media-mesh blob-fetch -
-                // a blob-ref there arrives as a blank photo. The capability model
-                // can't tell a jar-transport peer (can't fetch) from a built-in
-                // one (can), so we simply always fit, exactly like MaxSolo does.
-                jpeg = fitClassicInline(jpeg);
+                // Downscale to the inline cap ONLY when the image must ride inline:
+                // we are the jar sender (embeds media in the message), or the peer
+                // is classic (stock MaxSolo, maxsolo wire). A built-in->built-in
+                // send keeps the full-res JPEG so the media-mesh blob path carries
+                // HD. (A photo to a Parlons-on-classic peer arrives blank - accepted
+                // edge case for that rare hidden-toggle transport.)
+                if (MaximaService.jar() != null
+                        || (g == null && c != null && c.isClassic())) {
+                    jpeg = fitClassicInline(jpeg);
+                }
                 if (g != null) {
                     chat.sendGroupMedia(g.id, jpeg, "image/jpeg", caption);
                 } else {

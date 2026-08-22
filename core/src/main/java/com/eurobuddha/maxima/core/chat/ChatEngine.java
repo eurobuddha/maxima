@@ -921,25 +921,6 @@ public final class ChatEngine {
 
     private boolean deliver(Contact zTo, ChatMessage zMsg) {
         try {
-            // MAXSOLO-STYLE INLINE IMAGES. An image goes out as an inline base64
-            // maxsolo message (exactly how MaxSolo sends photos) whenever it fits
-            // the inline cap - to EVERY recipient, not just classic ones. This is
-            // the only form that lands on the classic/jar TRANSPORT, which has no
-            // media-mesh blob-fetch: a blob-ref there arrives as a blank photo.
-            // Image-only (voice notes/video keep the blob path) and size-gated
-            // (oversize returns null and falls through to the paths below). We do
-            // NOT flip the peer's capabilities for this - a full peer receiving
-            // an inline image is still a full peer.
-            if (ChatMedia.isMedia(zMsg.body)) {
-                String mime = ChatMedia.mime(zMsg.body);
-                if (mime != null && mime.startsWith("image/")) {
-                    String inline = classicImageWire(zMsg.body);
-                    if (inline != null) {
-                        return mNode.sendToContact(zTo, ClassicChat.APPLICATION,
-                                inline.getBytes(StandardCharsets.UTF_8)).isOk();
-                    }
-                }
-            }
             // THE BRIDGE: a classic peer (MaxSolo on a stock node) speaks the
             // maxsolo wire, not ours. Only human-visible content crosses -
             // receipts/roster/address are our protocol alone and would be
