@@ -300,6 +300,25 @@ public final class MaximaService extends Service {
 
     /** Boot Parlons on maxima.jar - classic routing under the same chat brain. */
     private void bootJarEngine() throws Exception {
+        // SLAVE / LEAF MODE - the single most important line for a phone on the
+        // classic engine. A phone is a leaf, not a P2P host-manager: classic's
+        // default behaviour tries to VERIFY 2 relay hosts by bouncing a message
+        // off itself through each, and DISCONNECTS + reconnects any host that
+        // doesn't verify within 30s. On weak/high-latency cellular that bounce
+        // can't return in time, so it storms - disconnecting the very socket the
+        // inbound (and the verification) would arrive on, so it can neither
+        // verify nor RECEIVE (send still works, which is exactly the symptom).
+        //
+        // TXBLOCK_NODE=true is classic's own slave mode. In maxjar it does exactly
+        // two things, both correct for a phone: (1) MaximaManager:636 short-
+        // circuits the verify-or-disconnect handler, so the relay connection is
+        // HELD and the relay pushes inbound straight down it; (2) MaximaManager:984
+        // auto-pins the relay it attached to as our STATIC MLS - the same perm-
+        // address anchor the MAX# strand wants. Must be set BEFORE the JarEngine
+        // ctor below spins up Main/MaximaManager. Config only - no maxjar edit.
+        org.minima.system.params.GeneralParams.TXBLOCK_NODE = true;
+        EventLog.add("classic engine: SLAVE MODE (hold hosts, static MLS) - weak-cellular safe");
+
         // Classic-scale: a couple of hosts, healed by classic's own loop -
         // never the whole fleet.
         java.util.List<String> hosts = new java.util.ArrayList<>();
