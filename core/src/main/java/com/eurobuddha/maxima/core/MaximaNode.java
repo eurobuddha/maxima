@@ -1189,8 +1189,17 @@ public final class MaximaNode implements ChatPort {
         // A MAX# permanent address resolves to the peer's CURRENT address via
         // their MLS first - same behaviour as the classic engine. Without this
         // the raw MAX# string reaches the socket parser and dies on the port.
+        // Keep the MAX#'s own MLS host: if the resolved address is BARE (a
+        // classic-slave peer publishes "Mx…@" with no host), we re-home the
+        // routing key onto that MLS host + our relays below.
+        String peerMls = null;
         if (zPeerAddress.trim().startsWith("MAX#")) {
-            zPeerAddress = resolvePermanent(zPeerAddress.trim());
+            String max = zPeerAddress.trim();
+            int h2 = max.indexOf('#', max.indexOf('#') + 1);
+            if (h2 >= 0 && h2 < max.length() - 1) {
+                peerMls = max.substring(h2 + 1);
+            }
+            zPeerAddress = resolvePermanent(max);
             log("MAX# resolved to " + zPeerAddress);
         }
         String json = ContactCtrl.build(
@@ -1205,8 +1214,31 @@ public final class MaximaNode implements ChatPort {
                 mCapabilities.gateForReachability(isDirectlyReachable()),
                 mNodeKind, zIntro);
 
-        sendRaw(zPeerAddress, ContactCtrl.APPLICATION,
-                json.getBytes(StandardCharsets.UTF_8));
+        // Re-home a bare/hostless resolved address onto real relays (same as
+        // fanOut) and try each. A fully-qualified address yields exactly one
+        // form, so this is a no-op for the normal case. NEVER let a malformed
+        // address reach the parser raw (that threw "Range [n,-1]" on introduce).
+        byte[] payload = json.getBytes(StandardCharsets.UTF_8);
+        java.util.List<String> forms = routableForms(zPeerAddress, peerMls);
+        if (forms.isEmpty()) {
+            throw new IllegalStateException(
+                    "no reachable address for " + zPeerAddress
+                    + " (peer not registered at that MLS, or we share no relay)");
+        }
+        boolean ok = false;
+        for (String form : forms) {
+            try {
+                if (sendRaw(form, ContactCtrl.APPLICATION, payload).isOk()) {
+                    ok = true;
+                }
+            } catch (Exception ignored) {
+                // try the next form; a bad address must not crash the introduce
+            }
+        }
+        if (!ok) {
+            throw new IllegalStateException(
+                    "couldn't reach " + zPeerAddress + " on any known relay");
+        }
     }
 
     /** Tell every known contact our current addresses. Call after a relay change. */
@@ -1340,6 +1372,13 @@ public final class MaximaNode implements ChatPort {
      * This is how the built-in engine speaks classic's bare-address convention.
      */
     private java.util.List<String> routableForms(String zAddr, Contact zContact) {
+        return routableForms(zAddr, zContact == null ? null : zContact.mls);
+    }
+
+    /** As {@link #routableForms(String, Contact)} but taking the peer's full MLS
+     *  address ({@code Mx…@host:port}) directly - lets the introduce-by-MAX# path
+     *  re-home a hostless resolved address without a Contact. */
+    private java.util.List<String> routableForms(String zAddr, String zPeerMls) {
         java.util.List<String> out = new ArrayList<>();
         if (zAddr == null || zAddr.isEmpty()) {
             return out;
@@ -1356,10 +1395,10 @@ public final class MaximaNode implements ChatPort {
         }
         java.util.LinkedHashSet<String> hosts = new java.util.LinkedHashSet<>();
         // The peer's pinned static-MLS host first (a relay they are surely on).
-        if (zContact.mls != null) {
-            int a = zContact.mls.indexOf('@');
-            if (a >= 0 && a < zContact.mls.length() - 1) {
-                hosts.add(zContact.mls.substring(a + 1));
+        if (zPeerMls != null) {
+            int a = zPeerMls.indexOf('@');
+            if (a >= 0 && a < zPeerMls.length() - 1) {
+                hosts.add(zPeerMls.substring(a + 1));
             }
         }
         // …then every relay WE currently hold - we very likely share the fleet.

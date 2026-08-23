@@ -605,6 +605,21 @@ public final class DesktopJarEngine implements ChatPort {
 			}
 			com.eurobuddha.maxima.desktop.ui.DesktopEventLog.add("MAX# resolved to " + address);
 		}
+		// Guard: classic's send parser splits an "Mx…@host:port" on '@' and ':'
+		// with NO bounds check, so a bare / hostless address (a classic-slave peer
+		// publishes "Mx…@" with the host resolved via MLS) throws a raw
+		// StringIndexOutOfBounds ("Range [n,-1] …") deep in byte-identical maxjar.
+		// Fail with a clear message instead of that crash. (The built-in engine
+		// re-homes such an address onto our relays; the classic engine cannot.)
+		if (address != null) {
+			int at = address.indexOf('@');
+			int colon = at < 0 ? -1 : address.indexOf(':', at + 1);
+			if (at <= 0 || colon <= at + 1 || colon >= address.length() - 1) {
+				throw new IllegalStateException(
+						"address has no host:port - the peer isn't reachable at a "
+						+ "fixed address from the classic engine (try the built-in engine)");
+			}
+		}
 		// classic maxcontacts action:add, verbatim flow
 		JSONObject info = mManager.getContactsManager().getMaximaContactInfo(zIntro, false);
 		MiniData mdata = new MiniData(new MiniString(info.toString()).getData());
