@@ -41,6 +41,12 @@ public final class OnboardingActivity extends AppCompatActivity {
     protected void onCreate(Bundle zState) {
         super.onCreate(zState);
 
+        // Seed derivation (create AND restore) needs SHA3-256, which Android's JDK
+        // provider lacks. MainActivity installs it, but it gates to us BEFORE that
+        // line runs, so we must install it here too — otherwise create/restore fail
+        // with "SHA3-256 unavailable".
+        Sha3Provider.install();
+
         // Already have an identity (race, or backed out after creating one) → app.
         if (SeedStore.hasIdentity(this)) {
             launchMain();
