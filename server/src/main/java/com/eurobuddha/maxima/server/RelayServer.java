@@ -108,13 +108,26 @@ public final class RelayServer {
 
     private final MlsStore mDirectory = new MlsStore();
 
-    /** Open-pool MLS: -Dmaxima.mls.open=true (or env MAXIMA_MLS_OPEN=true) -
-     *  every published identity resolves for anyone, the public staticMLS
-     *  pool semantic. Off = classic allow-list + permanent-list behaviour. */
-    private static final boolean MLS_OPEN =
-            Boolean.parseBoolean(System.getProperty("maxima.mls.open",
-                    String.valueOf(Boolean.parseBoolean(
-                            System.getenv("MAXIMA_MLS_OPEN")))));
+    /** Open-pool MLS, now the DEFAULT: every maxima-server.jar relay opts INTO
+     *  the public staticMLS pool (open-resolve) so a phone that pins it gets a
+     *  working permanent MAX# with no central registration. Every published
+     *  identity resolves for anyone (DNS-style). Opt OUT with
+     *  -Dmaxima.mls.open=false or MAXIMA_MLS_OPEN=false to fall back to the
+     *  classic allow-list + permanent-list behaviour. Advertised in the greeting
+     *  (Greeting "pool":"true") so clients auto-discover pool relays. */
+    private static final boolean MLS_OPEN = poolDefault();
+
+    private static boolean poolDefault() {
+        String sys = System.getProperty("maxima.mls.open");
+        if (sys != null) {
+            return Boolean.parseBoolean(sys);
+        }
+        String env = System.getenv("MAXIMA_MLS_OPEN");
+        if (env != null && !env.isEmpty()) {
+            return Boolean.parseBoolean(env);
+        }
+        return true;   // default: this relay is a pool host
+    }
 
     {
         if (MLS_OPEN) {
@@ -511,7 +524,7 @@ public final class RelayServer {
                 // ourselves as a directory, exactly as a classic node does.
                 zConn.write(Frame.body(Frame.MSG_GREETING,
                         Greeting.commsOnly(mVersion, mPublicHost, mPort, mPeers.share(),
-                                mMaxConnections)));
+                                mMaxConnections, MLS_OPEN)));
                 zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL,
                         MaximaCTRLMessage.mls(mIdentity.mxIdentity())));
                 return;
@@ -575,7 +588,7 @@ public final class RelayServer {
                 // classic node does; an unanswered probe makes the prober mark
                 // us unreachable. lastSeen was already stamped by serve().
                 zConn.write(Frame.singlePong(Greeting.commsOnly(
-                        mVersion, mPublicHost, mPort, mPeers.share())));
+                        mVersion, mPublicHost, mPort, mPeers.share(), mMaxConnections, MLS_OPEN)));
                 return;
             }
             default:

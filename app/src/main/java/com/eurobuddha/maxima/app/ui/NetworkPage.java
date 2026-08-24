@@ -257,19 +257,26 @@ public final class NetworkPage implements Page {
             mContrib.addView(k.sub("Starting…"));
         }
 
-        // ---- MLS ----
+        // ---- MLS / permanent address ----
+        // Prefer the shareable PERMANENT MAX# (MAX#<you>#<pool relay>): it survives
+        // host/network moves and resolves for anyone via the open staticMLS pool, so
+        // it's what to hand out as your contact. Falls back to the raw location
+        // address only if no MLS has been adopted yet.
         String mls = node.mlsAddress();
+        String perm = node.permanentAddress();
         if (mls.isEmpty()) {
-            mMlsText.setText("None — no host has offered one yet.");
+            mMlsText.setText("None — no pool relay has offered one yet.");
             mMlsText.setOnClickListener(null);
         } else {
-            mMlsText.setText(mls);
-            final String mlsVal = mls;
+            final boolean isPerm = !perm.isEmpty();
+            final String shown = isPerm ? perm : mls;
+            mMlsText.setText(shown);
             mMlsText.setOnClickListener(x -> {
                 ((android.content.ClipboardManager) mAct.getSystemService(
                         android.content.Context.CLIPBOARD_SERVICE))
-                        .setPrimaryClip(android.content.ClipData.newPlainText("maxima-mls", mlsVal));
-                mAct.toast("Location address copied");
+                        .setPrimaryClip(android.content.ClipData.newPlainText(
+                                isPerm ? "maxima-max" : "maxima-mls", shown));
+                mAct.toast(isPerm ? "Permanent address copied" : "Location address copied");
             });
         }
 

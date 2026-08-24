@@ -514,6 +514,16 @@ public final class ContactsPage implements Page {
                 return perm;
             }
         }
+        // Built-in engine: share the permanent MAX# too (MAX#<you>#<pool relay>),
+        // now that the fleet relays open-resolve — it survives host/network moves
+        // and resolves for anyone, unlike the per-relay Mx…@host:port fallback.
+        com.eurobuddha.maxima.core.MaximaNode builtin = MaximaService.node();
+        if (builtin != null) {
+            String perm = builtin.permanentAddress();
+            if (!perm.isEmpty()) {
+                return perm;
+            }
+        }
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             return null;

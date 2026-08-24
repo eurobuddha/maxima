@@ -106,6 +106,21 @@ public final class Greeting implements Streamable {
      */
     public static Greeting commsOnly(String zVersion, String zHost, int zPort,
                                      List<String> zPeers, int zCapacity) {
+        return commsOnly(zVersion, zHost, zPort, zPeers, zCapacity, false);
+    }
+
+    /**
+     * As above, plus a {@code "pool":"true"} claim when this relay is an OPEN
+     * staticMLS pool member (open-resolve on). Rides in the same extraData JSON
+     * as {@code host}/{@code port}/{@code cap}/{@code peers}: a classic or older
+     * node ignores the key, so it is invisible on the wire and never required.
+     * A client reads {@link #poolOf} to auto-discover pool relays instead of a
+     * central out-of-band list.
+     *
+     * @param zPool true if this relay open-resolves (public staticMLS pool host)
+     */
+    public static Greeting commsOnly(String zVersion, String zHost, int zPort,
+                                     List<String> zPeers, int zCapacity, boolean zPool) {
         boolean known = zHost != null && !zHost.isEmpty()
                 && !zHost.equals("0.0.0.0") && !zHost.equals("::");
         StringBuilder peers = new StringBuilder("[");
@@ -120,8 +135,15 @@ public final class Greeting implements Streamable {
                 + (known ? ",\"host\":\"" + zHost + "\"" : "")
                 + ",\"port\":\"" + zPort + "\""
                 + (zCapacity > 0 ? ",\"cap\":\"" + zCapacity + "\"" : "")
+                + (zPool ? ",\"pool\":\"true\"" : "")
                 + ",\"peers\":" + peers + "}";
         return new Greeting(zVersion, json, -1);
+    }
+
+    /** True if the greeting advertises OPEN staticMLS pool membership
+     *  ({@code "pool":"true"}). Absent (classic / older relay) = false. */
+    public static boolean poolOf(String zExtraDataJson) {
+        return "true".equals(flatValue(zExtraDataJson, "pool"));
     }
 
     /**

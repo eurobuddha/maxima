@@ -61,6 +61,10 @@ public final class HostConnection implements Closeable {
     /** Host capacity this relay advertised in its greeting (peers it will host),
      *  or 0 if unspecified (classic host). A MERIT input for host selection. */
     private volatile int mTheirCapacity;
+    /** True if this relay advertised OPEN staticMLS pool membership (greeting
+     *  "pool":"true"). We prefer pinning a pool relay as our MLS anchor so our
+     *  permanent MAX# resolves for strangers. Absent (classic/old relay) = false. */
+    private volatile boolean mTheirPool;
     private boolean mAttached;
 
     /** When we last read ANY frame from this host. Mirrors the reference's
@@ -115,6 +119,11 @@ public final class HostConnection implements Closeable {
      *  host said nothing (classic). Used to weight host selection by merit. */
     public int getTheirCapacity() {
         return mTheirCapacity;
+    }
+
+    /** True if this relay advertised open staticMLS pool membership. */
+    public boolean getTheirPool() {
+        return mTheirPool;
     }
 
     public byte[] routingKey() {
@@ -254,6 +263,7 @@ public final class HostConnection implements Closeable {
         if (type == Frame.MSG_GREETING) {
             mTheirGreeting = Greeting.fromBytes(payload);
             mTheirCapacity = Greeting.capOf(mTheirGreeting.getExtraData());
+            mTheirPool = Greeting.poolOf(mTheirGreeting.getExtraData());
             return true;
         }
         if (type == Frame.MSG_MAXIMA_CTRL) {

@@ -542,15 +542,26 @@ public final class MaximaNode implements ChatPort {
     private String firstHostMls() {
         // Best-scoring host first (merit: reliability x uptime x capacity, no
         // node type), so the MLS we adopt as our perm anchor is the most reliable
-        // directory we can reach - phone or jar, chosen the same way.
+        // directory we can reach - phone or jar, chosen the same way. But PREFER a
+        // relay that advertises open staticMLS pool membership: our permanent MAX#
+        // only resolves for strangers via an open-resolve (pool) relay. Fall back
+        // to the best directory of any kind when no attached relay advertises the
+        // pool bit (older relays / classic), preserving prior behaviour.
+        String fallback = "";
         for (String h : mPool.activeHostsByScore()) {
             HostConnection c = mPool.connection(h);
             String m = c == null ? null : c.getTheirMlsAddress();
-            if (m != null && !m.isEmpty()) {
-                return m;
+            if (m == null || m.isEmpty()) {
+                continue;
+            }
+            if (c.getTheirPool()) {
+                return m;   // best-scoring POOL relay
+            }
+            if (fallback.isEmpty()) {
+                fallback = m;
             }
         }
-        return "";
+        return fallback;
     }
 
     private boolean mlsHostActive(String zMls) {
