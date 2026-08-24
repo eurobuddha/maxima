@@ -136,11 +136,24 @@ public final class MaximaService extends Service {
         return null;
     }
 
+    /** Set in onCreate when no identity exists yet (fresh install, pre-onboarding).
+     *  onStartCommand then stands the service down instead of building an engine. */
+    private boolean mNoIdentity;
+
     @Override
     public void onCreate() {
         super.onCreate();
         Sha3Provider.install();
         createChannel();
+
+        // Never mint an identity here. On a fresh install the seed is chosen in
+        // onboarding (create-new vs restore); until then EVERY start path
+        // (launcher, BootReceiver, MaximaWorker, HeartbeatReceiver) hits onCreate
+        // and must no-op rather than silently generate a seed the user never saw.
+        if (SeedStore.loadIdentity(this) == null) {
+            mNoIdentity = true;
+            return;
+        }
 
         // THE JAR ENGINE (classic Maxima extracted whole, chain-free). When the
         // hidden toggle is on, classic routing replaces the reimplementation
@@ -165,7 +178,7 @@ public final class MaximaService extends Service {
             }
         }
 
-        MaximaIdentity id = SeedStore.loadOrCreateIdentity(this);
+        MaximaIdentity id = SeedStore.loadIdentity(this);   // non-null past the gate above
         sNode = new MaximaNode(id, "1.0.48", RELAY_TARGET);
         // Discovery client: seeded from the bootstrap floor, it adopts relays the
         // swarm gossips about. Announcing (this phone AS a host) only kicks in if
@@ -482,6 +495,15 @@ public final class MaximaService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (mNoIdentity) {
+            // No identity yet (pre-onboarding). Satisfy the FGS contract briefly,
+            // then stand down without minting or scheduling belts — onboarding
+            // restarts us once a seed exists.
+            try { startForeground(NOTIF_ID, buildNotification("Connecting...")); } catch (Exception ignored) {}
+            stopForeground(true);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         try {
             startForeground(NOTIF_ID, buildNotification("Connecting..."));
         } catch (Exception e) {

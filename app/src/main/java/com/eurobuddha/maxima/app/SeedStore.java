@@ -60,14 +60,23 @@ public final class SeedStore {
         prefs(zCtx).edit().putString(KEY_NAME, zName).apply();
     }
 
-    /** Load the existing identity, or generate one on first run.
-     *  FUND-CRITICAL: unsynchronized, the service (main thread) and a wallet
-     *  worker could both see no phrase on a fresh install, each generate a
-     *  DIFFERENT 24-word seed, and the last writer wins - any funds sent to the
-     *  loser's derived address are unrecoverable. The whole check-generate-save
-     *  is serialized, and the phrase is re-read after acquiring the lock so the
-     *  second caller adopts the first's seed instead of minting its own. */
-    public static synchronized MaximaIdentity loadOrCreateIdentity(Context zCtx) {
+    /** Load the existing identity, or {@code null} if none has been created yet.
+     *  NEVER mints. This is what the service uses on startup so that a fresh
+     *  install can be gated behind onboarding (create-new vs restore) instead of
+     *  silently generating an identity the user never gets to write down. */
+    public static MaximaIdentity loadIdentity(Context zCtx) {
+        String phrase = loadPhrase(zCtx);
+        return phrase == null ? null : MaximaIdentity.fromPhrase(phrase);
+    }
+
+    /** Generate and save a brand-new identity.
+     *  FUND-CRITICAL: unsynchronized, two callers could both see no phrase on a
+     *  fresh install, each generate a DIFFERENT 24-word seed, and the last writer
+     *  wins - any funds sent to the loser's derived address are unrecoverable. The
+     *  whole check-generate-save is serialized, and the phrase is re-read after
+     *  acquiring the lock so the second caller adopts the first's seed instead of
+     *  minting its own. */
+    public static synchronized MaximaIdentity createNewIdentity(Context zCtx) {
         String phrase = loadPhrase(zCtx);
         if (phrase == null) {
             List<String> words = Bip39.generate(24);
@@ -75,6 +84,15 @@ public final class SeedStore {
             savePhrase(zCtx, phrase);
         }
         return MaximaIdentity.fromPhrase(phrase);
+    }
+
+    /** Load the existing identity, or generate one on first run. Thin shim kept
+     *  for callers that must never be left without an identity (wallet
+     *  canonicalSeed, jar migration) - they only run once onboarding has already
+     *  established one, so this never mints unexpectedly. */
+    public static synchronized MaximaIdentity loadOrCreateIdentity(Context zCtx) {
+        MaximaIdentity id = loadIdentity(zCtx);
+        return id != null ? id : createNewIdentity(zCtx);
     }
 
     /**

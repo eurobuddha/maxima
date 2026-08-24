@@ -164,4 +164,62 @@ public class PrefsKeyUses implements KeyUses {
             }
         }
     }
+
+    // ---- raw backup export/import (ALL namespaces) --------------------------
+    // These operate on the on-disk entry names verbatim (e.g. "uses_1000",
+    // "uses_v3_1000"), across every derivation's namespace, so an encrypted
+    // identity backup carries the TRUE Winternitz key-use count to a new device —
+    // the one piece of wallet safety that cannot be reconstructed from the seed.
+
+    /** Reconciled snapshot of every counter across all namespaces (entry name ->
+     *  max of both mirrors), for inclusion in an encrypted backup. */
+    public static java.util.Map<String, Integer> exportAll(Context zCtx) {
+        Context app = zCtx.getApplicationContext();
+        SharedPreferences a = app.getSharedPreferences(FILE_A, Context.MODE_PRIVATE);
+        SharedPreferences b = app.getSharedPreferences(FILE_B, Context.MODE_PRIVATE);
+        synchronized (USES_LOCK) {
+            java.util.LinkedHashMap<String, Integer> out = new java.util.LinkedHashMap<>();
+            mergeInto(out, a);
+            mergeInto(out, b);
+            return out;
+        }
+    }
+
+    private static void mergeInto(java.util.Map<String, Integer> zOut, SharedPreferences zPrefs) {
+        for (java.util.Map.Entry<String, ?> e : zPrefs.getAll().entrySet()) {
+            String k = e.getKey();
+            if (k != null && k.startsWith(KEY_PREFIX) && e.getValue() instanceof Integer) {
+                Integer v = (Integer) e.getValue();
+                Integer cur = zOut.get(k);
+                zOut.put(k, cur == null ? v : Math.max(cur, v));
+            }
+        }
+    }
+
+    /** Restore counters from a backup, RAISE-ONLY: writes max(current, incoming)
+     *  to both mirrors. Never lowers a counter, so a restore can never re-enable a
+     *  spent one-time leaf; on a clean device it reproduces the saved counts. */
+    public static void importRaiseOnly(Context zCtx, java.util.Map<String, Integer> zEntries) {
+        if (zEntries == null || zEntries.isEmpty()) {
+            return;
+        }
+        Context app = zCtx.getApplicationContext();
+        SharedPreferences a = app.getSharedPreferences(FILE_A, Context.MODE_PRIVATE);
+        SharedPreferences b = app.getSharedPreferences(FILE_B, Context.MODE_PRIVATE);
+        synchronized (USES_LOCK) {
+            for (java.util.Map.Entry<String, Integer> e : zEntries.entrySet()) {
+                String k = e.getKey();
+                if (k == null || !k.startsWith(KEY_PREFIX) || e.getValue() == null) {
+                    continue;
+                }
+                int merged = Math.max(Math.max(a.getInt(k, 0), b.getInt(k, 0)), e.getValue());
+                boolean okA = a.edit().putInt(k, merged).commit();
+                boolean okB = b.edit().putInt(k, merged).commit();
+                if (!okA || !okB) {
+                    throw new IllegalStateException(
+                        "KeyUses: failed to persist imported count for " + k);
+                }
+            }
+        }
+    }
 }

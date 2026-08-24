@@ -71,6 +71,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".OnboardingActivity"
+            android:exported="false"
+            android:launchMode="singleTask" />
+
         <!-- The conversation screen. Exported=false: the only ways in are our
              own Chats tab and our own notification. -->
         <activity

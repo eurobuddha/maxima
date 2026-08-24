@@ -66,6 +66,16 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // First run: no identity yet. Route to onboarding (create new vs restore
+        // from seed) instead of silently minting one the user never sees. The
+        // service is gated to match, so nothing starts until a seed is chosen.
+        if (!SeedStore.hasIdentity(this)) {
+            startActivity(new android.content.Intent(this, OnboardingActivity.class));
+            finish();
+            return;
+        }
+
         setContentView(R.layout.activity_main);
 
         // DEV-ONLY intent hooks below. MainActivity is the exported launcher,
