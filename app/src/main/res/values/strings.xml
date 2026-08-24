@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Parlons</string>
+    <string name="app_name">Parlons!</string>
     <string name="brand_tagline">let\'s chat</string>
     <string name="brand_backend_credit">Powered by Maxima</string>
 </resources>

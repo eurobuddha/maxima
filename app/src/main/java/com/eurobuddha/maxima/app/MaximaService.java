@@ -924,7 +924,7 @@ public final class MaximaService extends Service {
     private void createChannel() {
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
-            NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Parlons",
+            NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Parlons!",
                     NotificationManager.IMPORTANCE_LOW);
             ch.setShowBadge(false);
             nm.createNotificationChannel(ch);
@@ -935,7 +935,7 @@ public final class MaximaService extends Service {
         Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
-        return b.setContentTitle("Parlons")
+        return b.setContentTitle("Parlons!")
                 .setContentText(zText)
                 .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setOngoing(true)
