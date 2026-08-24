@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.5.30";
+    public static final String APP_VERSION = "1.5.31";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -215,7 +215,7 @@ public final class DesktopMain {
 
         java.util.prefs.Preferences prefs =
                 java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
-        String name = prefs.get("name", "Parlons Desktop");
+        String name = prefs.get("name", "Parlons! Desktop");
 
         com.eurobuddha.maxima.desktop.ui.DesktopNode dnode =
                 new com.eurobuddha.maxima.desktop.ui.DesktopNode(id, dataDir, name);
@@ -263,7 +263,7 @@ public final class DesktopMain {
             com.eurobuddha.maxima.desktop.ui.MaximaWindow w =
                     new com.eurobuddha.maxima.desktop.ui.MaximaWindow(dnode, theme);
             w.setEngineRestart(this::restartEngine);
-            w.frame().setTitle("Parlons — " + name);
+            w.frame().setTitle("Parlons! — " + name);
             w.show();
             mWindow = w;
         });
@@ -303,7 +303,7 @@ public final class DesktopMain {
                 MaximaIdentity id = MaximaIdentity.fromPhrase(seed.phrase);
                 java.util.prefs.Preferences prefs =
                         java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
-                String name = prefs.get("name", "Parlons Desktop");
+                String name = prefs.get("name", "Parlons! Desktop");
                 // The constructor internally falls back to built-in if a jar boot
                 // fails, so this rarely throws; a jar-boot failure never bricks.
                 com.eurobuddha.maxima.desktop.ui.DesktopNode nn =
@@ -322,7 +322,7 @@ public final class DesktopMain {
                             w.frame().setBounds(oldWin.frame().getBounds());
                             w.frame().setExtendedState(oldWin.frame().getExtendedState());
                         }
-                        w.frame().setTitle("Parlons — " + name);
+                        w.frame().setTitle("Parlons! — " + name);
                         w.show();
                         mWindow = w;
                         if (oldWin != null) oldWin.frame().dispose();

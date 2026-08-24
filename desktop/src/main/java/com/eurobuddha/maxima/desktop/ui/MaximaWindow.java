@@ -104,7 +104,7 @@ public final class MaximaWindow {
         t = zTheme;
         k = new DKit(zTheme);
 
-        mFrame = new JFrame("Parlons");
+        mFrame = new JFrame("Parlons!");
         applyAppIcon(mFrame);
         mFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mFrame.setMinimumSize(new Dimension(360, 560));   // phone-narrow floor
@@ -214,7 +214,7 @@ public final class MaximaWindow {
                     ? java.awt.SystemTray.getSystemTray() : null;
             if (tray != null && tray.getTrayIcons().length > 0) {
                 tray.getTrayIcons()[0].displayMessage(
-                        "Parlons", "New message", java.awt.TrayIcon.MessageType.NONE);
+                        "Parlons!", "New message", java.awt.TrayIcon.MessageType.NONE);
             }
         } catch (Exception ignored) { }
     }
@@ -278,7 +278,7 @@ public final class MaximaWindow {
         line1.setOpaque(false);
         line1.setLayout(new BoxLayout(line1, BoxLayout.X_AXIS));
         line1.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel brand = new JLabel("Parlons");
+        JLabel brand = new JLabel("Parlons!");
         brand.setFont(t.extrabold(21f));
         brand.setForeground(t.onHeader);
         line1.add(brand);
