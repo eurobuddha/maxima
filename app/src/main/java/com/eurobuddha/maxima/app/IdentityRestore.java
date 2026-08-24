@@ -47,22 +47,35 @@ public final class IdentityRestore {
      * @param zPostTarget any live View, used only for the retry postDelayed loop.
      */
     public static void applyWithTeardown(Context zCtx, View zPostTarget, Done zDone) {
-        zCtx.stopService(new Intent(zCtx, MaximaService.class));
-        waitThenWipe(zCtx, zPostTarget, 0, zDone);
+        applyWithTeardown(zCtx, zPostTarget, null, zDone);
     }
 
-    private static void waitThenWipe(Context zCtx, View zView, int zAttempt, Done zDone) {
+    /**
+     * As above, but runs {@code zPostWipe} on the main thread AFTER the wipe and
+     * BEFORE the service restarts — the only safe window to seed fresh node state
+     * (e.g. restore contacts + the key-use counter from a backup) without the
+     * old-then-new race or a live service caching over the write.
+     */
+    public static void applyWithTeardown(Context zCtx, View zPostTarget, Runnable zPostWipe, Done zDone) {
+        zCtx.stopService(new Intent(zCtx, MaximaService.class));
+        waitThenWipe(zCtx, zPostTarget, 0, zPostWipe, zDone);
+    }
+
+    private static void waitThenWipe(Context zCtx, View zView, int zAttempt, Runnable zPostWipe, Done zDone) {
         boolean down = MaximaService.node() == null;
         if (down || zAttempt >= 40) {   // hard cap ~10s so we never hang
             wipeDir(new File(zCtx.getFilesDir(), "node"));
             wipeDir(new File(zCtx.getFilesDir(), "chat"));
+            if (zPostWipe != null) {
+                zPostWipe.run();
+            }
             MaximaService.start(zCtx);
             if (zDone != null) {
                 zDone.run(!down);
             }
             return;
         }
-        zView.postDelayed(() -> waitThenWipe(zCtx, zView, zAttempt + 1, zDone), 250);
+        zView.postDelayed(() -> waitThenWipe(zCtx, zView, zAttempt + 1, zPostWipe, zDone), 250);
     }
 
     /** Recursively delete a directory's contents and the directory itself. */

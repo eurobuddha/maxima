@@ -76,6 +76,11 @@
             android:exported="false"
             android:launchMode="singleTask" />
 
+        <activity
+            android:name=".backup.BackupActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
         <!-- The conversation screen. Exported=false: the only ways in are our
              own Chats tab and our own notification. -->
         <activity

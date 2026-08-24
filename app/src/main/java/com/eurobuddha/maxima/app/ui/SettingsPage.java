@@ -450,6 +450,13 @@ public final class SettingsPage implements Page {
         });
     }
 
+    private void launchBackup(String zMode) {
+        android.content.Intent i = new android.content.Intent(mAct,
+                com.eurobuddha.maxima.app.backup.BackupActivity.class);
+        i.putExtra(com.eurobuddha.maxima.app.backup.BackupActivity.EXTRA_MODE, zMode);
+        mAct.startActivity(i);
+    }
+
     private void requestBatteryExemption() {
         if (isBatteryExempt()) {
             Explain.show(mAct, "battery");
@@ -570,6 +577,16 @@ public final class SettingsPage implements Page {
         TextView restore = k.ghostButton("Restore a seed phrase");
         secCard.addView(restore);
         restore.setOnClickListener(v -> restore());
+
+        TextView backup = k.ghostButton("Back up identity…");
+        LinearLayout.LayoutParams bkp = new LinearLayout.LayoutParams(-1, -2);
+        bkp.topMargin = k.dp(8);
+        secCard.addView(backup, bkp);
+        backup.setOnClickListener(v -> launchBackup("export"));
+        TextView restoreBk = k.ghostButton("Restore from backup…");
+        secCard.addView(restoreBk);
+        restoreBk.setOnClickListener(v -> launchBackup("import"));
+
         mBox.addView(secCard, k.mb(k.dp(4)));
 
         // Apps (IPC).
