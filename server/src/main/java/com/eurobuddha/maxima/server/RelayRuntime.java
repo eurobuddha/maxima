@@ -80,6 +80,12 @@ public final class RelayRuntime {
     private volatile Consumer<Stats> mTickListener;
     private volatile long mBlobBytes;
     private volatile int mMaxConnections;
+    /** Whether this relay is a public open-resolve staticMLS pool host. Defaults to
+     *  the standalone-jar policy; the in-app phone relay and desktop in-process relay
+     *  call {@link #setPool(boolean) setPool(false)} so a churny phone is never a
+     *  permanent-address anchor (it still relays + mailboxes, just is not a pool
+     *  directory). Set before {@link #start()}. */
+    private volatile boolean mPool = RelayServer.poolDefault();
 
     /** Enable the media blob shelf at this byte cap (0 = off). Set before start(). */
     public void setBlobBytes(long zBytes) {
@@ -94,6 +100,16 @@ public final class RelayRuntime {
      */
     public void setMaxConnections(int zMax) {
         mMaxConnections = zMax;
+    }
+
+    /**
+     * Opt this relay into or out of the public open-resolve staticMLS pool. The
+     * standalone jar leaves the default (on, unless the operator opts out); the phone
+     * and desktop in-process relays pass {@code false} so strangers never anchor a
+     * permanent MAX# to a high-churn host. Set before {@link #start()}.
+     */
+    public void setPool(boolean zPool) {
+        mPool = zPool;
     }
 
     public RelayRuntime(MaximaIdentity zIdentity, int zPort, String zProtocol,
@@ -158,7 +174,7 @@ public final class RelayRuntime {
      * taken, which the CLI turns into a friendly message.
      */
     public void start() throws Exception {
-        RelayServer relay = new RelayServer(mIdentity, mPort, mProtocol);
+        RelayServer relay = new RelayServer(mIdentity, mPort, mProtocol, mPool);
         relay.setRateLimit(mRate);
         if (mMaxConnections > 0) {
             relay.setMaxConnections(mMaxConnections);

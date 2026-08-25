@@ -131,6 +131,10 @@ public final class RelayHost {
                     mNode.identity(), RELAY_PORT, VERSION, RATE, "", dir.toPath());
             rt.setBlobBytes(0);   // forward messages + mailbox; no media shelf on a phone
             rt.setMaxConnections(PHONE_HOST_CAP);   // honest, modest advertised capacity
+            rt.setPool(false);    // a churny phone must NOT be a pool/permanent-address anchor
+                                  // (until the Phase-B mesh replicates the directory); it still
+                                  // relays traffic + holds a mailbox for others
+            EventLog.add("RELAY pool=false (phone is not a permanent-address anchor)");
             rt.start();
             mRuntime = rt;
             mState = State.RUNNING;

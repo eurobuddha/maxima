@@ -105,6 +105,7 @@ public final class DesktopMain {
 
         // 1. the relay itself, in-process
         mRuntime = new RelayRuntime(id, port, PROTOCOL, RATE, "", dataDir);
+        mRuntime.setPool(false);   // in-process desktop relay: not a pool/permanent anchor until Phase-B mesh
         mRuntime.setTickListener(s -> {
             mAttachedClients = s.routes;
             mRelayed = s.relayed;

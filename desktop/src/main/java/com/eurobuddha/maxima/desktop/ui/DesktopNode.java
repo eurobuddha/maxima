@@ -352,6 +352,7 @@ public final class DesktopNode {
         try {
             mRelay = new RelayRuntime(mIdentity, RELAY_PORT, PROTOCOL, RELAY_RATE, "",
                     mDataDir.resolve("relay"));
+            mRelay.setPool(false);   // in-process desktop relay: not a pool/permanent anchor until Phase-B mesh
             mRelay.setTickListener(s -> { mRelayStats = s; fireChanged(); });
             mRelay.start();
             mRelayRunning = true;

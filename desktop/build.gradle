@@ -54,6 +54,10 @@ sourceSets {
             include 'com/eurobuddha/wallet/**'
             exclude 'com/eurobuddha/wallet/Identicon.java'      // android Bitmap
             exclude 'com/eurobuddha/wallet/PrefsKeyUses.java'   // android prefs
+            exclude 'com/eurobuddha/wallet/ImageLoader.java'    // android Bitmap/Base64/AndroidSVG
+            exclude 'com/eurobuddha/wallet/ImageTools.java'     // android-adjacent (display-side; not used on desktop)
+            exclude 'com/eurobuddha/wallet/IconResolver.java'   // android.util.Base64
+            exclude 'com/eurobuddha/wallet/TokenMeta.java'      // calls IconResolver (token-icon resolve is app-only for now)
         }
     }
 }
