@@ -564,6 +564,23 @@ public final class MaximaNode implements ChatPort {
         return fallback;
     }
 
+    /** The best-scoring ATTACHED open-pool relay's MLS address, or "" if none is
+     *  attached. Unlike {@link #firstHostMls} this NEVER falls back to a non-pool
+     *  directory: it is used to PIN a stable, stranger-resolvable permanent anchor,
+     *  which only a pool (open-resolve) relay can be. */
+    public String bestPoolMls() {
+        for (String h : mPool.activeHostsByScore()) {
+            HostConnection c = mPool.connection(h);
+            if (c != null && c.getTheirPool()) {
+                String m = c.getTheirMlsAddress();
+                if (m != null && !m.isEmpty()) {
+                    return m;
+                }
+            }
+        }
+        return "";
+    }
+
     private boolean mlsHostActive(String zMls) {
         int at = zMls.lastIndexOf('@');
         if (at < 0) {

@@ -258,25 +258,27 @@ public final class NetworkPage implements Page {
         }
 
         // ---- MLS / permanent address ----
-        // Prefer the shareable PERMANENT MAX# (MAX#<you>#<pool relay>): it survives
-        // host/network moves and resolves for anyone via the open staticMLS pool, so
-        // it's what to hand out as your contact. Falls back to the raw location
-        // address only if no MLS has been adopted yet.
+        // PINNED (isStaticMls) = a FIXED permanent MAX# (MAX#<you>#<pool relay>): it
+        // never changes and, when the anchor is an open-pool relay, resolves for
+        // anyone — this is what to hand out as your contact. UNPINNED = the rotating
+        // live location, which DRIFTS as you move networks; "Make this my permanent
+        // address" in Location settings fixes it to a pool relay. Never label the
+        // drifting location "permanent".
         String mls = node.mlsAddress();
-        String perm = node.permanentAddress();
         if (mls.isEmpty()) {
             mMlsText.setText("None — no pool relay has offered one yet.");
             mMlsText.setOnClickListener(null);
         } else {
-            final boolean isPerm = !perm.isEmpty();
-            final String shown = isPerm ? perm : mls;
+            final boolean pinned = node.isStaticMls();
+            final String shown = pinned ? node.permanentAddress() : mls;
             mMlsText.setText(shown);
             mMlsText.setOnClickListener(x -> {
                 ((android.content.ClipboardManager) mAct.getSystemService(
                         android.content.Context.CLIPBOARD_SERVICE))
                         .setPrimaryClip(android.content.ClipData.newPlainText(
-                                isPerm ? "maxima-max" : "maxima-mls", shown));
-                mAct.toast(isPerm ? "Permanent address copied" : "Location address copied");
+                                pinned ? "maxima-max" : "maxima-mls", shown));
+                mAct.toast(pinned ? "Permanent address copied"
+                        : "Location copied — rotating; set a permanent address in Location settings");
             });
         }
 
@@ -565,6 +567,17 @@ public final class NetworkPage implements Page {
             pool = k.primaryButton("Use the eurobuddha pool (register)");
             body.addView(pool, k.mb(k.dp(8)));
         }
+        // Built-in engine: pin the best attached OPEN-POOL relay as a FIXED,
+        // stranger-resolvable permanent anchor. No central registration needed -
+        // the pool relay open-resolves. Only shown when a pool relay is attached.
+        TextView poolBuiltin = null;
+        if (jarEngine == null) {
+            MaximaNode bn = MaximaService.node();
+            if (bn != null && !bn.bestPoolMls().isEmpty()) {
+                poolBuiltin = k.primaryButton("Make this my permanent address");
+                body.addView(poolBuiltin, k.mb(k.dp(8)));
+            }
+        }
         TextView clear = k.ghostButton("Use the host's directory");
         body.addView(clear);
         BottomSheetDialog d = k.sheet("Location service", body);
@@ -631,6 +644,28 @@ public final class NetworkPage implements Page {
                         mAct.runOnUiThread(() -> mAct.toast("Pool unavailable: " + e.getMessage()));
                     }
                 }, "mls-pool-register").start();
+            });
+        }
+        if (poolBuiltin != null) {
+            poolBuiltin.setOnClickListener(v -> {
+                MaximaNode node = MaximaService.node();
+                if (node == null) {
+                    mAct.toast("Transport not running");
+                    return;
+                }
+                String anchor = node.bestPoolMls();
+                if (anchor.isEmpty()) {
+                    mAct.toast("No pool relay attached yet — try again in a moment");
+                    return;
+                }
+                node.setStaticMls(anchor);          // FIXED pin; does not rotate
+                MlsStore.save(mAct, anchor);
+                EventLog.add("permanent address pinned to pool relay " + anchor);
+                new Thread(node::refreshContacts, "refresh-mls").start();
+                mAct.toast("Permanent address set — resolves via the open pool");
+                d.dismiss();
+                mLastNetSig = "";
+                render();
             });
         }
         clear.setOnClickListener(v -> {

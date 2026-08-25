@@ -514,11 +514,11 @@ public final class ContactsPage implements Page {
                 return perm;
             }
         }
-        // Built-in engine: share the permanent MAX# too (MAX#<you>#<pool relay>),
-        // now that the fleet relays open-resolve — it survives host/network moves
-        // and resolves for anyone, unlike the per-relay Mx…@host:port fallback.
+        // Built-in engine: share the FIXED permanent MAX# (MAX#<you>#<pool relay>)
+        // ONLY when the user has pinned an anchor (isStaticMls) — otherwise the
+        // address drifts and isn't permanent, so we share the per-relay form below.
         com.eurobuddha.maxima.core.MaximaNode builtin = MaximaService.node();
-        if (builtin != null) {
+        if (builtin != null && builtin.isStaticMls()) {
             String perm = builtin.permanentAddress();
             if (!perm.isEmpty()) {
                 return perm;
