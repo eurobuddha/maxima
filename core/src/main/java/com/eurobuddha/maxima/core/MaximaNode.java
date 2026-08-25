@@ -581,6 +581,23 @@ public final class MaximaNode implements ChatPort {
         return "";
     }
 
+    /** Every attached open-pool relay's MLS address, best-scoring first, deduped — the
+     *  redundant resolvers the permanent-address fallback (B3) asks when a MAX#'s baked-in
+     *  host is down. Like {@link #bestPoolMls()} but collects all, not just the first. */
+    public java.util.List<String> poolMlsAddresses() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String h : mPool.activeHostsByScore()) {
+            HostConnection c = mPool.connection(h);
+            if (c != null && c.getTheirPool()) {
+                String m = c.getTheirMlsAddress();
+                if (m != null && !m.isEmpty() && !out.contains(m)) {
+                    out.add(m);
+                }
+            }
+        }
+        return out;
+    }
+
     private boolean mlsHostActive(String zMls) {
         int at = zMls.lastIndexOf('@');
         if (at < 0) {
@@ -697,10 +714,22 @@ public final class MaximaNode implements ChatPort {
         com.eurobuddha.maxima.core.directory.MlsClient c =
                 new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity);
         com.eurobuddha.maxima.core.directory.MlsClient.Resolved r = c.resolve(mls, targetKey);
-        if (!r.ok()) {
-            throw new IllegalStateException(r.error);
+        if (r.ok()) {
+            return r.address;
         }
-        return r.address;
+        // Phase B3 fallback: the baked-in host is DOWN or missed. Ask our OWN attached pool
+        // relays and accept an address only when >=2 independently agree (each may itself
+        // forward across the Phase-B mesh). This resolves a permanent MAX# whose host is
+        // offline, as long as two reachable pool relays can answer for the key. (When the host
+        // is merely MISSING but reachable, it forwards for us via the mesh and r.ok() above is
+        // already true — this path is specifically for a down host.)
+        java.util.List<String> pool = poolMlsAddresses();
+        pool.remove(mls);   // no point re-asking the host that just failed
+        String viaPool = resolveKeyVia(targetKey, pool);
+        if (viaPool != null) {
+            return viaPool;
+        }
+        throw new IllegalStateException(r.error);
     }
 
     /** Publish our address to the directory - to our current MLS, the one we most
@@ -1864,6 +1893,23 @@ public final class MaximaNode implements ChatPort {
             String a = tryResolve(dir, c.publicKey);
             if (a != null && votes.merge(a, 1, Integer::sum) >= 2) {
                 return a;                       // >=2 independent relays agree
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolve a bare identity key across a set of directories, accepting an address only when
+     * >=2 independently agree — the same anti-malice quorum as {@link #resolveVia}, but keyed
+     * by a public key rather than a Contact (used by the permanent-address fallback, B3). A
+     * single pool relay is not an authority, so one answer never wins; two agreeing do.
+     */
+    private String resolveKeyVia(String zTargetKey, java.util.List<String> zDirs) {
+        java.util.Map<String, Integer> votes = new java.util.LinkedHashMap<>();
+        for (String dir : zDirs) {
+            String a = tryResolve(dir, zTargetKey);
+            if (a != null && votes.merge(a, 1, Integer::sum) >= 2) {
+                return a;
             }
         }
         return null;
