@@ -2,6 +2,7 @@ package com.eurobuddha.maxima.core.directory;
 
 import com.eurobuddha.maxima.core.codec.Codec;
 import com.eurobuddha.maxima.core.codec.MiniData;
+import com.eurobuddha.maxima.core.crypto.MaximaCrypto;
 import com.eurobuddha.maxima.core.msg.MLSPacketGETReq;
 import com.eurobuddha.maxima.core.msg.MLSPacketGETResp;
 import com.eurobuddha.maxima.core.msg.MLSPacketSET;
@@ -44,22 +45,74 @@ public final class MlsService {
     }
 
     /**
+     * Verify a forwarded directory proof and return the Maxima address it publishes for
+     * {@code zExpectedKeyHex}, or null if it does not verify. The trust rule for the
+     * Phase-B mesh: a relay accepts a peer's answer ONLY when the PUBLISHER's own signature
+     * checks out and the signed identity is exactly the key we asked for — so a forwarding
+     * relay can withhold an answer, but can never forge or redirect one. The worst a hostile
+     * peer can do is serve a genuine, still-signed address (bounded by the entry TTL).
+     */
+    public static String verifiedAddress(String zExpectedKeyHex, byte[] zProofFrom,
+                                         byte[] zProofPayload, byte[] zProofSig) {
+        try {
+            if (zProofFrom == null || zProofPayload == null || zProofSig == null) {
+                return null;
+            }
+            if (!MaximaCrypto.verify(zProofFrom, zProofPayload, zProofSig)) {
+                return null;
+            }
+            MaximaMessage mm = MaximaMessage.fromBytes(zProofPayload);
+            // The signing key (proofFrom) must be exactly the identity inside the signed
+            // message — otherwise a valid signature could be lifted onto a foreign 'from'.
+            if (!java.util.Arrays.equals(zProofFrom, mm.mFrom.getBytes())) {
+                return null;
+            }
+            String signer = mm.mFrom.to0xString();
+            if (zExpectedKeyHex != null
+                    && !signer.trim().equalsIgnoreCase(zExpectedKeyHex.trim())) {
+                return null;
+            }
+            if (!APP_SET.equals(mm.mApplication.toString())) {
+                return null;
+            }
+            MLSPacketSET set = MLSPacketSET.fromBytes(mm.mData.getBytes());
+            String addr = set.getMaximaAddress();
+            return (addr == null || addr.isEmpty()) ? null : addr;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * Handle a classic inbound directory message.
      *
      * @return the MiniData to send back on the ack channel: a bare status byte
      *         for a SET, or a serialised MLSPacketGETResp for a successful GET
      */
     public MiniData handleClassic(MaximaMessage zMsg, int zOkStatus, int zUnknownStatus) {
+        return handleClassic(zMsg, null, null, null, zOkStatus, zUnknownStatus);
+    }
+
+    /**
+     * As {@link #handleClassic(MaximaMessage, int, int)}, but the caller also supplies the
+     * verified signed envelope triplet ({@code zProofFrom}=publisher key DER,
+     * {@code zProofPayload}=the signed MaximaMessage bytes, {@code zProofSig}=the signature).
+     * A SET retains this proof on its entry so the Phase-B mesh can forward and re-verify it.
+     */
+    public MiniData handleClassic(MaximaMessage zMsg, byte[] zProofFrom, byte[] zProofPayload,
+                                  byte[] zProofSig, int zOkStatus, int zUnknownStatus) {
         String app = zMsg.mApplication.toString();
         String from = zMsg.mFrom.to0xString();
 
         try {
             if (APP_SET.equals(app)) {
                 MLSPacketSET set = MLSPacketSET.fromBytes(zMsg.mData.getBytes());
-                // Keyed by the SIGNER, never by packet contents.
+                // Keyed by the SIGNER, never by packet contents. The proof triplet (when
+                // present) rides along so another relay can verify this entry after forwarding.
                 mStore.put(from,
                         Collections.singletonList(set.getMaximaAddress()),
-                        set.getValidPublicKeys());
+                        set.getValidPublicKeys(),
+                        zProofFrom, zProofPayload, zProofSig, MlsStore.DEFAULT_TTL_MS);
                 return new MiniData(new byte[]{(byte) zOkStatus});
             }
 

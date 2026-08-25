@@ -24,16 +24,43 @@ public final class MlsStore {
         public final List<String> addresses;
         public final List<String> allowedReaders;
         public final long storedAt;
+        /** Absolute expiry (per-entry, so a forwarded/cached entry can expire sooner
+         *  than a locally-published one). */
+        public final long expiresAt;
+        /**
+         * The signed proof this entry was published with, so ANY relay can verify it
+         * without having received the original SET directly (the Phase-B mesh). Null
+         * for entries published without a proof (e.g. the RPC publish path) — those
+         * are usable locally but cannot be trusted/forwarded across relays. The triplet
+         * is the verified MaximaInternal envelope: {@code proofFrom} = publisher key DER,
+         * {@code proofPayload} = the signed MaximaMessage bytes, {@code proofSig} = the
+         * signature over the payload. Re-verify with
+         * {@code MaximaCrypto.verify(proofFrom, proofPayload, proofSig)}.
+         */
+        public final byte[] proofFrom;
+        public final byte[] proofPayload;
+        public final byte[] proofSig;
 
-        Entry(String zKey, List<String> zAddresses, List<String> zAllowed, long zStoredAt) {
+        Entry(String zKey, List<String> zAddresses, List<String> zAllowed,
+              long zStoredAt, long zExpiresAt,
+              byte[] zProofFrom, byte[] zProofPayload, byte[] zProofSig) {
             publicKey = zKey;
             addresses = zAddresses;
             allowedReaders = zAllowed;
             storedAt = zStoredAt;
+            expiresAt = zExpiresAt;
+            proofFrom = zProofFrom;
+            proofPayload = zProofPayload;
+            proofSig = zProofSig;
         }
 
         public String primary() {
             return addresses.isEmpty() ? null : addresses.get(0);
+        }
+
+        /** True when this entry carries a signed proof another relay can verify. */
+        public boolean hasProof() {
+            return proofFrom != null && proofPayload != null && proofSig != null;
         }
     }
 
@@ -70,6 +97,18 @@ public final class MlsStore {
      * otherwise anyone could overwrite anyone's directory entry.
      */
     public void put(String zSignerPublicKey, List<String> zAddresses, List<String> zAllowedReaders) {
+        put(zSignerPublicKey, zAddresses, zAllowedReaders, null, null, null, mTtlMs);
+    }
+
+    /**
+     * Signed publish with an explicit TTL. Retains the proof triplet (the verified
+     * MaximaInternal envelope) so another relay can verify this entry after it is
+     * forwarded (the Phase-B mesh); {@code zTtlMs} lets a forwarded/cached entry expire
+     * sooner than a locally-published one. Pass null proof + {@link #DEFAULT_TTL_MS}
+     * for an ordinary unsigned local publish.
+     */
+    public void put(String zSignerPublicKey, List<String> zAddresses, List<String> zAllowedReaders,
+                    byte[] zProofFrom, byte[] zProofPayload, byte[] zProofSig, long zTtlMs) {
         // Bound the per-entry lists so one SET cannot carry a huge address blob.
         List<String> addrs = zAddresses.size() > MAX_ADDRESSES
                 ? new ArrayList<>(zAddresses.subList(0, MAX_ADDRESSES))
@@ -77,9 +116,11 @@ public final class MlsStore {
         List<String> readers = zAllowedReaders.size() > MAX_ADDRESSES
                 ? new ArrayList<>(zAllowedReaders.subList(0, MAX_ADDRESSES))
                 : new ArrayList<>(zAllowedReaders);
+        long now = System.currentTimeMillis();
         synchronized (mEntries) {
             mEntries.put(norm(zSignerPublicKey), new Entry(
-                    norm(zSignerPublicKey), addrs, readers, System.currentTimeMillis()));
+                    norm(zSignerPublicKey), addrs, readers, now, now + zTtlMs,
+                    zProofFrom, zProofPayload, zProofSig));
             // LRU cap: evict the least-recently-accessed while over the limit.
             java.util.Iterator<String> it = mEntries.keySet().iterator();
             while (mEntries.size() > DEFAULT_MAX_ENTRIES && it.hasNext()) {
@@ -112,7 +153,7 @@ public final class MlsStore {
         if (e == null) {
             return null;
         }
-        if (System.currentTimeMillis() - e.storedAt > mTtlMs) {
+        if (System.currentTimeMillis() > e.expiresAt) {
             mEntries.remove(norm(zTargetPublicKey));
             return null;
         }
@@ -149,7 +190,7 @@ public final class MlsStore {
         java.util.List<String> expired = new java.util.ArrayList<>();
         synchronized (mEntries) {
             for (Map.Entry<String, Entry> e : mEntries.entrySet()) {
-                if (now - e.getValue().storedAt > mTtlMs) {
+                if (now > e.getValue().expiresAt) {
                     expired.add(e.getKey());
                 }
             }

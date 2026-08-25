@@ -820,8 +820,12 @@ public final class RelayServer {
                 return;
             }
 
-            // Directory SET/GET reply on the ack channel, classic style.
-            MiniData reply = mMls.handleClassic(mm, Frame.RESPONSE_OK, Frame.RESPONSE_UNKNOWN);
+            // Directory SET/GET reply on the ack channel, classic style. Hand the verified
+            // envelope triplet along: a SET retains it as a signed proof so this entry can be
+            // forwarded to and re-verified by peer relays (the Phase-B mesh).
+            MiniData reply = mMls.handleClassic(mm,
+                    mi.mFrom.getBytes(), mi.mData.getBytes(), mi.mSignature.getBytes(),
+                    Frame.RESPONSE_OK, Frame.RESPONSE_UNKNOWN);
             if (reply != null) {
                 zConn.write(Frame.body(Frame.MSG_PING, reply));
                 return;
