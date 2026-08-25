@@ -65,6 +65,16 @@ public final class Probe {
      */
     public static boolean dial(String zHost, int zPort, int zConnectMs, int zReadMs,
                                String zVersion) {
+        return dialGreeting(zHost, zPort, zConnectMs, zReadMs, zVersion) != null;
+    }
+
+    /**
+     * As {@link #dial} but returns the peer's greeting (or null if it did not answer as
+     * a Maxima endpoint), so the caller can read what the peer advertises — e.g. the
+     * staticMLS-pool bit ({@link Greeting#poolOf}) used to pick mesh forwarding targets.
+     */
+    public static Greeting dialGreeting(String zHost, int zPort, int zConnectMs, int zReadMs,
+                                        String zVersion) {
         try (Socket s = new Socket()) {
             // Separate connect and read budgets, so a target that completes the
             // TCP handshake and then goes silent blocks for connect+read, not
@@ -82,10 +92,14 @@ public final class Probe {
             // Read one frame; a real endpoint greets back. Bounded read - we do
             // not trust the far side just because we dialled it.
             byte[] frame = Frame.readOrSkip(in, 64 * 1024);
-            return frame != null && frame.length >= 1
-                    && Frame.typeOf(frame) == Frame.MSG_GREETING;
+            if (frame == null || frame.length < 1 || Frame.typeOf(frame) != Frame.MSG_GREETING) {
+                return null;
+            }
+            byte[] body = new byte[frame.length - 1];
+            System.arraycopy(frame, 1, body, 0, body.length);
+            return Greeting.fromBytes(body);
         } catch (Exception e) {
-            return false;
+            return null;
         }
     }
 

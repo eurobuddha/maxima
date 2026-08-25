@@ -9,6 +9,8 @@ import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 import com.eurobuddha.maxima.core.mailbox.Mailbox;
 import com.eurobuddha.maxima.core.msg.CryptoPackage;
 import com.eurobuddha.maxima.core.msg.Greeting;
+import com.eurobuddha.maxima.core.msg.MLSPacketGETReq;
+import com.eurobuddha.maxima.core.msg.MLSPacketGETResp;
 import com.eurobuddha.maxima.core.msg.MaxTxPoW;
 import com.eurobuddha.maxima.core.msg.MaximaCTRLMessage;
 import com.eurobuddha.maxima.core.msg.MaximaInternal;
@@ -158,6 +160,38 @@ public final class RelayServer {
     /** Claims are cheap to send but cost us a verification dial — cap per source. */
     private static final int PER_SOURCE_CLAIMS_PER_MIN = 6;
     private final Map<String, RateLimit> mClaimLimits = new ConcurrentHashMap<>();
+
+    // ---- Phase-B MLS mesh: forward a resolve MISS to peer pool relays ----
+    /**
+     * Bootstrap fleet peers (host:port) the mesh forwards resolves to, on top of any
+     * gossip-verified pool peers. Like the client's {@code RelayStore.DEFAULTS}: a starting
+     * set, never a single point of failure — trust is the publisher's signed proof, so a
+     * dead or hostile peer is simply skipped. Set via {@code --peers} / RelayRuntime.setPeers.
+     */
+    private volatile java.util.List<String> mBootstrapPeers = java.util.Collections.emptyList();
+    /** Target keys currently being forwarded, so a burst of identical misses fans out once. */
+    private final java.util.Set<String> mForwarding =
+            java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Map<String, RateLimit> mForwardLimit = new ConcurrentHashMap<>();
+    /** Peers asked per miss (stop at the first verified answer). */
+    private static final int FORWARD_FANOUT = 4;
+    private static final int FORWARD_CONNECT_MS = 3000;
+    private static final int FORWARD_READ_MS = 2500;
+    /** Global forward budget — a miss flood must not amplify into a fan-out storm. */
+    private static final int FORWARDS_PER_MIN = 240;
+    /** A forwarded answer is cached this briefly, so repeats are instant and staleness is
+     *  bounded regardless of the origin entry's own (longer) TTL. */
+    private static final long FORWARD_CACHE_TTL_MS = 10 * 60 * 1000;
+
+    /**
+     * Bootstrap the mesh with a fleet peer list ({@code host:port}). Optional: without it the
+     * mesh still forwards to any gossip-verified pool peers. Only pool relays should be given
+     * a list (a non-pool relay never forwards). Safe to set at startup or any time after.
+     */
+    public void setPeers(java.util.List<String> zHostPorts) {
+        mBootstrapPeers = zHostPorts == null ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(zHostPorts);
+    }
 
     /**
      * The media shelf: ciphertext chunks parked here by attached users so a
@@ -592,6 +626,13 @@ public final class RelayServer {
                 handleMaxima(zConn, payload);
                 return;
             }
+            case Frame.MSG_DIR_QUERY: {
+                // A peer pool relay asks whether we hold a signed entry for a key (Phase-B
+                // mesh). We answer ONLY from our own store and never re-forward (strict
+                // 1-hop). handleDirQuery guards on mPool so a non-pool relay leaks nothing.
+                handleDirQuery(zConn, payload);
+                return;
+            }
             case Frame.MSG_SINGLE_PING: {
                 // A connectivity probe - either the reference's fresh-socket
                 // reachability check (NIOManager.sendPingMessage) or a peer's
@@ -827,6 +868,17 @@ public final class RelayServer {
                     mi.mFrom.getBytes(), mi.mData.getBytes(), mi.mSignature.getBytes(),
                     Frame.RESPONSE_OK, Frame.RESPONSE_UNKNOWN);
             if (reply != null) {
+                // Phase-B mesh: a pool relay that MISSED a resolve forwards it to peer pool
+                // relays, verifies the signed answer, and returns a real hit — so a client
+                // that reaches ANY pool relay resolves anything published anywhere in the pool.
+                byte[] rb = reply.getBytes();
+                boolean miss = rb.length == 1 && (rb[0] & 0xFF) == Frame.RESPONSE_UNKNOWN;
+                if (mPool && miss && MlsService.APP_GET.equals(mm.mApplication.toString())) {
+                    MiniData forwarded = forwardResolve(mm);
+                    if (forwarded != null) {
+                        reply = forwarded;
+                    }
+                }
                 zConn.write(Frame.body(Frame.MSG_PING, reply));
                 return;
             }
@@ -835,6 +887,112 @@ public final class RelayServer {
         } catch (Exception e) {
             zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
         }
+    }
+
+    /**
+     * Answer a peer relay's directory query from our OWN store only (strict 1-hop — we never
+     * re-forward). Only an open pool relay answers with content: a non-pool relay's directory
+     * is allow-listed and must not leak via the mesh, so it always replies "absent". We also
+     * only share entries that carry a verifiable signed proof and have not expired.
+     */
+    private void handleDirQuery(Conn zConn, byte[] zPayload) throws Exception {
+        DirQuery q;
+        try {
+            q = DirQuery.fromBytes(zPayload);
+        } catch (Exception e) {
+            return;   // malformed — say nothing
+        }
+        byte[] nonce = q.getNonce();
+        if (mPool) {
+            MlsStore.Entry e = mDirectory.peek(q.getTargetKey());
+            if (e != null && e.hasProof() && System.currentTimeMillis() <= e.expiresAt) {
+                zConn.write(Frame.body(Frame.MSG_DIR_ANSWER,
+                        new DirAnswer(nonce, e.proofFrom, e.proofPayload, e.proofSig)));
+                return;
+            }
+        }
+        zConn.write(Frame.body(Frame.MSG_DIR_ANSWER, DirAnswer.absent(nonce)));
+    }
+
+    /**
+     * Forward a resolve MISS to peer pool relays and, on the first VERIFIED answer, cache it
+     * briefly and return a normal {@code MLSPacketGETResp} for the original client. Returns
+     * null if no peer holds a verifiable entry. Only called on a pool relay, for an APP_GET
+     * that missed locally — so this is always an ORIGINAL client query, never a forward of a
+     * forward (the DIR_QUERY handler above never calls this): the mesh is strictly 1-hop.
+     */
+    private MiniData forwardResolve(MaximaMessage zGetMsg) {
+        String targetKey;
+        MLSPacketGETReq req;
+        try {
+            req = MLSPacketGETReq.fromBytes(zGetMsg.mData.getBytes());
+            targetKey = req.getPublicKey();
+        } catch (Exception e) {
+            return null;
+        }
+        // Collapse a burst of identical concurrent misses into one fan-out, and honour a
+        // global forward budget so a miss flood cannot amplify.
+        if (!mForwarding.add(targetKey)) {
+            return null;
+        }
+        try {
+            if (!allow(mForwardLimit, "*", FORWARDS_PER_MIN)) {
+                return null;
+            }
+            int asked = 0;
+            for (String hp : forwardTargets()) {
+                if (asked >= FORWARD_FANOUT) {
+                    break;
+                }
+                int c = hp.lastIndexOf(':');
+                if (c < 0) {
+                    continue;
+                }
+                String host = hp.substring(0, c);
+                int port;
+                try {
+                    port = Integer.parseInt(hp.substring(c + 1).trim());
+                } catch (Exception e) {
+                    continue;
+                }
+                asked++;
+                DirAnswer ans = RelayQueryClient.query(host, port, targetKey,
+                        FORWARD_CONNECT_MS, FORWARD_READ_MS);
+                if (ans == null) {
+                    continue;
+                }
+                String addr = MlsService.verifiedAddress(targetKey,
+                        ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig());
+                if (addr == null) {
+                    continue;   // unverifiable answer — a peer can withhold, never forge
+                }
+                // Trust is the signature. Cache briefly (bounded staleness) so repeats are
+                // instant, then answer the client as if it had been a local hit.
+                mDirectory.put(targetKey,
+                        java.util.Collections.singletonList(addr),
+                        java.util.Collections.emptyList(),
+                        ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig(),
+                        FORWARD_CACHE_TTL_MS);
+                log("mesh: resolved " + safe(targetKey) + " via " + host + ":" + port);
+                MLSPacketGETResp resp =
+                        new MLSPacketGETResp(targetKey, addr, req.getRandomUID());
+                return new MiniData(Codec.serialise(resp));
+            }
+            return null;
+        } finally {
+            mForwarding.remove(targetKey);
+        }
+    }
+
+    /** Forwarding targets, best-first: gossip-verified pool peers, then the bootstrap fleet,
+     *  deduped and minus ourselves. */
+    private java.util.List<String> forwardTargets() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>(mPeers.poolPeers());
+        out.addAll(mBootstrapPeers);
+        if (!mPublicHost.isEmpty()) {
+            out.remove(mPublicHost + ":" + mPort);
+        }
+        return new java.util.ArrayList<>(out);
     }
 
     /**

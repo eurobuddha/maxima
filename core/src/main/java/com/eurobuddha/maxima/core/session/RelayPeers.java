@@ -44,6 +44,11 @@ public final class RelayPeers {
     /** verified "ip:port" -> last time it was verified or re-claimed. */
     private final Map<String, Long> mVerified = new ConcurrentHashMap<>();
 
+    /** verified "ip:port" -> whether it advertised the open-resolve staticMLS pool bit
+     *  in its greeting. Captured at the verification dial; the mesh forwards resolves
+     *  only to pool peers (a non-pool relay would answer "unknown" anyway). */
+    private final Map<String, Boolean> mPool = new ConcurrentHashMap<>();
+
     /** claims waiting for a dial-back check. */
     private final LinkedBlockingQueue<String> mPending = new LinkedBlockingQueue<>(64);
 
@@ -109,10 +114,28 @@ public final class RelayPeers {
         return mVerified.size();
     }
 
+    /** Verified peers that advertised the open-resolve pool bit, freshest first — the
+     *  mesh's forwarding targets. Capped at {@link #SHARE_LIMIT}. */
+    public List<String> poolPeers() {
+        List<Map.Entry<String, Long>> all = new ArrayList<>(mVerified.entrySet());
+        all.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, Long> e : all) {
+            if (Boolean.TRUE.equals(mPool.get(e.getKey()))) {
+                out.add(e.getKey());
+                if (out.size() >= SHARE_LIMIT) {
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     /** Drop verified peers that have not re-claimed within the TTL. */
     public void expire() {
         long now = System.currentTimeMillis();
         mVerified.entrySet().removeIf(e -> now - e.getValue() > TTL_MS);
+        mPool.keySet().retainAll(mVerified.keySet());
     }
 
     public void stop() {
@@ -133,9 +156,13 @@ public final class RelayPeers {
             int c = hp.lastIndexOf(':');
             String host = hp.substring(0, c);
             int port = Integer.parseInt(hp.substring(c + 1));
-            // The dial-back IS the admission test: a greeting must come home.
-            if (Probe.dial(host, port, CONNECT_MS, READ_MS, mProtocol)) {
+            // The dial-back IS the admission test: a greeting must come home. We keep
+            // the greeting to record whether the peer is an open staticMLS pool host.
+            com.eurobuddha.maxima.core.msg.Greeting g =
+                    Probe.dialGreeting(host, port, CONNECT_MS, READ_MS, mProtocol);
+            if (g != null) {
                 mVerified.put(hp, System.currentTimeMillis());
+                mPool.put(hp, com.eurobuddha.maxima.core.msg.Greeting.poolOf(g.getExtraData()));
             }
         }
     }

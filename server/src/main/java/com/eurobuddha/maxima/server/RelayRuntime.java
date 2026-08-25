@@ -86,6 +86,8 @@ public final class RelayRuntime {
      *  permanent-address anchor (it still relays + mailboxes, just is not a pool
      *  directory). Set before {@link #start()}. */
     private volatile boolean mPool = RelayServer.poolDefault();
+    /** Bootstrap mesh peers (host:port) forwarded to on a resolve miss. */
+    private volatile java.util.List<String> mPeers = java.util.Collections.emptyList();
 
     /** Enable the media blob shelf at this byte cap (0 = off). Set before start(). */
     public void setBlobBytes(long zBytes) {
@@ -110,6 +112,21 @@ public final class RelayRuntime {
      */
     public void setPool(boolean zPool) {
         mPool = zPool;
+    }
+
+    /**
+     * Bootstrap the Phase-B mesh with fleet peer host:ports this relay forwards resolve
+     * misses to (like the client's RelayStore.DEFAULTS — a starting set, not a single point
+     * of failure; trust is the publisher's signed proof). Applies whether set before or after
+     * {@link #start()}.
+     */
+    public void setPeers(java.util.List<String> zHostPorts) {
+        mPeers = zHostPorts == null ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(zHostPorts);
+        RelayServer r = mRelay;
+        if (r != null) {
+            r.setPeers(mPeers);
+        }
     }
 
     public RelayRuntime(MaximaIdentity zIdentity, int zPort, String zProtocol,
@@ -180,6 +197,7 @@ public final class RelayRuntime {
             relay.setMaxConnections(mMaxConnections);
         }
         relay.setPublicHost(mHost);
+        relay.setPeers(mPeers);   // bootstrap the Phase-B mesh forwarding targets
         // Durable mailbox under <data>/relaystore, so a restart does not lose the
         // ciphertext we hold for offline peers.
         relay.setStore(new com.eurobuddha.maxima.core.store.FileStore(

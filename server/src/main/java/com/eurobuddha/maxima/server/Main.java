@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.30";
+    public static final String VERSION = "0.4.31";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -36,6 +36,7 @@ public final class Main {
         String protocol = DEFAULT_PROTOCOL;
         boolean selftest = false;
         long blobBytes = DEFAULT_BLOB_BYTES;
+        java.util.List<String> peers = new java.util.ArrayList<>();
 
         // --- parse first, do nothing else, so informational flags are pure ---
         for (int i = 0; i < args.length; i++) {
@@ -83,6 +84,16 @@ public final class Main {
                 case "--protocol":
                     protocol = strArg(args, ++i, "--protocol");
                     break;
+                case "--peers":
+                    // Comma-separated fleet host:ports the Phase-B mesh forwards resolve
+                    // misses to (bootstrap set; trust is the publisher's signed proof).
+                    for (String p : strArg(args, ++i, "--peers").split(",")) {
+                        String t = p.trim();
+                        if (!t.isEmpty()) {
+                            peers.add(t);
+                        }
+                    }
+                    break;
                 default:
                     // Silently ignoring this is how you end up on the wrong port.
                     System.err.println("Unknown option: " + a);
@@ -96,8 +107,21 @@ public final class Main {
             System.exit(SelfTest.run(port, protocol));
         }
 
+        // Env fallback so the systemd unit can carry the fleet list without editing argv.
+        if (peers.isEmpty()) {
+            String env = System.getenv("MAXIMA_PEERS");
+            if (env != null && !env.trim().isEmpty()) {
+                for (String p : env.split(",")) {
+                    String t = p.trim();
+                    if (!t.isEmpty()) {
+                        peers.add(t);
+                    }
+                }
+            }
+        }
+
         try {
-            run(port, data, rate, protocol, host, blobBytes);
+            run(port, data, rate, protocol, host, blobBytes, peers);
         } catch (BindException be) {
             System.err.println();
             System.err.println("ERROR: port " + port + " is already in use.");
@@ -115,7 +139,8 @@ public final class Main {
         }
     }
 
-    private static void run(int port, String data, int rate, String protocol, String host, long blobBytes)
+    private static void run(int port, String data, int rate, String protocol, String host, long blobBytes,
+                            java.util.List<String> peers)
             throws Exception {
         Path dir = Paths.get(data);
 
@@ -156,6 +181,11 @@ public final class Main {
 
         RelayRuntime runtime = new RelayRuntime(id, port, protocol, rate, host, dir);
         runtime.setBlobBytes(blobBytes);
+        runtime.setPeers(peers);
+        if (!peers.isEmpty()) {
+            System.out.println("  mesh     : forwarding resolve misses to " + peers.size()
+                    + " bootstrap peer(s)");
+        }
         runtime.setTickListener(s -> System.out.printf(
                 "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
                 s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory));
@@ -200,6 +230,8 @@ public final class Main {
         out.println("  --rate <n>       max messages/min per peer     (default " + DEFAULT_RATE + ")");
         out.println("  --blobstore <MB> media shelf size in MB, 0=off (default 4096)");
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
+        out.println("  --peers <list>   comma-separated fleet host:ports to forward resolve");
+        out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");
         out.println("  -v, --version    print the version and exit");
         out.println("  -h, --help       print this and exit");

@@ -45,6 +45,17 @@ public final class Frame {
     public static final int MSG_SINGLE_PING = 11;
     public static final int MSG_SINGLE_PONG = 12;
 
+    /**
+     * Relay-plane directory forwarding (the Phase-B MLS mesh). A pool relay that misses a
+     * resolve asks a peer pool relay with a DIR_QUERY; the peer answers from its OWN store
+     * (strict 1-hop — it never re-forwards) with a DIR_ANSWER carrying the publisher's
+     * signed proof, so the asking relay verifies the address itself. High values, well
+     * clear of the classic NIO type range: only our relays send these, and an unknown
+     * type is merely ignored on the reference (never a disconnect).
+     */
+    public static final int MSG_DIR_QUERY = 200;
+    public static final int MSG_DIR_ANSWER = 201;
+
     // ---- Liveness cadence (one place; both roles share it) ----
     /** Send a keep-alive down every held connection this often. Well under the
      *  reference's 10-min read-silence disconnect AND common NAT idle timers. */
