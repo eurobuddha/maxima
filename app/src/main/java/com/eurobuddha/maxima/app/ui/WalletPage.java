@@ -28,6 +28,8 @@ import com.eurobuddha.wallet.Amounts;
 import com.eurobuddha.wallet.CoinAggregator;
 import com.eurobuddha.wallet.CoinSelector;
 import com.eurobuddha.wallet.Identicon;
+import com.eurobuddha.wallet.ImageLoader;
+import com.eurobuddha.wallet.TokenMeta;
 import com.eurobuddha.wallet.TxnFactory;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
@@ -413,10 +415,21 @@ public final class WalletPage implements Page {
             int pad = Math.round(px * 0.26f);
             iv.setPadding(pad, pad, pad, pad);
         } else {
-            Bitmap b = Identicon.forToken(agg.tokenid, px);
-            RoundedBitmapDrawable d = RoundedBitmapDrawableFactory.create(mAct.getResources(), b);
-            d.setCircular(true);
-            iv.setImageDrawable(d);
+            // Base layer: the deterministic identicon, circle-cropped — shown until (and unless) the
+            // token's real icon loads. Clip the view to an oval so a swapped-in real icon stays circular.
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setClipToOutline(true);
+            iv.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override public void getOutline(View v, android.graphics.Outline o) {
+                    o.setOval(0, 0, v.getWidth(), v.getHeight());
+                }
+            });
+            iv.setImageBitmap(Identicon.forToken(agg.tokenid, px));
+            // Real-icon layer: resolve the token's own icon from its metadata (token.url / nested
+            // name.icon, incl. the on-chain <artimage> base64 wrapper) and swap it in on load. The
+            // identicon stays on absence or failure. Mirrors NFTwallet BalancesView.buildCard.
+            TokenMeta meta = TokenMeta.parse(agg.tokenJson, agg.tokenid);
+            ImageLoader.loadOver(mAct, meta.iconUrl, iv, null);
         }
         return iv;
     }
