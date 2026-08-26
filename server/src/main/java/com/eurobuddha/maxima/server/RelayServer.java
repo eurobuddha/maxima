@@ -173,8 +173,12 @@ public final class RelayServer {
     private final java.util.Set<String> mForwarding =
             java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Map<String, RateLimit> mForwardLimit = new ConcurrentHashMap<>();
-    /** Peers asked per miss (stop at the first verified answer). */
-    private static final int FORWARD_FANOUT = 4;
+    /** Peers asked per miss (stop at the FIRST verified answer). Sized to cover the whole
+     *  fleet: an entry may live on a single relay (a client attached to just one), so a miss
+     *  must be able to reach every peer, not a subset — otherwise a rare entry beyond the cut
+     *  is unresolvable. First-answer-wins means the common case (widely-replicated entries)
+     *  still stops after one dial; the full fan-out is only paid for genuinely rare/absent keys. */
+    private static final int FORWARD_FANOUT = 8;
     private static final int FORWARD_CONNECT_MS = 3000;
     private static final int FORWARD_READ_MS = 2500;
     /** Global forward budget — a miss flood must not amplify into a fan-out storm. */
