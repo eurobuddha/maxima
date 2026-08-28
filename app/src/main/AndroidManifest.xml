@@ -81,6 +81,14 @@
             android:exported="false"
             android:launchMode="singleTop" />
 
+        <activity
+            android:name=".cloud.CloudActivity"
+            android:label="Parlons Cloud"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- The conversation screen. Exported=false: the only ways in are our
              own Chats tab and our own notification. -->
         <activity
