@@ -37,15 +37,20 @@ public final class ParlonsControl {
     public static final String M_SUMMARIES    = "parlons.chat.summaries";
     public static final String M_CONVERSATION = "parlons.chat.conversation";
     public static final String M_SEND         = "parlons.chat.send";
+    public static final String M_WALLET_ADDR  = "parlons.wallet.address";
+    public static final String M_WALLET_SET   = "parlons.wallet.setwatch";
+    public static final String M_WALLET_BAL   = "parlons.wallet.balance";
 
     private final MaximaNode mNode;
     private final ChatEngine mChat;
     private final DevicePairing mPairing;
+    private final WatchWallet mWallet;
 
-    public ParlonsControl(MaximaNode zNode, ChatEngine zChat, DevicePairing zPairing) {
+    public ParlonsControl(MaximaNode zNode, ChatEngine zChat, DevicePairing zPairing, WatchWallet zWallet) {
         mNode = zNode;
         mChat = zChat;
         mPairing = zPairing;
+        mWallet = zWallet;
     }
 
     public void registerOn(ServiceRegistry zReg) {
@@ -185,6 +190,31 @@ public final class ParlonsControl {
             ChatEngine.Entry e = mChat.send(c, body);
             JSONObject out = ok();
             out.put("id", e == null ? "" : safe(e.id));
+            return bytes(out);
+        });
+
+        // --- watch-only wallet (funds stay COLD on the device; the node only reads) ---
+        zReg.register(M_WALLET_ADDR, req -> {
+            requireAuth(req);
+            JSONObject out = ok();
+            out.put("address", safe(mWallet.watchAddress()));
+            return bytes(out);
+        });
+        zReg.register(M_WALLET_SET, req -> {
+            requireAuth(req);
+            String address = str(parse(req), "address");
+            if (address.isEmpty()) {
+                return bytes(err("address required"));
+            }
+            mWallet.setWatchAddress(address);
+            return bytes(ok());
+        });
+        zReg.register(M_WALLET_BAL, req -> {
+            requireAuth(req);
+            JSONObject bal = mWallet.balance();   // gateway read; throws if unset → ERROR envelope
+            JSONObject out = ok();
+            out.put("address", safe(mWallet.watchAddress()));
+            out.put("balance", bal);
             return bytes(out);
         });
     }

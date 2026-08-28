@@ -52,6 +52,7 @@ public final class ParlonsCore {
     private final MediaService mMedia;
     private final ChatEngine mChat;
     private final DevicePairing mPairing;
+    private final WatchWallet mWallet;
     private final ParlonsControl mControl;
 
     private ScheduledExecutorService mMaint;
@@ -108,7 +109,8 @@ public final class ParlonsCore {
         // Maxima RPC substrate (no public port). RPC is dispatched before the chat engine
         // (MaximaNode routes RpcEnvelope.APPLICATION first), so control never hits chat.
         mPairing = new DevicePairing(zDataDir);
-        mControl = new ParlonsControl(mNode, mChat, mPairing);
+        mWallet = new WatchWallet(zDataDir);
+        mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
         mControl.registerOn(mNode.services());
     }
 

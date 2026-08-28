@@ -191,6 +191,38 @@ public final class Client {
                 report(r.send(rest.get(1), body.toString()), "sent ✓");
                 break;
             }
+            case "wallet": {
+                String sub = rest.size() > 1 ? rest.get(1).toLowerCase() : "balance";
+                if ("set".equals(sub)) {
+                    requireArg(rest.subList(1, rest.size()), "wallet set <Mx address>");
+                    report(r.setWatch(rest.get(2)), "watch address set ✓ (funds stay on your device)");
+                } else if ("address".equals(sub)) {
+                    JSONObject o = r.walletAddress();
+                    System.out.println(isOk(o)
+                            ? "watch address: " + (String.valueOf(o.get("address")).isEmpty()
+                                ? "(none — wallet set <Mx>)" : o.get("address"))
+                            : "error: " + o.getOrDefault("error", o));
+                } else {   // balance
+                    JSONObject o = r.balance();
+                    if (!isOk(o)) { fail(o); break; }
+                    System.out.println("address : " + o.get("address"));
+                    Object bal = o.get("balance");
+                    if (bal instanceof JSONObject) {
+                        Object resp = ((JSONObject) bal).get("response");
+                        if (resp instanceof JSONArray && !((JSONArray) resp).isEmpty()) {
+                            for (Object t : (JSONArray) resp) {
+                                JSONObject tk = (JSONObject) t;
+                                System.out.println("  " + tk.getOrDefault("token", "Minima")
+                                        + "  confirmed=" + tk.get("confirmed")
+                                        + "  sendable=" + tk.get("sendable"));
+                            }
+                        } else {
+                            System.out.println("  (no coins at this address yet)");
+                        }
+                    }
+                }
+                break;
+            }
             default:
                 usage();
         }
@@ -235,5 +267,8 @@ public final class Client {
         System.out.println("  chats                  conversation summaries");
         System.out.println("  read <peer key>        a conversation");
         System.out.println("  send <peer key> <msg>  send a message");
+        System.out.println("  wallet address         your account's watch-only address");
+        System.out.println("  wallet set <Mx>        set the address to watch (funds stay on your device)");
+        System.out.println("  wallet balance         watch-only balance (read-only; the node can't spend)");
     }
 }

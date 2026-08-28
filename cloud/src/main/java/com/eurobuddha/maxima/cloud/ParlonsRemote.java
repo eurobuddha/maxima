@@ -179,6 +179,20 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_SEND, p);
     }
 
+    public JSONObject walletAddress() throws Exception {
+        return rpc(ParlonsControl.M_WALLET_ADDR, new JSONObject());
+    }
+
+    public JSONObject setWatch(String zAddress) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("address", zAddress);
+        return rpc(ParlonsControl.M_WALLET_SET, p);
+    }
+
+    public JSONObject balance() throws Exception {
+        return rpc(ParlonsControl.M_WALLET_BAL, new JSONObject());
+    }
+
     public void close() {
         if (mPump != null) {
             mPump.shutdownNow();
