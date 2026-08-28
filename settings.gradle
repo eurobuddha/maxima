@@ -41,3 +41,8 @@ if (!providers.gradleProperty('skipAndroid').isPresent()) {
 // The set-and-forget desktop node: a native-installer app (jpackage) that runs
 // the relay in-process with automatic router port-forwarding and a tray UI.
 include ':desktop'
+
+// Parlons Cloud: a HEADLESS always-on Parlons node (identity + chat + pool relay)
+// for a VPS, driven remotely by paired devices. Pure JVM (:core + :server), no
+// Swing, no Android. See the Parlons Cloud spec.
+include ':cloud'

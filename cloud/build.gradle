@@ -1,0 +1,53 @@
+plugins {
+    id 'application'
+}
+
+/*
+ * Parlons Cloud — the headless always-on node. Pure JVM, pinned to 11 like
+ * :core/:server so one toolchain builds everything. No Android, no Swing.
+ */
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    implementation project(':core')
+    implementation project(':server')   // RelayRuntime/RelayServer — the in-process pool relay
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// JUnit tests live in src/junit/java (mirrors :server), keeping any main()-style
+// live harnesses out of the hermetic `./gradlew :cloud:test` run.
+sourceSets {
+    test { java.srcDirs = ['src/junit/java'] }
+}
+
+application {
+    mainClass = 'com.eurobuddha.maxima.cloud.Main'
+}
+
+/** Runnable fat jar — the VPS deploy artifact: parlons-cloud-<VER>.jar. */
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Self-contained runnable Parlons Cloud jar'
+
+    // See :server fatJar — resolving runtimeClasspath inside a `from {}` closure
+    // hides the dependency from Gradle and ships stale :core/:server code under a
+    // new version. Declare it so an edit to :core actually reaches the artifact.
+    dependsOn configurations.runtimeClasspath
+    inputs.files configurations.runtimeClasspath
+
+    archiveBaseName = 'parlons-cloud'
+    manifest {
+        attributes 'Main-Class': 'com.eurobuddha.maxima.cloud.Main'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+}
