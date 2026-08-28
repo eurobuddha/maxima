@@ -238,6 +238,13 @@ public final class ParlonsCore {
         mMaint.scheduleWithFixedDelay(() -> {
             try { mChat.resendUndelivered(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
+        // Publish our MLS record proactively — an always-on ACCOUNT must be resolvable by its
+        // permanent MAX# BEFORE it has any contacts, so a paired device can log in. maintain()
+        // only republishes when the host set changes, so a stable contactless account would
+        // otherwise never publish. Every 5 min keeps the 24h record fresh; first push at ~8s.
+        mMaint.scheduleWithFixedDelay(() -> {
+            try { mNode.publishToMls(); } catch (Exception ignored) { }
+        }, 8, 300, TimeUnit.SECONDS);
     }
 
     private ChatEngine.Listener loggingListener() {
