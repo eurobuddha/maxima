@@ -145,7 +145,7 @@ public final class Main {
 
         System.out.println();
         System.out.println("  Running. This node holds your identity and stays online for you.");
-        System.out.println("  (Phase 1: no remote login yet — device pairing lands in Phase 2.)");
+        System.out.println("  Pair a device to drive it: see the pairing note above (cat pair-code.txt).");
         System.out.println();
 
         // Block forever; all work runs on the maintenance/reader threads.
