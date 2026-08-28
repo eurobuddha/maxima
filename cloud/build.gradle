@@ -19,6 +19,7 @@ tasks.withType(JavaCompile).configureEach {
 dependencies {
     implementation project(':core')
     implementation project(':server')   // RelayRuntime/RelayServer — the in-process pool relay
+    implementation project(':minima-common')  // org.minima.utils.json — control-channel payloads
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -48,6 +49,10 @@ tasks.register('fatJar', Jar) {
         attributes 'Main-Class': 'com.eurobuddha.maxima.cloud.Main'
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // minima-common drags in signed jar entries (BouncyCastle). Merging their META-INF
+    // signature files into one fat jar breaks JVM signature verification ("Invalid signature
+    // file digest"), so strip them — same as the app's packaging.excludes.
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC'
     from sourceSets.main.output
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 }

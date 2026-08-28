@@ -51,6 +51,8 @@ public final class ParlonsCore {
     private final RelayGossipClient mGossip;
     private final MediaService mMedia;
     private final ChatEngine mChat;
+    private final DevicePairing mPairing;
+    private final ParlonsControl mControl;
 
     private ScheduledExecutorService mMaint;
     private ReachabilityManager mReach;
@@ -101,6 +103,13 @@ public final class ParlonsCore {
             } catch (Exception ignored) {
             }
         });
+
+        // The owner control channel: paired devices drive the account over the encrypted
+        // Maxima RPC substrate (no public port). RPC is dispatched before the chat engine
+        // (MaximaNode routes RpcEnvelope.APPLICATION first), so control never hits chat.
+        mPairing = new DevicePairing(zDataDir);
+        mControl = new ParlonsControl(mNode, mChat, mPairing);
+        mControl.registerOn(mNode.services());
     }
 
     public MaximaNode node() { return mNode; }
@@ -142,10 +151,25 @@ public final class ParlonsCore {
             startReachability();
         }
 
+        // 5. Pairing: if no device is paired yet, mint a one-time bootstrap code the operator
+        //    reads over ssh (never logged — it gates account access).
+        mPairing.ensureBootstrapCode();
+
         int hosts = connectedCount();
         log("started: identity " + mIdentity.mxIdentity());   // RULE 1: full identity, never truncated
         log("attached to " + hosts + " relay(s); permanent address " + safePermanent());
+        if (mPairing.authorizedCount() == 0) {
+            log("NO devices paired yet. To pair your first device, read the one-time code:");
+            log("    cat " + mPairing.codeFile());
+            log("  then enter it in the app pointed at this account's address above.");
+        } else {
+            log(mPairing.authorizedCount() + " device(s) paired.");
+        }
         return hosts;
+    }
+
+    public DevicePairing pairing() {
+        return mPairing;
     }
 
     private void startRelay() {
