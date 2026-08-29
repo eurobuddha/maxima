@@ -1,0 +1,104 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+/*
+ * Parlons Cloud PORTAL — a standalone Parlons-parity frontend for a VPS node
+ * (parlons-server.jar). Its own app (own applicationId + icon), installed instead of
+ * local Parlons by cloud users. It holds NO chat identity of its own: it pairs to and
+ * drives an always-on account over :cloud's ParlonsRemote.
+ *
+ * namespace = com.eurobuddha.maxima.app so the copied look-layer (R + helpers, package
+ * com.eurobuddha.maxima.app.*) compiles unchanged; applicationId is distinct so it installs
+ * as a separate app. The current Parlons :app is NOT modified.
+ */
+android {
+    namespace 'com.eurobuddha.maxima.app'
+    buildFeatures { buildConfig true }
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.eurobuddha.parlons.cloud"
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    signingConfigs {
+        release {
+            if (project.hasProperty('MINIMA_FAMILY_RELEASE_STORE_FILE')) {
+                storeFile file(MINIMA_FAMILY_RELEASE_STORE_FILE)
+                storePassword MINIMA_FAMILY_RELEASE_STORE_PASSWORD
+                keyAlias MINIMA_FAMILY_RELEASE_KEY_ALIAS
+                keyPassword MINIMA_FAMILY_RELEASE_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (project.hasProperty('MINIMA_FAMILY_RELEASE_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    packaging {
+        resources {
+            excludes += [
+                    'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA',
+                    'META-INF/versions/**',
+                    'META-INF/LICENSE*', 'META-INF/NOTICE*',
+                    'META-INF/DEPENDENCIES', 'META-INF/INDEX.LIST'
+            ]
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    implementation project(':server')          // RelayRuntime.loadOrCreateSeed for the device key
+    implementation project(':cloud')            // ParlonsRemote + ParlonsControl method names
+    implementation project(':minima-common')    // org.minima.utils.json
+    implementation libs.appcompat
+    implementation 'androidx.core:core:1.13.1'
+    implementation libs.material
+    implementation 'androidx.viewpager:viewpager:1.0.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    // Android < API 29 lacks SHA3-256; :core takes an injected digest, BC provides it.
+    implementation 'org.bouncycastle:bcprov-jdk15on:1.69'
+    // QR: scan/share the account address.
+    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    // SVG token icons on the watch-only wallet (parity with the app wallet).
+    implementation 'com.caverock:androidsvg-aar:1.4'
+}
+
+// Land every release APK in dist/ (matches the app's convention).
+tasks.register('publishToDist') {
+    doLast {
+        def ver = android.defaultConfig.versionName
+        def apk = file("build/outputs/apk/release/portal-release.apk")
+        if (!apk.exists()) {
+            apk = file("build/outputs/apk/release/release.apk")
+        }
+        if (!apk.exists()) {
+            return
+        }
+        def out = rootProject.file("dist/parlons-cloud-portal-${ver}-release.apk")
+        out.bytes = apk.bytes
+        println "dist <- parlons-cloud-portal-${ver}-release.apk"
+    }
+}
+afterEvaluate {
+    tasks.matching { it.name == 'assembleRelease' }.configureEach {
+        finalizedBy 'publishToDist'
+    }
+}

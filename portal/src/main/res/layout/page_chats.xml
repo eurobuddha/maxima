@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ux_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <EditText
+            android:id="@+id/chats_search"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/input"
+            android:hint="Search chats"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:textColor="@color/ux_text"
+            android:textColorHint="@color/ux_subtext"
+            android:textSize="14sp" />
+
+        <ListView
+            android:id="@+id/conversations"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="88dp"
+            android:clipToPadding="false" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/chats_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:padding="32dp"
+        android:textColor="@color/ux_subtext"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/btn_new_group"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="18dp"
+        android:background="@drawable/fab_new"
+        android:contentDescription="New chat"
+        android:elevation="5dp"
+        android:padding="17dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_newchat"
+        android:stateListAnimator="@null"
+        app:tint="@color/ux_on_accent"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
+</FrameLayout>

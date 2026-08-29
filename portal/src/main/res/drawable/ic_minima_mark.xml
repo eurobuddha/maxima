@@ -1,0 +1,11 @@
+<!-- Minima Logo Mark 2023 — from the official Minima Media Kit (Logo/Black/svg/
+     Minima Logo Mark 2023). Single polygon, tint at use. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="22dp"
+    android:viewportWidth="400"
+    android:viewportHeight="360.74">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M320.64,96.6L302.98,174.69L280.41,80.34L201.19,48.23L179.74,142.73L160.81,31.97L81.6,0L0,360.74L86.51,360.74L111.6,249.98L130.39,360.74L217.03,360.74L238.35,266.25L260.92,360.74L347.42,360.74L400,128.57Z" />
+</vector>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A payment: a solid accent card, so money reads as distinct from chat. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ux_accent" />
+    <corners android:radius="16dp" />
+</shape>

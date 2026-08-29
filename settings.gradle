@@ -46,3 +46,7 @@ include ':desktop'
 // for a VPS, driven remotely by paired devices. Pure JVM (:core + :server), no
 // Swing, no Android. See the Parlons Cloud spec.
 include ':cloud'
+
+// Parlons Cloud PORTAL: a standalone Parlons-parity frontend for a VPS node.
+// Separate app (own applicationId/icon); reuses the app look-layer, driven by :cloud ParlonsRemote.
+include ':portal'

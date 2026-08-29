@@ -1,0 +1,61 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Base.Theme.Maxima" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/ux_bg</item>
+        <item name="android:textColor">@color/ux_text</item>
+        <item name="colorPrimary">@color/ux_accent</item>
+        <item name="colorOnPrimary">@color/ux_on_accent</item>
+        <!-- Manrope (the Minima brand font) app-wide. -->
+        <item name="android:fontFamily">@font/manrope</item>
+        <item name="fontFamily">@font/manrope</item>
+        <item name="android:textViewStyle">@style/MaximaTextView</item>
+        <item name="android:buttonStyle">@style/MaximaButton</item>
+        <item name="android:editTextStyle">@style/MaximaEditText</item>
+    </style>
+
+    <!-- Force Manrope onto the base widgets too, so nothing falls back to Roboto. -->
+    <style name="MaximaTextView" parent="android:Widget.TextView">
+        <item name="android:fontFamily">@font/manrope</item>
+    </style>
+    <style name="MaximaButton" parent="Widget.Material3.Button">
+        <item name="android:fontFamily">@font/manrope</item>
+    </style>
+    <style name="MaximaEditText" parent="Widget.AppCompat.EditText">
+        <item name="android:fontFamily">@font/manrope</item>
+    </style>
+
+    <style name="Theme.Maxima" parent="Base.Theme.Maxima" />
+
+    <!-- A section heading: small, spaced, muted. Used everywhere so the eye
+         can find the structure of a screen without reading it. -->
+    <style name="MaximaSectionLabel">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.15</item>
+        <item name="android:textColor">@color/ux_subtext</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <style name="MaximaValue">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/ux_text</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <style name="MaximaHint">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/ux_subtext</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <style name="MaximaMono">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/ux_text</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+</resources>

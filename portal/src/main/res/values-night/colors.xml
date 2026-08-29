@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Maxima's DARK palette — soft greyscale ("not a void" dark: warm grey ground,
+     not pure black). The light palette is in res/values/colors.xml. Every ux_*
+     token is redefined so dark never inherits a light value. -->
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="ux_bg">#FF16181B</color>
+    <color name="ux_chat_bg">#FF16181B</color>
+    <color name="ux_card">#FF1E2126</color>
+    <color name="ux_card2">#FF23272C</color>
+    <color name="ux_input">#FF23272C</color>
+    <color name="ux_divider">#FF2A2E34</color>
+    <color name="ux_press">#1FFFFFFF</color>
+    <color name="ux_scrim">#B3000000</color>
+
+    <color name="ux_header">#FF22262B</color>
+    <color name="ux_on_header">#FFF1F2F3</color>
+
+    <color name="ux_text">#FFE6E8EA</color>
+    <color name="ux_subtext">#FF9A9EA6</color>
+
+    <!-- in dark, the accent inverts to light grey so controls (FAB/badge) pop -->
+    <color name="ux_accent">#FFE9E9EB</color>
+    <color name="ux_accent_press">#FFCFCFD3</color>
+    <color name="ux_accent_glow">#22FFFFFF</color>
+    <color name="ux_on_accent">#FF23262B</color>
+    <color name="ux_banner">#1AFFFFFF</color>
+    <color name="ux_selected">#14FFFFFF</color>
+
+    <color name="ux_success">#FF5AAE80</color>
+    <color name="ux_error">#FFFF6B5C</color>
+    <color name="ux_pending">#FFE6A23C</color>
+
+    <color name="ux_bubble_in">#FF23272C</color>
+    <color name="ux_bubble_in_text">#FFE6E8EA</color>
+    <color name="ux_bubble_out">#FF333840</color>
+    <color name="ux_bubble_out_text">#FFF1F2F3</color>
+    <color name="ux_bubble_out_sub">#FFADB1B9</color>
+    <color name="ux_tick_read">#FF9A9EA6</color>
+
+    <color name="ic_launcher_background">#0A0B0D</color>
+</resources>

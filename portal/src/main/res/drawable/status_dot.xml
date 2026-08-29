@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The connection "status light" inside the header pill. Its colour is set at
+     runtime (green connected / red offline / grey starting) and, when connected,
+     it breathes via a slow alpha pulse - a live-heartbeat cue, not data transfer. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/ux_success" />
+    <size android:width="8dp" android:height="8dp" />
+</shape>

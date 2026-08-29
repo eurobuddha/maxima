@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The chat background: the theme's soft chat ground, with a faint repeating
+     doodle tiled over it (neutral grey, low alpha, so it reads on light + dark). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ux_chat_bg" />
+    <item>
+        <bitmap android:src="@drawable/doodle_tile" android:tileMode="repeat"
+            android:gravity="top|start" />
+    </item>
+</layer-list>
