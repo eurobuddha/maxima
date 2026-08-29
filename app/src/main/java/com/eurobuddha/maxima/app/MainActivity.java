@@ -147,7 +147,6 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
             android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);
             m.getMenu().add("New group");
             m.getMenu().add("Scan QR");
-            m.getMenu().add("Parlons Cloud");
             m.getMenu().add("Search");
             m.getMenu().add("Settings");
             m.setOnMenuItemClickListener(item -> {
@@ -161,9 +160,6 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
                     }
                 } else if ("Scan QR".contentEquals(t)) {
                     scanQr();
-                } else if ("Parlons Cloud".contentEquals(t)) {
-                    startActivity(new android.content.Intent(this,
-                            com.eurobuddha.maxima.app.cloud.CloudActivity.class));
                 } else if ("Search".contentEquals(t)) {
                     startActivity(new android.content.Intent(this,
                             com.eurobuddha.maxima.app.ui.SearchActivity.class));
