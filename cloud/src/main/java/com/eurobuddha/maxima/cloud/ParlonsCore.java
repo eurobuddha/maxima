@@ -107,7 +107,7 @@ public final class ParlonsCore {
         mChat = new ChatEngine(mNode);
         mChat.setStore(new FileStore(new File(base, "chat")));
         mChat.setMediaService(mMedia);
-        mChat.setListener(loggingListener());
+        // (listener wired AFTER mControl below — it fans events out through the control push)
         mNode.setLogListener(s -> log("node: " + s));
         mNode.setMessageListener((msg, msgid) -> {
             try {
@@ -130,6 +130,7 @@ public final class ParlonsCore {
             public int meshPeers()     { return mCfg.meshPeers.size(); }
         });
         mControl.registerOn(mNode.services());
+        mChat.setListener(loggingListener());
         // Inbound CALL signals for the account ring the paired devices (WebRTC terminates on the
         // device; we relay the opaque SDP/ICE). Without this, an offer was silently swallowed.
         mChat.setCallListener((from, cm) -> mControl.forwardCallSignal(from, cm));
@@ -263,6 +264,9 @@ public final class ParlonsCore {
             try { healStuckPeers(); } catch (Exception ignored) { }
             try { mChat.resendUndelivered(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
+        mMaint.scheduleWithFixedDelay(() -> {
+            try { mControl.maintenanceSweep(); } catch (Exception ignored) { }
+        }, 60, 60, TimeUnit.SECONDS);
         // Publish our MLS record proactively — an always-on ACCOUNT must be resolvable by its
         // permanent MAX# BEFORE it has any contacts, so a paired device can log in. maintain()
         // only republishes when the host set changes, so a stable contactless account would
@@ -294,6 +298,9 @@ public final class ParlonsCore {
         long now = System.currentTimeMillis();
         for (ChatEngine.Summary s : mChat.summaries()) {
             String peer = s.conversation;
+            if (!s.lastMine) {
+                continue;   // their message is newest — nothing of ours can be freshly stuck
+            }
             com.eurobuddha.maxima.core.contacts.Contact c =
                     peer == null || peer.isEmpty() ? null : mNode.contact(peer);
             if (c == null) {

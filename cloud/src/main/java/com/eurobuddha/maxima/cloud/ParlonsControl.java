@@ -85,17 +85,66 @@ public final class ParlonsControl {
     }
 
     private final java.util.Map<String, Live> mLive = new java.util.concurrent.ConcurrentHashMap<>();
-    /** callId → device key that answered first (first-answer-wins across paired devices). */
-    private final java.util.Map<String, String> mCallTaken = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.concurrent.ExecutorService mPush =
+
+    private static final class Taken {
+        final String device;
+        final long at = System.currentTimeMillis();
+        Taken(String zDevice) { device = zDevice; }
+    }
+
+    /** callId → first answering device + when (first-answer-wins; swept after 10 min). */
+    private final java.util.Map<String, Taken> mCallTaken = new java.util.concurrent.ConcurrentHashMap<>();
+
+    // ---- executor LANES. One shared thread let a 55s media publish bury a call offer, and a
+    // push to one dead device address (20s blocking connect) starved everything behind it.
+    /** Latency-critical: call-signal relay + declines. Nothing slow may ever run here. */
+    private final java.util.concurrent.ExecutorService mCallExec =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "parlons-call-relay");
+                t.setDaemon(true);
+                return t;
+            });
+    /** Chat sends, group roster fan-out, read receipts — sequential, may block on a dead peer. */
+    private final java.util.concurrent.ExecutorService mSendExec =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "parlons-chat-send");
+                t.setDaemon(true);
+                return t;
+            });
+    /** Media publish+replicate (up to ~55s each) — its own lane. */
+    private final java.util.concurrent.ExecutorService mMediaExec =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "parlons-media-publish");
+                t.setDaemon(true);
+                return t;
+            });
+    /** Push fan-out: one task per device so one dead device can't stall the others. */
+    private final java.util.concurrent.ExecutorService mPushPool =
+            java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
                 Thread t = new Thread(r, "parlons-push");
                 t.setDaemon(true);
                 return t;
             });
-    /** In-flight chunked media uploads: transfer id → accumulated bytes. */
-    private final java.util.Map<String, java.io.ByteArrayOutputStream> mUploads =
+
+    private static final class Upload {
+        final java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        volatile long touched = System.currentTimeMillis();
+    }
+
+    /** In-flight chunked media uploads: transfer id → buffer (idle entries swept). */
+    private final java.util.Map<String, Upload> mUploads =
             new java.util.concurrent.ConcurrentHashMap<>();
+    /** Recent group creations (name → at): a retried create must not mint a duplicate. */
+    private final java.util.Map<String, Long> mRecentGroups =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Called from the node's maintenance pump: sweep idle uploads / stale call + group records. */
+    public void maintenanceSweep() {
+        long now = System.currentTimeMillis();
+        mUploads.entrySet().removeIf(e -> now - e.getValue().touched > 10 * 60_000L);
+        mCallTaken.entrySet().removeIf(e -> now - e.getValue().at > 10 * 60_000L);
+        mRecentGroups.entrySet().removeIf(e -> now - e.getValue() > 5 * 60_000L);
+    }
 
     public ParlonsControl(MaximaNode zNode, ChatEngine zChat, DevicePairing zPairing, WatchWallet zWallet) {
         mNode = zNode;
@@ -126,7 +175,13 @@ public final class ParlonsControl {
         });
         zReg.register(M_PAIR_REVOKE, req -> {
             requireAuth(req);
-            boolean done = mPairing.revoke(req.fromPublicKey, str(parse(req), "device"));
+            String device = str(parse(req), "device");
+            boolean done = mPairing.revoke(req.fromPublicKey, device);
+            if (done) {
+                // Cut the push feed IMMEDIATELY — a revoked device must not keep receiving
+                // message bodies for the rest of its live window.
+                mLive.keySet().removeIf(k -> k.equalsIgnoreCase(device));
+            }
             return bytes(done ? ok() : err("no such device"));
         });
         zReg.register(M_PAIR_NEWCODE, req -> {
@@ -275,7 +330,15 @@ public final class ParlonsControl {
                 o.put("peer", safe(s.conversation));
                 o.put("name", safe(nameFor(s.conversation)));
                 o.put("group", mChat.group(s.conversation) != null);
-                o.put("last", safe(s.lastBody));
+                // Bounded reply: a full media body is a multi-KB manifest, and the WHOLE reply
+                // must fit one 256K wire message or it silently black-holes. Previews only.
+                String last = safe(s.lastBody);
+                if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(last)) {
+                    last = com.eurobuddha.maxima.core.chat.ChatMedia.preview(last);
+                } else if (last.length() > 200) {
+                    last = last.substring(0, 200);
+                }
+                o.put("last", last);
                 o.put("lastSender", safe(s.lastSender));
                 o.put("lastMine", s.lastMine);
                 o.put("time", s.lastTime);
@@ -288,9 +351,26 @@ public final class ParlonsControl {
         });
         zReg.register(M_CONVERSATION, req -> {
             requireAuth(req);
-            String peer = str(parse(req), "peer");
+            JSONObject in = parse(req);
+            String peer = str(in, "peer");
+            // Bounded reply (256K wire ceiling): newest `limit` entries, optional `before`
+            // time-cursor for paging back. History only grows — unbounded replies would one
+            // day black-hole and the conversation would never load again.
+            int limit = (int) lngOf(in, "limit");
+            if (limit <= 0 || limit > 200) {
+                limit = 100;
+            }
+            long before = lngOf(in, "before");
+            java.util.List<ChatEngine.Entry> entries = mChat.conversation(peer);
+            entries.sort((a, b) -> Long.compare(a.time, b.time));
+            if (before > 0) {
+                entries.removeIf(e -> e.time >= before);
+            }
+            if (entries.size() > limit) {
+                entries = entries.subList(entries.size() - limit, entries.size());
+            }
             JSONArray arr = new JSONArray();
-            for (ChatEngine.Entry e : mChat.conversation(peer)) {
+            for (ChatEngine.Entry e : entries) {
                 JSONObject o = new JSONObject();
                 o.put("id", safe(e.id));
                 o.put("sender", safe(e.sender));
@@ -313,22 +393,28 @@ public final class ParlonsControl {
             if (peer.isEmpty() || body.isEmpty()) {
                 return bytes(err("peer and body required"));
             }
-            ChatEngine.Entry e;
-            if (mChat.group(peer) != null) {
-                e = mChat.sendGroup(peer, body);
-            } else {
-                Contact c = mNode.contact(peer);
-                if (c == null) {
-                    return bytes(err("unknown contact " + peer));
-                }
-                e = mChat.send(c, body);
+            final boolean isGroup = mChat.group(peer) != null;
+            if (!isGroup && mNode.contact(peer) == null) {
+                return bytes(err("unknown contact " + peer));
             }
+            // A send blocks up to the socket timeouts (×addresses, ×members for a group) — on
+            // the pump thread that deafened the WHOLE node whenever a peer was offline. Queue
+            // it on the send lane; the honest delivery state reaches the device moments later
+            // as a push (setState fires the listener) + the conversation poll.
+            final String fpeer = peer;
+            final String fbody = body;
+            mSendExec.execute(() -> {
+                try {
+                    if (isGroup) {
+                        mChat.sendGroup(fpeer, fbody);
+                    } else {
+                        mChat.send(mNode.contact(fpeer), fbody);
+                    }
+                } catch (Exception ignored) {
+                }
+            });
             JSONObject out = ok();
-            out.put("id", e == null ? "" : safe(e.id));
-            // Honest immediate state: send() is synchronous, so "failed" here means every
-            // address AND the inline MLS heal failed — the peer is genuinely unreachable
-            // right now. The node's resend heartbeat keeps retrying failed entries for 24h.
-            out.put("state", e == null ? "" : safe(e.state));
+            out.put("state", "queued");
             return bytes(out);
         });
         zReg.register(M_MARK_READ, req -> {
@@ -337,7 +423,10 @@ public final class ParlonsControl {
             if (peer.isEmpty()) {
                 return bytes(err("peer required"));
             }
-            mChat.markRead(peer);
+            // markRead SENDS the read receipt — off the pump, on the send lane.
+            mSendExec.execute(() -> {
+                try { mChat.markRead(peer); } catch (Exception ignored) { }
+            });
             return bytes(ok());
         });
 
@@ -363,10 +452,18 @@ public final class ParlonsControl {
             String dev = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
             if ("answer".equals(kind)) {
                 // First answer wins across the account's devices; the rest stop ringing.
-                String taken = mCallTaken.putIfAbsent(id, dev);
-                if (taken != null && !taken.equalsIgnoreCase(dev)) {
+                Taken taken = mCallTaken.putIfAbsent(id, new Taken(dev));
+                if (taken != null && !taken.device.equalsIgnoreCase(dev)) {
                     return bytes(err("answered on another device"));
                 }
+                JSONObject ev = new JSONObject();
+                ev.put("type", "call");
+                ev.put("kind", "taken");
+                ev.put("ref", id);
+                push(ev, dev);
+            } else if ("bye".equals(kind) && !mCallTaken.containsKey(id)) {
+                // A DECLINE from one device stops the others ringing too — without this the
+                // siblings ring out their full 45s for a call already refused.
                 JSONObject ev = new JSONObject();
                 ev.put("type", "call");
                 ev.put("kind", "taken");
@@ -382,9 +479,9 @@ public final class ParlonsControl {
             if (!memo.isEmpty()) {
                 m.memo = memo;
             }
-            // Fire-and-forget OFF this thread: a signal send blocks up to the socket timeouts on
-            // a dead peer, and this handler runs on the transport pump.
-            mPush.execute(() -> {
+            // The dedicated CALL lane: never queued behind pushes or media publishes, and off
+            // this thread because a signal send blocks on a dead peer's socket timeouts.
+            mCallExec.execute(() -> {
                 try { mChat.sendCallSignal(c, m); } catch (Exception ignored) { }
             });
             return bytes(ok());
@@ -405,18 +502,31 @@ public final class ParlonsControl {
             } catch (Exception e) {
                 return bytes(err("bad chunk encoding"));
             }
-            java.io.ByteArrayOutputStream buf =
-                    mUploads.computeIfAbsent(tid, k -> new java.io.ByteArrayOutputStream());
-            synchronized (buf) {
-                if (buf.size() + chunk.length > 16 * 1024 * 1024) {
+            long off = lngOf(in, "off");
+            Upload up = mUploads.computeIfAbsent(tid, k -> new Upload());
+            up.touched = System.currentTimeMillis();
+            synchronized (up.buf) {
+                // Offset idempotency: an RPC retry whose original REQUEST was processed (only
+                // the reply got lost) re-sends the same chunk — appending it blindly corrupted
+                // the media. A duplicate (off < size) is acked as already-received; a gap fails.
+                if (off < up.buf.size()) {
+                    JSONObject out = ok();
+                    out.put("got", up.buf.size());
+                    return bytes(out);
+                }
+                if (off > up.buf.size()) {
+                    mUploads.remove(tid);
+                    return bytes(err("chunk gap — resend the media"));
+                }
+                if (up.buf.size() + chunk.length > 16 * 1024 * 1024) {
                     mUploads.remove(tid);
                     return bytes(err("media too big (16MB max)"));
                 }
-                try { buf.write(chunk); } catch (java.io.IOException ignored) { }
+                try { up.buf.write(chunk); } catch (java.io.IOException ignored) { }
             }
             if (!bool(in, "last")) {
                 JSONObject out = ok();
-                out.put("got", buf.size());
+                out.put("got", up.buf.size());
                 return bytes(out);
             }
             mUploads.remove(tid);
@@ -424,16 +534,16 @@ public final class ParlonsControl {
             final String mime = str(in, "mime");
             final String caption = str(in, "caption");
             final boolean group = bool(in, "group");
-            final byte[] media = buf.toByteArray();
+            final byte[] media = up.buf.toByteArray();
             if (peer.isEmpty() || mime.isEmpty() || media.length == 0) {
                 return bytes(err("peer, mime and data required"));
             }
             if (!group && mNode.contact(peer) == null) {
                 return bytes(err("unknown contact " + peer));
             }
-            // publish + replicate can take up to ~55s — never on the pump thread. The result
-            // reaches the device through the normal conversation state (+ push).
-            mPush.execute(() -> {
+            // publish + replicate can take up to ~55s — the media lane, never the pump thread.
+            // The result reaches the device through the conversation state (+ push).
+            mMediaExec.execute(() -> {
                 try {
                     if (group) {
                         mChat.sendGroupMedia(peer, media, mime, caption);
@@ -459,14 +569,27 @@ public final class ParlonsControl {
             if (name.isEmpty() || mems == null || mems.isEmpty()) {
                 return bytes(err("name and members required"));
             }
-            java.util.List<String> keys = new java.util.ArrayList<>();
+            final java.util.List<String> keys = new java.util.ArrayList<>();
             for (Object o : mems) {
                 keys.add(String.valueOf(o));
             }
-            com.eurobuddha.maxima.core.chat.Group g = mChat.createGroup(name, keys);
+            // createGroup pushes the roster to every member SYNCHRONOUSLY (20s+ per offline
+            // member) — on the pump thread that deafens the whole node and the client's 35s
+            // retry then minted a DUPLICATE group. Run it on the send lane; a retry inside the
+            // dedup window is acknowledged, not repeated.
+            Long recent = mRecentGroups.putIfAbsent(name, System.currentTimeMillis());
+            if (recent != null && System.currentTimeMillis() - recent < 60_000) {
+                JSONObject out = ok();
+                out.put("name", name);
+                out.put("status", "creating");
+                return bytes(out);
+            }
+            mSendExec.execute(() -> {
+                try { mChat.createGroup(name, keys); } catch (Exception ignored) { }
+            });
             JSONObject out = ok();
-            out.put("id", g.id);
-            out.put("name", g.name);
+            out.put("name", name);
+            out.put("status", "creating");
             return bytes(out);
         });
 
@@ -533,15 +656,16 @@ public final class ParlonsControl {
         event.put("eid", java.util.UUID.randomUUID().toString());
         final byte[] bytes = event.toString().getBytes(StandardCharsets.UTF_8);
         final long now = System.currentTimeMillis();
-        mPush.execute(() -> {
-            for (java.util.Map.Entry<String, Live> en : mLive.entrySet()) {
-                if (zExceptDeviceKey != null && en.getKey().equalsIgnoreCase(zExceptDeviceKey)) {
-                    continue;
-                }
-                Live l = en.getValue();
-                if (now - l.seen > LIVE_MS || l.addrs == null) {
-                    continue;
-                }
+        for (java.util.Map.Entry<String, Live> en : mLive.entrySet()) {
+            if (zExceptDeviceKey != null && en.getKey().equalsIgnoreCase(zExceptDeviceKey)) {
+                continue;
+            }
+            final Live l = en.getValue();
+            if (now - l.seen > LIVE_MS || l.addrs == null) {
+                continue;
+            }
+            // One pool task PER DEVICE: a dead device's blocking connects delay only itself.
+            mPushPool.execute(() -> {
                 for (String addr : l.addrs) {
                     try {
                         mNode.rpc().call(addr, DEVICE_PUSH, bytes,
@@ -552,8 +676,8 @@ public final class ParlonsControl {
                     } catch (Exception ignored) {
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
     /** New inbound message on the account → tell every live device NOW (instant chat + notification). */
@@ -612,7 +736,7 @@ public final class ParlonsControl {
     }
 
     private void declineCall(String zPeerKey, String zRef) {
-        mPush.execute(() -> {
+        mCallExec.execute(() -> {
             try {
                 Contact c = mNode.contact(zPeerKey);
                 if (c != null) {
@@ -640,6 +764,11 @@ public final class ParlonsControl {
     private static boolean bool(JSONObject o, String key) {
         Object v = o.get(key);
         return v instanceof Boolean && (Boolean) v;
+    }
+
+    private static long lngOf(JSONObject o, String key) {
+        Object v = o.get(key);
+        return v instanceof Number ? ((Number) v).longValue() : 0L;
     }
 
     private String permanent() {

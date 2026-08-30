@@ -138,6 +138,13 @@ public final class ParlonsRemote {
      */
     public void setPushListener(PushListener zListener) {
         final String accountKey = accountKeyHex();
+        if (accountKey.isEmpty()) {
+            // A bare Mx…@host:port account has no recoverable identity key, so pushes could
+            // never be verified — and silently rejecting every event was the worst failure
+            // mode. Fail LOUDLY at install time: push needs the MAX# permanent.
+            throw new IllegalStateException(
+                    "push needs the account's MAX# permanent address (bare Mx address given)");
+        }
         final java.util.Set<String> seen =
                 java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<String, Boolean>() {
                     protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> e) {
@@ -209,11 +216,11 @@ public final class ParlonsRemote {
             int n = Math.min(MEDIA_CHUNK, zBytes.length - off);
             byte[] part = new byte[n];
             System.arraycopy(zBytes, off, part, 0, n);
-            off += n;
             JSONObject p = new JSONObject();
             p.put("tid", tid);
+            p.put("off", off);         // offset idempotency: a retried chunk must not append twice
             p.put("data", java.util.Base64.getEncoder().encodeToString(part));
-            boolean isLast = off >= zBytes.length;
+            boolean isLast = off + n >= zBytes.length;
             p.put("last", isLast);
             if (isLast) {
                 p.put("peer", zPeer);
@@ -226,8 +233,29 @@ public final class ParlonsRemote {
             if (!(ok instanceof Boolean) || !((Boolean) ok)) {
                 return last;
             }
+            Object got = last.get("got");
+            if (!isLast && got instanceof Number && ((Number) got).longValue() != off + n) {
+                JSONObject e = new JSONObject();
+                e.put("ok", false);
+                e.put("error", "upload out of sync — try again");
+                return e;
+            }
+            off += n;
         }
         return last;
+    }
+
+    /** Newest page of a conversation ({@code limit} entries, or those before a time cursor). */
+    public JSONObject conversation(String zPeer, int zLimit, long zBefore) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("peer", zPeer);
+        if (zLimit > 0) {
+            p.put("limit", zLimit);
+        }
+        if (zBefore > 0) {
+            p.put("before", zBefore);
+        }
+        return rpc(ParlonsControl.M_CONVERSATION, p);
     }
 
     /** Create a group on the account; the roster is pushed to every member. */
