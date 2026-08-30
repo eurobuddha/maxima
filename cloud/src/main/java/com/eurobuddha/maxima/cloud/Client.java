@@ -20,8 +20,9 @@ import java.nio.file.Paths;
  *
  *   java -cp parlons-cloud.jar com.eurobuddha.maxima.cloud.Client [--data DIR] &lt;cmd&gt; [args]
  *
- * Commands: whoami · connect MAX# · pair [CODE] · ping · devices · approve KEY · revoke KEY ·
- *           contacts · add ADDR · chats · read PEER · send PEER BODY...
+ * Commands: whoami · connect MAX# · pair [CODE] · ping · status · devices · approve KEY ·
+ *           revoke KEY · name NAME · contacts · add ADDR · rename KEY NAME · resolve KEY ·
+ *           chats · read PEER · markread PEER · send PEER BODY...
  */
 public final class Client {
 
@@ -155,6 +156,46 @@ public final class Client {
                 requireArg(rest, "add <Mx…@host:port or MAX#>");
                 report(r.addContact(rest.get(1)), "introduction sent ✓");
                 break;
+            case "name":
+                requireArg(rest, "name <display name>");
+                report(r.setName(rest.get(1)), "name set ✓ (announced to your contacts)");
+                break;
+            case "rename": {
+                if (rest.size() < 3) {
+                    System.err.println("usage: rename <contact key> <new name>");
+                    System.exit(2);
+                }
+                report(r.renameContact(rest.get(1), rest.get(2)), "renamed ✓");
+                break;
+            }
+            case "resolve": {
+                requireArg(rest, "resolve <contact key>");
+                JSONObject o = r.resolveContact(rest.get(1));
+                if (!isOk(o)) { fail(o); break; }
+                System.out.println("  current address: " + o.get("address"));
+                System.out.println(Boolean.TRUE.equals(o.get("updated"))
+                        ? "  directory answered — address refreshed ✓"
+                        : "  directory answered — address unchanged");
+                break;
+            }
+            case "markread":
+                requireArg(rest, "markread <peer key>");
+                report(r.markRead(rest.get(1)), "marked read ✓");
+                break;
+            case "status": {
+                JSONObject o = r.nodeStatus();
+                if (!isOk(o)) { fail(o); break; }
+                System.out.println("  name      : " + o.get("name"));
+                System.out.println("  version   : " + o.get("version"));
+                long up = num(o.get("uptime"));
+                System.out.println("  uptime    : " + (up / 3600000) + "h " + ((up % 3600000) / 60000) + "m");
+                System.out.println("  relays    : " + o.get("hosts") + " attached, mailbox held: " + o.get("mailboxHeld"));
+                System.out.println("  pool relay: " + (Boolean.TRUE.equals(o.get("relayOn"))
+                        ? ("on, mesh " + o.get("meshPeers") + " peers") : "off"));
+                System.out.println("  devices   : " + o.get("pairedDevices") + " paired");
+                System.out.println("  permanent : " + o.get("permanent"));
+                break;
+            }
             case "chats": {
                 JSONObject o = r.summaries();
                 if (!isOk(o)) { fail(o); break; }
@@ -262,8 +303,13 @@ public final class Client {
         System.out.println("  devices                list paired / pending devices");
         System.out.println("  approve <key>          approve a pending device");
         System.out.println("  revoke <key>           revoke a device");
+        System.out.println("  status                 node status (uptime, relays, mesh, devices)");
+        System.out.println("  name <display name>    set the ACCOUNT's name (announced to contacts)");
         System.out.println("  contacts               your contacts");
         System.out.println("  add <addr|MAX#>        add a contact");
+        System.out.println("  rename <key> <name>    rename a contact (local override)");
+        System.out.println("  resolve <key>          re-resolve a contact's current address NOW");
+        System.out.println("  markread <peer key>    mark a conversation read");
         System.out.println("  chats                  conversation summaries");
         System.out.println("  read <peer key>        a conversation");
         System.out.println("  send <peer key> <msg>  send a message");
