@@ -130,6 +130,9 @@ public final class ParlonsCore {
             public int meshPeers()     { return mCfg.meshPeers.size(); }
         });
         mControl.registerOn(mNode.services());
+        // Inbound CALL signals for the account ring the paired devices (WebRTC terminates on the
+        // device; we relay the opaque SDP/ICE). Without this, an offer was silently swallowed.
+        mChat.setCallListener((from, cm) -> mControl.forwardCallSignal(from, cm));
     }
 
     public MaximaNode node() { return mNode; }
@@ -325,15 +328,18 @@ public final class ParlonsCore {
     }
 
     private ChatEngine.Listener loggingListener() {
-        // Headless: no UI to update. Log inbound so a running node is observable; later
-        // phases replace/augment this with the owner control-channel fan-out.
+        // Headless: no local UI — but paired DEVICES are the UI, so every event fans out to
+        // them over the push channel (instant chat, live ticks, notifications on the portal).
         return new ChatEngine.Listener() {
             public void onMessage(ChatEngine.Entry e) {
                 if (!e.mine) {
                     log("message from " + shortPeer(e) + ": " + preview(e.body));
+                    mControl.pushMessage(e);
                 }
             }
-            public void onStateChanged(ChatEngine.Entry e) { }
+            public void onStateChanged(ChatEngine.Entry e) {
+                mControl.pushState(e);
+            }
             public void onGroupChanged(Group g) { }
         };
     }

@@ -125,6 +125,127 @@ public final class ParlonsRemote {
 
     // ---- typed commands (thin wrappers over ParlonsControl methods) ----
 
+    /** Receives events the cloud PUSHES to this device (messages, ticks, call signals). */
+    public interface PushListener {
+        void onPush(JSONObject zEvent);
+    }
+
+    /**
+     * Serve the {@code parlons.push} method on THIS device's node so the cloud can push events
+     * (instant messages, delivery ticks, incoming calls) instead of us polling. Only events
+     * signed by the ACCOUNT's identity are accepted; duplicates (the cloud fires every reply
+     * address we advertise) are dropped by event id.
+     */
+    public void setPushListener(PushListener zListener) {
+        final String accountKey = accountKeyHex();
+        final java.util.Set<String> seen =
+                java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<String, Boolean>() {
+                    protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> e) {
+                        return size() > 256;
+                    }
+                });
+        mNode.rpc().services().register(ParlonsControl.DEVICE_PUSH, req -> {
+            String from = new MiniData(req.fromPublicKey).to0xString();
+            if (accountKey.isEmpty() || !accountKey.equalsIgnoreCase(from)) {
+                throw new SecurityException("push not from the account");
+            }
+            Object o = new JSONParser().parse(new String(req.payload, StandardCharsets.UTF_8));
+            if (o instanceof JSONObject) {
+                JSONObject ev = (JSONObject) o;
+                String eid = String.valueOf(ev.get("eid"));
+                synchronized (seen) {
+                    if (!seen.add(eid)) {
+                        return "{\"ok\":true}".getBytes(StandardCharsets.UTF_8);
+                    }
+                }
+                zListener.onPush(ev);
+            }
+            return "{\"ok\":true}".getBytes(StandardCharsets.UTF_8);
+        });
+    }
+
+    /** The account's identity key (0x-hex) parsed from its MAX# permanent, or "". */
+    public String accountKeyHex() {
+        String m = mCloudMax;
+        if (m != null && m.startsWith("MAX#")) {
+            int end = m.indexOf('#', 4);
+            if (end > 4) {
+                return m.substring(4, end);
+            }
+        }
+        return "";
+    }
+
+    /** Heartbeat: refreshes this device's live addresses on the node so pushes keep arriving. */
+    public JSONObject registerPush() throws Exception {
+        return rpc(ParlonsControl.M_PUSH_REG, new JSONObject());
+    }
+
+    /** Relay one call signal (offer/answer/ice/bye/busy) to a peer, sent AS the account. */
+    public JSONObject callSignal(String zPeer, String zCallId, String zKind,
+                                 String zPayload, String zMemo) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("peer", zPeer);
+        p.put("id", zCallId);
+        p.put("kind", zKind);
+        p.put("payload", zPayload == null ? "" : zPayload);
+        p.put("memo", zMemo == null ? "" : zMemo);
+        return rpc(ParlonsControl.M_CALL_SIGNAL, p);
+    }
+
+    /** Chunk size for media upload — inside the 256K RPC ceiling with base64 + envelope room. */
+    public static final int MEDIA_CHUNK = 120 * 1024;
+
+    /**
+     * Send media (photo / voice note) through the account: chunked upload, then the NODE
+     * publishes the blobs (they live on the always-on VPS) and sends the media message.
+     */
+    public JSONObject sendMedia(String zPeer, boolean zGroup, byte[] zBytes, String zMime,
+                                String zCaption) throws Exception {
+        String tid = java.util.UUID.randomUUID().toString();
+        int off = 0;
+        JSONObject last = new JSONObject();
+        while (off < zBytes.length) {
+            int n = Math.min(MEDIA_CHUNK, zBytes.length - off);
+            byte[] part = new byte[n];
+            System.arraycopy(zBytes, off, part, 0, n);
+            off += n;
+            JSONObject p = new JSONObject();
+            p.put("tid", tid);
+            p.put("data", java.util.Base64.getEncoder().encodeToString(part));
+            boolean isLast = off >= zBytes.length;
+            p.put("last", isLast);
+            if (isLast) {
+                p.put("peer", zPeer);
+                p.put("group", zGroup);
+                p.put("mime", zMime);
+                p.put("caption", zCaption == null ? "" : zCaption);
+            }
+            last = rpc(ParlonsControl.M_MEDIA_UP, p);
+            Object ok = last.get("ok");
+            if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                return last;
+            }
+        }
+        return last;
+    }
+
+    /** Create a group on the account; the roster is pushed to every member. */
+    public JSONObject createGroup(String zName, java.util.List<String> zMemberKeys) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("name", zName);
+        org.minima.utils.json.JSONArray arr = new org.minima.utils.json.JSONArray();
+        arr.addAll(zMemberKeys);
+        p.put("members", arr);
+        return rpc(ParlonsControl.M_GROUP_CREATE, p);
+    }
+
+    /** This device's own node — the portal hangs its MediaService/BlobStore off it so received
+     *  media chunks are fetched over MediaWire exactly as the phone app does. */
+    public com.eurobuddha.maxima.core.MaximaNode node() {
+        return mNode;
+    }
+
     public JSONObject pair(String zLabel, String zCode) throws Exception {
         JSONObject p = new JSONObject();
         p.put("label", zLabel);
