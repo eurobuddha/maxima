@@ -63,7 +63,8 @@ public final class ParlonsCore {
 
     /** Headless runtime configuration (from CLI/env — no Preferences on a VPS). */
     public static final class Config {
-        public String displayName = "Parlons Cloud";
+        /** Explicit --name override; null = keep whatever name the account has stored. */
+        public String displayName = null;
         /** Build version reported on the Node tab (set from Main.VERSION). */
         public String version = "";
         /** Pool-relay listener port (0 = no relay). Public; peers dial it. */
@@ -92,7 +93,14 @@ public final class ParlonsCore {
         mNode = new MaximaNode(zIdentity, PROTOCOL, RELAY_TARGET);
         mGossip = new RelayGossipClient(zIdentity, PROTOCOL, 8);
         mNode.setStore(new FileStore(new File(base, "node")));
-        mNode.setName(zConfig.displayName);
+        // The account's name is the USER's (set from a device via parlons.identity.setname and
+        // persisted by the node). An unconditional set here clobbered it on every restart —
+        // config only wins when --name was EXPLICITLY given; the default applies on first boot.
+        if (zConfig.displayName != null && !zConfig.displayName.isEmpty()) {
+            mNode.setName(zConfig.displayName);
+        } else if (mNode.name() == null || mNode.name().isEmpty()) {
+            mNode.setName("Parlons Cloud");
+        }
         mNode.setNodeKind("core");
         mMedia = new MediaService(mNode, blobs);
         mNode.setLocalBlobs(blobs);

@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.4.4";
+    public static final String VERSION = "0.4.6";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -133,7 +133,8 @@ public final class Main {
 
         System.out.println("Parlons Cloud " + VERSION + " starting");
         System.out.println("  data     : " + dir);
-        System.out.println("  name     : " + cfg.displayName);
+        System.out.println("  name     : " + (cfg.displayName == null
+                ? "(kept from the account's stored name)" : cfg.displayName));
         System.out.println("  relay    : " + (cfg.relayPort > 0
                 ? ("pool host on port " + cfg.relayPort) : "off (--no-relay)"));
         System.out.println("  direct   : " + (cfg.directPort > 0
@@ -198,7 +199,7 @@ public final class Main {
         out.println("Usage: java -jar parlons-cloud-" + VERSION + ".jar [options]");
         out.println();
         out.println("  --data <dir>        data directory                 (default ~/.parlons)");
-        out.println("  --name <name>       display name for your account  (default 'Parlons Cloud')");
+        out.println("  --name <name>       display name for your account  (default: keep the stored name)");
         out.println("  --relay-port <n>    pool-relay port                (default " + DEFAULT_RELAY_PORT + ")");
         out.println("  --no-relay          run the account WITHOUT a pool relay");
         out.println("  --direct-port <n>   Tier-2 direct reachability port (default " + DEFAULT_DIRECT_PORT + ")");
