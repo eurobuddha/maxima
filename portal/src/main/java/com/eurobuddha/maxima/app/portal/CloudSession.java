@@ -73,6 +73,16 @@ public final class CloudSession {
         return sDeviceId;
     }
 
+    /** Last-known page payload (raw JSON string) — tabs paint this instantly on a cold start
+     *  instead of sitting blank for the 10–20s fleet-attach, then refresh live behind it. */
+    public static String cached(Context c, String key) {
+        return prefs(c).getString("cache_" + key, "");
+    }
+
+    public static void cache(Context c, String key, String json) {
+        prefs(c).edit().putString("cache_" + key, json == null ? "" : json).apply();
+    }
+
     public interface Cb {
         void ok(ParlonsRemote r);
         void err(String message);
@@ -101,6 +111,59 @@ public final class CloudSession {
 
     public static ParlonsRemote remoteOrNull() {
         return sRemote;
+    }
+
+    private static volatile com.eurobuddha.maxima.core.media.MediaService sMedia;
+
+    /**
+     * The device-side media service: received photos / voice notes are fetched CHUNK BY CHUNK
+     * over MediaWire from the manifest's sources (the always-on cloud node + its replica relays)
+     * and cached in this device's own BlobStore — exactly how the phone app fetches media. Null
+     * until the remote is connected.
+     */
+    public static com.eurobuddha.maxima.core.media.MediaService media(Context c) {
+        ParlonsRemote r = sRemote;
+        if (r == null) {
+            return null;
+        }
+        if (sMedia == null) {
+            synchronized (CloudSession.class) {
+                if (sMedia == null) {
+                    com.eurobuddha.maxima.core.store.BlobStore blobs =
+                            new com.eurobuddha.maxima.core.store.BlobStore(
+                                    new File(c.getFilesDir(), "media"), 256L * 1024 * 1024);
+                    sMedia = new com.eurobuddha.maxima.core.media.MediaService(r.node(), blobs);
+                }
+            }
+        }
+        return sMedia;
+    }
+
+    private static volatile boolean sPushInstalled;
+
+    /**
+     * Install the device-side push handler once per connection: cloud events land here and fan
+     * out — screens via {@link PortalHub}, notifications via {@link PortalNotifier}, call
+     * signals via {@link PortalCalls}. Also fires an immediate register so pushes start now.
+     */
+    public static void installPush(Context appCtx, ParlonsRemote r) {
+        if (sPushInstalled) {
+            return;
+        }
+        sPushInstalled = true;
+        final Context app = appCtx.getApplicationContext();
+        r.setPushListener(ev -> {
+            String type = String.valueOf(ev.get("type"));
+            if ("message".equals(type)) {
+                PortalNotifier.onPushedMessage(app, ev);
+            } else if ("call".equals(type)) {
+                PortalCalls.onPushedSignal(app, ev);
+            }
+            PortalHub.dispatch(ev);
+        });
+        IO.execute(() -> {
+            try { r.registerPush(); } catch (Exception ignored) { }
+        });
     }
 
     /** This device's pairing key (0x-hex, as the node stores it), or "" if not yet connected. */

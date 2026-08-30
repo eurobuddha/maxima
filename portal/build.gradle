@@ -21,8 +21,8 @@ android {
         applicationId "com.eurobuddha.parlons.cloud"
         minSdk 28
         targetSdk 35
-        versionCode 4
-        versionName "0.3.1"
+        versionCode 5
+        versionName "0.4.0"
     }
 
     signingConfigs {
@@ -79,6 +79,9 @@ dependencies {
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     // SVG token icons on the watch-only wallet (parity with the app wallet).
     implementation 'com.caverock:androidsvg-aar:1.4'
+    // Calls: same WebRTC build as the app — Opus/DTLS-SRTP terminates on THIS device.
+    implementation 'io.getstream:stream-webrtc-android:1.1.1'
+    implementation 'androidx.exifinterface:exifinterface:1.3.7'  // honour photo orientation
 }
 
 // Land every release APK in dist/ (matches the app's convention).

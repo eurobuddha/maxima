@@ -1,5 +1,6 @@
 package com.eurobuddha.maxima.app.portal;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -38,6 +39,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     public static final String EXTRA_PEER = "peer";
     public static final String EXTRA_NAME = "name";
+    public static final String EXTRA_GROUP = "group";
 
     private static final class Msg {
         String id;
@@ -50,12 +52,38 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     private String mPeer;
     private String mName;
+    private boolean mGroup;
     private RecyclerView mList;
     private EditText mInput;
     private final List<Msg> mMsgs = new ArrayList<>();
     private final Adapter mAdapter = new Adapter();
     private volatile boolean mBusy;
     private volatile long mReadMark;      // newest inbound time we've told the node we read
+
+    // ---- media (image + voice-note) state — same discipline as the app's ChatActivity ----
+    private static final int PICK_PHOTO = 41;
+    private static final int TAKE_PHOTO = 42;
+    private android.net.Uri mCaptureUri;
+    private android.media.MediaPlayer mAudioPlayer;
+    private String mAudioPlayingId;
+    private volatile int mAudioToken;
+    private final android.os.Handler mAudioTicker =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private com.eurobuddha.maxima.app.chat.VoiceNote mActiveRecorder;
+
+    /** Decoded chat images by message id — LruCache of DOWNSAMPLED bitmaps (heap/8 cap). */
+    private final android.util.LruCache<String, android.graphics.Bitmap> mImageCache =
+            new android.util.LruCache<String, android.graphics.Bitmap>(
+                    (int) Math.min(Integer.MAX_VALUE, Runtime.getRuntime().maxMemory() / 8)) {
+                @Override
+                protected int sizeOf(String k, android.graphics.Bitmap b) {
+                    return b.getByteCount();
+                }
+            };
+    private final java.util.Set<String> mImageFetching =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    private final java.util.Set<String> mImageFailed =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
 
@@ -72,6 +100,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         super.onCreate(b);
         mPeer = getIntent().getStringExtra(EXTRA_PEER);
         mName = getIntent().getStringExtra(EXTRA_NAME);
+        mGroup = getIntent().getBooleanExtra(EXTRA_GROUP, false);
         if (mName == null || mName.isEmpty()) {
             mName = mPeer;
         }
@@ -114,13 +143,27 @@ public final class CloudChatActivity extends AppCompatActivity {
         if (avatar instanceof TextView) {
             Avatars.apply((TextView) avatar, mPeer, mName);
         }
-        // Phase-2 controls (no cloud RPC yet): hide rather than dangle dead buttons.
-        hide(R.id.btn_chat_video);
-        hide(R.id.btn_chat_call);
+        // Calls: WebRTC terminates on this device; signaling relays through the cloud account.
+        View call = findViewById(R.id.btn_chat_call);
+        if (call != null) {
+            call.setOnClickListener(v -> startCall(false));
+        }
+        View video = findViewById(R.id.btn_chat_video);
+        if (video != null) {
+            video.setOnClickListener(v -> startCall(true));
+        }
         hide(R.id.btn_chat_info);
-        hide(R.id.btn_chat_attach);
-        hide(R.id.btn_chat_camera);
         hide(R.id.btn_chat_emoji);
+        View attach = findViewById(R.id.btn_chat_attach);
+        if (attach != null) {
+            attach.setVisibility(View.VISIBLE);
+            attach.setOnClickListener(v -> attachSheet());
+        }
+        View camera = findViewById(R.id.btn_chat_camera);
+        if (camera != null) {
+            camera.setVisibility(View.VISIBLE);
+            camera.setOnClickListener(v -> takePhoto());
+        }
 
         mList = findViewById(R.id.messages);
         LinearLayoutManager lm = new LinearLayoutManager(this);
@@ -130,11 +173,16 @@ public final class CloudChatActivity extends AppCompatActivity {
 
         mInput = findViewById(R.id.chat_input);
         final android.widget.ImageButton send = findViewById(R.id.btn_chat_send);
-        // Send button shows a mic when the field is empty and a send arrow once there's text —
-        // same affordance as Parlons. (Voice notes are Phase 2, so the mic is inert for now, but the
-        // arrow appears exactly when tapping it will actually send.)
+        // Send button shows a mic when the field is empty (tap to record a voice note) and a
+        // send arrow once there's text — same affordance as Parlons.
         send.setImageResource(R.drawable.ic_mic);
-        send.setOnClickListener(v -> send());
+        send.setOnClickListener(v -> {
+            if (mInput.getText().toString().trim().isEmpty()) {
+                startVoiceNote();
+            } else {
+                send();
+            }
+        });
         mInput.addTextChangedListener(new android.text.TextWatcher() {
             boolean hasText = false;
             public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
@@ -149,16 +197,43 @@ public final class CloudChatActivity extends AppCompatActivity {
         });
     }
 
+    /** Cloud push → instant refresh when the event is about THIS conversation. */
+    private final PortalHub.Listener mPush = ev -> {
+        String type = String.valueOf(ev.get("type"));
+        if (!"message".equals(type) && !"state".equals(type)) {
+            return;
+        }
+        String peer = String.valueOf(ev.get("peer"));
+        if (mPeer != null && mPeer.equalsIgnoreCase(peer)) {
+            runOnUiThread(this::load);
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
+        PortalHub.setForeground(mPeer);
+        PortalHub.add(mPush);
+        PortalNotifier.clear(this, mPeer);
         mHandler.post(mTick);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        PortalHub.setForeground("");
+        PortalHub.remove(mPush);
         mHandler.removeCallbacks(mTick);
+        stopAudio();
+    }
+
+    private void startCall(boolean zVideo) {
+        Intent i = new Intent(this, PortalCallActivity.class);
+        i.putExtra(PortalCallActivity.EXTRA_PEER, mPeer);
+        i.putExtra(PortalCallActivity.EXTRA_NAME, mName);
+        i.putExtra(PortalCallActivity.EXTRA_OUTGOING, true);
+        i.putExtra(PortalCallActivity.EXTRA_VIDEO, zVideo);
+        startActivity(i);
     }
 
     private void hide(int id) {
@@ -318,6 +393,695 @@ public final class CloudChatActivity extends AppCompatActivity {
         return t > 0 ? mHm.format(new Date(t)) : "";
     }
 
+    private void toast(String zMsg) {
+        Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
+    }
+
+    // ==================================================================
+    // Media — image + voice note, ported from the app's ChatActivity.
+    // Receive: manifests are fetched chunk-by-chunk over MediaWire from
+    // the ALWAYS-ON cloud node + its replicas, cached in this device's
+    // BlobStore. Send: chunked upload to the node, which publishes the
+    // blobs (they live on the VPS) and sends the media message.
+    // ==================================================================
+
+    /** Decode within a ~1280px bound so one photo can't blow the heap. */
+    private static android.graphics.Bitmap decodeBounded(byte[] zRaw) {
+        if (zRaw == null || zRaw.length == 0) {
+            return null;
+        }
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeByteArray(zRaw, 0, zRaw.length, o);
+        int sample = 1;
+        int max = Math.max(o.outWidth, o.outHeight);
+        while (max / sample > 1280) {
+            sample *= 2;
+        }
+        android.graphics.BitmapFactory.Options d = new android.graphics.BitmapFactory.Options();
+        d.inSampleSize = sample;
+        return android.graphics.BitmapFactory.decodeByteArray(zRaw, 0, zRaw.length, d);
+    }
+
+    /** Fetch a media ref's raw bytes: embedded data: URI, or mx1 manifest via MediaService. */
+    private byte[] fetchMediaBytes(String zRef) throws Exception {
+        if (zRef.startsWith("data:")) {
+            return android.util.Base64.decode(
+                    zRef.substring(zRef.indexOf(',') + 1), android.util.Base64.DEFAULT);
+        }
+        com.eurobuddha.maxima.core.media.MediaService media = CloudSession.media(this);
+        if (media == null) {
+            throw new IllegalStateException("not connected");
+        }
+        com.eurobuddha.maxima.core.media.MediaManifest mf =
+                com.eurobuddha.maxima.core.media.MediaManifest.decode(
+                        new String(android.util.Base64.decode(
+                                zRef.substring("mx1:".length()), android.util.Base64.URL_SAFE),
+                                java.nio.charset.StandardCharsets.UTF_8));
+        return media.fetch(mf);
+    }
+
+    /** Show the image for a media bubble: cache hit, else fetch+decode off-main. */
+    private void bindImage(android.widget.ImageView view, String body, String id) {
+        android.graphics.Bitmap cached = mImageCache.get(id);
+        if (cached != null) {
+            view.setImageBitmap(cached);
+            view.setOnClickListener(v -> openImage(id));
+            return;
+        }
+        view.setImageResource(R.drawable.ic_photo);
+        view.setOnClickListener(null);
+        if (mImageFailed.contains(id)) {
+            return;
+        }
+        if (!mImageFetching.add(id)) {
+            return;
+        }
+        final String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(body);
+        new Thread(() -> {
+            try {
+                android.graphics.Bitmap bmp = decodeBounded(fetchMediaBytes(ref));
+                if (bmp != null) {
+                    mImageCache.put(id, bmp);
+                    runOnUiThread(() -> mAdapter.notifyDataSetChanged());
+                    return;
+                }
+                mImageFailed.add(id);
+            } catch (Exception e) {
+                mImageFailed.add(id);
+            } finally {
+                mImageFetching.remove(id);
+            }
+        }, "portal-image").start();
+    }
+
+    /** Full-screen in-app viewer: pinch-zoom, pan, double-tap, save, share. */
+    private void openImage(String id) {
+        final android.graphics.Bitmap b = mImageCache.get(id);
+        if (b == null) {
+            return;
+        }
+        final android.app.Dialog d = new android.app.Dialog(this,
+                android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        android.widget.FrameLayout root = new android.widget.FrameLayout(this);
+        root.setBackgroundColor(0xFF000000);
+
+        com.eurobuddha.maxima.app.chat.ZoomImageView z =
+                new com.eurobuddha.maxima.app.chat.ZoomImageView(this);
+        z.setImageBitmap(b);
+        root.addView(z, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        final android.widget.LinearLayout bar = new android.widget.LinearLayout(this);
+        bar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(0xB3000000);
+        bar.setPadding(dp(10), dp(14), dp(14), dp(10));
+
+        android.widget.ImageView close = new android.widget.ImageView(this);
+        close.setImageResource(R.drawable.ic_close);
+        close.setColorFilter(0xFFFFFFFF);
+        close.setPadding(dp(8), dp(8), dp(8), dp(8));
+        close.setOnClickListener(v -> d.dismiss());
+        bar.addView(close, new android.widget.LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        View spacer = new View(this);
+        bar.addView(spacer, new android.widget.LinearLayout.LayoutParams(0, 1, 1f));
+
+        TextView save = new TextView(this);
+        save.setText("Save");
+        save.setTextColor(0xFFFFFFFF);
+        save.setTextSize(15);
+        save.setTypeface(null, android.graphics.Typeface.BOLD);
+        save.setPadding(dp(14), dp(8), dp(14), dp(8));
+        save.setOnClickListener(v -> saveImage(id));
+        bar.addView(save);
+
+        TextView share = new TextView(this);
+        share.setText("Share");
+        share.setTextColor(0xFFFFFFFF);
+        share.setTextSize(15);
+        share.setTypeface(null, android.graphics.Typeface.BOLD);
+        share.setPadding(dp(14), dp(8), dp(14), dp(8));
+        share.setOnClickListener(v -> shareImage(id));
+        bar.addView(share);
+
+        root.addView(bar, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP));
+        z.setOnSingleTap(() -> bar.setVisibility(
+                bar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        d.setContentView(root);
+        d.show();
+    }
+
+    private void saveImage(String id) {
+        final android.graphics.Bitmap b = mImageCache.get(id);
+        if (b == null) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                android.content.ContentValues cv = new android.content.ContentValues();
+                cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+                        "parlons-" + System.currentTimeMillis() + ".jpg");
+                cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                android.net.Uri uri = getContentResolver().insert(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+                try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
+                }
+                runOnUiThread(() -> toast("Saved to Photos"));
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Save failed"));
+            }
+        }, "portal-save-image").start();
+    }
+
+    private void shareImage(String id) {
+        final android.graphics.Bitmap b = mImageCache.get(id);
+        if (b == null) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+                dir.mkdirs();
+                java.io.File f = new java.io.File(dir, "share.jpg");
+                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
+                }
+                final android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                        this, "com.eurobuddha.parlons.cloud.payloads", f);
+                runOnUiThread(() -> {
+                    Intent i = new Intent(Intent.ACTION_SEND);
+                    i.setType("image/jpeg");
+                    i.putExtra(Intent.EXTRA_STREAM, uri);
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(i, "Share photo"));
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Could not share image"));
+            }
+        }, "portal-share-image").start();
+    }
+
+    // ---- attach / camera / caption / send-photo ----
+
+    private void attachSheet() {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setItems(new CharSequence[]{"Photo library", "Voice note"}, (d, which) -> {
+                    if (which == 0) {
+                        pickPhoto();
+                    } else {
+                        startVoiceNote();
+                    }
+                })
+                .show();
+    }
+
+    private void pickPhoto() {
+        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+        i.setType("image/*");
+        startActivityForResult(Intent.createChooser(i, "Send photo"), PICK_PHOTO);
+    }
+
+    private void takePhoto() {
+        try {
+            java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "capture.jpg");
+            mCaptureUri = androidx.core.content.FileProvider.getUriForFile(
+                    this, "com.eurobuddha.parlons.cloud.payloads", f);
+            Intent i = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, mCaptureUri);
+            i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            // OEM camera apps that don't self-grant get a SecurityException and the
+            // capture silently returns nothing — grant the output uri explicitly.
+            for (android.content.pm.ResolveInfo ri : getPackageManager()
+                    .queryIntentActivities(i,
+                            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)) {
+                grantUriPermission(ri.activityInfo.packageName, mCaptureUri,
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            }
+            startActivityForResult(i, TAKE_PHOTO);
+        } catch (Exception e) {
+            toast("No camera available");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req == TAKE_PHOTO && res == RESULT_OK && mCaptureUri != null) {
+            promptCaption(mCaptureUri);
+            return;
+        }
+        if (req != PICK_PHOTO || res != RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        promptCaption(data.getData());
+    }
+
+    private void promptCaption(final android.net.Uri uri) {
+        new Thread(() -> {
+            android.graphics.Bitmap preview = null;
+            try {
+                byte[] jpeg = readScaledJpeg(uri, 600);
+                preview = android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
+            } catch (Exception ignored) {
+            }
+            final android.graphics.Bitmap thumb = preview;
+            runOnUiThread(() -> showCaptionDialog(uri, thumb));
+        }, "portal-preview").start();
+    }
+
+    private void showCaptionDialog(final android.net.Uri uri, android.graphics.Bitmap thumb) {
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(14), dp(18), 0);
+        if (thumb != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(thumb);
+            iv.setAdjustViewBounds(true);
+            iv.setMaxHeight(dp(240));
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            android.widget.LinearLayout.LayoutParams lp =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(12);
+            iv.setLayoutParams(lp);
+            box.addView(iv);
+        }
+        final EditText cap = new EditText(this);
+        cap.setHint("Add a caption…");
+        cap.setHintTextColor(getColor(R.color.ux_subtext));
+        cap.setTextColor(getColor(R.color.ux_text));
+        cap.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        cap.setMaxLines(4);
+        box.addView(cap);
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Send photo")
+                .setView(box)
+                .setPositiveButton("Send",
+                        (d, w) -> sendPhoto(uri, cap.getText().toString().trim()))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void sendPhoto(final android.net.Uri uri, final String caption) {
+        toast("Sending photo…");
+        new Thread(() -> {
+            try {
+                byte[] jpeg = readScaledJpeg(uri, 1400);
+                uploadMedia(jpeg, "image/jpeg", caption);
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Photo failed: " + e.getMessage()));
+            }
+        }, "portal-media").start();
+    }
+
+    /** Chunked upload → the node publishes and sends. Blocking; call off-main. */
+    private void uploadMedia(byte[] zBytes, String zMime, String zCaption) {
+        String error = null;
+        try {
+            com.eurobuddha.maxima.cloud.ParlonsRemote r = CloudSession.remoteOrNull();
+            if (r == null) {
+                error = "not connected to your account";
+            } else {
+                JSONObject res = r.sendMedia(mPeer, mGroup, zBytes, zMime, zCaption);
+                Object ok = res.get("ok");
+                if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                    error = String.valueOf(res.get("error"));
+                }
+            }
+        } catch (Exception e) {
+            error = e.getMessage() == null ? e.toString() : e.getMessage();
+        }
+        final String err = error;
+        runOnUiThread(() -> {
+            if (err != null) {
+                toast("Send failed: " + err);
+            }
+            load();
+        });
+    }
+
+    /** Decode + downscale + re-encode a picked image to a modest JPEG (EXIF honoured). */
+    private byte[] readScaledJpeg(android.net.Uri uri, int maxPx) throws Exception {
+        try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+            android.graphics.BitmapFactory.Options bounds =
+                    new android.graphics.BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            byte[] all = readAll(in);
+            android.graphics.BitmapFactory.decodeByteArray(all, 0, all.length, bounds);
+            int sample = 1;
+            int big = Math.max(bounds.outWidth, bounds.outHeight);
+            while (big / sample > maxPx * 2) {
+                sample *= 2;
+            }
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = sample;
+            android.graphics.Bitmap bmp =
+                    android.graphics.BitmapFactory.decodeByteArray(all, 0, all.length, o);
+            if (bmp == null) {
+                throw new Exception("could not read image");
+            }
+            bmp = applyExifOrientation(bmp, all);
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, bos);
+            return bos.toByteArray();
+        }
+    }
+
+    private static byte[] readAll(java.io.InputStream in) throws java.io.IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[16384];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            bos.write(buf, 0, n);
+        }
+        return bos.toByteArray();
+    }
+
+    private static android.graphics.Bitmap applyExifOrientation(
+            android.graphics.Bitmap zBmp, byte[] zJpeg) {
+        try {
+            androidx.exifinterface.media.ExifInterface exif =
+                    new androidx.exifinterface.media.ExifInterface(
+                            new java.io.ByteArrayInputStream(zJpeg));
+            int o = exif.getAttributeInt(
+                    androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                    androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL);
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            switch (o) {
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90:
+                    m.postRotate(90);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180:
+                    m.postRotate(180);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270:
+                    m.postRotate(270);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+                    m.postScale(-1f, 1f);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL:
+                    m.postScale(1f, -1f);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSPOSE:
+                    m.postRotate(90);
+                    m.postScale(-1f, 1f);
+                    break;
+                case androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSVERSE:
+                    m.postRotate(270);
+                    m.postScale(-1f, 1f);
+                    break;
+                default:
+                    return zBmp;
+            }
+            return android.graphics.Bitmap.createBitmap(zBmp, 0, 0,
+                    zBmp.getWidth(), zBmp.getHeight(), m, true);
+        } catch (Exception e) {
+            return zBmp;
+        }
+    }
+
+    // ---- voice notes ----
+
+    private void startVoiceNote() {
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 61);
+            return;
+        }
+        recordVoiceDialog();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] grants) {
+        super.onRequestPermissionsResult(req, perms, grants);
+        if (req == 61 && grants.length > 0
+                && grants[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            recordVoiceDialog();
+        }
+    }
+
+    private void recordVoiceDialog() {
+        final com.eurobuddha.maxima.app.chat.VoiceNote rec =
+                new com.eurobuddha.maxima.app.chat.VoiceNote(this);
+        mActiveRecorder = rec;
+        try {
+            rec.start();
+        } catch (Exception e) {
+            toast("Microphone unavailable");
+            return;
+        }
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(18), dp(22), dp(6));
+        final com.eurobuddha.maxima.app.chat.WaveformView wave =
+                new com.eurobuddha.maxima.app.chat.WaveformView(this);
+        wave.setInk(getColor(R.color.ux_accent));
+        android.widget.LinearLayout.LayoutParams wlp =
+                new android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
+        wlp.bottomMargin = dp(10);
+        box.addView(wave, wlp);
+        android.widget.LinearLayout rowBox = new android.widget.LinearLayout(this);
+        rowBox.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        rowBox.setGravity(Gravity.CENTER_VERTICAL);
+        box.addView(rowBox);
+        final java.util.List<Integer> samples = new java.util.ArrayList<>();
+        final TextView dot = new TextView(this);
+        dot.setText("●");
+        dot.setTextColor(0xFFE0524D);
+        dot.setTextSize(16);
+        final TextView timer = new TextView(this);
+        timer.setTextSize(28);
+        timer.setTypeface(android.graphics.Typeface.MONOSPACE);
+        timer.setTextColor(getColor(R.color.ux_text));
+        timer.setPadding(dp(14), 0, 0, 0);
+        timer.setText("0:00");
+        rowBox.addView(dot);
+        rowBox.addView(timer);
+
+        final androidx.appcompat.app.AlertDialog dlg =
+                new androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Voice note")
+                        .setView(box)
+                        .setPositiveButton("Send", null)
+                        .setNegativeButton("Cancel", null)
+                        .create();
+        dlg.setCanceledOnTouchOutside(false);
+        dlg.show();
+
+        final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+        final Runnable sampler = new Runnable() {
+            @Override
+            public void run() {
+                int a = rec.amplitude();
+                samples.add(a);
+                wave.append(a);
+                if (rec.elapsedSeconds() < com.eurobuddha.maxima.app.chat.VoiceNote.MAX_SECONDS) {
+                    h.postDelayed(this, 100);
+                }
+            }
+        };
+        h.post(sampler);
+        final Runnable tick = new Runnable() {
+            @Override
+            public void run() {
+                int sSec = rec.elapsedSeconds();
+                dot.setAlpha(dot.getAlpha() > 0.5f ? 0.25f : 1f);
+                if (sSec >= com.eurobuddha.maxima.app.chat.VoiceNote.MAX_SECONDS) {
+                    timer.setText(fmtSecs(com.eurobuddha.maxima.app.chat.VoiceNote.MAX_SECONDS)
+                            + "  max");
+                    rec.stopQuiet();
+                } else {
+                    timer.setText(fmtSecs(sSec));
+                    h.postDelayed(this, 500);
+                }
+            }
+        };
+        h.post(tick);
+
+        dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    h.removeCallbacksAndMessages(null);
+                    rec.stopQuiet();
+                    byte[] bytes;
+                    int secs = rec.recordedSeconds();
+                    try {
+                        bytes = rec.bytes();
+                    } catch (Exception e) {
+                        toast("Recording failed");
+                        dlg.dismiss();
+                        return;
+                    }
+                    dlg.dismiss();
+                    if (bytes == null || bytes.length == 0 || secs < 1) {
+                        toast("Too short - hold on a moment longer");
+                        return;
+                    }
+                    sendVoice(bytes, rec.mime(), secs,
+                            com.eurobuddha.maxima.app.chat.WaveformView.encode(
+                                    com.eurobuddha.maxima.app.chat.WaveformView.summarise(samples)));
+                });
+        dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE)
+                .setOnClickListener(v -> {
+                    h.removeCallbacksAndMessages(null);
+                    rec.cancel();
+                    dlg.dismiss();
+                });
+        dlg.setOnDismissListener(d -> {
+            h.removeCallbacksAndMessages(null);
+            rec.stopQuiet();
+            if (mActiveRecorder == rec) {
+                mActiveRecorder = null;
+            }
+        });
+    }
+
+    private void sendVoice(final byte[] zBytes, final String zMime, final int zSecs,
+                           final String zWave) {
+        toast("Sending voice note…");
+        new Thread(() -> {
+            // Caption slot carries "duration|waveformhex" — the bubble draws the real
+            // shape without decoding the audio; previews show only the duration.
+            String cap = fmtSecs(zSecs) + (zWave == null || zWave.isEmpty() ? "" : "|" + zWave);
+            uploadMedia(zBytes, zMime, cap);
+        }, "portal-voice").start();
+    }
+
+    private void bindAudio(Holder h, Msg m) {
+        boolean playing = m.id.equals(mAudioPlayingId) && mAudioPlayer != null;
+        int ink = getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
+        h.audioBtn.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        h.audioBtn.setColorFilter(ink);
+        h.audioTime.setTextColor(ink);
+        String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body);
+        String total = cap;
+        int[] bars = null;
+        int sep = cap.indexOf('|');
+        if (sep >= 0) {
+            total = cap.substring(0, sep);
+            bars = com.eurobuddha.maxima.app.chat.WaveformView.decode(cap.substring(sep + 1));
+        }
+        if (bars == null) {
+            bars = new int[com.eurobuddha.maxima.app.chat.WaveformView.BAR_COUNT];
+            java.util.Arrays.fill(bars, 4);
+        }
+        h.audioBar.setInk(ink);
+        h.audioBar.setBars(bars);
+        if (playing) {
+            int pos = mAudioPlayer.getCurrentPosition();
+            int dur = Math.max(1, mAudioPlayer.getDuration());
+            h.audioTime.setText(fmtSecs(pos / 1000) + " / " + fmtSecs(dur / 1000));
+            h.audioBar.setProgress(pos / (float) dur);
+        } else {
+            h.audioTime.setText(total.isEmpty() ? "voice note" : total);
+            h.audioBar.setProgress(0f);
+        }
+        h.audio.setOnClickListener(v -> toggleAudio(m));
+    }
+
+    private void toggleAudio(final Msg m) {
+        if (m.id.equals(mAudioPlayingId)) {
+            stopAudio();
+            return;
+        }
+        stopAudio();
+        final int token = ++mAudioToken;
+        new Thread(() -> {
+            final java.io.File f = audioCacheFile(m.id, m.body);
+            runOnUiThread(() -> {
+                if (token != mAudioToken || isFinishing() || isDestroyed()) {
+                    return;
+                }
+                if (f == null) {
+                    toast("Could not decode voice note");
+                    return;
+                }
+                try {
+                    mAudioPlayer = new android.media.MediaPlayer();
+                    mAudioPlayer.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build());
+                    mAudioPlayer.setDataSource(f.getAbsolutePath());
+                    mAudioPlayer.prepare();
+                    mAudioPlayer.setOnCompletionListener(mp -> stopAudio());
+                    mAudioPlayer.start();
+                    mAudioPlayingId = m.id;
+                    audioTick();
+                    mAdapter.notifyDataSetChanged();
+                } catch (Exception ex) {
+                    toast("Playback failed");
+                    stopAudio();
+                }
+            });
+        }, "portal-audio").start();
+    }
+
+    private void stopAudio() {
+        mAudioToken++;
+        mAudioTicker.removeCallbacksAndMessages(null);
+        if (mAudioPlayer != null) {
+            try { mAudioPlayer.stop(); } catch (Exception ignored) { }
+            try { mAudioPlayer.release(); } catch (Exception ignored) { }
+            mAudioPlayer = null;
+        }
+        if (mAudioPlayingId != null) {
+            mAudioPlayingId = null;
+            mAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void audioTick() {
+        mAudioTicker.removeCallbacksAndMessages(null);
+        mAudioTicker.postDelayed(() -> {
+            if (mAudioPlayer == null || mAudioPlayingId == null) {
+                return;
+            }
+            mAdapter.notifyDataSetChanged();
+            audioTick();
+        }, 300);
+    }
+
+    /** Decode a voice-note ref into a playable cache file, once per message id. */
+    private java.io.File audioCacheFile(String zId, String zBody) {
+        try {
+            String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(zBody);
+            java.io.File dir = new java.io.File(getCacheDir(), "maximavoice");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir,
+                    "vn_" + zId.replaceAll("[^A-Za-z0-9_-]", "_"));
+            if (f.exists() && f.length() > 0) {
+                return f;
+            }
+            byte[] raw = fetchMediaBytes(ref);
+            try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                os.write(raw);
+            }
+            return f;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String fmtSecs(int zSecs) {
+        return (zSecs / 60) + ":" + String.format(Locale.UK, "%02d", zSecs % 60);
+    }
+
+    private int dp(int zDp) {
+        return Math.round(zDp * getResources().getDisplayMetrics().density);
+    }
+
     /** Delivery-state glyph — matches Parlons' ChatActivity.ticks(). */
     private static String ticks(String state) {
         if ("failed".equals(state)) return "✗";
@@ -362,9 +1126,32 @@ public final class CloudChatActivity extends AppCompatActivity {
             Msg m = mMsgs.get(position);
             h.row.setGravity(m.mine ? Gravity.END : Gravity.START);
             h.bubble.setBackgroundResource(m.mine ? R.drawable.bubble_out : R.drawable.bubble_in);
-            h.body.setText(m.body);
-            h.body.setTextColor(getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text));
+            int ink = getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
             h.sender.setVisibility(View.GONE);
+
+            boolean media = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
+            String mime = media ? com.eurobuddha.maxima.core.chat.ChatMedia.mime(m.body) : "";
+            if (media && mime.startsWith("audio")) {
+                h.image.setVisibility(View.GONE);
+                h.audio.setVisibility(View.VISIBLE);
+                h.body.setVisibility(View.GONE);
+                bindAudio(h, m);
+            } else if (media) {
+                h.audio.setVisibility(View.GONE);
+                h.image.setVisibility(View.VISIBLE);
+                String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body);
+                h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
+                h.body.setText(cap);
+                h.body.setTextColor(ink);
+                bindImage(h.image, m.body, m.id);
+            } else {
+                h.image.setVisibility(View.GONE);
+                h.audio.setVisibility(View.GONE);
+                h.body.setVisibility(View.VISIBLE);
+                h.body.setText(m.body);
+                h.body.setTextColor(ink);
+            }
+
             String meta = stamp(m.time);
             if (m.mine) {
                 meta = meta + "  " + ticks(m.state);
@@ -374,8 +1161,6 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.meta.setText(meta);
                 h.meta.setTextColor(getColor(R.color.ux_subtext));
             }
-            // hide the media image row we don't render in v1 (voice-note row was removed from the layout)
-            gone(h.itemView, R.id.bubble_image);
             // A failed (✗) message is tappable: reconnect to the peer now instead of waiting
             // for the node's retry heartbeat.
             if (m.mine && "failed".equals(m.state)) {
@@ -405,6 +1190,11 @@ public final class CloudChatActivity extends AppCompatActivity {
         final TextView sender;
         final TextView body;
         final TextView meta;
+        final android.widget.ImageView image;
+        final View audio;
+        final android.widget.ImageView audioBtn;
+        final TextView audioTime;
+        final com.eurobuddha.maxima.app.chat.WaveformView audioBar;
 
         Holder(View v) {
             super(v);
@@ -413,6 +1203,11 @@ public final class CloudChatActivity extends AppCompatActivity {
             sender = v.findViewById(R.id.bubble_sender);
             body = v.findViewById(R.id.bubble_body);
             meta = v.findViewById(R.id.bubble_meta);
+            image = v.findViewById(R.id.bubble_image);
+            audio = v.findViewById(R.id.bubble_audio);
+            audioBtn = v.findViewById(R.id.bubble_audio_btn);
+            audioTime = v.findViewById(R.id.bubble_audio_time);
+            audioBar = v.findViewById(R.id.bubble_audio_bar);
         }
     }
 }

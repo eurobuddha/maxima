@@ -38,6 +38,7 @@ public final class CloudChatsPage implements Page {
         String preview;
         String time;
         int unread;
+        boolean group;
     }
 
     private final MainActivity mAct;
@@ -65,8 +66,8 @@ public final class CloudChatsPage implements Page {
         mList.setOnItemClickListener((p, v, pos, id) -> open(mRows.get(pos)));
         View newGroup = zView.findViewById(R.id.btn_new_group);
         if (newGroup != null) {
-            // Groups have no cloud RPC yet (Phase 2). Hide the FAB rather than dangle a dead button.
-            newGroup.setVisibility(View.GONE);
+            newGroup.setVisibility(View.VISIBLE);
+            newGroup.setOnClickListener(v -> newGroupFlow());
         }
         mSearch.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
@@ -92,6 +93,7 @@ public final class CloudChatsPage implements Page {
         Intent i = new Intent(mAct, CloudChatActivity.class);
         i.putExtra(CloudChatActivity.EXTRA_PEER, r.key);
         i.putExtra(CloudChatActivity.EXTRA_NAME, r.name);
+        i.putExtra(CloudChatActivity.EXTRA_GROUP, r.group);
         mAct.startActivity(i);
     }
 
@@ -106,40 +108,37 @@ public final class CloudChatsPage implements Page {
             return;
         }
         if (mAll.isEmpty()) {
-            mEmpty.setVisibility(View.VISIBLE);
-            mEmpty.setText("Loading your conversations…");
+            // Paint the last-known list instantly while the live fetch attaches to the fleet.
+            String cached = CloudSession.cached(mAct, "summaries");
+            if (!cached.isEmpty()) {
+                try {
+                    Object o = new org.minima.utils.json.parser.JSONParser().parse(cached);
+                    if (o instanceof JSONObject) {
+                        mAll.addAll(parseRows((JSONObject) o));
+                        applyFilter();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (mAll.isEmpty()) {
+                mEmpty.setVisibility(View.VISIBLE);
+                mEmpty.setText("Loading your conversations…");
+            }
         }
         mBusy = true;
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
-                final List<Row> rows = new ArrayList<>();
+                List<Row> got = null;
                 String error = null;
                 try {
                     JSONObject res = r.summaries();
-                    JSONArray arr = (JSONArray) res.get("summaries");
-                    if (arr != null) {
-                        for (Object o : arr) {
-                            JSONObject s = (JSONObject) o;
-                            Row row = new Row();
-                            row.key = str(s, "peer");
-                            row.name = str(s, "name");
-                            if (row.name.isEmpty()) {
-                                row.name = row.key;
-                            }
-                            String last = str(s, "last");
-                            boolean mine = bool(s, "lastMine");
-                            row.preview = last.isEmpty() ? "no messages yet"
-                                    : (mine ? "You: " : "") + oneLine(last);
-                            long t = lng(s, "time");
-                            row.time = t > 0 ? stamp(t) : "";
-                            row.unread = (int) lng(s, "unread");
-                            rows.add(row);
-                        }
-                    }
+                    got = parseRows(res);
+                    CloudSession.cache(mAct, "summaries", res.toString());
                 } catch (Exception e) {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
                 final String err = error;
+                final List<Row> rows = got;
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
                     mBusy = false;
@@ -164,6 +163,136 @@ public final class CloudChatsPage implements Page {
                 });
             }
         });
+    }
+
+    /** New group: name + pick members from the account's contacts → parlons.group.create.
+     *  The node pushes the roster to every member, exactly like the app. */
+    private void newGroupFlow() {
+        CloudSession.connect(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                final List<String> keys = new ArrayList<>();
+                final List<String> names = new ArrayList<>();
+                try {
+                    JSONObject res = r.contacts();
+                    JSONArray arr = (JSONArray) res.get("contacts");
+                    if (arr != null) {
+                        for (Object o : arr) {
+                            JSONObject c = (JSONObject) o;
+                            keys.add(str(c, "key"));
+                            String n = str(c, "name");
+                            names.add(n.isEmpty() ? str(c, "key") : n);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                mAct.runOnUiThread(() -> {
+                    if (keys.isEmpty()) {
+                        android.widget.Toast.makeText(mAct,
+                                "Add some contacts first — a group needs members",
+                                android.widget.Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    android.widget.LinearLayout box = new android.widget.LinearLayout(mAct);
+                    box.setOrientation(android.widget.LinearLayout.VERTICAL);
+                    int pad = (int) (20 * mAct.getResources().getDisplayMetrics().density);
+                    box.setPadding(pad, pad / 2, pad, 0);
+                    final EditText nameField = new EditText(mAct);
+                    nameField.setHint("Group name");
+                    nameField.setSingleLine(true);
+                    box.addView(nameField);
+                    final boolean[] picked = new boolean[keys.size()];
+                    for (int i = 0; i < names.size(); i++) {
+                        final int idx = i;
+                        android.widget.CheckBox cb = new android.widget.CheckBox(mAct);
+                        cb.setText(names.get(i));
+                        cb.setOnCheckedChangeListener((b, on) -> picked[idx] = on);
+                        box.addView(cb);
+                    }
+                    android.widget.ScrollView scroll = new android.widget.ScrollView(mAct);
+                    scroll.addView(box);
+                    new androidx.appcompat.app.AlertDialog.Builder(mAct)
+                            .setTitle("New group")
+                            .setView(scroll)
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Create", (d, w) -> {
+                                String gname = nameField.getText().toString().trim();
+                                List<String> members = new ArrayList<>();
+                                for (int i = 0; i < picked.length; i++) {
+                                    if (picked[i]) {
+                                        members.add(keys.get(i));
+                                    }
+                                }
+                                if (gname.isEmpty() || members.isEmpty()) {
+                                    android.widget.Toast.makeText(mAct,
+                                            "Name the group and pick at least one member",
+                                            android.widget.Toast.LENGTH_LONG).show();
+                                    return;
+                                }
+                                createGroup(gname, members);
+                            })
+                            .show();
+                });
+            }
+            public void err(String m) {
+                mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, m,
+                        android.widget.Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private void createGroup(String zName, List<String> zMembers) {
+        CloudSession.connect(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String error = null;
+                try {
+                    JSONObject res = r.createGroup(zName, zMembers);
+                    Object ok = res.get("ok");
+                    if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final String err = error;
+                mAct.runOnUiThread(() -> {
+                    android.widget.Toast.makeText(mAct, err == null
+                                    ? "Group created" : "Could not create group: " + err,
+                            android.widget.Toast.LENGTH_LONG).show();
+                    mLastLoad = 0;
+                    render();
+                });
+            }
+            public void err(String m) {
+                mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, m,
+                        android.widget.Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private List<Row> parseRows(JSONObject res) {
+        List<Row> rows = new ArrayList<>();
+        JSONArray arr = (JSONArray) res.get("summaries");
+        if (arr != null) {
+            for (Object o : arr) {
+                JSONObject s = (JSONObject) o;
+                Row row = new Row();
+                row.key = str(s, "peer");
+                row.name = str(s, "name");
+                if (row.name.isEmpty()) {
+                    row.name = row.key;
+                }
+                String last = str(s, "last");
+                boolean mine = bool(s, "lastMine");
+                row.preview = last.isEmpty() ? "no messages yet"
+                        : (mine ? "You: " : "") + oneLine(last);
+                long t = lng(s, "time");
+                row.time = t > 0 ? stamp(t) : "";
+                row.unread = (int) lng(s, "unread");
+                row.group = bool(s, "group");
+                rows.add(row);
+            }
+        }
+        return rows;
     }
 
     private void applyFilter() {

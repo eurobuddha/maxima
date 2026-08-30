@@ -76,35 +76,45 @@ public final class CloudContactsPage implements Page {
         if (mBuilt && now - mLastLoad < 4000) {
             return;
         }
+        if (!mBuilt) {
+            // Paint the last-known contacts instantly while the live fetch attaches.
+            String cached = CloudSession.cached(mAct, "contacts");
+            if (!cached.isEmpty()) {
+                try {
+                    Object o = new org.minima.utils.json.parser.JSONParser().parse(cached);
+                    if (o instanceof JSONObject) {
+                        JSONObject j = (JSONObject) o;
+                        mPermanent = str(j, "permanent");
+                        mContacts.clear();
+                        mContacts.addAll(parseContacts(j));
+                        rebuild();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
         mBusy = true;
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String perm = mPermanent;
-                final List<C> got = new ArrayList<>();
+                List<C> got = new ArrayList<>();
                 try {
                     JSONObject ping = r.ping();
                     perm = str(ping, "permanent");
                     JSONObject res = r.contacts();
-                    JSONArray arr = (JSONArray) res.get("contacts");
-                    if (arr != null) {
-                        for (Object o : arr) {
-                            JSONObject c = (JSONObject) o;
-                            C x = new C();
-                            x.key = str(c, "key");
-                            x.name = str(c, "name");
-                            x.address = str(c, "address");
-                            got.add(x);
-                        }
-                    }
+                    got = parseContacts(res);
+                    res.put("permanent", perm);
+                    CloudSession.cache(mAct, "contacts", res.toString());
                 } catch (Exception ignored) {
                 }
                 final String permanent = perm;
+                final List<C> fgot = got;
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
                     mBusy = false;
                     mPermanent = permanent;
                     mContacts.clear();
-                    mContacts.addAll(got);
+                    mContacts.addAll(fgot);
                     rebuild();
                 });
             }
@@ -120,6 +130,22 @@ public final class CloudContactsPage implements Page {
                 });
             }
         });
+    }
+
+    private static List<C> parseContacts(JSONObject res) {
+        List<C> got = new ArrayList<>();
+        JSONArray arr = (JSONArray) res.get("contacts");
+        if (arr != null) {
+            for (Object o : arr) {
+                JSONObject c = (JSONObject) o;
+                C x = new C();
+                x.key = str(c, "key");
+                x.name = str(c, "name");
+                x.address = str(c, "address");
+                got.add(x);
+            }
+        }
+        return got;
     }
 
     /** Called by MainActivity after a QR scan resolves to an address. */

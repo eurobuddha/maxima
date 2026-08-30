@@ -43,8 +43,44 @@
             android:contentDescription="media"
             android:visibility="gone" />
 
-        <!-- voice-note bubble omitted in the portal: v1 has no voice notes, and the app's
-             WaveformView was not copied. CloudChatActivity's gone(@id/bubble_audio) no-ops. -->
+        <!-- voice-note bubble: play/pause + progress + time, else GONE -->
+        <LinearLayout
+            android:id="@+id/bubble_audio"
+            android:layout_width="220dp"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="2dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/bubble_audio_btn"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="5dp"
+                android:contentDescription="play" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:orientation="vertical">
+
+                <com.eurobuddha.maxima.app.chat.WaveformView
+                    android:id="@+id/bubble_audio_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="26dp" />
+
+                <TextView
+                    android:id="@+id/bubble_audio_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="monospace"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             android:id="@+id/bubble_body"

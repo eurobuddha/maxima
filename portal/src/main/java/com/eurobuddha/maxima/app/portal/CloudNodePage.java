@@ -83,6 +83,20 @@ public final class CloudNodePage implements Page {
         if (mBuilt && now - mLastLoad < 4000) {
             return;
         }
+        if (!mBuilt) {
+            // Paint the last-known node status instantly while the live fetch attaches.
+            String cached = CloudSession.cached(mAct, "nodestatus");
+            if (!cached.isEmpty()) {
+                try {
+                    Object o = new org.minima.utils.json.parser.JSONParser().parse(cached);
+                    if (o instanceof JSONObject) {
+                        applyStatus((JSONObject) o);
+                        rebuild();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
         mBusy = true;
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
@@ -105,6 +119,7 @@ public final class CloudNodePage implements Page {
                         mailbox = bool(s, "mailboxHeld");
                         relay = bool(s, "relayOn");
                         mesh = (int) lng(s, "meshPeers");
+                        CloudSession.cache(mAct, "nodestatus", s.toString());
                     }
                 } catch (Exception e) {
                     // Older node without the node.status RPC — fall back to ping for identity.
@@ -173,6 +188,19 @@ public final class CloudNodePage implements Page {
                 });
             }
         });
+    }
+
+    /** Populate the status snapshot fields from a (cached) node.status JSON. */
+    private void applyStatus(JSONObject s) {
+        mStatusOk = bool(s, "ok");
+        mName = str(s, "name");
+        mPermanent = str(s, "permanent");
+        mVersion = str(s, "version");
+        mUptime = lng(s, "uptime");
+        mHosts = (int) lng(s, "hosts");
+        mMailboxHeld = bool(s, "mailboxHeld");
+        mRelayOn = bool(s, "relayOn");
+        mMeshPeers = (int) lng(s, "meshPeers");
     }
 
     private void rebuild() {

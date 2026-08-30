@@ -75,6 +75,14 @@ public final class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
+        // Keep this device LIVE on the account's push channel (instant messages, ringing calls).
+        com.eurobuddha.maxima.app.portal.PortalService.start(this);
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 71);
+        }
+
         // Edge-to-edge: extend the dark app bar up into the status bar, inset the rest.
         View root = findViewById(R.id.root);
         final View appbar = findViewById(R.id.main_appbar);
