@@ -267,6 +267,13 @@ public final class ParlonsCore {
         mMaint.scheduleWithFixedDelay(() -> {
             try { mControl.maintenanceSweep(); } catch (Exception ignored) { }
         }, 60, 60, TimeUnit.SECONDS);
+        // A restart gives this node FRESH relay addresses; until contacts learn them, their
+        // replies rot in the old addresses' mailboxes (core's first refresh is at +3min — a
+        // long deaf window for an "always-on" account). Announce early, once, then core's
+        // 20-min loop owns it.
+        mMaint.schedule(() -> {
+            try { mNode.refreshContacts(); } catch (Exception ignored) { }
+        }, 15, TimeUnit.SECONDS);
         // Publish our MLS record proactively — an always-on ACCOUNT must be resolvable by its
         // permanent MAX# BEFORE it has any contacts, so a paired device can log in. maintain()
         // only republishes when the host set changes, so a stable contactless account would

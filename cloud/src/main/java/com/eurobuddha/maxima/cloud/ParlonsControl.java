@@ -134,6 +134,10 @@ public final class ParlonsControl {
     /** In-flight chunked media uploads: transfer id → buffer (idle entries swept). */
     private final java.util.Map<String, Upload> mUploads =
             new java.util.concurrent.ConcurrentHashMap<>();
+    /** COMPLETED uploads (tid → final ack json + when): a retried last chunk whose reply was
+     *  lost must replay the stored ack, not re-publish the media twice. */
+    private final java.util.Map<String, Object[]> mDoneUploads =
+            new java.util.concurrent.ConcurrentHashMap<>();
     /** Recent group creations (name → at): a retried create must not mint a duplicate. */
     private final java.util.Map<String, Long> mRecentGroups =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -142,6 +146,7 @@ public final class ParlonsControl {
     public void maintenanceSweep() {
         long now = System.currentTimeMillis();
         mUploads.entrySet().removeIf(e -> now - e.getValue().touched > 10 * 60_000L);
+        mDoneUploads.entrySet().removeIf(e -> now - (Long) e.getValue()[1] > 5 * 60_000L);
         mCallTaken.entrySet().removeIf(e -> now - e.getValue().at > 10 * 60_000L);
         mRecentGroups.entrySet().removeIf(e -> now - e.getValue() > 5 * 60_000L);
     }
@@ -403,12 +408,13 @@ public final class ParlonsControl {
             // as a push (setState fires the listener) + the conversation poll.
             final String fpeer = peer;
             final String fbody = body;
+            final Contact fc = isGroup ? null : mNode.contact(peer);   // pre-checked: never null here
             mSendExec.execute(() -> {
                 try {
                     if (isGroup) {
                         mChat.sendGroup(fpeer, fbody);
                     } else {
-                        mChat.send(mNode.contact(fpeer), fbody);
+                        mChat.send(fc, fbody);
                     }
                 } catch (Exception ignored) {
                 }
@@ -481,8 +487,14 @@ public final class ParlonsControl {
             }
             // The dedicated CALL lane: never queued behind pushes or media publishes, and off
             // this thread because a signal send blocks on a dead peer's socket timeouts.
+            mNode.log("call relay " + kind + " → " + safe(c.name) + " (device→peer)");
             mCallExec.execute(() -> {
-                try { mChat.sendCallSignal(c, m); } catch (Exception ignored) { }
+                try {
+                    mChat.sendCallSignal(c, m);
+                } catch (Exception e) {
+                    mNode.log("call relay " + kind + " to " + safe(c.name) + " FAILED: "
+                            + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                }
             });
             return bytes(ok());
         });
@@ -503,6 +515,12 @@ public final class ParlonsControl {
                 return bytes(err("bad chunk encoding"));
             }
             long off = lngOf(in, "off");
+            // A retried LAST chunk whose reply was lost: the upload is done and the media
+            // already sent — replay the stored ack instead of re-publishing a duplicate.
+            Object[] done = mDoneUploads.get(tid);
+            if (done != null) {
+                return bytes((JSONObject) done[0]);
+            }
             Upload up = mUploads.computeIfAbsent(tid, k -> new Upload());
             up.touched = System.currentTimeMillis();
             synchronized (up.buf) {
@@ -557,6 +575,7 @@ public final class ParlonsControl {
             JSONObject out = ok();
             out.put("size", media.length);
             out.put("status", "publishing");
+            mDoneUploads.put(tid, new Object[]{out, System.currentTimeMillis()});
             return bytes(out);
         });
 
@@ -577,13 +596,14 @@ public final class ParlonsControl {
             // member) — on the pump thread that deafens the whole node and the client's 35s
             // retry then minted a DUPLICATE group. Run it on the send lane; a retry inside the
             // dedup window is acknowledged, not repeated.
-            Long recent = mRecentGroups.putIfAbsent(name, System.currentTimeMillis());
+            Long recent = mRecentGroups.get(name);
             if (recent != null && System.currentTimeMillis() - recent < 60_000) {
                 JSONObject out = ok();
                 out.put("name", name);
                 out.put("status", "creating");
                 return bytes(out);
             }
+            mRecentGroups.put(name, System.currentTimeMillis());   // fresh window each real create
             mSendExec.execute(() -> {
                 try { mChat.createGroup(name, keys); } catch (Exception ignored) { }
             });
@@ -732,6 +752,7 @@ public final class ParlonsControl {
         ev.put("payload", safe(cm.body));
         ev.put("memo", safe(cm.memo));
         ev.put("time", cm.time);
+        mNode.log("call " + safe(cm.state) + " from " + nameFor(zFromKey) + " → pushing to devices");
         push(ev);
     }
 
