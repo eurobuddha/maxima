@@ -236,6 +236,7 @@ public final class PortalCallManager {
             String kind = str(ev, "kind");
             String from = str(ev, "from");
             String ref = str(ev, "ref");
+            Log.i(TAG, "signal in: " + kind + " ref=" + ref + " state=" + mState);
             String payload = str(ev, "payload");
             long time = lng(ev, "time");
             switch (kind) {

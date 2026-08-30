@@ -286,7 +286,11 @@ public final class CloudChatActivity extends AppCompatActivity {
                 }
                 runOnUiThread(() -> {
                     mBusy = false;
-                    boolean grew = got.size() != mMsgs.size();
+                    // "New message?" by newest id, not list size — the server pages to the
+                    // newest 100, so sizes stop changing once a thread is long.
+                    String prevNewest = mMsgs.isEmpty() ? "" : mMsgs.get(mMsgs.size() - 1).id;
+                    String nowNewest = got.isEmpty() ? "" : got.get(got.size() - 1).id;
+                    boolean grew = !nowNewest.isEmpty() && !nowNewest.equals(prevNewest);
                     mMsgs.clear();
                     mMsgs.addAll(got);
                     mAdapter.notifyDataSetChanged();

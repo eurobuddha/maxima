@@ -101,11 +101,11 @@ public final class CloudSession {
                 if (r == null) {
                     r = new ParlonsRemote(deviceId(app));
                     r.connect(account(app));
-                    sRemote = r;
-                    // The push channel is part of a connection, not a separate one-shot: every
-                    // NEW remote gets the listener immediately, so re-pair / reset / a failed
-                    // first service connect can never leave a deaf device that still heartbeats.
+                    // The push channel is part of a connection: install BEFORE publishing the
+                    // remote, so a failure here (e.g. a bare address with no verifiable account
+                    // key) discards the remote instead of caching a deaf-but-heartbeating one.
                     installPush(app, r);
+                    sRemote = r;
                 }
                 cb.ok(r);
             } catch (Exception e) {
