@@ -94,13 +94,18 @@ public final class CloudSession {
      * marshal UI updates with {@code runOnUiThread}.
      */
     public static void connect(Context c, Cb cb) {
+        final Context app = c.getApplicationContext();
         IO.execute(() -> {
             try {
                 ParlonsRemote r = sRemote;
                 if (r == null) {
-                    r = new ParlonsRemote(deviceId(c));
-                    r.connect(account(c));
+                    r = new ParlonsRemote(deviceId(app));
+                    r.connect(account(app));
                     sRemote = r;
+                    // The push channel is part of a connection, not a separate one-shot: every
+                    // NEW remote gets the listener immediately, so re-pair / reset / a failed
+                    // first service connect can never leave a deaf device that still heartbeats.
+                    installPush(app, r);
                 }
                 cb.ok(r);
             } catch (Exception e) {
@@ -139,18 +144,13 @@ public final class CloudSession {
         return sMedia;
     }
 
-    private static volatile boolean sPushInstalled;
-
     /**
-     * Install the device-side push handler once per connection: cloud events land here and fan
-     * out — screens via {@link PortalHub}, notifications via {@link PortalNotifier}, call
-     * signals via {@link PortalCalls}. Also fires an immediate register so pushes start now.
+     * Install the device-side push handler on a remote: cloud events land here and fan out —
+     * screens via {@link PortalHub}, notifications via {@link PortalNotifier}, call signals via
+     * {@link PortalCalls}. Called for every NEW remote (from {@link #connect}); registering on
+     * the remote's own node is per-connection, so no once-per-process flag.
      */
     public static void installPush(Context appCtx, ParlonsRemote r) {
-        if (sPushInstalled) {
-            return;
-        }
-        sPushInstalled = true;
         final Context app = appCtx.getApplicationContext();
         r.setPushListener(ev -> {
             String type = String.valueOf(ev.get("type"));
@@ -180,6 +180,7 @@ public final class CloudSession {
     public static void reset() {
         ParlonsRemote r = sRemote;
         sRemote = null;
+        sMedia = null;   // bound to the OLD node — a new connection builds a fresh one
         if (r != null) {
             try { r.close(); } catch (Exception ignored) { }
         }

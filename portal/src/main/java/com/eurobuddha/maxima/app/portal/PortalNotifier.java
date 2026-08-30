@@ -55,6 +55,7 @@ public final class PortalNotifier {
         Intent open = new Intent(c, CloudChatActivity.class);
         open.putExtra(CloudChatActivity.EXTRA_PEER, peer);
         open.putExtra(CloudChatActivity.EXTRA_NAME, name);
+        open.putExtra(CloudChatActivity.EXTRA_GROUP, Boolean.TRUE.equals(ev.get("group")));
         open.setAction("open:" + peer);   // distinct action per conversation, else intents collapse
         PendingIntent pi = PendingIntent.getActivity(c, 0, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

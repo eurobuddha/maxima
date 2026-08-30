@@ -61,11 +61,11 @@ public final class PortalService extends Service {
                 .build();
         startForeground(1, n);
 
-        // Connect (reuses the shared remote), install the push listener, and heartbeat so the
-        // node keeps this device's live addresses fresh (LIVE window is 3 min server-side).
+        // Connect (reuses the shared remote — the push listener installs with every new
+        // connection inside CloudSession.connect), then heartbeat so the node keeps this
+        // device's live addresses fresh (LIVE window is 3 min server-side).
         CloudSession.connect(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
-                CloudSession.installPush(getApplicationContext(), r);
             }
             public void err(String m) {
             }
@@ -89,6 +89,13 @@ public final class PortalService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         return START_STICKY;
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        // Android 15 caps some FGS types; a service that ignores the timeout is ANR'd — a
+        // visible crash. Stop cleanly; opening the app (or a MainActivity resume) restarts us.
+        stopSelf();
     }
 
     @Override

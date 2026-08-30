@@ -82,8 +82,9 @@ public final class CloudChatActivity extends AppCompatActivity {
             };
     private final java.util.Set<String> mImageFetching =
             java.util.Collections.synchronizedSet(new java.util.HashSet<>());
-    private final java.util.Set<String> mImageFailed =
-            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    /** id → when the fetch failed; retried after 30s so a transient network blip isn't forever. */
+    private final java.util.Map<String, Long> mImageFailed =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
 
@@ -451,8 +452,9 @@ public final class CloudChatActivity extends AppCompatActivity {
         }
         view.setImageResource(R.drawable.ic_photo);
         view.setOnClickListener(null);
-        if (mImageFailed.contains(id)) {
-            return;
+        Long failedAt = mImageFailed.get(id);
+        if (failedAt != null && System.currentTimeMillis() - failedAt < 30_000) {
+            return;   // failed recently — no retry-storm; a fresh bind after 30s retries
         }
         if (!mImageFetching.add(id)) {
             return;
@@ -463,16 +465,28 @@ public final class CloudChatActivity extends AppCompatActivity {
                 android.graphics.Bitmap bmp = decodeBounded(fetchMediaBytes(ref));
                 if (bmp != null) {
                     mImageCache.put(id, bmp);
-                    runOnUiThread(() -> mAdapter.notifyDataSetChanged());
+                    mImageFailed.remove(id);
+                    runOnUiThread(() -> notifyRow(id));
                     return;
                 }
-                mImageFailed.add(id);
+                mImageFailed.put(id, System.currentTimeMillis());
             } catch (Exception e) {
-                mImageFailed.add(id);
+                mImageFailed.put(id, System.currentTimeMillis());
             } finally {
                 mImageFetching.remove(id);
             }
         }, "portal-image").start();
+    }
+
+    /** Rebind just the row holding this message id (falls back to a full refresh if unknown). */
+    private void notifyRow(String zId) {
+        for (int i = 0; i < mMsgs.size(); i++) {
+            if (zId.equals(mMsgs.get(i).id)) {
+                mAdapter.notifyItemChanged(i);
+                return;
+            }
+        }
+        mAdapter.notifyDataSetChanged();
     }
 
     /** Full-screen in-app viewer: pinch-zoom, pan, double-tap, save, share. */
@@ -999,27 +1013,41 @@ public final class CloudChatActivity extends AppCompatActivity {
         final int token = ++mAudioToken;
         new Thread(() -> {
             final java.io.File f = audioCacheFile(m.id, m.body);
-            runOnUiThread(() -> {
-                if (token != mAudioToken || isFinishing() || isDestroyed()) {
-                    return;
-                }
-                if (f == null) {
-                    toast("Could not decode voice note");
-                    return;
-                }
+            android.media.MediaPlayer prepared = null;
+            if (f != null) {
                 try {
-                    mAudioPlayer = new android.media.MediaPlayer();
-                    mAudioPlayer.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                    // prepare() is disk+codec work — on THIS thread, never main.
+                    prepared = new android.media.MediaPlayer();
+                    prepared.setAudioAttributes(new android.media.AudioAttributes.Builder()
                             .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
                             .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build());
-                    mAudioPlayer.setDataSource(f.getAbsolutePath());
-                    mAudioPlayer.prepare();
+                    prepared.setDataSource(f.getAbsolutePath());
+                    prepared.prepare();
+                } catch (Exception ex) {
+                    try { prepared.release(); } catch (Exception ignored) { }
+                    prepared = null;
+                }
+            }
+            final android.media.MediaPlayer player = prepared;
+            runOnUiThread(() -> {
+                if (token != mAudioToken || isFinishing() || isDestroyed()) {
+                    if (player != null) {
+                        try { player.release(); } catch (Exception ignored) { }
+                    }
+                    return;
+                }
+                if (player == null) {
+                    toast("Could not play voice note");
+                    return;
+                }
+                try {
+                    mAudioPlayer = player;
                     mAudioPlayer.setOnCompletionListener(mp -> stopAudio());
                     mAudioPlayer.start();
                     mAudioPlayingId = m.id;
                     audioTick();
-                    mAdapter.notifyDataSetChanged();
+                    notifyRow(m.id);
                 } catch (Exception ex) {
                     toast("Playback failed");
                     stopAudio();
@@ -1036,9 +1064,10 @@ public final class CloudChatActivity extends AppCompatActivity {
             try { mAudioPlayer.release(); } catch (Exception ignored) { }
             mAudioPlayer = null;
         }
-        if (mAudioPlayingId != null) {
+        String was = mAudioPlayingId;
+        if (was != null) {
             mAudioPlayingId = null;
-            mAdapter.notifyDataSetChanged();
+            notifyRow(was);
         }
     }
 
@@ -1048,7 +1077,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             if (mAudioPlayer == null || mAudioPlayingId == null) {
                 return;
             }
-            mAdapter.notifyDataSetChanged();
+            notifyRow(mAudioPlayingId);   // just the playing row — not the whole list at 3Hz
             audioTick();
         }, 300);
     }
@@ -1065,8 +1094,14 @@ public final class CloudChatActivity extends AppCompatActivity {
                 return f;
             }
             byte[] raw = fetchMediaBytes(ref);
-            try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+            // Temp + rename: a write that dies half-way must not leave a "valid-looking"
+            // partial file that exists+length>0 trusts forever.
+            java.io.File tmp = new java.io.File(dir, f.getName() + ".tmp");
+            try (java.io.FileOutputStream os = new java.io.FileOutputStream(tmp)) {
                 os.write(raw);
+            }
+            if (!tmp.renameTo(f)) {
+                return tmp.exists() && tmp.length() > 0 ? tmp : null;
             }
             return f;
         } catch (Exception e) {

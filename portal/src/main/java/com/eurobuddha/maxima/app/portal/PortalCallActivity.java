@@ -165,11 +165,16 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         }
         PortalCallManager cm = PortalCallManager.get(this);
         cm.setListener(this);
-        if (getIntent().getBooleanExtra(EXTRA_OUTGOING, false)
-                && cm.state() == PortalCallManager.State.IDLE) {
+        boolean startingOut = getIntent().getBooleanExtra(EXTRA_OUTGOING, false)
+                && cm.state() == PortalCallManager.State.IDLE;
+        if (startingOut) {
             cm.startCall(mPeer, who, mVideoUi);
+            // startCall runs async on the manager thread; rendering cm.state() here would show
+            // "Call ended" + arm the auto-finish before OUTGOING_RINGING lands.
+            renderState(PortalCallManager.State.OUTGOING_RINGING, null);
+        } else {
+            renderState(cm.state(), null);
         }
-        renderState(cm.state(), null);
     }
 
     @Override
