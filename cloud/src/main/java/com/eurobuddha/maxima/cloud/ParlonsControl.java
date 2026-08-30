@@ -350,6 +350,26 @@ public final class ParlonsControl {
                 o.put("unread", s.unread);
                 arr.add(o);
             }
+            // Groups with no messages yet still belong in the list — the app shows groups()
+            // alongside summaries; without this a freshly created group was invisible.
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (Object o : arr) {
+                seen.add(String.valueOf(((JSONObject) o).get("peer")));
+            }
+            for (com.eurobuddha.maxima.core.chat.Group g : mChat.groups()) {
+                if (seen.contains(g.id)) {
+                    continue;
+                }
+                JSONObject o = new JSONObject();
+                o.put("peer", safe(g.id));
+                o.put("name", safe(g.name));
+                o.put("group", true);
+                o.put("last", "");
+                o.put("lastMine", false);
+                o.put("time", g.lastActivity);
+                o.put("unread", 0);
+                arr.add(o);
+            }
             JSONObject out = ok();
             out.put("summaries", arr);
             return bytes(out);
