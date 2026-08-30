@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.4.0";
+    public static final String VERSION = "0.4.4";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -32,6 +32,7 @@ public final class Main {
     public static void main(String[] args) {
         String data = System.getProperty("user.home") + "/.parlons";
         ParlonsCore.Config cfg = new ParlonsCore.Config();
+        cfg.version = VERSION;
         cfg.relayPort = DEFAULT_RELAY_PORT;
         cfg.directPort = DEFAULT_DIRECT_PORT;
         cfg.relayBlobMb = DEFAULT_BLOB_MB;

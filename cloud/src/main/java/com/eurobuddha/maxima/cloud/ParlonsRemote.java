@@ -136,6 +136,42 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_PING, new JSONObject());
     }
 
+    /** VPS-node telemetry for the Node tab: uptime, version, hosts, mailboxHeld, relayOn, meshPeers, pairedDevices. */
+    public JSONObject nodeStatus() throws Exception {
+        return rpc(ParlonsControl.M_NODE_STATUS, new JSONObject());
+    }
+
+    /** Set the account's display name; the node re-announces it to every contact. */
+    public JSONObject setName(String zName) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("name", zName);
+        return rpc(ParlonsControl.M_SET_NAME, p);
+    }
+
+    /** Rename a contact locally on the account (display-name override). */
+    public JSONObject renameContact(String zKey, String zName) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("key", zKey);
+        p.put("name", zName);
+        return rpc(ParlonsControl.M_CONTACT_RENAME, p);
+    }
+
+    /** Force-heal one contact NOW: the node asks their directory for their current address and
+     *  persists it. Returns {updated, address} or a clear "they may be offline" error. */
+    public JSONObject resolveContact(String zKey) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("key", zKey);
+        return rpc(ParlonsControl.M_CONTACT_RESOLVE, p);
+    }
+
+    /** Mark a conversation read on the account (clears unread; sends the read receipt if the
+     *  account allows it). */
+    public JSONObject markRead(String zPeer) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("peer", zPeer);
+        return rpc(ParlonsControl.M_MARK_READ, p);
+    }
+
     public JSONObject devices() throws Exception {
         return rpc(ParlonsControl.M_PAIR_LIST, new JSONObject());
     }
@@ -150,6 +186,11 @@ public final class ParlonsRemote {
         JSONObject p = new JSONObject();
         p.put("device", zDeviceKey);
         return rpc(ParlonsControl.M_PAIR_REVOKE, p);
+    }
+
+    /** Mint a fresh one-time bootstrap code on the node (written to its pair-code.txt, never returned). */
+    public JSONObject newCode() throws Exception {
+        return rpc(ParlonsControl.M_PAIR_NEWCODE, new JSONObject());
     }
 
     public JSONObject contacts() throws Exception {

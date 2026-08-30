@@ -59,10 +59,13 @@ public final class ParlonsCore {
     private ReachabilityManager mReach;
     private RelayRuntime mRelay;
     private volatile boolean mRunning;
+    private volatile long mStartedAt;
 
     /** Headless runtime configuration (from CLI/env — no Preferences on a VPS). */
     public static final class Config {
         public String displayName = "Parlons Cloud";
+        /** Build version reported on the Node tab (set from Main.VERSION). */
+        public String version = "";
         /** Pool-relay listener port (0 = no relay). Public; peers dial it. */
         public int relayPort = 9501;
         /** The node's own direct listener port (Tier-2 reachability). 0 = off. */
@@ -111,6 +114,13 @@ public final class ParlonsCore {
         mPairing = new DevicePairing(zDataDir);
         mWallet = new WatchWallet(zDataDir);
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
+        mControl.setStatusSource(new ParlonsControl.StatusSource() {
+            public long uptimeMillis() { return mStartedAt == 0 ? 0 : System.currentTimeMillis() - mStartedAt; }
+            public String version()    { return mCfg.version; }
+            public int hosts()         { return connectedCount(); }
+            public boolean relayOn()   { return relayRunning(); }
+            public int meshPeers()     { return mCfg.meshPeers.size(); }
+        });
         mControl.registerOn(mNode.services());
     }
 
@@ -133,6 +143,7 @@ public final class ParlonsCore {
      *  Tier-2 direct reachability. Returns the connected-host count after attach. */
     public int start() {
         mRunning = true;
+        mStartedAt = System.currentTimeMillis();
 
         // 1. Attach the client half to the fleet (bootstrap + configured extras).
         LinkedHashSet<String> relays = new LinkedHashSet<>(Bootstrap.RELAYS);
@@ -238,6 +249,7 @@ public final class ParlonsCore {
             try { mGossip.tick(mNode); } catch (Exception ignored) { }
         }, 15, 60, TimeUnit.SECONDS);
         mMaint.scheduleWithFixedDelay(() -> {
+            try { healStuckPeers(); } catch (Exception ignored) { }
             try { mChat.resendUndelivered(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
         // Publish our MLS record proactively — an always-on ACCOUNT must be resolvable by its
@@ -247,6 +259,61 @@ public final class ParlonsCore {
         mMaint.scheduleWithFixedDelay(() -> {
             try { mNode.publishToMls(); } catch (Exception ignored) { }
         }, 8, 300, TimeUnit.SECONDS);
+    }
+
+    /** Per-peer receipt-heal rate limit (peer key → last heal attempt millis). */
+    private final java.util.Map<String, Long> mLastHeal = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * The receipt heal — the staleness case the core self-heal can't see.
+     *
+     * Core's send path only re-resolves a contact when EVERY address fails at the socket
+     * (MaximaNode.sendToContact step 3). But a STALE relay still ACCEPTS a store-and-forward
+     * blob, so a send to a mailbox the peer no longer reads looks "delivered" at the socket and
+     * the heal never fires — the message rots at one tick while the resend heartbeat re-posts
+     * it into the same dead mailbox forever. And inbound traffic keeps the contact's lastSeen
+     * fresh, so the 30-min checkStaleMls never considers them stale either.
+     *
+     * Fix, before every resend beat: any peer with an outbound entry stuck short of DELIVERED
+     * (older than a settle window, younger than the resend cap) gets an mlsLookup — which
+     * persists their CURRENT address at the front of the contact's set — so the very next
+     * resend goes where they actually are. Rate-limited per peer; one directory GET is cheap.
+     */
+    private void healStuckPeers() {
+        long now = System.currentTimeMillis();
+        for (ChatEngine.Summary s : mChat.summaries()) {
+            String peer = s.conversation;
+            com.eurobuddha.maxima.core.contacts.Contact c =
+                    peer == null || peer.isEmpty() ? null : mNode.contact(peer);
+            if (c == null) {
+                continue;                                  // a group, or an unknown key
+            }
+            Long last = mLastHeal.get(peer);
+            if (last != null && now - last < 240_000) {
+                continue;                                  // healed recently — let it settle
+            }
+            boolean stuck = false;
+            for (ChatEngine.Entry e : mChat.conversation(peer)) {
+                if (!e.mine || e.state == null) {
+                    continue;
+                }
+                if (!"sent".equals(e.state) && !"failed".equals(e.state)) {
+                    continue;                              // delivered/read = receipted, fine
+                }
+                long age = now - e.time;
+                if (age > 60_000 && age < 24L * 3600_000) {
+                    stuck = true;
+                    break;
+                }
+            }
+            if (!stuck) {
+                continue;
+            }
+            mLastHeal.put(peer, now);
+            if (mNode.mlsLookup(c)) {
+                log("receipt-heal " + c.name + ": directory checked, sending to their current address");
+            }
+        }
     }
 
     private ChatEngine.Listener loggingListener() {
