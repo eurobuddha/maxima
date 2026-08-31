@@ -734,8 +734,10 @@ public final class ParlonsControl {
         ev.put("group", e.isGroup());
         ev.put("sender", safe(e.sender));
         ev.put("name", nameFor(e.isGroup() ? e.groupId : e.peer));
-        String body = safe(e.body);
-        ev.put("body", body.length() > 500 ? body.substring(0, 500) : body);
+        // FULL body: the portal now renders pushed messages directly, and a media body's
+        // manifest routinely exceeds any preview cap — truncation broke pushed photo bubbles.
+        // An inline chat message already fit one wire message; the 256K ceiling is far away.
+        ev.put("body", safe(e.body));
         ev.put("id", safe(e.id));
         ev.put("time", e.time);
         push(ev);

@@ -295,12 +295,14 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_CONVERSATION, p);
     }
 
-    /** Delta poll: only entries NEWER than the cursor (tiny reply — the cheap fallback poll). */
+    /** Delta poll: only entries NEWER than the cursor (tiny reply — the cheap fallback poll).
+     *  NO retry and a short leash: the cadence retries it anyway, and the full retry ladder
+     *  (35s + re-resolve + 35s) held the interactive lane hostage on a bad network. */
     public JSONObject conversationAfter(String zPeer, long zAfter) throws Exception {
         JSONObject p = new JSONObject();
         p.put("peer", zPeer);
         p.put("after", zAfter);
-        return rpc(ParlonsControl.M_CONVERSATION, p);
+        return callOnce(ParlonsControl.M_CONVERSATION, p, 12_000);
     }
 
     /** Create a group on the account; the roster is pushed to every member. */
