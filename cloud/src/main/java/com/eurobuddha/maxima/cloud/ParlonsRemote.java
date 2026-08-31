@@ -373,6 +373,32 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_PAY, p);
     }
 
+    /** Reveal the account's 24-word seed to THIS paired device (explicit confirm required).
+     *  Handle like money: FLAG_SECURE display, sensitive clipboard, never logged. */
+    public JSONObject revealSeed() throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("confirm", true);
+        return rpc(ParlonsControl.M_SEED_REVEAL, p);
+    }
+
+    /** Export the account's encrypted .pbk backup (PARLONSBK format — phone-compatible).
+     *  The node scrypt-encrypts with the given passphrase; returns base64 blob. */
+    public JSONObject backupExport(String zPassphrase) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("passphrase", zPassphrase);
+        return rpc(ParlonsControl.M_BACKUP_EXPORT, p);
+    }
+
+    /** Send from the ACCOUNT wallet to any Minima address (pid-idempotent). Result arrives
+     *  as a walletsent/walletfail push. */
+    public JSONObject walletSend(String zTo, String zAmount) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("to", zTo);
+        p.put("amount", zAmount);
+        p.put("pid", java.util.UUID.randomUUID().toString());
+        return rpc(ParlonsControl.M_WALLET_SEND, p);
+    }
+
     /** Account settings: {readReceipts}. */
     public JSONObject settings() throws Exception {
         return rpc(ParlonsControl.M_SETTINGS_GET, new JSONObject());

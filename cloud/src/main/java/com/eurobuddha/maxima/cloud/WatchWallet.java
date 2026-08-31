@@ -91,6 +91,16 @@ public final class WatchWallet {
         return gateway("newscript trackall:true script:\"" + zScript + "\"");
     }
 
+    /** Export one coin (+ its MegaMMR proof) from the global set. */
+    public JSONObject coinExport(String zCoinId) throws Exception {
+        return gateway("coinexport coinid:" + zCoinId);
+    }
+
+    /** Import a coin+proof into the gateway node's TRACKED set — makes it spendable. */
+    public JSONObject coinImport(String zDataHex) throws Exception {
+        return gateway("coinimport data:" + zDataHex + " track:true");
+    }
+
     /**
      * Publish a LOCALLY-SIGNED txn: txnimport → txnbasics (gateway attaches the MMR proofs and
      * scripts) → txnpost. Family hard rule: EVERY error path runs txndelete so a failed send

@@ -55,6 +55,9 @@ public final class ParlonsControl {
     public static final String M_SETTINGS_SET = "parlons.settings.set";
     public static final String M_CONTACT_REMOVE = "parlons.contacts.remove";
     public static final String M_PAY          = "parlons.chat.pay";
+    public static final String M_SEED_REVEAL  = "parlons.seed.reveal";
+    public static final String M_BACKUP_EXPORT = "parlons.backup.export";
+    public static final String M_WALLET_SEND  = "parlons.wallet.send";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -201,6 +204,18 @@ public final class ParlonsControl {
 
     public void setPaySource(PaySource zSource) {
         mPaySource = zSource;
+    }
+
+    /** Identity backup surface, wired from {@link ParlonsCore} (it owns the data dir). */
+    public interface BackupSource {
+        String revealPhrase() throws Exception;
+        byte[] exportBackup(char[] zPassword) throws Exception;
+    }
+
+    private volatile BackupSource mBackupSource;
+
+    public void setBackupSource(BackupSource zSource) {
+        mBackupSource = zSource;
     }
 
     public void registerOn(ServiceRegistry zReg) {
@@ -729,6 +744,118 @@ public final class ParlonsControl {
                     JSONObject ev = new JSONObject();
                     ev.put("type", "payfail");
                     ev.put("peer", safe(c.publicKey));
+                    ev.put("error", why);
+                    push(ev);
+                }
+            });
+            JSONObject out = ok();
+            out.put("state", "building");
+            return bytes(out);
+        });
+
+        // --- identity lifecycle: seed reveal + encrypted backup (user decision: the
+        //     passphrase-encrypted PARLONSBK blob may ride the encrypted RPC; RESTORE and
+        //     seed IMPORT stay CLI-only — an RPC restore would let one compromised device
+        //     swap the account out from under the others). ---
+        zReg.register(M_SEED_REVEAL, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            if (!bool(in, "confirm")) {
+                return bytes(err("confirmation required"));
+            }
+            BackupSource bs = mBackupSource;
+            if (bs == null) {
+                return bytes(err("not available"));
+            }
+            JSONObject out = ok();
+            out.put("phrase", safe(bs.revealPhrase()));
+            mNode.log("seed phrase revealed to a paired device");
+            return bytes(out);
+        });
+        zReg.register(M_BACKUP_EXPORT, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String pw = str(in, "passphrase");
+            if (pw.length() < 6) {
+                return bytes(err("use a passphrase of at least 6 characters"));
+            }
+            BackupSource bs = mBackupSource;
+            if (bs == null) {
+                return bytes(err("not available"));
+            }
+            char[] pwc = pw.toCharArray();
+            try {
+                byte[] blob = bs.exportBackup(pwc);
+                JSONObject out = ok();
+                out.put("blob", java.util.Base64.getEncoder().encodeToString(blob));
+                mNode.log("encrypted backup exported to a paired device");
+                return bytes(out);
+            } finally {
+                java.util.Arrays.fill(pwc, '\0');
+            }
+        });
+
+        // --- wallet send-to-address (also powers the wallet-detach sweep). pid-idempotent
+        //     like chat.pay: one tap must never pay twice. ---
+        zReg.register(M_WALLET_SEND, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String to = str(in, "to").trim();
+            String amount = str(in, "amount").trim();
+            String pid = str(in, "pid");
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent(pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
+            }
+            if (!to.matches("Mx[0-9A-Z]+") && !to.matches("0x[0-9A-Fa-f]+")) {
+                return bytes(err("that doesn't look like a Minima address"));
+            }
+            PaySource ps = mPaySource;
+            if (ps == null || ps.sender() == null) {
+                String why = ps == null ? "" : ps.walletError();
+                return bytes(err(why == null || why.isEmpty()
+                        ? "the account wallet is still opening — try again in a moment"
+                        : "the account wallet failed to open: " + why));
+            }
+            if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
+                return bytes(err("that amount doesn't look right"));
+            }
+            final org.minima.objects.base.MiniNumber amt;
+            try {
+                amt = new org.minima.objects.base.MiniNumber(amount);
+            } catch (Exception e) {
+                return bytes(err("that amount doesn't look right"));
+            }
+            if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
+                return bytes(err("the amount must be more than zero"));
+            }
+            final CloudPaymentSender sender = ps.sender();
+            final String fto = to;
+            mSendExec.execute(() -> {
+                try {
+                    CloudPaymentSender.Built built = sender.build(fto, amt);
+                    sender.publish(built);
+                    mNode.log("wallet send " + amt + " → " + fto + " txid " + built.txid);
+                    JSONObject ev = new JSONObject();
+                    ev.put("type", "walletsent");
+                    ev.put("to", fto);
+                    ev.put("amount", amt.toString());
+                    ev.put("txid", built.txid);
+                    push(ev);
+                } catch (Exception ex) {
+                    String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                    boolean gatewaySaidNo = why.startsWith("txnimport:")
+                            || why.startsWith("txnbasics:") || why.startsWith("txnpost:");
+                    if (!gatewaySaidNo && (why.contains("timed out") || why.contains("timeout")
+                            || why.toLowerCase().contains("connect"))) {
+                        why = "outcome unknown (network trouble mid-broadcast) — check the "
+                                + "wallet balance before sending again";
+                    }
+                    mNode.log("wallet send to " + fto + " FAILED: " + why);
+                    JSONObject ev = new JSONObject();
+                    ev.put("type", "walletfail");
+                    ev.put("to", fto);
                     ev.put("error", why);
                     push(ev);
                 }

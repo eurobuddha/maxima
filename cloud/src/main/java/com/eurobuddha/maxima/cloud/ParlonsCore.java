@@ -92,7 +92,8 @@ public final class ParlonsCore {
         // ---- built-in engine (the only engine on the cloud — no classic jar) ----
         mNode = new MaximaNode(zIdentity, PROTOCOL, RELAY_TARGET);
         mGossip = new RelayGossipClient(zIdentity, PROTOCOL, 8);
-        mNode.setStore(new FileStore(new File(base, "node")));
+        mNodeStore = new FileStore(new File(base, "node"));
+        mNode.setStore(mNodeStore);
         // The account's name is the USER's (set from a device via parlons.identity.setname and
         // persisted by the node). An unconditional set here clobbered it on every restart —
         // config only wins when --name was EXPLICITLY given; the default applies on first boot.
@@ -152,6 +153,14 @@ public final class ParlonsCore {
             }
             public String walletError() {
                 return mWalletError;
+            }
+        });
+        mControl.setBackupSource(new ParlonsControl.BackupSource() {
+            public String revealPhrase() throws Exception {
+                return CloudBackupManager.readPhrase(mDataDir);
+            }
+            public byte[] exportBackup(char[] zPassword) throws Exception {
+                return CloudBackupManager.export(mDataDir, mNodeStore, mNode.name(), zPassword);
             }
         });
         mControl.registerOn(mNode.services());
@@ -310,6 +319,10 @@ public final class ParlonsCore {
         }, 8, 300, TimeUnit.SECONDS);
     }
 
+    /** The LIVE node store — backup export reads through it (a second FileStore over a
+     *  running store risks stale reads). */
+    private FileStore mNodeStore;
+
     // ---- the account's own wallet (the Parlons pattern: the seed IS the wallet) ----
     private volatile CloudWallet mAccountWallet;
     private volatile CloudPaymentSender mPaymentSender;
@@ -380,6 +393,74 @@ public final class ParlonsCore {
             } catch (Exception ignored) {
                 // offline peer — retried next heartbeat round
             }
+        }
+        syncCoinsIfLagging(w, now);
+    }
+
+    private volatile long mLastCoinSync;
+
+    /**
+     * Make funded-before-tracked coins spendable — the app's exact backfill (WalletPage
+     * syncCoins): a coin that arrived BEFORE the gateway tracked our script is confirmed
+     * on-chain (balance shows it) but not in the gateway node's tracked set, so txnbasics
+     * can't attach a proof and sendable stays 0. Fix: coinexport each of our coins from the
+     * global MegaMMR and coinimport track:true it back. NEVER signs, burns no key use —
+     * safe to auto-run. Rate-limited to one pass per 5 min.
+     */
+    private void syncCoinsIfLagging(CloudWallet w, long now) {
+        if (now - mLastCoinSync < 5 * 60_000L) {
+            return;
+        }
+        mLastCoinSync = now;
+        try {
+            org.minima.utils.json.JSONObject bal =
+                    mWallet.cmd("balance megammr:true address:" + w.mxAddress());
+            org.minima.utils.json.JSONArray arr =
+                    (org.minima.utils.json.JSONArray) bal.get("response");
+            boolean lagging = false;
+            if (arr != null) {
+                for (Object o : arr) {
+                    org.minima.utils.json.JSONObject t = (org.minima.utils.json.JSONObject) o;
+                    if ("0x00".equals(String.valueOf(t.get("tokenid")))
+                            && !String.valueOf(t.get("confirmed"))
+                                    .equals(String.valueOf(t.get("sendable")))) {
+                        lagging = true;
+                    }
+                }
+            }
+            if (!lagging) {
+                return;
+            }
+            org.minima.utils.json.JSONObject coinsResp = mWallet.coins(w.hexAddress());
+            org.minima.utils.json.JSONArray coins =
+                    (org.minima.utils.json.JSONArray) coinsResp.get("response");
+            int imported = 0, failed = 0;
+            if (coins != null) {
+                for (Object o : coins) {
+                    String coinid = String.valueOf(
+                            ((org.minima.utils.json.JSONObject) o).get("coinid"));
+                    if (coinid.isEmpty() || "null".equals(coinid)) {
+                        continue;
+                    }
+                    try {
+                        org.minima.utils.json.JSONObject ex = mWallet.coinExport(coinid);
+                        org.minima.utils.json.JSONObject resp =
+                                (org.minima.utils.json.JSONObject) ex.get("response");
+                        String data = resp == null ? "" : String.valueOf(resp.get("data"));
+                        if (data.isEmpty() || "null".equals(data)) {
+                            failed++;
+                            continue;
+                        }
+                        mWallet.coinImport(data);
+                        imported++;
+                    } catch (Exception coinErr) {
+                        failed++;
+                    }
+                }
+            }
+            log("wallet coin sync: imported=" + imported + " failed=" + failed);
+        } catch (Exception e) {
+            log("wallet coin sync failed: " + e.getMessage());
         }
     }
 

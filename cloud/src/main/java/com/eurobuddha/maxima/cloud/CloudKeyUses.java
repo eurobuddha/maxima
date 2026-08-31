@@ -124,6 +124,73 @@ public final class CloudKeyUses implements KeyUses {
         }
     }
 
+    // ---- portable backup surface (raw entry names, all namespaces) ----
+
+    /** Every key-use counter across namespaces as raw entry names ("uses_v3_1000" → count),
+     *  max-merged over both mirrors — the exact shape the phone's PrefsKeyUses exports, so a
+     *  bundle moves between phone and cloud with no translation. */
+    public static Map<String, Integer> exportAll(File zWalletDir) {
+        CloudKeyUses k = new CloudKeyUses(zWalletDir, "");
+        synchronized (k.lock) {
+            Map<String, Integer> out = new HashMap<>();
+            for (File f : new File[]{k.mirrorA, k.mirrorB}) {
+                Properties p = k.load(f);
+                for (String key : p.stringPropertyNames()) {
+                    if (!key.startsWith("uses_")) {
+                        continue;
+                    }
+                    try {
+                        out.merge(key, Integer.parseInt(p.getProperty(key, "0")), Math::max);
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
+    /** Restore counters RAISE-ONLY: each incoming entry is written as max(current, incoming)
+     *  to BOTH mirrors, fsync'd; throws on any failed write. Can never lower a counter —
+     *  lowering would let a Winternitz leaf sign twice (key disclosure). FUND-CRITICAL. */
+    public static void importRaiseOnly(File zWalletDir, Map<String, Integer> zIncoming) {
+        CloudKeyUses k = new CloudKeyUses(zWalletDir, "");
+        k.underLocks(() -> {
+            for (Map.Entry<String, Integer> e : zIncoming.entrySet()) {
+                String key = e.getKey();
+                if (!key.startsWith("uses_") || e.getValue() == null) {
+                    continue;
+                }
+                int incoming = e.getValue();
+                int current = Math.max(k.readRaw(k.mirrorA, key), k.readRaw(k.mirrorB, key));
+                int merged = Math.max(current, incoming);
+                k.writeRaw(k.mirrorA, key, merged);
+                k.writeRaw(k.mirrorB, key, merged);
+            }
+            return null;
+        });
+    }
+
+    private int readRaw(File f, String zKey) {
+        try {
+            return Integer.parseInt(load(f).getProperty(zKey, "0"));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private void writeRaw(File f, String zKey, int zValue) {
+        Properties p = load(f);
+        p.setProperty(zKey, Integer.toString(zValue));
+        try (FileOutputStream out = new FileOutputStream(f)) {
+            p.store(out, "parlons cloud wallet key-uses — DO NOT EDIT (one-time-signature counter)");
+            out.flush();
+            out.getFD().sync();
+        } catch (IOException e) {
+            throw new IllegalStateException("KeyUses: failed to persist " + zKey
+                    + " to " + f + " — refusing (would risk key reuse)", e);
+        }
+    }
+
     // ---- durable file ops ----
 
     private String key(int keyIndex) { return prefix + keyIndex; }

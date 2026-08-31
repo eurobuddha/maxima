@@ -182,6 +182,32 @@ public final class Client {
                 requireArg(rest, "markread <peer key>");
                 report(r.markRead(rest.get(1)), "marked read ✓");
                 break;
+            case "seed": {
+                JSONObject o = r.revealSeed();
+                if (!isOk(o)) { fail(o); break; }
+                System.out.println();
+                System.out.println("  " + o.get("phrase"));
+                System.out.println();
+                System.out.println("  Back this up like money — it IS your account and wallet.");
+                break;
+            }
+            case "backup": {
+                requireArg(rest, "backup <output-file.pbk>");
+                java.io.Console con = System.console();
+                String pass = con != null
+                        ? new String(con.readPassword("Backup passphrase (min 6): "))
+                        : rest.size() > 2 ? rest.get(2) : "";
+                if (pass.length() < 6) {
+                    System.err.println("passphrase too short"); System.exit(2);
+                }
+                JSONObject o = r.backupExport(pass);
+                if (!isOk(o)) { fail(o); break; }
+                byte[] blob = java.util.Base64.getDecoder().decode(String.valueOf(o.get("blob")));
+                java.nio.file.Files.write(java.nio.file.Paths.get(rest.get(1)), blob);
+                System.out.println("Backup written to " + rest.get(1)
+                        + " (" + blob.length + " bytes)");
+                break;
+            }
             case "pay": {
                 if (rest.size() < 3) {
                     System.err.println("usage: pay <peer key> <amount> [memo…]");
@@ -331,5 +357,7 @@ public final class Client {
         System.out.println("  wallet address         the ACCOUNT's receive address (its keys live on the node)");
         System.out.println("  wallet set <Mx>        watch a DIFFERENT (cold) address instead");
         System.out.println("  wallet balance         balance of the shown address");
+        System.out.println("  seed                   reveal the account's 24-word phrase");
+        System.out.println("  backup <file.pbk>      write an encrypted backup (phone-compatible)");
     }
 }

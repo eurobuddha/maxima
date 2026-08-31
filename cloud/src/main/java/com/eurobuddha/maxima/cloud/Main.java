@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.6.1";
+    public static final String VERSION = "0.7.0";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -37,6 +37,9 @@ public final class Main {
         cfg.directPort = DEFAULT_DIRECT_PORT;
         cfg.relayBlobMb = DEFAULT_BLOB_MB;
 
+        String importSeedArg = null;
+        String restoreArg = null;
+
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
             switch (a) {
@@ -44,6 +47,12 @@ public final class Main {
                 case "--help":
                     usage(System.out);
                     return;
+                case "--import-seed":
+                    importSeedArg = strArg(args, ++i, "--import-seed");
+                    break;
+                case "--restore":
+                    restoreArg = strArg(args, ++i, "--restore");
+                    break;
                 case "-v":
                 case "--version":
                     System.out.println("parlons-cloud " + VERSION);
@@ -95,6 +104,14 @@ public final class Main {
         }
 
         try {
+            if (importSeedArg != null) {
+                importSeed(Paths.get(data), importSeedArg);
+                return;
+            }
+            if (restoreArg != null) {
+                restoreBackup(Paths.get(data), restoreArg);
+                return;
+            }
             run(Paths.get(data), cfg);
         } catch (BindException be) {
             System.err.println();
@@ -106,6 +123,84 @@ public final class Main {
             System.err.println("ERROR: " + e);
             System.exit(1);
         }
+    }
+
+    /**
+     * Import an EXISTING 24-word phrase as this node's identity+wallet seed. Operator-only
+     * (console); refuses to overwrite. Value is a file path holding the phrase, or "prompt"
+     * to type it interactively (console echo — use a private terminal).
+     */
+    private static void importSeed(Path dir, String zSource) throws Exception {
+        Path seedFile = dir.resolve("seed.txt");
+        if (java.nio.file.Files.exists(seedFile)) {
+            System.err.println("ERROR: " + seedFile + " already exists — move the old data dir "
+                    + "away first; import never overwrites an identity.");
+            System.exit(1);
+        }
+        String phrase;
+        if ("prompt".equalsIgnoreCase(zSource)) {
+            java.io.Console console = System.console();
+            if (console == null) {
+                System.err.println("ERROR: no console — pass a file path instead.");
+                System.exit(1);
+                return;
+            }
+            phrase = new String(console.readPassword("Paste the 24-word phrase: "));
+        } else {
+            phrase = new String(java.nio.file.Files.readAllBytes(Paths.get(zSource)),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        phrase = com.eurobuddha.maxima.core.identity.Bip39.cleanSeedPhrase(phrase);
+        if (!com.eurobuddha.maxima.core.identity.Bip39.checksumValid(
+                java.util.Arrays.asList(phrase.split(" ")))) {
+            System.out.println("note: no valid BIP39 checksum — normal for a Minima-node phrase.");
+        }
+        java.nio.file.Files.createDirectories(dir);
+        try {
+            java.nio.file.Files.createFile(seedFile,
+                    java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                            java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+        } catch (UnsupportedOperationException ignored) {
+        }
+        java.nio.file.Files.write(seedFile,
+                phrase.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        System.out.println("Identity imported to " + seedFile);
+        System.out.println();
+        System.out.println("  !! SINGLE-HOLDER RULE: this phrase must now live ONLY here. If a");
+        System.out.println("     phone was using it, resync that phone's wallet to a NEW seed");
+        System.out.println("     first — two key-use counters over one seed can leak a key.");
+    }
+
+    /** Restore a phone/cloud .pbk encrypted backup into a FRESH data dir. Operator-only. */
+    private static void restoreBackup(Path dir, String zPbkPath) throws Exception {
+        java.io.Console console = System.console();
+        if (console == null) {
+            System.err.println("ERROR: --restore needs an interactive console (passphrase).");
+            System.exit(1);
+            return;
+        }
+        byte[] blob = java.nio.file.Files.readAllBytes(Paths.get(zPbkPath));
+        char[] pw = console.readPassword("Backup passphrase: ");
+        BackupBundle b;
+        try {
+            b = CloudBackupManager.read(blob, pw);
+        } catch (javax.crypto.AEADBadTagException bad) {
+            System.err.println("ERROR: wrong passphrase (or a damaged backup file).");
+            System.exit(1);
+            return;
+        } finally {
+            java.util.Arrays.fill(pw, '\0');
+        }
+        CloudBackupManager.applyRestore(dir, b);
+        System.out.println("Restored: " + (b.displayName.isEmpty() ? "(unnamed)" : b.displayName)
+                + " · " + b.contacts.size() + " contact(s) · " + b.keyUses.size()
+                + " key-use counter(s) (raise-only)");
+        System.out.println();
+        System.out.println("  !! The node this backup came from must be STOPPED for good — two");
+        System.out.println("     holders of one seed will eventually reuse a one-time signature");
+        System.out.println("     key. Chat history does not travel in a backup.");
+        System.out.println();
+        System.out.println("  Start the node normally to bring the account online here.");
     }
 
     private static void run(Path dir, ParlonsCore.Config cfg) throws Exception {
@@ -208,6 +303,8 @@ public final class Main {
         out.println("  --relays <list>     extra fleet relays to attach to (comma-separated)");
         out.println("  --peers <list>      mesh peers for the pool relay   (comma-separated; or MAXIMA_PEERS)");
         out.println("  --blobstore <MB>    relay media shelf size in MB    (default " + DEFAULT_BLOB_MB + ")");
+        out.println("  --import-seed <f|prompt>  adopt an EXISTING 24-word phrase (fresh dir only)");
+        out.println("  --restore <file.pbk>      restore an encrypted Parlons backup (fresh dir only)");
         out.println("  -v, --version       print version and exit");
         out.println("  -h, --help          this help");
         out.println();
