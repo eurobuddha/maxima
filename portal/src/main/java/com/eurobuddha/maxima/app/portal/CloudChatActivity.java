@@ -44,8 +44,8 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     private static final class Msg {
         String id;
-        String sender;
-        String sname;      // group sender display name
+        String sender = "";
+        String sname = "";   // group sender display name (never null — bind reads .isEmpty())
         String body;
         boolean mine;
         long time;
@@ -307,6 +307,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 Msg m = new Msg();
                 m.id = id;
                 m.sender = str(ev, "sender");
+                m.sname = str(ev, "sname");   // group sender name (blank for 1:1)
                 m.body = str(ev, "body");
                 m.mine = false;              // the node only pushes INBOUND message events
                 m.time = lng(ev, "time");
@@ -993,12 +994,28 @@ public final class CloudChatActivity extends AppCompatActivity {
                     }
                     JSONObject res = r.contacts();
                     JSONArray arr = (JSONArray) res.get("contacts");
+                    java.util.Set<String> haveContact = new java.util.HashSet<>();
                     if (arr != null) {
                         for (Object o : arr) {
                             JSONObject cc = (JSONObject) o;
-                            keys.add(str(cc, "key"));
+                            String k = str(cc, "key");
+                            keys.add(k);
+                            haveContact.add(k);
                             String nm = str(cc, "name");
-                            names.add(nm.isEmpty() ? str(cc, "key") : nm);
+                            names.add(nm.isEmpty() ? k : nm);
+                        }
+                    }
+                    // Include current members who aren't my contacts (added by another admin),
+                    // pre-checked — otherwise Save would silently kick them.
+                    if (mem != null) {
+                        for (Object o : mem) {
+                            JSONObject mm = (JSONObject) o;
+                            String k = str(mm, "key");
+                            if (!haveContact.contains(k) && !bool(mm, "me")) {
+                                keys.add(k);
+                                String nm = str(mm, "name");
+                                names.add(nm.isEmpty() ? k : nm);
+                            }
                         }
                     }
                 } catch (Exception ignored) {
@@ -1902,6 +1919,9 @@ public final class CloudChatActivity extends AppCompatActivity {
             h.row.setGravity(m.mine ? Gravity.END : Gravity.START);
             h.bubble.setBackgroundResource(m.mine ? R.drawable.bubble_out : R.drawable.bubble_in);
             int ink = getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
+            // A selectable TextView eats long-presses (starts text selection) — the bubble menu
+            // wouldn't open on the text. Copy lives in the menu instead (app does the same).
+            h.body.setTextIsSelectable(false);
 
             // Group sender name — shown once at the top of a run of same-sender messages.
             boolean showName = mGroup && !m.mine && !m.sname.isEmpty()

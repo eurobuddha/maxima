@@ -204,16 +204,24 @@ public final class CloudSearchActivity extends AppCompatActivity {
     }
 
     private CharSequence highlight(String text, String q) {
-        String low = text.toLowerCase();
-        int at = low.indexOf(q.toLowerCase());
+        // regionMatches on the ORIGINAL string — lowercasing the haystack can change its length
+        // (e.g. İ→i̇) and shift/blow the substring indices.
+        int at = -1;
+        int n = q.length();
+        for (int i = 0; i + n <= text.length(); i++) {
+            if (text.regionMatches(true, i, q, 0, n)) {
+                at = i;
+                break;
+            }
+        }
         if (at < 0) {
             return text.length() > 80 ? text.substring(0, 80) + "…" : text;
         }
         int start = Math.max(0, at - 20);
-        int end = Math.min(text.length(), at + q.length() + 40);
+        int end = Math.min(text.length(), at + n + 40);
         String pre = (start > 0 ? "…" : "") + text.substring(start, at);
-        String hit = text.substring(at, at + q.length());
-        String post = text.substring(at + q.length(), end) + (end < text.length() ? "…" : "");
+        String hit = text.substring(at, at + n);
+        String post = text.substring(at + n, end) + (end < text.length() ? "…" : "");
         android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
         sb.append(pre);
         int hs = sb.length();

@@ -269,15 +269,18 @@ public final class CloudWalletPage implements Page {
         mSending = true;
         mAct.toast("Building on your node…");
         final String pid = java.util.UUID.randomUUID().toString();
+        final PortalHub.Listener[] holder = new PortalHub.Listener[1];
         if (zWatchOnSuccess != null) {
-            // Arm a one-shot listener: flip the watch only when THIS send confirms.
-            final PortalHub.Listener[] holder = new PortalHub.Listener[1];
+            // Arm a one-shot listener: flip the watch only when THIS send confirms. Match on
+            // pid for BOTH outcomes so an unrelated device's send can't disarm us, and so a
+            // send-RPC failure can tear it down.
             holder[0] = ev -> {
                 String type = String.valueOf(ev.get("type"));
-                if ("walletsent".equals(type) && pid.equals(String.valueOf(ev.get("pid")))) {
+                boolean mine = pid.equals(String.valueOf(ev.get("pid")));
+                if ("walletsent".equals(type) && mine) {
                     PortalHub.remove(holder[0]);
                     mAct.runOnUiThread(() -> setWatch(zWatchOnSuccess));
-                } else if ("walletfail".equals(type)) {
+                } else if ("walletfail".equals(type) && mine) {
                     PortalHub.remove(holder[0]);
                 }
             };
