@@ -87,6 +87,58 @@ public final class OnboardingActivity extends AppCompatActivity {
         mGo = accent("Connect & pair");
         mGo.setOnClickListener(v -> pair());
         col.addView(mGo);
+
+        // --- new here? how to create the account server the phone pairs to ---
+        final LinearLayout setupBox = new LinearLayout(this);
+        setupBox.setOrientation(LinearLayout.VERTICAL);
+        setupBox.setBackgroundColor(CARD);
+        int q = dp(14);
+        setupBox.setPadding(q, q, q, q);
+        LinearLayout.LayoutParams sblp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sblp.setMargins(0, dp(4), 0, dp(8));
+        setupBox.setLayoutParams(sblp);
+        setupBox.setVisibility(View.GONE);
+        setupBox.addView(body("Parlons Cloud runs on a small server you own — a cheap VPS "
+                + "(1 GB RAM is plenty). One command installs it and prints your account "
+                + "address plus a one-time pairing code to enter above:"));
+        setupBox.addView(codeBlock("ops/deploy-parlons-cloud.sh root@YOUR.VPS.IP --port 9501"));
+        setupBox.addView(body("Prefer to do it by hand, or want to back up your seed? The full "
+                + "guide walks through both (tap to copy):"));
+        setupBox.addView(codeBlock("github.com/eurobuddha/maxima → cloud/SETUP.md"));
+
+        final Button setupToggle = ghost("New here? Set up your account server ▸");
+        setupToggle.setOnClickListener(v -> {
+            boolean open = setupBox.getVisibility() == View.GONE;
+            setupBox.setVisibility(open ? View.VISIBLE : View.GONE);
+            setupToggle.setText(open ? "Set up your account server ▾"
+                    : "New here? Set up your account server ▸");
+        });
+        col.addView(setupToggle);
+        col.addView(setupBox);
+    }
+
+    /** A tap-to-copy monospace command / path block. */
+    private View codeBlock(final String s) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextColor(TEXT);
+        t.setTextSize(13);
+        t.setTypeface(android.graphics.Typeface.MONOSPACE);
+        t.setBackgroundColor(Color.parseColor("#ECEBE6"));
+        int q = dp(10);
+        t.setPadding(q, q, q, q);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(6), 0, dp(10));
+        t.setLayoutParams(lp);
+        t.setOnClickListener(v -> {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("setup", s));   // full, never truncated
+            toast("Copied");
+        });
+        return t;
     }
 
     private void pair() {
