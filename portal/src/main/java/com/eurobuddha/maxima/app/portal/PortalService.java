@@ -80,6 +80,7 @@ public final class PortalService extends Service {
                 ParlonsRemote r = CloudSession.remoteOrNull();
                 if (r != null) {
                     r.registerPush();
+                    CloudSession.notePushAlive();   // acked → screens can relax their polls
                 }
             } catch (Exception ignored) {
             }

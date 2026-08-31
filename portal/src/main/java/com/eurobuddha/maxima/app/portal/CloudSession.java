@@ -19,11 +19,32 @@ import java.util.concurrent.Executors;
  */
 public final class CloudSession {
 
+    /** Background lane: pill polls, heartbeats, non-foreground tabs. */
     private static final ExecutorService IO = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "parlons-portal-io");
         t.setDaemon(true);
         return t;
     });
+
+    /** Interactive lane: the FOREGROUND screen's fetches and sends. A slow Node-tab status call
+     *  must never make the open chat feel sticky — that was the single-lane serialization. */
+    private static final ExecutorService INTERACTIVE = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "parlons-portal-fg");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Last moment the push channel proved itself (event received / register acked). */
+    private static volatile long sPushAliveMs;
+
+    public static void notePushAlive() {
+        sPushAliveMs = System.currentTimeMillis();
+    }
+
+    /** Push confirmed working recently → screens can relax their fallback polls. */
+    public static boolean pushHealthy() {
+        return System.currentTimeMillis() - sPushAliveMs < 2 * 60_000L;
+    }
 
     private static volatile MaximaIdentity sDeviceId;
     private static volatile ParlonsRemote sRemote;
@@ -94,24 +115,40 @@ public final class CloudSession {
      * marshal UI updates with {@code runOnUiThread}.
      */
     public static void connect(Context c, Cb cb) {
+        connectOn(IO, c, cb);
+    }
+
+    /** The foreground screen's lane — same connection, its own queue. */
+    public static void connectInteractive(Context c, Cb cb) {
+        connectOn(INTERACTIVE, c, cb);
+    }
+
+    private static void connectOn(ExecutorService lane, Context c, Cb cb) {
         final Context app = c.getApplicationContext();
-        IO.execute(() -> {
+        lane.execute(() -> {
             try {
-                ParlonsRemote r = sRemote;
-                if (r == null) {
-                    r = new ParlonsRemote(deviceId(app));
-                    r.connect(account(app));
-                    // The push channel is part of a connection: install BEFORE publishing the
-                    // remote, so a failure here (e.g. a bare address with no verifiable account
-                    // key) discards the remote instead of caching a deaf-but-heartbeating one.
-                    installPush(app, r);
-                    sRemote = r;
-                }
-                cb.ok(r);
+                cb.ok(ensureRemote(app));
             } catch (Exception e) {
                 cb.err(e.getMessage() == null ? e.toString() : e.getMessage());
             }
         });
+    }
+
+    /** Create-once (both lanes race here): connect with the WARM fast path — the last resolved
+     *  live address is probed first, skipping the MLS resolve ladder on the happy path. */
+    private static synchronized ParlonsRemote ensureRemote(Context app) throws Exception {
+        ParlonsRemote r = sRemote;
+        if (r != null) {
+            return r;
+        }
+        r = new ParlonsRemote(deviceId(app));
+        r.connect(account(app), cached(app, "livemx"));
+        // The push channel is part of a connection: install BEFORE publishing the remote, so a
+        // failure here discards the remote instead of caching a deaf-but-heartbeating one.
+        installPush(app, r);
+        cache(app, "livemx", r.liveAddress());   // next cold start reconnects warm
+        sRemote = r;
+        return r;
     }
 
     public static ParlonsRemote remoteOrNull() {
@@ -153,6 +190,7 @@ public final class CloudSession {
     public static void installPush(Context appCtx, ParlonsRemote r) {
         final Context app = appCtx.getApplicationContext();
         r.setPushListener(ev -> {
+            notePushAlive();
             String type = String.valueOf(ev.get("type"));
             if ("message".equals(type)) {
                 PortalNotifier.onPushedMessage(app, ev);

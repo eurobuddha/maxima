@@ -88,11 +88,15 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
 
+    private int mPollN;                   // every Nth poll is a full reconcile, rest are deltas
+    private long mNewestServerTime;       // newest SERVER entry time — the delta cursor
+
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Runnable mTick = new Runnable() {
         public void run() {
             load();
-            mHandler.postDelayed(this, 3000);
+            // Push healthy → the poll is only a reconciler; relax it. Push quiet → tighten.
+            mHandler.postDelayed(this, CloudSession.pushHealthy() ? 10_000 : 3000);
         }
     };
 
@@ -172,6 +176,28 @@ public final class CloudChatActivity extends AppCompatActivity {
         mList.setLayoutManager(lm);
         mList.setAdapter(mAdapter);
 
+        // Instant paint: the last-known conversation renders NOW, the live fetch reconciles
+        // behind it — no more staring at wallpaper while a relay round-trip completes.
+        String cachedConv = CloudSession.cached(this, "conv_" + mPeer);
+        if (!cachedConv.isEmpty()) {
+            try {
+                Object o = new org.minima.utils.json.parser.JSONParser().parse(cachedConv);
+                if (o instanceof JSONObject) {
+                    mMsgs.addAll(parseMsgs((JSONObject) o));
+                    for (Msg m : mMsgs) {
+                        if (m.time > mNewestServerTime) {
+                            mNewestServerTime = m.time;
+                        }
+                    }
+                    mAdapter.notifyDataSetChanged();
+                    if (!mMsgs.isEmpty()) {
+                        mList.scrollToPosition(mMsgs.size() - 1);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
         mInput = findViewById(R.id.chat_input);
         final android.widget.ImageButton send = findViewById(R.id.btn_chat_send);
         // Send button shows a mic when the field is empty (tap to record a voice note) and a
@@ -198,17 +224,74 @@ public final class CloudChatActivity extends AppCompatActivity {
         });
     }
 
-    /** Cloud push → instant refresh when the event is about THIS conversation. */
+    /** Cloud push → apply the event DIRECTLY. The push already carries the message body and the
+     *  state change; fetching the whole page again on every event was a wasted round-trip and
+     *  the visible "waiting for the chat to re-print". */
     private final PortalHub.Listener mPush = ev -> {
         String type = String.valueOf(ev.get("type"));
         if (!"message".equals(type) && !"state".equals(type)) {
             return;
         }
         String peer = String.valueOf(ev.get("peer"));
-        if (mPeer != null && mPeer.equalsIgnoreCase(peer)) {
-            runOnUiThread(this::load);
+        if (mPeer == null || !mPeer.equalsIgnoreCase(peer)) {
+            return;
         }
+        runOnUiThread(() -> {
+            if ("message".equals(type)) {
+                String id = str(ev, "id");
+                if (id.isEmpty() || hasMsg(id)) {
+                    return;
+                }
+                Msg m = new Msg();
+                m.id = id;
+                m.sender = str(ev, "sender");
+                m.body = str(ev, "body");
+                m.mine = false;              // the node only pushes INBOUND message events
+                m.time = lng(ev, "time");
+                m.state = "delivered";
+                mMsgs.add(m);
+                if (m.time > mNewestServerTime) {
+                    mNewestServerTime = m.time;
+                }
+                mAdapter.notifyItemInserted(mMsgs.size() - 1);
+                mList.scrollToPosition(mMsgs.size() - 1);
+                View empty = findViewById(R.id.chat_empty);
+                if (empty != null) {
+                    empty.setVisibility(View.GONE);
+                }
+                if (m.time > mReadMark) {
+                    mReadMark = m.time;
+                    CloudSession.connect(this, new CloudSession.Cb() {   // background lane
+                        public void ok(ParlonsRemote r) {
+                            try { r.markRead(mPeer); } catch (Exception ignored) { }
+                        }
+                        public void err(String e2) { }
+                    });
+                }
+            } else {
+                // State tick for a known bubble: patch in place. Unknown id = the server-side
+                // copy of one of OUR sends — reconcile with one cheap delta fetch.
+                String id = str(ev, "id");
+                for (Msg m : mMsgs) {
+                    if (m.id.equals(id)) {
+                        m.state = str(ev, "state");
+                        notifyRow(id);
+                        return;
+                    }
+                }
+                load();
+            }
+        });
     };
+
+    private boolean hasMsg(String zId) {
+        for (Msg m : mMsgs) {
+            if (m.id.equals(zId)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     @Override
     protected void onResume() {
@@ -244,61 +327,110 @@ public final class CloudChatActivity extends AppCompatActivity {
         }
     }
 
+    /** Parse a conversation reply into time-sorted messages. */
+    private List<Msg> parseMsgs(JSONObject res) {
+        List<Msg> got = new ArrayList<>();
+        JSONArray arr = (JSONArray) res.get("messages");
+        if (arr != null) {
+            for (Object o : arr) {
+                JSONObject m = (JSONObject) o;
+                Msg x = new Msg();
+                x.id = str(m, "id");
+                x.sender = str(m, "sender");
+                x.body = str(m, "body");
+                x.mine = bool(m, "mine");
+                x.time = lng(m, "time");
+                x.state = str(m, "state");
+                got.add(x);
+            }
+        }
+        // Store order isn't time order — a resent message would render above older ones.
+        got.sort((a, b1) -> Long.compare(a.time, b1.time));
+        return got;
+    }
+
     private void load() {
         if (mBusy || mPeer == null) {
             return;
         }
         mBusy = true;
-        CloudSession.connect(this, new CloudSession.Cb() {
+        // Full page only for the first load and every 6th poll (reconciliation); the rest are
+        // tiny AFTER-cursor deltas. Push carries live messages + ticks, so the poll is backup.
+        final boolean full = mMsgs.isEmpty() || mNewestServerTime == 0 || (mPollN % 6 == 0);
+        mPollN++;
+        final long cursor = mNewestServerTime;
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
-                final List<Msg> got = new ArrayList<>();
+                List<Msg> parsed = null;
+                String rawJson = null;
                 long newestIn = 0;
                 try {
-                    JSONObject res = r.conversation(mPeer);
-                    JSONArray arr = (JSONArray) res.get("messages");
-                    if (arr != null) {
-                        for (Object o : arr) {
-                            JSONObject m = (JSONObject) o;
-                            Msg x = new Msg();
-                            x.id = str(m, "id");
-                            x.sender = str(m, "sender");
-                            x.body = str(m, "body");
-                            x.mine = bool(m, "mine");
-                            x.time = lng(m, "time");
-                            x.state = str(m, "state");
-                            got.add(x);
-                            if (!x.mine && x.time > newestIn) {
-                                newestIn = x.time;
-                            }
+                    JSONObject res = full ? r.conversation(mPeer)
+                            : r.conversationAfter(mPeer, cursor);
+                    parsed = parseMsgs(res);
+                    if (full) {
+                        rawJson = res.toString();
+                    }
+                    for (Msg x : parsed) {
+                        if (!x.mine && x.time > newestIn) {
+                            newestIn = x.time;
                         }
                     }
-                    // The node returns entries in store order, not time order — a resent or
-                    // late-receipted message would otherwise render above older ones.
-                    got.sort((a, b1) -> Long.compare(a.time, b1.time));
-                    // We're LOOKING at this conversation — mark it read on the account (clears
-                    // the unread badge, sends the read receipt if allowed). Only when a NEW
-                    // inbound appeared, so the 3s poll doesn't spam the node.
+                    // We're LOOKING at this conversation — mark read only when NEW inbound
+                    // appeared, so the poll doesn't spam the node.
                     if (newestIn > mReadMark) {
                         mReadMark = newestIn;
                         try { r.markRead(mPeer); } catch (Exception ignored) { }
                     }
                 } catch (Exception ignored) {
                 }
+                final List<Msg> got = parsed;
+                final String raw = rawJson;
                 runOnUiThread(() -> {
                     mBusy = false;
-                    // "New message?" by newest id, not list size — the server pages to the
-                    // newest 100, so sizes stop changing once a thread is long.
+                    if (got == null) {
+                        return;                     // fetch failed — keep what's on screen
+                    }
                     String prevNewest = mMsgs.isEmpty() ? "" : mMsgs.get(mMsgs.size() - 1).id;
-                    String nowNewest = got.isEmpty() ? "" : got.get(got.size() - 1).id;
-                    boolean grew = !nowNewest.isEmpty() && !nowNewest.equals(prevNewest);
-                    mMsgs.clear();
-                    mMsgs.addAll(got);
+                    if (full) {
+                        // Preserve unconfirmed local echoes across the replace: a send is
+                        // recorded ASYNC on the node, so a fetch can race it — the bubble
+                        // must not blink out and back.
+                        List<Msg> echoes = new ArrayList<>();
+                        for (Msg m : mMsgs) {
+                            if (m.id.startsWith("local:") && !echoConfirmed(m, got)) {
+                                echoes.add(m);
+                            }
+                        }
+                        mMsgs.clear();
+                        mMsgs.addAll(got);
+                        mMsgs.addAll(echoes);
+                        mMsgs.sort((a, b1) -> Long.compare(a.time, b1.time));
+                        if (raw != null) {
+                            CloudSession.cache(CloudChatActivity.this, "conv_" + mPeer, raw);
+                        }
+                    } else {
+                        for (Msg m : got) {
+                            if (!hasMsg(m.id)) {
+                                mMsgs.add(m);
+                            }
+                        }
+                        // A delta bringing our own message back confirms its echo.
+                        mMsgs.removeIf(m -> m.id.startsWith("local:") && echoConfirmed(m, got));
+                        mMsgs.sort((a, b1) -> Long.compare(a.time, b1.time));
+                    }
+                    for (Msg m : mMsgs) {
+                        if (!m.id.startsWith("local:") && m.time > mNewestServerTime) {
+                            mNewestServerTime = m.time;
+                        }
+                    }
                     mAdapter.notifyDataSetChanged();
                     View empty = findViewById(R.id.chat_empty);
                     if (empty != null) {
                         empty.setVisibility(mMsgs.isEmpty() ? View.VISIBLE : View.GONE);
                     }
-                    if (grew && !mMsgs.isEmpty()) {
+                    String nowNewest = mMsgs.isEmpty() ? "" : mMsgs.get(mMsgs.size() - 1).id;
+                    if (!nowNewest.isEmpty() && !nowNewest.equals(prevNewest)) {
                         mList.scrollToPosition(mMsgs.size() - 1);
                     }
                 });
@@ -309,47 +441,74 @@ public final class CloudChatActivity extends AppCompatActivity {
         });
     }
 
+    /** Has the server copy of this local echo arrived? (our message, same body, near time) */
+    private static boolean echoConfirmed(Msg zEcho, List<Msg> zServer) {
+        for (Msg s : zServer) {
+            if (s.mine && s.body.equals(zEcho.body)
+                    && Math.abs(s.time - zEcho.time) < 120_000L) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void send() {
         final String body = mInput.getText().toString().trim();
         if (body.isEmpty()) {
             return;
         }
         mInput.setText("");
-        CloudSession.connect(this, new CloudSession.Cb() {
+        // Optimistic echo: the bubble appears the instant you tap — the round-trip through the
+        // relays confirms it behind the scenes. The echo swaps for the server copy on the next
+        // fetch/push, or turns ✗ if the RPC itself fails.
+        final Msg echo = new Msg();
+        echo.id = "local:" + java.util.UUID.randomUUID();
+        echo.sender = "";
+        echo.body = body;
+        echo.mine = true;
+        echo.time = System.currentTimeMillis();
+        echo.state = "queued";
+        mMsgs.add(echo);
+        mAdapter.notifyItemInserted(mMsgs.size() - 1);
+        mList.scrollToPosition(mMsgs.size() - 1);
+        View empty = findViewById(R.id.chat_empty);
+        if (empty != null) {
+            empty.setVisibility(View.GONE);
+        }
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
-                boolean failed = false;
                 try {
                     JSONObject res = r.send(mPeer, body);
                     Object ok = res.get("ok");
                     if (!(ok instanceof Boolean) || !((Boolean) ok)) {
                         error = String.valueOf(res.get("error"));
-                    } else {
-                        failed = "failed".equalsIgnoreCase(str(res, "state"));
                     }
                 } catch (Exception e) {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
                 final String err = error;
-                final boolean ffail = failed;
                 runOnUiThread(() -> {
                     if (err != null) {
+                        echo.state = "failed";
+                        notifyRow(echo.id);
                         Toast.makeText(CloudChatActivity.this, "Send failed: " + err,
                                 Toast.LENGTH_LONG).show();
-                    } else if (ffail) {
-                        // The node tried every address AND the directory heal — the peer is
-                        // genuinely unreachable right now. Say so honestly; the node's resend
-                        // heartbeat keeps retrying failed messages for 24h.
-                        Toast.makeText(CloudChatActivity.this,
-                                mName + " looks offline — your node will keep retrying. "
-                                        + "Tap the ✗ to reconnect now.", Toast.LENGTH_LONG).show();
+                    } else {
+                        // Accepted ("queued") — the real entry + its ticks arrive via
+                        // push/delta and replace this echo. No full reload needed.
+                        echo.state = "sent";
+                        notifyRow(echo.id);
                     }
-                    load();
                 });
             }
             public void err(String m) {
-                runOnUiThread(() -> Toast.makeText(CloudChatActivity.this,
-                        "Send failed: " + m, Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> {
+                    echo.state = "failed";
+                    notifyRow(echo.id);
+                    Toast.makeText(CloudChatActivity.this,
+                            "Send failed: " + m, Toast.LENGTH_LONG).show();
+                });
             }
         });
     }
