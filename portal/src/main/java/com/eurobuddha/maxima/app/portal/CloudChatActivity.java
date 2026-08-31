@@ -108,6 +108,12 @@ public final class CloudChatActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        if (b != null) {
+            String cu = b.getString("captureUri");
+            if (cu != null) {
+                mCaptureUri = android.net.Uri.parse(cu);   // survive rotation during camera capture
+            }
+        }
         mPeer = getIntent().getStringExtra(EXTRA_PEER);
         mName = getIntent().getStringExtra(EXTRA_NAME);
         mGroup = getIntent().getBooleanExtra(EXTRA_GROUP, false);
@@ -184,10 +190,26 @@ public final class CloudChatActivity extends AppCompatActivity {
         }
 
         mList = findViewById(R.id.messages);
-        LinearLayoutManager lm = new LinearLayoutManager(this);
+        final LinearLayoutManager lm = new LinearLayoutManager(this);
         lm.setStackFromEnd(true);
         mList.setLayoutManager(lm);
         mList.setAdapter(mAdapter);
+
+        // Jump-to-latest FAB: shown once the user scrolls a few messages up from the bottom.
+        final android.widget.ImageButton jumpFab = findViewById(R.id.btn_scroll_bottom);
+        jumpFab.setOnClickListener(v -> {
+            if (!mMsgs.isEmpty()) {
+                mList.smoothScrollToPosition(mMsgs.size() - 1);
+            }
+            jumpFab.setVisibility(View.GONE);
+        });
+        mList.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            public void onScrolled(RecyclerView rv, int dx, int dy) {
+                int last = lm.findLastVisibleItemPosition();
+                boolean awayFromBottom = last >= 0 && last < mMsgs.size() - 3;
+                jumpFab.setVisibility(awayFromBottom ? View.VISIBLE : View.GONE);
+            }
+        });
 
         // Instant paint: the last-known conversation renders NOW, the live fetch reconciles
         // behind it. Parsed OFF the main thread (media bodies make the JSON non-trivial), and
@@ -1403,6 +1425,16 @@ public final class CloudChatActivity extends AppCompatActivity {
             startActivityForResult(i, TAKE_PHOTO);
         } catch (Exception e) {
             toast("No camera available");
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        // The camera app can push us through a config change / process death; without persisting
+        // the capture uri, a returning photo (onActivityResult) is dropped as mCaptureUri==null.
+        if (mCaptureUri != null) {
+            out.putString("captureUri", mCaptureUri.toString());
         }
     }
 
