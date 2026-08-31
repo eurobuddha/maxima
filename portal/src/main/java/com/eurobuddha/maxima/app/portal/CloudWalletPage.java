@@ -152,7 +152,10 @@ public final class CloudWalletPage implements Page {
         big.setTypeface(big.getTypeface(), Typeface.BOLD);
         bal.addView(big);
         TextView unit = new TextView(c);
-        unit.setText(mSendable.isEmpty() ? "MINIMA · watch-only" : mSendable + " sendable · watch-only");
+        // Honest custody line: the ACCOUNT's own wallet signs on the node; a device-set watch
+        // address is the read-only mode.
+        unit.setText(mSendable.isEmpty() ? "MINIMA · your account's wallet"
+                : mSendable + " sendable · keys live on your cloud node");
         unit.setTextColor(c.getColor(R.color.ux_subtext));
         unit.setTextSize(13);
         bal.addView(unit);

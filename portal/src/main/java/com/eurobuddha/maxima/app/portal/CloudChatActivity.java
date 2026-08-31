@@ -962,7 +962,11 @@ public final class CloudChatActivity extends AppCompatActivity {
                             });
                         }
                         public void err(String m) {
-                            runOnUiThread(() -> toast("Payment failed: " + m));
+                            runOnUiThread(() -> {
+                                if (!isFinishing() && !isDestroyed()) {
+                                    toast("Payment failed: " + m);
+                                }
+                            });
                         }
                     });
                 })
@@ -1526,9 +1530,15 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.image.setVisibility(View.GONE);
                 h.audio.setVisibility(View.GONE);
                 h.body.setVisibility(View.VISIBLE);
-                h.body.setText(com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body));
+                String payLine = com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body);
+                if (m.mine && "failed".equals(m.state)) {
+                    // A failed PAYMENT must never read like a safe retry — the broadcast may
+                    // have happened. Say so where the eye lands.
+                    payLine += "\n⚠ unconfirmed — check the balance before paying again";
+                }
+                h.body.setText(payLine);
                 h.body.setTextColor(ink);
-                h.body.setTypeface(h.body.getTypeface(), android.graphics.Typeface.BOLD);
+                h.body.setTypeface(null, android.graphics.Typeface.BOLD);
             } else if (media && mime.startsWith("audio")) {
                 h.image.setVisibility(View.GONE);
                 h.audio.setVisibility(View.VISIBLE);
@@ -1541,6 +1551,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
                 h.body.setText(cap);
                 h.body.setTextColor(ink);
+                h.body.setTypeface(null, android.graphics.Typeface.NORMAL);   // recycled pay bubble
                 bindImage(h.image, m.body, m.id);
             } else {
                 h.image.setVisibility(View.GONE);
