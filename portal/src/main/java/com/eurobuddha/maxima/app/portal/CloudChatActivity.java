@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -44,9 +45,12 @@ public final class CloudChatActivity extends AppCompatActivity {
     private static final class Msg {
         String id;
         String sender;
+        String sname;      // group sender display name
         String body;
         boolean mine;
         long time;
+        long arrived;      // late-relay dual clock
+        int delivered;     // group per-member delivery count
         String state;
     }
 
@@ -157,8 +161,16 @@ public final class CloudChatActivity extends AppCompatActivity {
         if (video != null) {
             video.setOnClickListener(v -> startCall(true));
         }
-        hide(R.id.btn_chat_info);
-        hide(R.id.btn_chat_emoji);
+        View emoji = findViewById(R.id.btn_chat_emoji);
+        if (emoji != null) {
+            emoji.setVisibility(View.VISIBLE);
+            emoji.setOnClickListener(v -> showEmojiPanel());
+        }
+        View info = findViewById(R.id.btn_chat_info);
+        if (info != null) {
+            info.setVisibility(View.VISIBLE);
+            info.setOnClickListener(v -> detailsDialog());
+        }
         View attach = findViewById(R.id.btn_chat_attach);
         if (attach != null) {
             attach.setVisibility(View.VISIBLE);
@@ -394,9 +406,12 @@ public final class CloudChatActivity extends AppCompatActivity {
                 Msg x = new Msg();
                 x.id = str(m, "id");
                 x.sender = str(m, "sender");
+                x.sname = str(m, "sname");
                 x.body = str(m, "body");
                 x.mine = bool(m, "mine");
                 x.time = lng(m, "time");
+                x.arrived = lng(m, "arrived");
+                x.delivered = (int) lng(m, "delivered");
                 x.state = str(m, "state");
                 got.add(x);
             }
@@ -681,8 +696,364 @@ public final class CloudChatActivity extends AppCompatActivity {
         return t > 0 ? mHm.format(new Date(t)) : "";
     }
 
+    private final java.text.SimpleDateFormat mFull =
+            new java.text.SimpleDateFormat("d MMM yyyy · HH:mm", Locale.UK);
+    private final java.text.SimpleDateFormat mDayFmt =
+            new java.text.SimpleDateFormat("EEEE, d MMM yyyy", Locale.UK);
+
+    /** "Today" / "Yesterday" / "Monday, 1 Sep 2026" for the date separator. */
+    private String dayLabel(long t) {
+        if (t <= 0) {
+            return "";
+        }
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        java.util.Calendar then = java.util.Calendar.getInstance();
+        then.setTimeInMillis(t);
+        boolean sameYear = now.get(java.util.Calendar.YEAR) == then.get(java.util.Calendar.YEAR);
+        int dd = now.get(java.util.Calendar.DAY_OF_YEAR) - then.get(java.util.Calendar.DAY_OF_YEAR);
+        if (sameYear && dd == 0) {
+            return "Today";
+        }
+        if (sameYear && dd == 1) {
+            return "Yesterday";
+        }
+        return mDayFmt.format(new Date(t));
+    }
+
+    /** Long-press a bubble → Copy / Copy tx id (payments) / Save+Share (photos) / Info. */
+    private void bubbleMenu(Msg m) {
+        java.util.List<String> items = new ArrayList<>();
+        boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body);
+        boolean media = !pay && com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
+        String mime = media ? com.eurobuddha.maxima.core.chat.ChatMedia.mime(m.body) : "";
+        boolean img = media && !mime.startsWith("audio");
+        boolean hasImg = img && mImageCache.get(m.id) != null;
+        if (!media) {
+            items.add("Copy");
+        }
+        if (pay) {
+            items.add("Copy transaction id");
+        }
+        if (hasImg) {
+            items.add("Save photo");
+            items.add("Share photo");
+        }
+        items.add("Info");
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
+                    String pick = items.get(which);
+                    switch (pick) {
+                        case "Copy":
+                            copyText(pay ? com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body)
+                                    : media ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body)
+                                    : m.body);
+                            break;
+                        case "Copy transaction id":
+                            copyText(com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body));
+                            break;
+                        case "Save photo":
+                            saveImage(m.id);
+                            break;
+                        case "Share photo":
+                            shareImage(m.id);
+                            break;
+                        case "Info":
+                            infoDialog(m);
+                            break;
+                    }
+                })
+                .show();
+    }
+
+    private void infoDialog(Msg m) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(m.mine ? "You" : (m.sname.isEmpty() ? mName : m.sname)).append('\n');
+        sb.append(mFull.format(new Date(m.time))).append('\n');
+        if (m.arrived > 0 && m.arrived - m.time >= 60_000L) {
+            sb.append("Arrived: ").append(mFull.format(new Date(m.arrived))).append('\n');
+        }
+        if (m.mine) {
+            String st;
+            switch (m.state == null ? "" : m.state) {
+                case "read": st = "Read"; break;
+                case "delivered": st = "Delivered"; break;
+                case "sent": st = "Sent (relay took it)"; break;
+                case "failed": st = "Failed to send"; break;
+                default: st = "Sending…";
+            }
+            sb.append("Status: ").append(st).append('\n');
+            if (mGroup && m.delivered > 0) {
+                sb.append("Delivered to ").append(m.delivered).append(" member(s)\n");
+            }
+        }
+        if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body)) {
+            sb.append("\nTransaction id:\n")
+                    .append(com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body));
+        }
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Message info")
+                .setMessage(sb.toString())
+                .setPositiveButton("Close", null)
+                .show();
+    }
+
+    private void copyText(String s) {
+        if (s == null || s.isEmpty()) {
+            return;
+        }
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("text", s));   // full value
+        toast("Copied");
+    }
+
     private void toast(String zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
+    }
+
+    // ---- emoji panel (data + layout ported verbatim from the app) ----
+    private static final String[][] EMOJI = {
+            {"Smileys", "😀 😂 🤣 😊 😇 😉 😍 🥰 😘 😜 🤪 🤔 🤐 😐 🙄 😬 😴 🥵 🥶 🤯 😳 🥺 😢 😭 😡 🤬 🤢 🥳 😎 🤓 🙈 🙉 🙊 💀 🤡 💩"},
+            {"Gestures", "👍 👎 👌 ✌️ 🤞 🤟 🤘 👊 ✊ 👏 🙌 👐 🤲 🤝 🙏 💪 ☝️ 👆 👇 👈 👉 🖐️ 🤙 👋"},
+            {"Hearts", "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💋 💌"},
+            {"Animals & nature", "🐶 🐱 🐭 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐵 🐔 🐧 🦆 🦅 🦉 🦋 🐝 🐢 🐙 🐳 🐬 🌵 🌲 🌻 🌹 🍂 ☀️ 🌙 ⭐ 🌈 ⚡ 🔥 ❄️ 🌊"},
+            {"Food & drink", "🍎 🍌 🍇 🍓 🍋 🥑 🍕 🍔 🍟 🌭 🌮 🍜 🍣 🍦 🍰 🍫 🍿 ☕ 🍺 🍷 🥂 🍵"},
+            {"Objects & symbols", "🎉 🎁 🎈 ⚽ 🏀 🎸 🎮 🎲 🚗 ✈️ 🚀 ⛵ 🏠 💡 🔑 💰 💎 ⏰ 📱 💻 🎧 📷 ✅ ❌ ❗ ❓ 💯 🎖️ 🏆 🚩"},
+    };
+
+    private void showEmojiPanel() {
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(10), dp(8), dp(10), dp(12));
+        scroll.addView(box);
+        final android.app.Dialog dlg = new android.app.Dialog(this);
+        for (String[] cat : EMOJI) {
+            TextView label = new TextView(this);
+            label.setText(cat[0].toUpperCase(Locale.UK));
+            label.setTextSize(11);
+            label.setTypeface(null, android.graphics.Typeface.BOLD);
+            label.setTextColor(getColor(R.color.ux_subtext));
+            label.setPadding(dp(8), dp(10), 0, dp(2));
+            box.addView(label);
+            android.widget.GridLayout grid = new android.widget.GridLayout(this);
+            grid.setColumnCount(8);
+            for (String e : cat[1].split(" ")) {
+                TextView cell = new TextView(this);
+                cell.setText(e);
+                cell.setTextSize(26);
+                cell.setGravity(Gravity.CENTER);
+                cell.setPadding(dp(6), dp(6), dp(6), dp(6));
+                cell.setOnClickListener(v -> {
+                    int at = Math.max(0, mInput.getSelectionStart());
+                    mInput.getText().insert(at, e);
+                });
+                grid.addView(cell);
+            }
+            box.addView(grid);
+        }
+        dlg.setContentView(scroll);
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            w.setGravity(Gravity.BOTTOM);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, dp(340));
+            w.setBackgroundDrawableResource(R.color.ux_bg);
+        }
+        dlg.show();
+    }
+
+    // ---- details: 1:1 info, or group roster + admin Edit members ----
+    private void detailsDialog() {
+        if (mGroup) {
+            groupDetails();
+        } else {
+            contactDetails();
+        }
+    }
+
+    private void contactDetails() {
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String text;
+                try {
+                    JSONObject i = r.contactInfo(mPeer);
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(str(i, "name")).append("\n\n");
+                    String kind = str(i, "kind");
+                    sb.append("Software: ").append(bool(i, "classic") ? "Classic Maxima"
+                            : kind.isEmpty() ? "Parlons" : kind).append('\n');
+                    long ls = lng(i, "lastSeen");
+                    sb.append("Last seen: ").append(ls > 0 ? mFull.format(new Date(ls))
+                            : "never").append("\n\n");
+                    sb.append("Public key:\n").append(str(i, "key")).append("\n\n");
+                    JSONArray addrs = (JSONArray) i.get("addresses");
+                    if (addrs != null && !addrs.isEmpty()) {
+                        sb.append("Addresses:\n");
+                        for (Object o : addrs) {
+                            sb.append(o).append('\n');
+                        }
+                    }
+                    String wallet = str(i, "wallet");
+                    if (!wallet.isEmpty()) {
+                        sb.append("\nPayment address:\n").append(wallet);
+                    }
+                    text = sb.toString();
+                } catch (Exception e) {
+                    text = "Couldn't load: " + e.getMessage();
+                }
+                final String ft = text;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    new androidx.appcompat.app.AlertDialog.Builder(CloudChatActivity.this)
+                            .setTitle("Contact")
+                            .setMessage(ft)
+                            .setPositiveButton("Close", null)
+                            .setNeutralButton("Copy key", (d, w) ->
+                                    copyText(mPeer))
+                            .show();
+                });
+            }
+            public void err(String m) {
+                runOnUiThread(() -> toast("Couldn't load: " + m));
+            }
+        });
+    }
+
+    private void groupDetails() {
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                JSONObject info = null;
+                String err = null;
+                try {
+                    info = r.groupInfo(mPeer);
+                } catch (Exception e) {
+                    err = e.getMessage();
+                }
+                final JSONObject fi = info;
+                final String fe = err;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    if (fi == null || !bool(fi, "ok")) {
+                        toast("Couldn't load group: " + (fi == null ? fe : str(fi, "error")));
+                        return;
+                    }
+                    JSONArray members = (JSONArray) fi.get("members");
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(str(fi, "name")).append("  (")
+                            .append(members == null ? 0 : members.size()).append(")\n\n");
+                    if (members != null) {
+                        for (Object o : members) {
+                            JSONObject mm = (JSONObject) o;
+                            boolean meRow = bool(mm, "me");
+                            String nm = str(mm, "name");
+                            // The account isn't its own contact, so its name resolves to the raw
+                            // key — show "You" instead.
+                            sb.append("• ").append(meRow ? "You" : nm);
+                            if (bool(mm, "admin")) {
+                                sb.append("  (admin)");
+                            }
+                            sb.append('\n');
+                        }
+                    }
+                    sb.append("\nNo shared group key — removing someone really removes them.");
+                    androidx.appcompat.app.AlertDialog.Builder b =
+                            new androidx.appcompat.app.AlertDialog.Builder(CloudChatActivity.this)
+                                    .setTitle("Group")
+                                    .setMessage(sb.toString())
+                                    .setPositiveButton("Close", null);
+                    if (bool(fi, "iAmAdmin")) {
+                        b.setNeutralButton("Edit members", (d, w) -> editMembers(fi));
+                    }
+                    b.show();
+                });
+            }
+            public void err(String m) {
+                runOnUiThread(() -> toast("Couldn't load group: " + m));
+            }
+        });
+    }
+
+    private void editMembers(JSONObject groupInfo) {
+        // Fetch the account's full contact list; pre-check current members.
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                final List<String> keys = new ArrayList<>();
+                final List<String> names = new ArrayList<>();
+                final java.util.Set<String> current = new java.util.HashSet<>();
+                try {
+                    JSONArray mem = (JSONArray) groupInfo.get("members");
+                    if (mem != null) {
+                        for (Object o : mem) {
+                            current.add(str((JSONObject) o, "key"));
+                        }
+                    }
+                    JSONObject res = r.contacts();
+                    JSONArray arr = (JSONArray) res.get("contacts");
+                    if (arr != null) {
+                        for (Object o : arr) {
+                            JSONObject cc = (JSONObject) o;
+                            keys.add(str(cc, "key"));
+                            String nm = str(cc, "name");
+                            names.add(nm.isEmpty() ? str(cc, "key") : nm);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed() || keys.isEmpty()) {
+                        return;
+                    }
+                    final boolean[] checked = new boolean[keys.size()];
+                    for (int i = 0; i < keys.size(); i++) {
+                        checked[i] = current.contains(keys.get(i));
+                    }
+                    new androidx.appcompat.app.AlertDialog.Builder(CloudChatActivity.this)
+                            .setTitle("Members")
+                            .setMultiChoiceItems(names.toArray(new CharSequence[0]), checked,
+                                    (d, which, isChecked) -> checked[which] = isChecked)
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Save", (d, w) -> {
+                                List<String> members = new ArrayList<>();
+                                for (int i = 0; i < checked.length; i++) {
+                                    if (checked[i]) {
+                                        members.add(keys.get(i));
+                                    }
+                                }
+                                saveMembers(members);
+                            })
+                            .show();
+                });
+            }
+            public void err(String m) {
+                runOnUiThread(() -> toast(m));
+            }
+        });
+    }
+
+    private void saveMembers(List<String> zMembers) {
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String error = null;
+                try {
+                    JSONObject res = r.updateGroup(mPeer, null, zMembers);
+                    Object ok = res.get("ok");
+                    if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final String fe = error;
+                runOnUiThread(() -> toast(fe == null ? "Group updated" : "Failed: " + fe));
+            }
+            public void err(String m) {
+                runOnUiThread(() -> toast("Failed: " + m));
+            }
+        });
     }
 
     // ==================================================================
@@ -1518,10 +1889,31 @@ public final class CloudChatActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(Holder h, int position) {
             Msg m = mMsgs.get(position);
+            // Date separator when the day changes (or the very first message).
+            String day = dayLabel(m.time);
+            boolean newDay = position == 0
+                    || !day.equals(dayLabel(mMsgs.get(position - 1).time));
+            if (newDay && m.time > 0) {
+                h.datePill.setVisibility(View.VISIBLE);
+                h.datePill.setText(day);
+            } else {
+                h.datePill.setVisibility(View.GONE);
+            }
             h.row.setGravity(m.mine ? Gravity.END : Gravity.START);
             h.bubble.setBackgroundResource(m.mine ? R.drawable.bubble_out : R.drawable.bubble_in);
             int ink = getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
-            h.sender.setVisibility(View.GONE);
+
+            // Group sender name — shown once at the top of a run of same-sender messages.
+            boolean showName = mGroup && !m.mine && !m.sname.isEmpty()
+                    && (position == 0 || mMsgs.get(position - 1).mine
+                        || !mMsgs.get(position - 1).sender.equals(m.sender)
+                        || m.time - mMsgs.get(position - 1).time > 5 * 60_000L);
+            if (showName) {
+                h.sender.setVisibility(View.VISIBLE);
+                h.sender.setText(m.sname);
+            } else {
+                h.sender.setVisibility(View.GONE);
+            }
 
             boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body);
             boolean media = !pay && com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
@@ -1568,17 +1960,24 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.meta.setText(meta);
                 h.meta.setTextColor(tickColour(m.state));
             } else {
+                // Dual clock: a late relay delivery shows "sent 13:56 · arrived 14:02".
+                if (m.arrived > 0 && m.arrived - m.time >= 60_000L) {
+                    meta = "sent " + stamp(m.time) + " · arrived " + stamp(m.arrived);
+                }
                 h.meta.setText(meta);
                 h.meta.setTextColor(getColor(R.color.ux_subtext));
             }
-            // A failed (✗) message is tappable: reconnect to the peer now instead of waiting
-            // for the node's retry heartbeat.
+            // A failed (✗) message is tappable: reconnect now. Long-press ANY bubble → menu.
             if (m.mine && "failed".equals(m.state)) {
                 h.bubble.setOnClickListener(v -> offerReconnect());
             } else {
                 h.bubble.setOnClickListener(null);
                 h.bubble.setClickable(false);
             }
+            h.bubble.setOnLongClickListener(v -> {
+                bubbleMenu(m);
+                return true;
+            });
         }
 
         @Override
@@ -1595,6 +1994,7 @@ public final class CloudChatActivity extends AppCompatActivity {
     }
 
     private static final class Holder extends RecyclerView.ViewHolder {
+        final TextView datePill;
         final android.widget.LinearLayout row;
         final android.widget.LinearLayout bubble;
         final TextView sender;
@@ -1608,6 +2008,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
         Holder(View v) {
             super(v);
+            datePill = v.findViewById(R.id.date_pill);
             row = v.findViewById(R.id.bubble_row);
             bubble = v.findViewById(R.id.bubble);
             sender = v.findViewById(R.id.bubble_sender);

@@ -109,8 +109,10 @@ public final class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
 
-        // No local search on a portal — hide it. Theme cycles day/night. More = account menu.
-        findViewById(R.id.btn_main_search).setVisibility(View.GONE);
+        // Search runs server-side over the account. Theme cycles day/night. More = account menu.
+        findViewById(R.id.btn_main_search).setOnClickListener(v ->
+                startActivity(new Intent(this,
+                        com.eurobuddha.maxima.app.portal.CloudSearchActivity.class)));
         findViewById(R.id.btn_main_theme).setOnClickListener(v -> cycleTheme());
         findViewById(R.id.btn_main_more).setOnClickListener(v -> {
             android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);

@@ -288,13 +288,12 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                 .setPositiveButton("Close", null)
                 .setNeutralButton("Copy", null)
                 .create();
-        d.setOnShowListener(x -> {
-            if (d.getWindow() != null) {
-                d.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
-            }
-            d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
-                    .setOnClickListener(v -> copySeed(zPhrase));   // does NOT dismiss
-        });
+        // FLAG_SECURE BEFORE show() — no capturable first frame (the app's discipline).
+        if (d.getWindow() != null) {
+            d.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        }
+        d.setOnShowListener(x -> d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
+                .setOnClickListener(v -> copySeed(zPhrase)));   // does NOT dismiss
         d.show();
     }
 
@@ -331,7 +330,12 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                     uri -> {
                         byte[] blob = mPendingBackup;
                         mPendingBackup = null;
-                        if (uri == null || blob == null) {
+                        if (uri == null) {
+                            return;   // user cancelled the picker
+                        }
+                        if (blob == null) {
+                            Toast.makeText(this, "Backup expired — export again",
+                                    Toast.LENGTH_LONG).show();
                             return;
                         }
                         try (java.io.OutputStream os =

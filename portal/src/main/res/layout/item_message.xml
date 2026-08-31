@@ -1,7 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One bubble. Gravity and background come from entry.mine in code, so a
-     single layout serves both sides and they cannot drift apart. -->
+<!-- One row: an optional centered date pill, then one bubble. Gravity and
+     background come from entry.mine in code. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bubble_outer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/date_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:textColor="@color/ux_subtext"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+<LinearLayout
     android:id="@+id/bubble_row"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -100,4 +121,5 @@
             android:fontFamily="monospace"
             android:textSize="11sp" />
     </LinearLayout>
+</LinearLayout>
 </LinearLayout>

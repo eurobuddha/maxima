@@ -64,6 +64,10 @@ public final class CloudChatsPage implements Page {
         mSearch = zView.findViewById(R.id.chats_search);
         mList.setAdapter(mAdapter);
         mList.setOnItemClickListener((p, v, pos, id) -> open(mRows.get(pos)));
+        mList.setOnItemLongClickListener((p, v, pos, id) -> {
+            rowMenu(mRows.get(pos));
+            return true;
+        });
         View newGroup = zView.findViewById(R.id.btn_new_group);
         if (newGroup != null) {
             newGroup.setVisibility(View.VISIBLE);
@@ -95,6 +99,68 @@ public final class CloudChatsPage implements Page {
         i.putExtra(CloudChatActivity.EXTRA_NAME, r.name);
         i.putExtra(CloudChatActivity.EXTRA_GROUP, r.group);
         mAct.startActivity(i);
+    }
+
+    /** Long-press a chat → Mark as read (if unread) / Clear messages (local, with confirm). */
+    private void rowMenu(Row r) {
+        java.util.List<String> items = new ArrayList<>();
+        if (r.unread > 0) {
+            items.add("Mark as read");
+        }
+        items.add("Clear messages");
+        new androidx.appcompat.app.AlertDialog.Builder(mAct)
+                .setTitle(r.name)
+                .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
+                    if ("Mark as read".equals(items.get(which))) {
+                        act(rr -> rr.markRead(r.key), "Marked read");
+                    } else {
+                        confirmClear(r);
+                    }
+                })
+                .show();
+    }
+
+    private void confirmClear(Row r) {
+        new androidx.appcompat.app.AlertDialog.Builder(mAct)
+                .setTitle("Clear this chat?")
+                .setMessage("Removes the messages from your account only. It does NOT unsend "
+                        + "them or leave a group, and can't be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Clear", (d, w) -> act(rr -> rr.clearConversation(r.key),
+                        "Chat cleared"))
+                .show();
+    }
+
+    private interface Call {
+        JSONObject run(ParlonsRemote r) throws Exception;
+    }
+
+    private void act(Call call, String okMsg) {
+        CloudSession.connect(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String error = null;
+                try {
+                    JSONObject res = call.run(r);
+                    Object ok = res.get("ok");
+                    if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final String err = error;
+                mAct.runOnUiThread(() -> {
+                    android.widget.Toast.makeText(mAct, err == null ? okMsg : "Failed: " + err,
+                            android.widget.Toast.LENGTH_SHORT).show();
+                    mLastLoad = 0;
+                    render();
+                });
+            }
+            public void err(String m) {
+                mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, "Failed: " + m,
+                        android.widget.Toast.LENGTH_SHORT).show());
+            }
+        });
     }
 
     /** Called on the 2s UI tick. Kicks a background refresh, throttled so we don't hammer the node. */

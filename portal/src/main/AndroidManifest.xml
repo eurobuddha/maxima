@@ -47,6 +47,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".portal.CloudSearchActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".portal.PortalCallActivity"
             android:exported="false"
             android:launchMode="singleTop"

@@ -252,17 +252,42 @@ public final class CloudWalletPage implements Page {
                 .setMessage("To:\n" + zTo + "\n\nThis signs and broadcasts a real transaction "
                         + "and cannot be undone.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Sign & send", (d, w) -> doWalletSend(zTo, zAmount))
+                .setPositiveButton("Sign & send", (d, w) -> doWalletSend(zTo, zAmount, null))
                 .show();
     }
 
-    private void doWalletSend(String zTo, String zAmount) {
+    private volatile boolean mSending;   // double-tap latch
+
+    /** Send from the account wallet. If zWatchOnSuccess is non-null, the watch is repointed to
+     *  it ONLY after the walletsent push for this send arrives (the detach sweep) — never
+     *  unconditionally, so a failed sweep can't hide the account's real balance. */
+    private void doWalletSend(String zTo, String zAmount, final String zWatchOnSuccess) {
+        if (mSending) {
+            mAct.toast("A send is already in progress…");
+            return;
+        }
+        mSending = true;
         mAct.toast("Building on your node…");
+        final String pid = java.util.UUID.randomUUID().toString();
+        if (zWatchOnSuccess != null) {
+            // Arm a one-shot listener: flip the watch only when THIS send confirms.
+            final PortalHub.Listener[] holder = new PortalHub.Listener[1];
+            holder[0] = ev -> {
+                String type = String.valueOf(ev.get("type"));
+                if ("walletsent".equals(type) && pid.equals(String.valueOf(ev.get("pid")))) {
+                    PortalHub.remove(holder[0]);
+                    mAct.runOnUiThread(() -> setWatch(zWatchOnSuccess));
+                } else if ("walletfail".equals(type)) {
+                    PortalHub.remove(holder[0]);
+                }
+            };
+            PortalHub.add(holder[0]);
+        }
         CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
                 try {
-                    JSONObject res = r.walletSend(zTo, zAmount);
+                    JSONObject res = r.walletSend(zTo, zAmount, pid);
                     Object okv = res.get("ok");
                     if (!(okv instanceof Boolean) || !((Boolean) okv)) {
                         error = String.valueOf(res.get("error"));
@@ -272,6 +297,7 @@ public final class CloudWalletPage implements Page {
                 }
                 final String err = error;
                 mAct.runOnUiThread(() -> {
+                    mSending = false;
                     mAct.toast(err == null
                             ? "Signing & broadcasting — watch the balance" : "Send failed: " + err);
                     mLastLoad = 0;
@@ -279,7 +305,10 @@ public final class CloudWalletPage implements Page {
                 });
             }
             public void err(String m) {
-                mAct.runOnUiThread(() -> mAct.toast("Send failed: " + m));
+                mAct.runOnUiThread(() -> {
+                    mSending = false;
+                    mAct.toast("Send failed: " + m);
+                });
             }
         });
     }
@@ -327,8 +356,8 @@ public final class CloudWalletPage implements Page {
     }
 
     private void confirmDetach(String zTo) {
-        if (!zTo.startsWith("Mx") && !zTo.startsWith("0x")) {
-            mAct.toast("That doesn't look like a Minima address");
+        if (!zTo.matches("Mx[0-9A-Z]+") && !zTo.matches("0x[0-9A-Fa-f]{64}")) {
+            mAct.toast("That doesn't look like a full Minima address");
             return;
         }
         String amount = mSendable.isEmpty() ? "" : mSendable;
@@ -343,10 +372,9 @@ public final class CloudWalletPage implements Page {
                         + "watches this address read-only. This signs a real transaction and "
                         + "cannot be undone.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Sweep & detach", (d, w) -> {
-                    doWalletSend(zTo, amt);
-                    setWatch(zTo);
-                })
+                // Watch flips ONLY after the sweep's walletsent push — a failed sweep must not
+                // hide the account's real balance behind an empty watch address.
+                .setPositiveButton("Sweep & detach", (d, w) -> doWalletSend(zTo, amt, zTo))
                 .show();
     }
 
