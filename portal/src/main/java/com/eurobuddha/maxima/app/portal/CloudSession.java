@@ -224,6 +224,8 @@ public final class CloudSession {
                 PortalNotifier.onPushedMessage(app, ev);
             } else if ("call".equals(type)) {
                 PortalCalls.onPushedSignal(app, ev);
+            } else if ("walletsent".equals(type) || "walletfail".equals(type)) {
+                PortalNotifier.onWalletEvent(app, ev);
             }
             PortalHub.dispatch(ev);
         });

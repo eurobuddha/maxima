@@ -74,6 +74,25 @@ public final class PortalNotifier {
         c.getSystemService(NotificationManager.class).notify(idFor(peer), n);
     }
 
+    /** Wallet send outcome (async on the node) — always worth a notification. */
+    public static void onWalletEvent(Context c, JSONObject ev) {
+        ensureChannel(c);
+        boolean okEv = "walletsent".equals(String.valueOf(ev.get("type")));
+        String to = str(ev, "to");
+        String title = okEv ? "Sent " + str(ev, "amount") + " MINIMA" : "Wallet send failed";
+        String line = okEv
+                ? "To " + to + "  ·  txid " + str(ev, "txid")     // full values, never truncated
+                : str(ev, "error");
+        Notification n = new NotificationCompat.Builder(c, CHANNEL)
+                .setSmallIcon(R.drawable.ic_send)
+                .setContentTitle(title)
+                .setContentText(line)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(line))
+                .setAutoCancel(true)
+                .build();
+        c.getSystemService(NotificationManager.class).notify(0x574C0000 | (int) (System.currentTimeMillis() & 0xFFF), n);
+    }
+
     public static void clear(Context c, String zPeer) {
         c.getSystemService(NotificationManager.class).cancel(idFor(zPeer));
     }

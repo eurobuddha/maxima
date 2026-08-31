@@ -92,6 +92,30 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         acc.addView(rrRow);
         body.addView(acc);
 
+        // --- keys & backup: the identity lifecycle, app-parity discipline ---
+        body.addView(PortalUi.section(c, "Keys & backup"));
+        LinearLayout keys = PortalUi.card(c);
+        keys.addView(PortalUi.label(c, "The 24 words on your node are your identity AND a "
+                + "spendable Minima wallet seed. Back them up like money."));
+        keys.addView(PortalUi.gap(c, 10));
+        TextView showSeed = PortalUi.ghost(c, "Show seed phrase");
+        showSeed.setTextColor(c.getColor(R.color.ux_error));
+        showSeed.setOnClickListener(v -> confirmShowSeed());
+        keys.addView(showSeed);
+        keys.addView(PortalUi.gap(c, 8));
+        TextView backup = PortalUi.button(c, "Back up account…");
+        backup.setOnClickListener(v -> promptBackupPassphrase());
+        keys.addView(backup);
+        keys.addView(PortalUi.gap(c, 8));
+        keys.addView(PortalUi.label(c, "Encrypted with your passphrase before it leaves the "
+                + "node (same .pbk format as the phone app — carries contacts and the "
+                + "signature counter, not chat history)."));
+        keys.addView(PortalUi.gap(c, 10));
+        keys.addView(PortalUi.label(c, "Restore / move this account: on the NEW server run\n"
+                + "java -jar parlons-cloud.jar --restore backup.pbk\n"
+                + "with the old node stopped for good (one seed, one node — ever)."));
+        body.addView(keys);
+
         // --- Minima Core on this phone — the same "link to core" path phone users know.
         //     A full node on the phone is your own chain view + an independent wallet home
         //     (resync your wallet to a new seed there; the cloud seed stays your identity). ---
@@ -185,6 +209,218 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(getColor(R.color.ux_header));
 
         loadSettings();
+    }
+
+    // ==================================================================
+    // Identity lifecycle — seed reveal + encrypted backup (app parity)
+    // ==================================================================
+
+    private void confirmShowSeed() {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Show seed phrase?")
+                .setMessage("These 24 words ARE your account and its wallet. Make sure nobody "
+                        + "is looking. They travel to this phone over the encrypted channel.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Show", (d, w) -> fetchAndShowSeed())
+                .show();
+    }
+
+    private void fetchAndShowSeed() {
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
+                String phrase = null, error = null;
+                try {
+                    org.minima.utils.json.JSONObject res = r.revealSeed();
+                    Object okv = res.get("ok");
+                    if (okv instanceof Boolean && (Boolean) okv) {
+                        phrase = String.valueOf(res.get("phrase"));
+                    } else {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final String fp = phrase, fe = error;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    if (fp == null || fp.isEmpty()) {
+                        Toast.makeText(CloudSettingsActivity.this,
+                                "Couldn't fetch the seed: " + fe, Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    showSeedDialog(fp);
+                });
+            }
+            public void err(String m) {
+                runOnUiThread(() -> Toast.makeText(CloudSettingsActivity.this,
+                        "Couldn't reach your node: " + m, Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    /** FLAG_SECURE numbered reveal + sensitive 60s-self-clearing copy — the app's exact rules. */
+    private void showSeedDialog(String zPhrase) {
+        String[] words = zPhrase.trim().split("\\s+");
+        StringBuilder left = new StringBuilder(), right = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            (i < (words.length + 1) / 2 ? left : right)
+                    .append(i + 1).append(". ").append(words[i]).append('\n');
+        }
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        int pad = PortalUi.dp(this, 20);
+        row.setPadding(pad, PortalUi.dp(this, 10), pad, 0);
+        for (String col : new String[]{left.toString(), right.toString()}) {
+            TextView t = new TextView(this);
+            t.setText(col.trim());
+            t.setTypeface(android.graphics.Typeface.MONOSPACE);
+            t.setTextSize(14);
+            t.setTextIsSelectable(true);
+            t.setTextColor(getColor(R.color.ux_text));
+            row.addView(t, new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        androidx.appcompat.app.AlertDialog d = new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Your 24 words")
+                .setView(row)
+                .setPositiveButton("Close", null)
+                .setNeutralButton("Copy", null)
+                .create();
+        d.setOnShowListener(x -> {
+            if (d.getWindow() != null) {
+                d.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+            }
+            d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
+                    .setOnClickListener(v -> copySeed(zPhrase));   // does NOT dismiss
+        });
+        d.show();
+    }
+
+    private void copySeed(String zPhrase) {
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        android.content.ClipData clip =
+                android.content.ClipData.newPlainText("seed", zPhrase);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            android.os.PersistableBundle extras = new android.os.PersistableBundle();
+            extras.putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true);
+            clip.getDescription().setExtras(extras);
+        }
+        cm.setPrimaryClip(clip);
+        Toast.makeText(this, "Copied — clipboard clears in 60s", Toast.LENGTH_SHORT).show();
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                android.content.ClipData cur = cm.getPrimaryClip();
+                if (cur != null && cur.getItemCount() > 0
+                        && zPhrase.contentEquals(cur.getItemAt(0).coerceToText(this))) {
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("", ""));
+                }
+            } catch (Exception ignored) {
+            }
+        }, 60_000);
+    }
+
+    private byte[] mPendingBackup;   // blob awaiting the SAF location
+
+    private final androidx.activity.result.ActivityResultLauncher<String> mSaveBackup =
+            registerForActivityResult(
+                    new androidx.activity.result.contract.ActivityResultContracts
+                            .CreateDocument("application/octet-stream"),
+                    uri -> {
+                        byte[] blob = mPendingBackup;
+                        mPendingBackup = null;
+                        if (uri == null || blob == null) {
+                            return;
+                        }
+                        try (java.io.OutputStream os =
+                                     getContentResolver().openOutputStream(uri)) {
+                            os.write(blob);
+                            Toast.makeText(this, "Backup saved", Toast.LENGTH_LONG).show();
+                        } catch (Exception e) {
+                            Toast.makeText(this, "Backup failed: " + e.getMessage(),
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    });
+
+    private void promptBackupPassphrase() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = PortalUi.dp(this, 20);
+        box.setPadding(pad, PortalUi.dp(this, 8), pad, 0);
+        final android.widget.EditText p1 = new android.widget.EditText(this);
+        p1.setHint("Passphrase (min 6 characters)");
+        p1.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        box.addView(p1);
+        final android.widget.EditText p2 = new android.widget.EditText(this);
+        p2.setHint("Repeat passphrase");
+        p2.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        box.addView(p2);
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Back up account")
+                .setMessage("Choose a passphrase for the backup file. It is NOT recoverable "
+                        + "if you lose it.")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Create backup", (d, w) -> {
+                    String a = p1.getText().toString();
+                    String b = p2.getText().toString();
+                    if (a.length() < 6) {
+                        Toast.makeText(this, "Use at least 6 characters",
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    if (!a.equals(b)) {
+                        Toast.makeText(this, "Passphrases don't match",
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    exportBackup(a);
+                })
+                .show();
+    }
+
+    private void exportBackup(final String zPassphrase) {
+        Toast.makeText(this, "Building encrypted backup…", Toast.LENGTH_SHORT).show();
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
+                byte[] blob = null;
+                String error = null;
+                try {
+                    org.minima.utils.json.JSONObject res = r.backupExport(zPassphrase);
+                    Object okv = res.get("ok");
+                    if (okv instanceof Boolean && (Boolean) okv) {
+                        blob = java.util.Base64.getDecoder()
+                                .decode(String.valueOf(res.get("blob")));
+                    } else {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final byte[] fb = blob;
+                final String fe = error;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    if (fb == null) {
+                        Toast.makeText(CloudSettingsActivity.this,
+                                "Backup failed: " + fe, Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    mPendingBackup = fb;
+                    mSaveBackup.launch("parlons-cloud-backup.pbk");
+                });
+            }
+            public void err(String m) {
+                runOnUiThread(() -> Toast.makeText(CloudSettingsActivity.this,
+                        "Couldn't reach your node: " + m, Toast.LENGTH_LONG).show());
+            }
+        });
     }
 
     private void loadSettings() {

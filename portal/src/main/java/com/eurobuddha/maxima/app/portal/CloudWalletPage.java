@@ -110,8 +110,19 @@ public final class CloudWalletPage implements Page {
     }
 
     private void rebuild() {
+        boolean first = !mBuilt;
         mBuilt = true;
         Context c = mAct;
+        // Never a blank screen: while the account address is still deriving on the node and no
+        // watch address is set, show a loading card instead of nothing.
+        if (mAddress.isEmpty() && mError.isEmpty()) {
+            mRoot.removeAllViews();
+            mRoot.addView(PortalUi.section(c, "Wallet"));
+            LinearLayout card = PortalUi.card(c);
+            card.addView(PortalUi.label(c, first ? "Opening your account wallet…" : "Loading…"));
+            mRoot.addView(card);
+            return;
+        }
         mRoot.removeAllViews();
 
         if (mAddress.isEmpty()) {
@@ -185,9 +196,158 @@ public final class CloudWalletPage implements Page {
         rec.addView(btns);
         mRoot.addView(rec);
 
+        // --- send from the account wallet (also powers the wallet-detach sweep) ---
+        mRoot.addView(PortalUi.section(c, "Send"));
+        LinearLayout sendCard = PortalUi.card(c);
+        TextView send = PortalUi.button(c, "Send MINIMA");
+        send.setOnClickListener(v -> sendSheet());
+        sendCard.addView(send);
+        sendCard.addView(PortalUi.gap(c, 8));
+        TextView detach = PortalUi.ghost(c, "Detach wallet to this phone…");
+        detach.setOnClickListener(v -> detachFlow());
+        sendCard.addView(detach);
+        sendCard.addView(PortalUi.gap(c, 6));
+        sendCard.addView(PortalUi.label(c, "Detach = move ALL funds to a wallet whose seed "
+                + "lives on this phone (Minima Core). Your cloud identity stays; the VPS "
+                + "goes cold and keeps a watch-only view."));
+        mRoot.addView(sendCard);
+
         if (!mError.isEmpty()) {
             mRoot.addView(PortalUi.label(c, "Balance note: " + mError));
         }
+    }
+
+    /** Send from the ACCOUNT wallet to any Minima address — one confirm naming amount+address
+     *  in full (this signs and broadcasts a real transaction). */
+    private void sendSheet() {
+        android.widget.LinearLayout box = new android.widget.LinearLayout(mAct);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = PortalUi.dp(mAct, 20);
+        box.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
+        final EditText addr = new EditText(mAct);
+        addr.setHint("Mx… or 0x… address");
+        addr.setSingleLine(true);
+        box.addView(addr);
+        final EditText amt = new EditText(mAct);
+        amt.setHint("Amount (MINIMA)");
+        amt.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        box.addView(amt);
+        new AlertDialog.Builder(mAct)
+                .setTitle("Send MINIMA")
+                .setMessage("Signed on your cloud node with one guarded key use.")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Continue", (d, w) -> confirmSend(
+                        addr.getText().toString().trim(), amt.getText().toString().trim()))
+                .show();
+    }
+
+    private void confirmSend(String zTo, String zAmount) {
+        if (zTo.isEmpty() || zAmount.isEmpty()) {
+            mAct.toast("Address and amount needed");
+            return;
+        }
+        new AlertDialog.Builder(mAct)
+                .setTitle("Send " + zAmount + " MINIMA?")
+                .setMessage("To:\n" + zTo + "\n\nThis signs and broadcasts a real transaction "
+                        + "and cannot be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Sign & send", (d, w) -> doWalletSend(zTo, zAmount))
+                .show();
+    }
+
+    private void doWalletSend(String zTo, String zAmount) {
+        mAct.toast("Building on your node…");
+        CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String error = null;
+                try {
+                    JSONObject res = r.walletSend(zTo, zAmount);
+                    Object okv = res.get("ok");
+                    if (!(okv instanceof Boolean) || !((Boolean) okv)) {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final String err = error;
+                mAct.runOnUiThread(() -> {
+                    mAct.toast(err == null
+                            ? "Signing & broadcasting — watch the balance" : "Send failed: " + err);
+                    mLastLoad = 0;
+                    render();
+                });
+            }
+            public void err(String m) {
+                mAct.runOnUiThread(() -> mAct.toast("Send failed: " + m));
+            }
+        });
+    }
+
+    /** The resync flow (user decision: the new seed lives ON THE DEVICE): sweep everything to
+     *  a Minima Core wallet on this phone, then watch that address from the cloud. */
+    private void detachFlow() {
+        boolean coreInstalled;
+        try {
+            mAct.getPackageManager().getPackageInfo("org.minimarex.minimacore", 0);
+            coreInstalled = true;
+        } catch (Exception e) {
+            coreInstalled = false;
+        }
+        if (!coreInstalled) {
+            new AlertDialog.Builder(mAct)
+                    .setTitle("Minima Core needed")
+                    .setMessage("The detached wallet lives in Minima Core on this phone — its "
+                            + "seed never touches the VPS. Install it first (Settings → Minima "
+                            + "Core on this phone), create a wallet there, then come back.")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+        android.widget.LinearLayout box = new android.widget.LinearLayout(mAct);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = PortalUi.dp(mAct, 20);
+        box.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
+        final EditText addr = new EditText(mAct);
+        addr.setHint("Mx… address from Minima Core");
+        addr.setSingleLine(true);
+        box.addView(addr);
+        new AlertDialog.Builder(mAct)
+                .setTitle("Detach wallet to this phone")
+                .setMessage("1. In Minima Core: Wallet → Receive → copy your address.\n"
+                        + "2. Paste it below. ALL sendable funds sweep to it in one "
+                        + "transaction, and the cloud switches to watching that address.\n\n"
+                        + "Your cloud IDENTITY is untouched — chats, calls and contacts keep "
+                        + "working exactly as before.")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Continue", (d, w) -> confirmDetach(
+                        addr.getText().toString().trim()))
+                .show();
+    }
+
+    private void confirmDetach(String zTo) {
+        if (!zTo.startsWith("Mx") && !zTo.startsWith("0x")) {
+            mAct.toast("That doesn't look like a Minima address");
+            return;
+        }
+        String amount = mSendable.isEmpty() ? "" : mSendable;
+        if (amount.isEmpty() || "0".equals(amount)) {
+            mAct.toast("Nothing sendable right now — sync first or wait for confirmations");
+            return;
+        }
+        final String amt = amount;
+        new AlertDialog.Builder(mAct)
+                .setTitle("Sweep " + amt + " MINIMA?")
+                .setMessage("Everything sendable goes to:\n" + zTo + "\n\nThe cloud then "
+                        + "watches this address read-only. This signs a real transaction and "
+                        + "cannot be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Sweep & detach", (d, w) -> {
+                    doWalletSend(zTo, amt);
+                    setWatch(zTo);
+                })
+                .show();
     }
 
     private void setWatch(String address) {
