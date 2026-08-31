@@ -542,33 +542,44 @@ public final class ParlonsControl {
             if (peer.isEmpty()) {
                 return bytes(err("peer required"));
             }
-            int n = mChat.clearConversation(peer);
-            JSONObject out = ok();
-            out.put("cleared", n);
-            return bytes(out);
+            // clearConversation does a whole-file rewrite per removed message (the chat store
+            // isn't write-behind) — off the pump so a big thread can't hold the node lock.
+            final String fpeer = peer;
+            mSendExec.execute(() -> {
+                try { mChat.clearConversation(fpeer); } catch (Exception ignored) { }
+            });
+            return bytes(ok());
         });
 
         // --- search: names, group names, message bodies (media captions + payment previews;
         //     voice-note waveform hex excluded) — the app's SearchActivity matching ---
         zReg.register(M_CHAT_SEARCH, req -> {
             requireAuth(req);
-            String q = str(parse(req), "q").trim().toLowerCase();
+            String q = str(parse(req), "q").trim().toLowerCase(java.util.Locale.ROOT);
             JSONObject out = ok();
             JSONArray convs = new JSONArray();
             JSONArray msgs = new JSONArray();
             if (!q.isEmpty()) {
+                int convCap = 40;
                 for (Contact c : mNode.contacts()) {
                     String nm = c.name == null ? "" : c.name;
-                    if (nm.toLowerCase().contains(q) || safe(c.publicKey).toLowerCase().contains(q)) {
+                    if (nm.toLowerCase(java.util.Locale.ROOT).contains(q)
+                            || safe(c.publicKey).toLowerCase(java.util.Locale.ROOT).contains(q)) {
                         JSONObject o = new JSONObject();
                         o.put("peer", safe(c.publicKey));
                         o.put("name", nm.isEmpty() ? safe(c.publicKey) : nm);
                         o.put("group", false);
                         convs.add(o);
+                        if (convs.size() >= convCap) {
+                            break;
+                        }
                     }
                 }
                 for (com.eurobuddha.maxima.core.chat.Group g : mChat.groups()) {
-                    if (g.name != null && g.name.toLowerCase().contains(q)) {
+                    if (convs.size() >= convCap) {
+                        break;
+                    }
+                    if (g.name != null && g.name.toLowerCase(java.util.Locale.ROOT).contains(q)) {
                         JSONObject o = new JSONObject();
                         o.put("peer", g.id);
                         o.put("name", g.name);
@@ -576,27 +587,31 @@ public final class ParlonsControl {
                         convs.add(o);
                     }
                 }
-                int cap = 60;
-                java.util.List<ChatEngine.Summary> sums = mChat.summaries();
-                outer:
-                for (ChatEngine.Summary s : sums) {
-                    for (ChatEngine.Entry e : mChat.conversation(s.conversation)) {
-                        String body = searchable(e.body);
-                        if (body.toLowerCase().contains(q)) {
-                            JSONObject o = new JSONObject();
-                            o.put("peer", safe(s.conversation));
-                            o.put("name", nameFor(s.conversation));
-                            o.put("group", mChat.group(s.conversation) != null);
-                            o.put("id", safe(e.id));
-                            o.put("body", body);
-                            o.put("time", e.time);
-                            o.put("mine", e.mine);
-                            msgs.add(o);
-                            if (msgs.size() >= cap) {
-                                break outer;
-                            }
-                        }
+                // SINGLE pass over all messages (mChat.conversation per-summary rescans the whole
+                // store — O(convs × messages)); collect hits, sort newest-first, then cap.
+                java.util.List<ChatEngine.Entry> hits = new java.util.ArrayList<>();
+                for (ChatEngine.Entry e : mChat.allMessages()) {
+                    if (searchable(e.body).toLowerCase(java.util.Locale.ROOT).contains(q)) {
+                        hits.add(e);
                     }
+                }
+                hits.sort((a, b) -> Long.compare(b.time, a.time));   // newest first
+                int cap = 60;
+                for (ChatEngine.Entry e : hits) {
+                    if (msgs.size() >= cap) {
+                        break;
+                    }
+                    String conv = e.isGroup() ? e.groupId : e.peer;
+                    JSONObject o = new JSONObject();
+                    o.put("peer", safe(conv));
+                    o.put("name", nameFor(conv));
+                    o.put("group", e.isGroup());
+                    o.put("id", safe(e.id));
+                    // Snippet only — the whole reply must fit one 256K wire message.
+                    o.put("body", snippet(searchable(e.body), q));
+                    o.put("time", e.time);
+                    o.put("mine", e.mine);
+                    msgs.add(o);
                 }
             }
             out.put("conversations", convs);
@@ -639,30 +654,44 @@ public final class ParlonsControl {
             if (g == null) {
                 return bytes(err("no such group"));
             }
-            if (!g.isAdmin(mNode.publicKeyHex())) {
+            String me = mNode.publicKeyHex();
+            if (!g.isAdmin(me)) {
                 return bytes(err("only an admin can change the group"));
             }
+            // Mutate a COPY off the shared live instance — sendGroup fan-out and the resend
+            // loop iterate the live group's sets concurrently. updateGroup persists + swaps it.
+            com.eurobuddha.maxima.core.chat.Group edit =
+                    new com.eurobuddha.maxima.core.chat.Group(g.id);
+            edit.name = g.name;
+            edit.setMembers(g.members());
+            edit.setAdmins(g.admins());
             String newName = str(in, "name").trim();
             if (!newName.isEmpty()) {
-                g.name = newName;
+                edit.name = newName;
             }
             JSONArray mems = (JSONArray) in.get("members");
             if (mems != null) {
-                java.util.List<String> keys = new java.util.ArrayList<>();
+                java.util.Set<String> keep = new java.util.HashSet<>();
                 for (Object o : mems) {
-                    keys.add(String.valueOf(o));
+                    keep.add(com.eurobuddha.maxima.core.identity.Keys.norm(String.valueOf(o)));
                 }
-                keys.add(mNode.publicKeyHex());   // never drop myself
-                g.setMembers(keys);
-                g.addAdmin(mNode.publicKeyHex());
+                keep.add(com.eurobuddha.maxima.core.identity.Keys.norm(me));   // never drop myself
+                edit.setMembers(keep);
+                // A removed member must lose admin too, or pushRoster re-adds them everywhere
+                // (handleRoster addMember's every admin) and they stay authorized.
+                for (String a : new java.util.ArrayList<>(edit.admins())) {
+                    if (!keep.contains(com.eurobuddha.maxima.core.identity.Keys.norm(a))) {
+                        edit.removeAdmin(a);
+                    }
+                }
+                edit.addAdmin(me);
             }
-            // updateGroup pushes the roster to members — blocking, off the pump.
-            final com.eurobuddha.maxima.core.chat.Group fg = g;
+            final com.eurobuddha.maxima.core.chat.Group fg = edit;
             mSendExec.execute(() -> {
                 try { mChat.updateGroup(fg); } catch (Exception ignored) { }
             });
             JSONObject out = ok();
-            out.put("name", g.name);
+            out.put("name", edit.name);
             return bytes(out);
         });
 
@@ -1039,6 +1068,7 @@ public final class ParlonsControl {
                     ev.put("type", "walletfail");
                     ev.put("to", fto);
                     ev.put("error", why);
+                    ev.put("pid", fpid);
                     push(ev);
                 }
             });
@@ -1250,7 +1280,10 @@ public final class ParlonsControl {
         ev.put("peer", e.isGroup() ? e.groupId : e.peer);
         ev.put("group", e.isGroup());
         ev.put("sender", safe(e.sender));
-        ev.put("name", nameFor(e.isGroup() ? e.groupId : e.peer));
+        ev.put("name", nameFor(e.isGroup() ? e.groupId : e.peer));   // conversation name (notifier)
+        if (e.isGroup()) {
+            ev.put("sname", nameFor(e.sender));   // who spoke — the bubble's sender label
+        }
         // FULL body: the portal now renders pushed messages directly, and a media body's
         // manifest routinely exceeds any preview cap — truncation broke pushed photo bubbles.
         // An inline chat message already fit one wire message; the 256K ceiling is far away.
@@ -1335,6 +1368,20 @@ public final class ParlonsControl {
     private static long lngOf(JSONObject o, String key) {
         Object v = o.get(key);
         return v instanceof Number ? ((Number) v).longValue() : 0L;
+    }
+
+    /** ~200-char snippet around the first case-insensitive hit — keeps the search reply well
+     *  under the 256K wire ceiling regardless of how long the matched message is. */
+    private static String snippet(String zText, String zQueryLower) {
+        String low = zText.toLowerCase(java.util.Locale.ROOT);
+        int at = low.indexOf(zQueryLower);
+        if (at < 0) {
+            return zText.length() > 200 ? zText.substring(0, 200) : zText;
+        }
+        int start = Math.max(0, at - 40);
+        int end = Math.min(zText.length(), at + zQueryLower.length() + 120);
+        return (start > 0 ? "…" : "") + zText.substring(start, end)
+                + (end < zText.length() ? "…" : "");
     }
 
     /** A message body reduced to searchable text: media → its caption, payment → its preview,

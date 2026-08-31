@@ -424,11 +424,12 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_CHAT_CLEAR, p);
     }
 
-    /** Search contacts, group names and message bodies. */
+    /** Search contacts, group names and message bodies. Short leash, NO retry ladder — a
+     *  keystroke-driven query must never hold the interactive lane for 90s on a bad network. */
     public JSONObject search(String zQuery) throws Exception {
         JSONObject p = new JSONObject();
         p.put("q", zQuery);
-        return rpc(ParlonsControl.M_CHAT_SEARCH, p);
+        return callOnce(ParlonsControl.M_CHAT_SEARCH, p, 12_000);
     }
 
     /** Group roster + admins. */
