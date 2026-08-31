@@ -49,12 +49,45 @@ public final class ParlonsRemote {
     /** Attach to the fleet and resolve the cloud account's live address from its MAX# (or use a
      *  bare {@code Mx…@host:port} as-is). Call once before any command. */
     public void connect(String zCloudAddress) throws Exception {
+        connect(zCloudAddress, null);
+    }
+
+    /**
+     * Connect with a FAST PATH: if the caller remembered the account's last resolved live
+     * address, probe it with one short ping before falling into the MLS resolve ladder
+     * (12×2.5s worst case). An always-on account rarely moves, so a warm reconnect usually
+     * skips the ladder entirely — this is most of the cold-start delay.
+     */
+    public void connect(String zCloudAddress, String zCachedLive) throws Exception {
         mNode.start(new ArrayList<>(Bootstrap.RELAYS), 30_000);
         for (int i = 0; i < 10 && mNode.rpc().myAddresses().isEmpty(); i++) {
             mNode.maintain(20_000);
             Thread.sleep(1000);
         }
+        if (zCachedLive != null && !zCachedLive.isEmpty() && zCloudAddress.startsWith("MAX#")) {
+            mCloudMax = zCloudAddress;
+            mCloudLive = zCachedLive;
+            try {
+                callOnce(ParlonsControl.M_PING, new JSONObject(), 8_000);
+                startPump();
+                return;                       // warm reconnect — ladder skipped
+            } catch (Exception probeFailed) {
+                // stale address — fall through to the full resolve
+            }
+        }
         resolve(zCloudAddress);
+        startPump();
+    }
+
+    /** The account's currently resolved live address — cache it for the next warm reconnect. */
+    public String liveAddress() {
+        return mCloudLive;
+    }
+
+    private void startPump() {
+        if (mPump != null) {
+            return;
+        }
         mPump = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "parlons-remote-maint");
             t.setDaemon(true);
@@ -107,6 +140,10 @@ public final class ParlonsRemote {
     }
 
     private JSONObject callOnce(String zMethod, JSONObject zPayload) throws Exception {
+        return callOnce(zMethod, zPayload, 30_000);
+    }
+
+    private JSONObject callOnce(String zMethod, JSONObject zPayload, long zTimeoutMs) throws Exception {
         final CompletableFuture<String> fut = new CompletableFuture<>();
         byte[] payload = (zPayload == null ? new JSONObject() : zPayload)
                 .toString().getBytes(StandardCharsets.UTF_8);
@@ -117,8 +154,8 @@ public final class ParlonsRemote {
             public void onError(String m) {
                 fut.completeExceptionally(new RuntimeException(m));
             }
-        }, 30_000);
-        String resp = fut.get(35, TimeUnit.SECONDS);
+        }, zTimeoutMs);
+        String resp = fut.get(zTimeoutMs + 5_000, TimeUnit.MILLISECONDS);
         Object o = new JSONParser().parse(resp);
         return o instanceof JSONObject ? (JSONObject) o : new JSONObject();
     }
@@ -255,6 +292,14 @@ public final class ParlonsRemote {
         if (zBefore > 0) {
             p.put("before", zBefore);
         }
+        return rpc(ParlonsControl.M_CONVERSATION, p);
+    }
+
+    /** Delta poll: only entries NEWER than the cursor (tiny reply — the cheap fallback poll). */
+    public JSONObject conversationAfter(String zPeer, long zAfter) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("peer", zPeer);
+        p.put("after", zAfter);
         return rpc(ParlonsControl.M_CONVERSATION, p);
     }
 

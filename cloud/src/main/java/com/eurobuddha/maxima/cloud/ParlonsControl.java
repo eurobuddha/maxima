@@ -386,10 +386,16 @@ public final class ParlonsControl {
                 limit = 100;
             }
             long before = lngOf(in, "before");
+            long after = lngOf(in, "after");
             java.util.List<ChatEngine.Entry> entries = mChat.conversation(peer);
             entries.sort((a, b) -> Long.compare(a.time, b.time));
             if (before > 0) {
                 entries.removeIf(e -> e.time >= before);
+            }
+            if (after > 0) {
+                // Delta poll: only entries NEWER than the cursor — tiny replies, so the
+                // fallback poll stops re-shipping the whole page every few seconds.
+                entries.removeIf(e -> e.time <= after);
             }
             if (entries.size() > limit) {
                 entries = entries.subList(entries.size() - limit, entries.size());
