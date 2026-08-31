@@ -129,6 +129,28 @@ public final class ParlonsCore {
             public boolean relayOn()   { return relayRunning(); }
             public int meshPeers()     { return mCfg.meshPeers.size(); }
         });
+        // Account settings — persisted across restarts (the engine's flags are volatile).
+        mSettingsFile = new File(base, "cloud-settings.properties");
+        loadSettings();
+        mChat.setSendReadReceipts(readReceiptsSetting());
+        mControl.setSettingsSink(new ParlonsControl.SettingsSink() {
+            public boolean readReceipts() {
+                return readReceiptsSetting();
+            }
+            public void setReadReceipts(boolean zSend) {
+                mChat.setSendReadReceipts(zSend);
+                mSettings.setProperty("readreceipts", String.valueOf(zSend));
+                saveSettings();
+            }
+        });
+        mControl.setPaySource(new ParlonsControl.PaySource() {
+            public String myWalletAddress() {
+                return mWalletMx;
+            }
+            public CloudPaymentSender sender() {
+                return mPaymentSender;
+            }
+        });
         mControl.registerOn(mNode.services());
         mChat.setListener(loggingListener());
         // Inbound CALL signals for the account ring the paired devices (WebRTC terminates on the
@@ -156,6 +178,7 @@ public final class ParlonsCore {
     public int start() {
         mRunning = true;
         mStartedAt = System.currentTimeMillis();
+        openAccountWallet();
 
         // 1. Attach the client half to the fleet (bootstrap + configured extras).
         LinkedHashSet<String> relays = new LinkedHashSet<>(Bootstrap.RELAYS);
@@ -281,6 +304,63 @@ public final class ParlonsCore {
         mMaint.scheduleWithFixedDelay(() -> {
             try { mNode.publishToMls(); } catch (Exception ignored) { }
         }, 8, 300, TimeUnit.SECONDS);
+    }
+
+    // ---- the account's own wallet (the Parlons pattern: the seed IS the wallet) ----
+    private volatile CloudWallet mAccountWallet;
+    private volatile CloudPaymentSender mPaymentSender;
+    private volatile String mWalletMx = "";
+
+    /**
+     * Open the account wallet off-thread (the first WOTS address derivation takes seconds),
+     * publish the pay source, track our script on the gateway (so our coins carry proofs —
+     * idempotent, can never move funds) and share our receive address with every contact,
+     * exactly as the app does when a chat opens.
+     */
+    private void openAccountWallet() {
+        Thread t = new Thread(() -> {
+            try {
+                CloudWallet w = CloudWallet.open(mIdentity, new File(mDataDir.toFile(), "wallet"));
+                w.ensureAddress();
+                mWalletMx = w.mxAddress();
+                mAccountWallet = w;
+                mPaymentSender = new CloudPaymentSender(w, mWallet);
+                log("account wallet ready: " + mWalletMx
+                        + " (key uses " + w.uses() + " / " + CloudWallet.MAX_USES + ")");
+                try { mWallet.trackScript(w.script()); } catch (Exception ignored) { }
+                for (com.eurobuddha.maxima.core.contacts.Contact c : mNode.contacts()) {
+                    try { mChat.shareWalletAddress(c, mWalletMx); } catch (Exception ignored) { }
+                }
+            } catch (Exception e) {
+                log("account wallet failed to open: " + e.getMessage());
+            }
+        }, "parlons-wallet-open");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    // ---- persisted account settings (read receipts etc.) ----
+    private final java.util.Properties mSettings = new java.util.Properties();
+    private File mSettingsFile;
+
+    private void loadSettings() {
+        try (java.io.FileInputStream in = new java.io.FileInputStream(mSettingsFile)) {
+            mSettings.load(in);
+        } catch (Exception ignored) {
+            // first boot — defaults apply
+        }
+    }
+
+    private synchronized void saveSettings() {
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(mSettingsFile)) {
+            mSettings.store(out, "parlons cloud account settings");
+        } catch (Exception e) {
+            log("could not save settings: " + e.getMessage());
+        }
+    }
+
+    private boolean readReceiptsSetting() {
+        return Boolean.parseBoolean(mSettings.getProperty("readreceipts", "true"));
     }
 
     /** Per-peer receipt-heal rate limit (peer key → last heal attempt millis). */

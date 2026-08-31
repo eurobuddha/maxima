@@ -66,6 +66,60 @@ public final class WatchWallet {
         return gateway("balance megammr:true address:" + addr);
     }
 
+    // ---- the spend-side surface (mirrors the phone's WalletPublisher, synchronous) ----
+    // Signing NEVER happens here: the gateway token is read+relay-only. These carry reads and
+    // the pre-signed txnimport → txnbasics → txnpost relay for CloudPaymentSender.
+
+    /** Run one gateway command (synchronous). */
+    public JSONObject cmd(String zCommand) throws Exception {
+        return gateway(zCommand);
+    }
+
+    /** Spendable coins (with MegaMMR proofs known to the gateway node) at an address. */
+    public JSONObject coins(String zHexAddress) throws Exception {
+        return gateway("coins megammr:true address:" + zHexAddress);
+    }
+
+    /** Ask the gateway node to track our address script so our coins carry proofs. */
+    public JSONObject trackScript(String zScript) throws Exception {
+        return gateway("newscript trackall:true script:\"" + zScript + "\"");
+    }
+
+    /**
+     * Publish a LOCALLY-SIGNED txn: txnimport → txnbasics (gateway attaches the MMR proofs and
+     * scripts) → txnpost. Family hard rule: EVERY error path runs txndelete so a failed send
+     * never leaves a dangling signed txn row on the gateway node.
+     */
+    public JSONObject publish(String zImportCmd, String zId, String zPostCmd) throws Exception {
+        try {
+            JSONObject r1 = gateway(zImportCmd);
+            if (!Boolean.TRUE.equals(r1.get("status"))) {
+                throw new Exception("txnimport: " + errOf(r1));
+            }
+            JSONObject r2 = gateway("txnbasics id:" + zId);
+            if (!Boolean.TRUE.equals(r2.get("status"))) {
+                throw new Exception("txnbasics: " + errOf(r2));
+            }
+            JSONObject r3 = gateway(zPostCmd);
+            if (!Boolean.TRUE.equals(r3.get("status"))) {
+                throw new Exception("txnpost: " + errOf(r3));
+            }
+            return r3;
+        } catch (Exception e) {
+            cleanupTxn(zId);   // every txn error path runs txndelete (family hard rule)
+            throw e;
+        }
+    }
+
+    private void cleanupTxn(String zId) {
+        try { gateway("txndelete id:" + zId); } catch (Exception ignored) { }
+    }
+
+    private static String errOf(JSONObject r) {
+        Object e = r.get("error");
+        return e == null ? r.toString() : String.valueOf(e);
+    }
+
     private JSONObject gateway(String command) throws Exception {
         HttpURLConnection c = null;
         try {

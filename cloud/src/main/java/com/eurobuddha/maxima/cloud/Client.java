@@ -182,6 +182,20 @@ public final class Client {
                 requireArg(rest, "markread <peer key>");
                 report(r.markRead(rest.get(1)), "marked read ✓");
                 break;
+            case "pay": {
+                if (rest.size() < 3) {
+                    System.err.println("usage: pay <peer key> <amount> [memo…]");
+                    System.exit(2);
+                }
+                StringBuilder memo = new StringBuilder();
+                for (int i = 3; i < rest.size(); i++) {
+                    if (i > 3) memo.append(' ');
+                    memo.append(rest.get(i));
+                }
+                report(r.pay(rest.get(1), rest.get(2), memo.toString()),
+                        "payment building on your node ✓ (watch the chat bubble)");
+                break;
+            }
             case "status": {
                 JSONObject o = r.nodeStatus();
                 if (!isOk(o)) { fail(o); break; }
@@ -313,6 +327,7 @@ public final class Client {
         System.out.println("  chats                  conversation summaries");
         System.out.println("  read <peer key>        a conversation");
         System.out.println("  send <peer key> <msg>  send a message");
+        System.out.println("  pay <key> <amt> [memo] pay a contact from the ACCOUNT's wallet");
         System.out.println("  wallet address         your account's watch-only address");
         System.out.println("  wallet set <Mx>        set the address to watch (funds stay on your device)");
         System.out.println("  wallet balance         watch-only balance (read-only; the node can't spend)");

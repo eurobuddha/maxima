@@ -20,12 +20,32 @@ dependencies {
     implementation project(':core')
     implementation project(':server')   // RelayRuntime/RelayServer — the in-process pool relay
     implementation project(':minima-common')  // org.minima.utils.json — control-channel payloads
+    implementation 'org.json:json:20231013'   // used by the grafted wallet stack (Util.java)
     testImplementation 'junit:junit:4.13.2'
 }
 
 // JUnit tests live in src/junit/java (mirrors :server), keeping any main()-style
 // live harnesses out of the hermetic `./gradlew :cloud:test` run.
+//
+// The main source set ALSO grafts the APK's fully-local wallet stack straight from
+// :app's tree (same pattern as :desktop) — key-#1000 derivation, txn build and
+// Winternitz signing run ON THE NODE, which holds the account seed. Only the
+// Android-coupled helpers are excluded (reimplemented here as CloudKeyUses).
 sourceSets {
+    main {
+        java {
+            srcDir '../app/src/main/java'
+            include 'com/eurobuddha/maxima/cloud/**'
+            include 'org/minima/**'
+            include 'com/eurobuddha/wallet/**'
+            exclude 'com/eurobuddha/wallet/Identicon.java'      // android Bitmap
+            exclude 'com/eurobuddha/wallet/PrefsKeyUses.java'   // android prefs
+            exclude 'com/eurobuddha/wallet/ImageLoader.java'    // android Bitmap/Base64/AndroidSVG
+            exclude 'com/eurobuddha/wallet/ImageTools.java'     // android-adjacent
+            exclude 'com/eurobuddha/wallet/IconResolver.java'   // android.util.Base64
+            exclude 'com/eurobuddha/wallet/TokenMeta.java'      // calls IconResolver
+        }
+    }
     test { java.srcDirs = ['src/junit/java'] }
 }
 

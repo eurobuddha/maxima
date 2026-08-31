@@ -360,6 +360,34 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_CONTACT_RESOLVE, p);
     }
 
+    /** Pay a contact from the ACCOUNT's wallet (built+signed on the node, gateway-relayed).
+     *  Returns fast with state "building"; the bubble + its states arrive via push. */
+    public JSONObject pay(String zPeer, String zAmount, String zMemo) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("peer", zPeer);
+        p.put("amount", zAmount);
+        p.put("memo", zMemo == null ? "" : zMemo);
+        return rpc(ParlonsControl.M_PAY, p);
+    }
+
+    /** Account settings: {readReceipts}. */
+    public JSONObject settings() throws Exception {
+        return rpc(ParlonsControl.M_SETTINGS_GET, new JSONObject());
+    }
+
+    public JSONObject setReadReceipts(boolean zSend) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("readReceipts", zSend);
+        return rpc(ParlonsControl.M_SETTINGS_SET, p);
+    }
+
+    /** Remove a contact from the account (the peer is told, classic-style). */
+    public JSONObject removeContact(String zKey) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("key", zKey);
+        return rpc(ParlonsControl.M_CONTACT_REMOVE, p);
+    }
+
     /** Mark a conversation read on the account (clears unread; sends the read receipt if the
      *  account allows it). */
     public JSONObject markRead(String zPeer) throws Exception {

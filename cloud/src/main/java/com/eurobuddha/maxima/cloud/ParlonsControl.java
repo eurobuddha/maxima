@@ -51,6 +51,10 @@ public final class ParlonsControl {
     public static final String DEVICE_PUSH    = "parlons.push";
     public static final String M_MEDIA_UP     = "parlons.media.up";
     public static final String M_GROUP_CREATE = "parlons.group.create";
+    public static final String M_SETTINGS_GET = "parlons.settings.get";
+    public static final String M_SETTINGS_SET = "parlons.settings.set";
+    public static final String M_CONTACT_REMOVE = "parlons.contacts.remove";
+    public static final String M_PAY          = "parlons.chat.pay";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -161,6 +165,31 @@ public final class ParlonsControl {
     /** Wire the node telemetry source. Set before the node starts serving requests. */
     public void setStatusSource(StatusSource zSource) {
         mStatus = zSource;
+    }
+
+    /** Account settings owned by {@link ParlonsCore} (it persists them across restarts). */
+    public interface SettingsSink {
+        boolean readReceipts();
+        void setReadReceipts(boolean zSend);
+    }
+
+    private volatile SettingsSink mSettingsSink;
+
+    public void setSettingsSink(SettingsSink zSink) {
+        mSettingsSink = zSink;
+    }
+
+    /** The account's own wallet (the Parlons pattern: the seed IS the wallet). Wired by
+     *  {@link ParlonsCore} once the heavy WOTS derivation has run off-thread. */
+    public interface PaySource {
+        String myWalletAddress();          // Mx… receive address ("" until derived)
+        CloudPaymentSender sender();       // null until the wallet is open
+    }
+
+    private volatile PaySource mPaySource;
+
+    public void setPaySource(PaySource zSource) {
+        mPaySource = zSource;
     }
 
     public void registerOn(ServiceRegistry zReg) {
@@ -605,6 +634,105 @@ public final class ParlonsControl {
             return bytes(out);
         });
 
+        // --- in-chat payments: the Parlons pattern — the account seed IS the wallet. Build +
+        //     sign on THIS node, publish via the read+relay gateway, bubble via ChatPay. ---
+        zReg.register(M_PAY, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String peer = str(in, "peer");
+            String amount = str(in, "amount").trim();
+            final String memo = str(in, "memo");
+            final Contact c = mNode.contact(peer);
+            if (c == null) {
+                return bytes(err("unknown contact " + peer));
+            }
+            if (mChat.group(peer) != null) {
+                return bytes(err("payments are one-to-one for now"));
+            }
+            PaySource ps = mPaySource;
+            if (ps == null || ps.sender() == null) {
+                return bytes(err("the account wallet is still opening — try again in a moment"));
+            }
+            final org.minima.objects.base.MiniNumber amt;
+            try {
+                amt = new org.minima.objects.base.MiniNumber(amount);
+            } catch (Exception e) {
+                return bytes(err("that amount doesn't look right"));
+            }
+            if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
+                return bytes(err("the amount must be more than zero"));
+            }
+            final String to = mChat.walletAddress(peer);
+            if (to == null || to.isEmpty()) {
+                return bytes(err("no wallet address from them yet — ask them to open this chat"));
+            }
+            final CloudPaymentSender sender = ps.sender();
+            // Build+sign+publish are blocking network work — the send lane, never the pump.
+            // States flow to devices as pushes: QUEUED bubble at sign time, SENT on publish,
+            // FAILED (or a payfail toast) if anything breaks.
+            mSendExec.execute(() -> {
+                ChatEngine.Entry e = null;
+                try {
+                    CloudPaymentSender.Built built = sender.build(to, amt);
+                    e = mChat.beginPayment(c, amt.toString(), "Minima", memo, built.txid);
+                    sender.publish(built);
+                    mChat.completePayment(c, e);
+                    mNode.log("payment " + amt + " → " + safe(c.name) + " txid " + built.txid);
+                } catch (Exception ex) {
+                    String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                    if (e != null) {
+                        mChat.failPayment(e);
+                    }
+                    mNode.log("payment to " + safe(c.name) + " FAILED: " + why);
+                    JSONObject ev = new JSONObject();
+                    ev.put("type", "payfail");
+                    ev.put("peer", safe(c.publicKey));
+                    ev.put("error", why);
+                    push(ev);
+                }
+            });
+            JSONObject out = ok();
+            out.put("state", "building");
+            return bytes(out);
+        });
+
+        // --- account settings (persisted by ParlonsCore across restarts) ---
+        zReg.register(M_SETTINGS_GET, req -> {
+            requireAuth(req);
+            SettingsSink s = mSettingsSink;
+            JSONObject out = ok();
+            out.put("readReceipts", s != null && s.readReceipts());
+            return bytes(out);
+        });
+        zReg.register(M_SETTINGS_SET, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            SettingsSink s = mSettingsSink;
+            if (s == null) {
+                return bytes(err("settings unavailable"));
+            }
+            Object rr = in.get("readReceipts");
+            if (rr instanceof Boolean) {
+                s.setReadReceipts((Boolean) rr);
+            }
+            JSONObject out = ok();
+            out.put("readReceipts", s.readReceipts());
+            return bytes(out);
+        });
+
+        // --- contacts: remove (tells the peer, classic-style; network send off the pump) ---
+        zReg.register(M_CONTACT_REMOVE, req -> {
+            requireAuth(req);
+            String key = str(parse(req), "key");
+            if (key.isEmpty() || mNode.contact(key) == null) {
+                return bytes(err("no such contact"));
+            }
+            mSendExec.execute(() -> {
+                try { mNode.removeContact(key); } catch (Exception ignored) { }
+            });
+            return bytes(ok());
+        });
+
         // --- groups: core is fully group-capable; expose create (roster pushes to members). ---
         zReg.register(M_GROUP_CREATE, req -> {
             requireAuth(req);
@@ -639,11 +767,16 @@ public final class ParlonsControl {
             return bytes(out);
         });
 
-        // --- watch-only wallet (funds stay COLD on the device; the node only reads) ---
+        // --- the account wallet: receive = the account's own address (the Parlons pattern);
+        //     a device can still point the WATCH at a different (cold) address instead. ---
         zReg.register(M_WALLET_ADDR, req -> {
             requireAuth(req);
+            PaySource ps = mPaySource;
+            String own = ps == null ? "" : safe(ps.myWalletAddress());
+            String watch = safe(mWallet.watchAddress());
             JSONObject out = ok();
-            out.put("address", safe(mWallet.watchAddress()));
+            out.put("address", watch.isEmpty() ? own : watch);
+            out.put("own", own);
             return bytes(out);
         });
         zReg.register(M_WALLET_SET, req -> {
@@ -657,9 +790,16 @@ public final class ParlonsControl {
         });
         zReg.register(M_WALLET_BAL, req -> {
             requireAuth(req);
-            JSONObject bal = mWallet.balance();   // gateway read; throws if unset → ERROR envelope
+            PaySource ps = mPaySource;
+            String own = ps == null ? "" : safe(ps.myWalletAddress());
+            String watch = safe(mWallet.watchAddress());
+            String addr = watch.isEmpty() ? own : watch;
+            if (addr.isEmpty()) {
+                return bytes(err("wallet still opening — try again in a moment"));
+            }
+            JSONObject bal = mWallet.cmd("balance megammr:true address:" + addr);
             JSONObject out = ok();
-            out.put("address", safe(mWallet.watchAddress()));
+            out.put("address", addr);
             out.put("balance", bal);
             return bytes(out);
         });
