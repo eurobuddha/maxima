@@ -81,6 +81,8 @@ public final class PortalService extends Service {
                 if (r != null) {
                     r.registerPush();
                     CloudSession.notePushAlive();   // acked → screens can relax their polls
+                    // Keep the warm-reconnect address fresh if the account moved mid-session.
+                    CloudSession.noteLiveAddress(getApplicationContext(), r.liveAddress());
                 }
             } catch (Exception ignored) {
             }

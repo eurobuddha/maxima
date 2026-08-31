@@ -277,7 +277,7 @@ public final class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Unpair", (d, w) -> {
                     CloudSession.setPaired(this, false);
-                    CloudSession.reset();
+                    CloudSession.reset(this);
                     startActivity(new Intent(this, OnboardingActivity.class));
                     finish();
                 })

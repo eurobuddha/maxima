@@ -134,6 +134,15 @@ public final class CloudSession {
         });
     }
 
+    /** Bumped by reset(): an in-flight connect must not publish a remote for a DEAD session. */
+    private static volatile int sGen;
+
+    /** The warm-address cache key — scoped PER ACCOUNT. A global key let a stale address from
+     *  a previous account pass the warm probe and silently drive the WRONG account. */
+    private static String liveKey(Context c) {
+        return "livemx_" + Integer.toHexString(account(c).hashCode());
+    }
+
     /** Create-once (both lanes race here): connect with the WARM fast path — the last resolved
      *  live address is probed first, skipping the MLS resolve ladder on the happy path. */
     private static synchronized ParlonsRemote ensureRemote(Context app) throws Exception {
@@ -141,14 +150,33 @@ public final class CloudSession {
         if (r != null) {
             return r;
         }
+        final int gen = sGen;
         r = new ParlonsRemote(deviceId(app));
-        r.connect(account(app), cached(app, "livemx"));
-        // The push channel is part of a connection: install BEFORE publishing the remote, so a
-        // failure here discards the remote instead of caching a deaf-but-heartbeating one.
-        installPush(app, r);
-        cache(app, "livemx", r.liveAddress());   // next cold start reconnects warm
+        try {
+            r.connect(account(app), cached(app, liveKey(app)));
+            // The push channel is part of a connection: install BEFORE publishing the remote, so
+            // a failure here discards the remote instead of caching a deaf-but-heartbeating one.
+            installPush(app, r);
+        } catch (Exception e) {
+            try { r.close(); } catch (Exception ignored) { }   // no leaked node threads/sockets
+            throw e;
+        }
+        if (gen != sGen) {
+            // reset() ran while we were connecting (re-pair, unpair) — this remote belongs to
+            // a dead session and must not resurrect it.
+            try { r.close(); } catch (Exception ignored) { }
+            throw new IllegalStateException("connection was reset");
+        }
+        cache(app, liveKey(app), r.liveAddress());   // next cold start reconnects warm
         sRemote = r;
         return r;
+    }
+
+    /** Refresh the warm-address cache if the account moved mid-session (heartbeat calls this). */
+    public static void noteLiveAddress(Context c, String zLive) {
+        if (zLive != null && !zLive.isEmpty() && !zLive.equals(cached(c, liveKey(c)))) {
+            cache(c, liveKey(c), zLive);
+        }
     }
 
     public static ParlonsRemote remoteOrNull() {
@@ -214,13 +242,24 @@ public final class CloudSession {
         }
     }
 
-    /** Drop the connection (e.g. on disconnect / re-pair). */
-    public static void reset() {
+    /** Drop the connection AND everything cached from it (re-pair / unpair / account switch).
+     *  Clearing the cache_* keys matters twice over: a stale warm address must never probe the
+     *  old account, and a new account must never instant-paint the previous account's chats. */
+    public static void reset(Context c) {
+        sGen++;                       // an in-flight connect must not publish after this
         ParlonsRemote r = sRemote;
         sRemote = null;
-        sMedia = null;   // bound to the OLD node — a new connection builds a fresh one
+        sMedia = null;                // bound to the OLD node — a new connection builds fresh
         if (r != null) {
             try { r.close(); } catch (Exception ignored) { }
         }
+        SharedPreferences p = prefs(c);
+        SharedPreferences.Editor e = p.edit();
+        for (String key : p.getAll().keySet()) {
+            if (key.startsWith("cache_")) {
+                e.remove(key);
+            }
+        }
+        e.apply();
     }
 }

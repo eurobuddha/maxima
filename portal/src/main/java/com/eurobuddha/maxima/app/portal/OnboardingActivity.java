@@ -94,7 +94,7 @@ public final class OnboardingActivity extends AppCompatActivity {
         String c = mCode.getText().toString().trim();
         if (a.isEmpty()) { toast("Enter or scan your account address"); return; }
         CloudSession.setAccount(this, a);
-        CloudSession.reset();   // fresh remote for the (possibly new) account
+        CloudSession.reset(this);   // fresh remote + cleared caches for the (possibly new) account
         mGo.setEnabled(false);
         show("Attaching to the network…");
         CloudSession.connect(this, new CloudSession.Cb() {

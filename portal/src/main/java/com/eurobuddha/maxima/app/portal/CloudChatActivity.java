@@ -177,25 +177,61 @@ public final class CloudChatActivity extends AppCompatActivity {
         mList.setAdapter(mAdapter);
 
         // Instant paint: the last-known conversation renders NOW, the live fetch reconciles
-        // behind it — no more staring at wallpaper while a relay round-trip completes.
-        String cachedConv = CloudSession.cached(this, "conv_" + mPeer);
-        if (!cachedConv.isEmpty()) {
-            try {
-                Object o = new org.minima.utils.json.parser.JSONParser().parse(cachedConv);
-                if (o instanceof JSONObject) {
-                    mMsgs.addAll(parseMsgs((JSONObject) o));
+        // behind it. Parsed OFF the main thread (media bodies make the JSON non-trivial), and
+        // unconfirmed/failed echoes replay too — a ✗ bubble must survive reopening.
+        final String cachedConv = CloudSession.cached(this, "conv_" + mPeer);
+        final String cachedEcho = CloudSession.cached(this, "echo_" + mPeer);
+        if (!cachedConv.isEmpty() || !cachedEcho.isEmpty()) {
+            new Thread(() -> {
+                final List<Msg> fromCache = new ArrayList<>();
+                try {
+                    if (!cachedConv.isEmpty()) {
+                        Object o = new org.minima.utils.json.parser.JSONParser().parse(cachedConv);
+                        if (o instanceof JSONObject) {
+                            fromCache.addAll(parseMsgs((JSONObject) o));
+                        }
+                    }
+                    if (!cachedEcho.isEmpty()) {
+                        Object o = new org.minima.utils.json.parser.JSONParser().parse(cachedEcho);
+                        if (o instanceof JSONObject) {
+                            JSONArray arr = (JSONArray) ((JSONObject) o).get("echoes");
+                            if (arr != null) {
+                                for (Object eo : arr) {
+                                    JSONObject j = (JSONObject) eo;
+                                    Msg m = new Msg();
+                                    m.id = str(j, "id");
+                                    m.sender = "";
+                                    m.body = str(j, "body");
+                                    m.mine = true;
+                                    m.time = lng(j, "time");
+                                    m.state = str(j, "state");
+                                    fromCache.add(m);
+                                }
+                            }
+                        }
+                    }
+                    fromCache.sort((a, b1) -> Long.compare(a.time, b1.time));
+                } catch (Exception ignored) {
+                }
+                runOnUiThread(() -> {
+                    // Only if the live fetch hasn't already won the race.
+                    if (isFinishing() || isDestroyed() || !mMsgs.isEmpty() || fromCache.isEmpty()) {
+                        return;
+                    }
+                    mMsgs.addAll(fromCache);
                     for (Msg m : mMsgs) {
-                        if (m.time > mNewestServerTime) {
+                        if (!m.id.startsWith("local:") && m.time > mNewestServerTime) {
                             mNewestServerTime = m.time;
                         }
                     }
                     mAdapter.notifyDataSetChanged();
-                    if (!mMsgs.isEmpty()) {
-                        mList.scrollToPosition(mMsgs.size() - 1);
+                    mList.scrollToPosition(mMsgs.size() - 1);
+                    View empty2 = findViewById(R.id.chat_empty);
+                    if (empty2 != null) {
+                        empty2.setVisibility(View.GONE);
                     }
-                }
-            } catch (Exception ignored) {
-            }
+                });
+            }, "portal-conv-cache").start();
         }
 
         mInput = findViewById(R.id.chat_input);
@@ -237,6 +273,9 @@ public final class CloudChatActivity extends AppCompatActivity {
             return;
         }
         runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
             if ("message".equals(type)) {
                 String id = str(ev, "id");
                 if (id.isEmpty() || hasMsg(id)) {
@@ -260,12 +299,19 @@ public final class CloudChatActivity extends AppCompatActivity {
                     empty.setVisibility(View.GONE);
                 }
                 if (m.time > mReadMark) {
+                    final long prev = mReadMark;
                     mReadMark = m.time;
                     CloudSession.connect(this, new CloudSession.Cb() {   // background lane
                         public void ok(ParlonsRemote r) {
-                            try { r.markRead(mPeer); } catch (Exception ignored) { }
+                            try {
+                                r.markRead(mPeer);
+                            } catch (Exception e2) {
+                                mReadMark = prev;   // retried when the next inbound arrives
+                            }
                         }
-                        public void err(String e2) { }
+                        public void err(String e2) {
+                            mReadMark = prev;
+                        }
                     });
                 }
             } else {
@@ -362,68 +408,76 @@ public final class CloudChatActivity extends AppCompatActivity {
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 List<Msg> parsed = null;
-                String rawJson = null;
                 long newestIn = 0;
                 try {
                     JSONObject res = full ? r.conversation(mPeer)
                             : r.conversationAfter(mPeer, cursor);
                     parsed = parseMsgs(res);
-                    if (full) {
-                        rawJson = res.toString();
-                    }
                     for (Msg x : parsed) {
                         if (!x.mine && x.time > newestIn) {
                             newestIn = x.time;
                         }
                     }
                     // We're LOOKING at this conversation — mark read only when NEW inbound
-                    // appeared, so the poll doesn't spam the node.
+                    // appeared. Roll the mark back if the RPC fails, else it's never retried.
                     if (newestIn > mReadMark) {
+                        final long prev = mReadMark;
                         mReadMark = newestIn;
-                        try { r.markRead(mPeer); } catch (Exception ignored) { }
+                        try {
+                            r.markRead(mPeer);
+                        } catch (Exception e) {
+                            mReadMark = prev;
+                        }
                     }
                 } catch (Exception ignored) {
                 }
                 final List<Msg> got = parsed;
-                final String raw = rawJson;
                 runOnUiThread(() -> {
                     mBusy = false;
-                    if (got == null) {
-                        return;                     // fetch failed — keep what's on screen
+                    if (got == null || isFinishing() || isDestroyed()) {
+                        return;                     // fetch failed / screen gone — keep as-is
                     }
                     String prevNewest = mMsgs.isEmpty() ? "" : mMsgs.get(mMsgs.size() - 1).id;
-                    if (full) {
-                        // Preserve unconfirmed local echoes across the replace: a send is
-                        // recorded ASYNC on the node, so a fetch can race it — the bubble
-                        // must not blink out and back.
-                        List<Msg> echoes = new ArrayList<>();
-                        for (Msg m : mMsgs) {
-                            if (m.id.startsWith("local:") && !echoConfirmed(m, got)) {
-                                echoes.add(m);
-                            }
+                    // Preserve unconfirmed local echoes: a send records ASYNC on the node, so a
+                    // fetch can race it — the bubble must not blink out. One-to-one consumption:
+                    // each server entry retires at most ONE echo, so duplicate same-text sends
+                    // keep their own bubbles.
+                    List<Msg> echoes = new ArrayList<>();
+                    for (Msg m : mMsgs) {
+                        if (m.id.startsWith("local:")) {
+                            echoes.add(m);
                         }
+                    }
+                    consumeEchoes(echoes, got);
+                    if (full) {
                         mMsgs.clear();
                         mMsgs.addAll(got);
                         mMsgs.addAll(echoes);
-                        mMsgs.sort((a, b1) -> Long.compare(a.time, b1.time));
-                        if (raw != null) {
-                            CloudSession.cache(CloudChatActivity.this, "conv_" + mPeer, raw);
+                        // Cursor from SERVER entries alone — recoverable after a restore/rollback
+                        // (a never-lowered cursor made every later delta permanently empty).
+                        mNewestServerTime = 0;
+                        for (Msg m : got) {
+                            if (m.time > mNewestServerTime) {
+                                mNewestServerTime = m.time;
+                            }
                         }
+                        CloudSession.cache(CloudChatActivity.this, "conv_" + mPeer, capConv(got));
                     } else {
+                        final List<Msg> keep = echoes;
+                        mMsgs.removeIf(m -> m.id.startsWith("local:") && !keep.contains(m));
                         for (Msg m : got) {
                             if (!hasMsg(m.id)) {
                                 mMsgs.add(m);
                             }
                         }
-                        // A delta bringing our own message back confirms its echo.
-                        mMsgs.removeIf(m -> m.id.startsWith("local:") && echoConfirmed(m, got));
-                        mMsgs.sort((a, b1) -> Long.compare(a.time, b1.time));
-                    }
-                    for (Msg m : mMsgs) {
-                        if (!m.id.startsWith("local:") && m.time > mNewestServerTime) {
-                            mNewestServerTime = m.time;
+                        for (Msg m : got) {
+                            if (m.time > mNewestServerTime) {
+                                mNewestServerTime = m.time;
+                            }
                         }
                     }
+                    mMsgs.sort((a, b1) -> Long.compare(a.time, b1.time));
+                    saveEchoes();
                     mAdapter.notifyDataSetChanged();
                     View empty = findViewById(R.id.chat_empty);
                     if (empty != null) {
@@ -441,15 +495,70 @@ public final class CloudChatActivity extends AppCompatActivity {
         });
     }
 
-    /** Has the server copy of this local echo arrived? (our message, same body, near time) */
-    private static boolean echoConfirmed(Msg zEcho, List<Msg> zServer) {
+    /** One-to-one echo consumption: each SERVER entry retires at most ONE matching echo (the
+     *  nearest in time within 2 min). Survivors stay in the list. */
+    private static void consumeEchoes(List<Msg> zEchoes, List<Msg> zServer) {
         for (Msg s : zServer) {
-            if (s.mine && s.body.equals(zEcho.body)
-                    && Math.abs(s.time - zEcho.time) < 120_000L) {
-                return true;
+            if (!s.mine) {
+                continue;
+            }
+            Msg best = null;
+            long bestD = 120_000L;
+            for (Msg m : zEchoes) {
+                if (!m.body.equals(s.body)) {
+                    continue;
+                }
+                long d = Math.abs(s.time - m.time);
+                if (d < bestD) {
+                    bestD = d;
+                    best = m;
+                }
+            }
+            if (best != null) {
+                zEchoes.remove(best);
             }
         }
-        return false;
+    }
+
+    /** Cap the cached page to the last 30 entries — media bodies are multi-KB manifests, and
+     *  the whole prefs file lives in RAM and rewrites wholesale. */
+    private static String capConv(List<Msg> got) {
+        List<Msg> tail = got.size() > 30 ? got.subList(got.size() - 30, got.size()) : got;
+        JSONArray arr = new JSONArray();
+        for (Msg m : tail) {
+            JSONObject o = new JSONObject();
+            o.put("id", m.id);
+            o.put("sender", m.sender);
+            o.put("body", m.body);
+            o.put("mine", m.mine);
+            o.put("time", m.time);
+            o.put("state", m.state);
+            arr.add(o);
+        }
+        JSONObject res = new JSONObject();
+        res.put("messages", arr);
+        return res.toString();
+    }
+
+    /** Persist unconfirmed/failed echoes — a ✗ bubble is the only record a message never went;
+     *  it must survive rotation and reopening. */
+    private void saveEchoes() {
+        JSONArray arr = new JSONArray();
+        long now = System.currentTimeMillis();
+        for (Msg m : mMsgs) {
+            if (!m.id.startsWith("local:") || now - m.time > 24L * 3600_000) {
+                continue;
+            }
+            JSONObject o = new JSONObject();
+            o.put("id", m.id);
+            o.put("body", m.body);
+            o.put("time", m.time);
+            o.put("state", m.state);
+            arr.add(o);
+        }
+        JSONObject box = new JSONObject();
+        box.put("echoes", arr);
+        CloudSession.cache(this, "echo_" + mPeer, arr.isEmpty() ? "" : box.toString());
     }
 
     private void send() {
@@ -469,6 +578,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         echo.time = System.currentTimeMillis();
         echo.state = "queued";
         mMsgs.add(echo);
+        saveEchoes();
         mAdapter.notifyItemInserted(mMsgs.size() - 1);
         mList.scrollToPosition(mMsgs.size() - 1);
         View empty = findViewById(R.id.chat_empty);
@@ -491,6 +601,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (err != null) {
                         echo.state = "failed";
+                        saveEchoes();
                         notifyRow(echo.id);
                         Toast.makeText(CloudChatActivity.this, "Send failed: " + err,
                                 Toast.LENGTH_LONG).show();
@@ -498,6 +609,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                         // Accepted ("queued") — the real entry + its ticks arrive via
                         // push/delta and replace this echo. No full reload needed.
                         echo.state = "sent";
+                        saveEchoes();
                         notifyRow(echo.id);
                     }
                 });
@@ -505,6 +617,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             public void err(String m) {
                 runOnUiThread(() -> {
                     echo.state = "failed";
+                    saveEchoes();
                     notifyRow(echo.id);
                     Toast.makeText(CloudChatActivity.this,
                             "Send failed: " + m, Toast.LENGTH_LONG).show();
