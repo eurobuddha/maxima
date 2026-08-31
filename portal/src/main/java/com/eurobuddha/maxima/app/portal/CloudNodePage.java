@@ -304,6 +304,18 @@ public final class CloudNodePage implements Page {
         addr.addView(btns);
         mRoot.addView(addr);
 
+        // --- VPS control panel (the "superior to a phone" surface) ---
+        mRoot.addView(PortalUi.section(c, "Transport & hosts"));
+        LinearLayout ctrl = PortalUi.card(c);
+        TextView open = PortalUi.button(c, "Open control panel");
+        open.setOnClickListener(v -> mAct.startActivity(
+                new android.content.Intent(mAct, CloudNodePanelActivity.class)));
+        ctrl.addView(open);
+        ctrl.addView(PortalUi.gap(c, 6));
+        ctrl.addView(PortalUi.label(c, "Hosts, reachability, relay stats, MLS/location and the "
+                + "live event log — everything a VPS operator runs."));
+        mRoot.addView(ctrl);
+
         // --- paired devices ---
         mRoot.addView(PortalUi.section(c, "Paired devices (" + mAuthorized.size() + ")"));
         LinearLayout devs = PortalUi.card(c);

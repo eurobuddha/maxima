@@ -277,20 +277,156 @@ public final class CloudContactsPage implements Page {
             mAct.startActivity(i);
         });
         row.setOnLongClickListener(v -> {
-            String shown = contact.name.isEmpty() ? contact.key : contact.name;
-            new AlertDialog.Builder(mAct)
-                    .setTitle(shown)
-                    .setItems(new CharSequence[]{"Rename", "Reconnect now"}, (d, which) -> {
-                        if (which == 0) {
-                            promptRename(contact);
-                        } else {
-                            reconnect(contact);
-                        }
-                    })
-                    .show();
+            detailSheet(contact);
             return true;
         });
         return row;
+    }
+
+    /** Full contact detail — software, last seen, key, all addresses, payment address, and
+     *  Message / Rename / Reconnect / Remove (parlons.contacts.info + .remove). */
+    private void detailSheet(C contact) {
+        CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                JSONObject info = null;
+                try {
+                    info = r.contactInfo(contact.key);
+                } catch (Exception ignored) {
+                }
+                final JSONObject fi = info;
+                mAct.runOnUiThread(() -> showDetail(contact, fi));
+            }
+            public void err(String m) {
+                mAct.runOnUiThread(() -> showDetail(contact, null));
+            }
+        });
+    }
+
+    private void showDetail(C contact, JSONObject info) {
+        Context c = mAct;
+        LinearLayout box = new LinearLayout(c);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = PortalUi.dp(c, 20);
+        box.setPadding(pad, PortalUi.dp(c, 8), pad, 0);
+        String nm = contact.name.isEmpty() ? contact.key : contact.name;
+        box.addView(PortalUi.title(c, nm));
+        if (info != null && bool(info, "ok")) {
+            String kind = str(info, "kind");
+            box.addView(PortalUi.kv(c, "Software", bool(info, "classic") ? "Classic Maxima"
+                    : kind.isEmpty() ? "Parlons" : kind));
+            long ls = lng(info, "lastSeen");
+            box.addView(PortalUi.kv(c, "Last seen", presence(ls)));
+            box.addView(PortalUi.gap(c, 8));
+            box.addView(PortalUi.label(c, "Public key"));
+            TextView k = PortalUi.value(c, str(info, "key"));
+            k.setTextSize(11);
+            box.addView(k);
+            JSONArray addrs = (JSONArray) info.get("addresses");
+            if (addrs != null && !addrs.isEmpty()) {
+                box.addView(PortalUi.gap(c, 8));
+                box.addView(PortalUi.label(c, "Addresses"));
+                for (Object o : addrs) {
+                    TextView a = PortalUi.value(c, String.valueOf(o));
+                    a.setTextSize(11);
+                    box.addView(a);
+                }
+            }
+            String wallet = str(info, "wallet");
+            if (!wallet.isEmpty()) {
+                box.addView(PortalUi.gap(c, 8));
+                box.addView(PortalUi.label(c, "Payment address (MINIMA)"));
+                TextView w = PortalUi.value(c, wallet);
+                w.setTextSize(11);
+                box.addView(w);
+            }
+        }
+        android.widget.ScrollView scroll = new android.widget.ScrollView(c);
+        scroll.addView(box);
+        new AlertDialog.Builder(c)
+                .setView(scroll)
+                .setPositiveButton("Message", (d, w) -> {
+                    Intent i = new Intent(mAct, CloudChatActivity.class);
+                    i.putExtra(CloudChatActivity.EXTRA_PEER, contact.key);
+                    i.putExtra(CloudChatActivity.EXTRA_NAME, contact.name);
+                    mAct.startActivity(i);
+                })
+                .setNeutralButton("More", (d, w) -> moreMenu(contact))
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void moreMenu(C contact) {
+        new AlertDialog.Builder(mAct)
+                .setItems(new CharSequence[]{"Rename", "Reconnect now", "Remove contact"},
+                        (d, which) -> {
+                            if (which == 0) {
+                                promptRename(contact);
+                            } else if (which == 1) {
+                                reconnect(contact);
+                            } else {
+                                confirmRemove(contact);
+                            }
+                        })
+                .show();
+    }
+
+    private void confirmRemove(C contact) {
+        String nm = contact.name.isEmpty() ? contact.key : contact.name;
+        new AlertDialog.Builder(mAct)
+                .setTitle("Remove " + nm + "?")
+                .setMessage("They stay able to write to you and keep your address — this just "
+                        + "removes them from your list.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Remove", (d, w) -> {
+                    CloudSession.connect(mAct, new CloudSession.Cb() {
+                        public void ok(ParlonsRemote r) {
+                            String error = null;
+                            try {
+                                JSONObject res = r.removeContact(contact.key);
+                                Object ok = res.get("ok");
+                                if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                                    error = String.valueOf(res.get("error"));
+                                }
+                            } catch (Exception e) {
+                                error = e.getMessage() == null ? e.toString() : e.getMessage();
+                            }
+                            final String err = error;
+                            mAct.runOnUiThread(() -> {
+                                mAct.toast(err == null ? "Removed" : "Failed: " + err);
+                                mLastLoad = 0;
+                                render();
+                            });
+                        }
+                        public void err(String m) {
+                            mAct.runOnUiThread(() -> mAct.toast("Failed: " + m));
+                        }
+                    });
+                })
+                .show();
+    }
+
+    private static String presence(long lastSeen) {
+        if (lastSeen <= 0) {
+            return "never";
+        }
+        long ago = System.currentTimeMillis() - lastSeen;
+        if (ago < 30 * 60_000L) {
+            return "online now";
+        }
+        long m = ago / 60_000, h = m / 60, d = h / 24;
+        if (d > 0) return d + "d ago";
+        if (h > 0) return h + "h ago";
+        return m + "m ago";
+    }
+
+    private static long lng(JSONObject o, String k) {
+        Object v = o.get(k);
+        return v instanceof Number ? ((Number) v).longValue() : 0L;
+    }
+
+    private static boolean bool(JSONObject o, String k) {
+        Object v = o.get(k);
+        return v instanceof Boolean && (Boolean) v;
     }
 
     /** Force the account to re-resolve this contact's current address from their directory. */

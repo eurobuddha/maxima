@@ -16,6 +16,7 @@ import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.ui.Page;
 import com.eurobuddha.maxima.app.ui.Qr;
+import com.eurobuddha.maxima.cloud.CloudWallet;
 import com.eurobuddha.maxima.cloud.ParlonsRemote;
 
 import org.minima.utils.json.JSONArray;
@@ -41,6 +42,9 @@ public final class CloudWalletPage implements Page {
     private String mConfirmed = "";
     private String mSendable = "";
     private String mError = "";
+    private JSONArray mTokens;            // non-Minima tokens (from walletTokens)
+    private int mUses = -1;               // one-time-signature counter (from walletUses)
+    private int mMaxUses = CloudWallet.MAX_USES;
 
     public CloudWalletPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -67,6 +71,16 @@ public final class CloudWalletPage implements Page {
         if (mBuilt && now - mLastLoad < 5000) {
             return;
         }
+        // Never a blank tab: paint a loading card synchronously BEFORE the (multi-RPC) round-trip,
+        // so the first frame after tab-select is always populated even while balance+tokens+uses
+        // are still in flight.
+        if (!mBuilt) {
+            mRoot.removeAllViews();
+            mRoot.addView(PortalUi.section(mAct, "Wallet"));
+            LinearLayout loading = PortalUi.card(mAct);
+            loading.addView(PortalUi.label(mAct, "Opening your account wallet…"));
+            mRoot.addView(loading);
+        }
         mBusy = true;
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
@@ -74,6 +88,8 @@ public final class CloudWalletPage implements Page {
                 String confirmed = "";
                 String sendable = "";
                 String error = "";
+                JSONArray tokens = null;
+                int uses = -1, maxUses = CloudWallet.MAX_USES;
                 try {
                     JSONObject a = r.walletAddress();
                     addr = str(a, "address");
@@ -87,7 +103,28 @@ public final class CloudWalletPage implements Page {
                 } catch (Exception e) {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
+                // The account's OWN wallet (not a device watch address) also has a token list and
+                // the one-time-signature counter — read them too, best-effort (a miss just omits
+                // the card, never blocks the balance).
+                try {
+                    JSONObject t = r.walletTokens();
+                    if (t.get("ok") == Boolean.TRUE) {
+                        tokens = nonMinima(obj(t, "balance"));
+                    }
+                } catch (Exception ignored) {
+                }
+                try {
+                    JSONObject u = r.walletUses(0);
+                    if (u.get("ok") == Boolean.TRUE) {
+                        uses = num(u, "uses");
+                        int mx = num(u, "max");
+                        if (mx > 0) maxUses = mx;
+                    }
+                } catch (Exception ignored) {
+                }
                 final String fa = addr, fc = confirmed, fs = sendable, fe = error;
+                final JSONArray ft = tokens;
+                final int fu = uses, fm = maxUses;
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
                     mBusy = false;
@@ -95,6 +132,9 @@ public final class CloudWalletPage implements Page {
                     mConfirmed = fc;
                     mSendable = fs;
                     mError = fe;
+                    mTokens = ft;
+                    mUses = fu;
+                    mMaxUses = fm;
                     rebuild();
                 });
             }
@@ -195,6 +235,70 @@ public final class CloudWalletPage implements Page {
         btns.addView(qr, lp2);
         rec.addView(btns);
         mRoot.addView(rec);
+
+        // --- other tokens held (only for the account's own wallet, not a device watch address) ---
+        if (mTokens != null && !mTokens.isEmpty()) {
+            mRoot.addView(PortalUi.section(c, "Tokens"));
+            LinearLayout tc = PortalUi.card(c);
+            for (int i = 0; i < mTokens.size(); i++) {
+                if (!(mTokens.get(i) instanceof JSONObject)) continue;
+                JSONObject t = (JSONObject) mTokens.get(i);
+                String name = tokenName(t);
+                String amt = str(t, "confirmed");
+                String tid = str(t, "tokenid");
+                LinearLayout row = new LinearLayout(c);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                int pv = PortalUi.dp(c, 8);
+                row.setPadding(0, pv, 0, pv);
+                LinearLayout left = new LinearLayout(c);
+                left.setOrientation(LinearLayout.VERTICAL);
+                TextView nm = new TextView(c);
+                nm.setText(name);
+                nm.setTextColor(c.getColor(R.color.ux_text));
+                nm.setTextSize(15);
+                nm.setTypeface(nm.getTypeface(), Typeface.BOLD);
+                left.addView(nm);
+                TextView id = new TextView(c);
+                id.setText(tid);                                   // full token id, never truncated
+                id.setTextColor(c.getColor(R.color.ux_subtext));
+                id.setTextSize(10);
+                id.setTypeface(Typeface.MONOSPACE);
+                left.addView(id);
+                row.addView(left, new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                TextView val2 = new TextView(c);
+                val2.setText(amt);
+                val2.setTextColor(c.getColor(R.color.ux_text));
+                val2.setTextSize(15);
+                val2.setGravity(android.view.Gravity.END);
+                row.addView(val2);
+                final String ftid = tid;
+                row.setOnClickListener(v -> copy(ftid, "Token id copied"));
+                tc.addView(row);
+            }
+            mRoot.addView(tc);
+        }
+
+        // --- key uses (the sacred one-time-signature counter) ---
+        if (mUses >= 0) {
+            mRoot.addView(PortalUi.section(c, "Signing key"));
+            LinearLayout kc = PortalUi.card(c);
+            TextView u = new TextView(c);
+            u.setText(mUses + " / " + mMaxUses + " signatures used");
+            u.setTextColor(c.getColor(R.color.ux_text));
+            u.setTextSize(16);
+            u.setTypeface(u.getTypeface(), Typeface.BOLD);
+            kc.addView(u);
+            kc.addView(PortalUi.gap(c, 4));
+            kc.addView(PortalUi.label(c, "Each key signs a fixed number of times. When it runs low, "
+                    + "detach to a fresh wallet. Only raise this if you've signed with this seed on "
+                    + "ANOTHER device — a wrong count can reuse a one-time key and leak it."));
+            kc.addView(PortalUi.gap(c, 8));
+            TextView adj = PortalUi.ghost(c, "Set signatures used…");
+            adj.setOnClickListener(v -> usesSheet());
+            kc.addView(adj);
+            mRoot.addView(kc);
+        }
 
         // --- send from the account wallet (also powers the wallet-detach sweep) ---
         mRoot.addView(PortalUi.section(c, "Send"));
@@ -381,6 +485,75 @@ public final class CloudWalletPage implements Page {
                 .show();
     }
 
+    /** Raise-only adjust of the one-time-signature counter (for a seed signed elsewhere).
+     *  Double-guarded: naming the danger, then confirming the exact new value. */
+    private void usesSheet() {
+        final EditText field = new EditText(mAct);
+        field.setHint("New used count (> " + mUses + ")");
+        field.setInputType(InputType.TYPE_CLASS_NUMBER);
+        int pad = PortalUi.dp(mAct, 20);
+        field.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
+        new AlertDialog.Builder(mAct)
+                .setTitle("Set signatures used")
+                .setMessage("ONLY if this seed has signed transactions on another device. The "
+                        + "counter can only go UP — setting it too low risks reusing a key and "
+                        + "leaking it. Current: " + mUses + ".")
+                .setView(field)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Continue", (d, w) -> {
+                    String s = field.getText().toString().trim();
+                    int to;
+                    try {
+                        to = Integer.parseInt(s);
+                    } catch (Exception e) {
+                        mAct.toast("Enter a whole number");
+                        return;
+                    }
+                    if (to <= mUses) {
+                        mAct.toast("Must be higher than the current " + mUses);
+                        return;
+                    }
+                    confirmUses(to);
+                })
+                .show();
+    }
+
+    private void confirmUses(final int zTo) {
+        new AlertDialog.Builder(mAct)
+                .setTitle("Raise to " + zTo + "?")
+                .setMessage("This permanently marks " + zTo + " signatures as used and cannot be "
+                        + "undone. Do this only to match a seed already used elsewhere.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Raise counter", (d, w) -> doRaiseUses(zTo))
+                .show();
+    }
+
+    private void doRaiseUses(final int zTo) {
+        mAct.toast("Updating counter…");
+        CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String error = null;
+                try {
+                    JSONObject res = r.walletUses(zTo);
+                    if (res.get("ok") != Boolean.TRUE) {
+                        error = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final String err = error;
+                mAct.runOnUiThread(() -> {
+                    mAct.toast(err == null ? "Counter raised" : "Could not raise: " + err);
+                    mLastLoad = 0;
+                    render();
+                });
+            }
+            public void err(String m) {
+                mAct.runOnUiThread(() -> mAct.toast("Could not raise: " + m));
+            }
+        });
+    }
+
     private void setWatch(String address) {
         if (address.isEmpty()) {
             mAct.toast("Enter a receive address");
@@ -440,12 +613,51 @@ public final class CloudWalletPage implements Page {
         return new String[]{"", ""};
     }
 
+    /** All tokens EXCEPT Minima (0x00) from the gateway balance JSON — the "Tokens" section. */
+    private static JSONArray nonMinima(JSONObject bal) {
+        JSONArray out = new JSONArray();
+        try {
+            Object resp = bal.get("response");
+            if (resp instanceof JSONArray) {
+                for (Object o : (JSONArray) resp) {
+                    if (!(o instanceof JSONObject)) continue;
+                    String tid = str((JSONObject) o, "tokenid");
+                    if (tid.isEmpty() || "0x00".equalsIgnoreCase(tid)) continue;
+                    out.add(o);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    /** A token's display name — the "token" field may be a bare string or a {name:…} object. */
+    private static String tokenName(JSONObject t) {
+        Object tok = t.get("token");
+        if (tok instanceof JSONObject) {
+            Object n = ((JSONObject) tok).get("name");
+            if (n != null && !String.valueOf(n).isEmpty()) return String.valueOf(n);
+        } else if (tok != null && !String.valueOf(tok).isEmpty()) {
+            return String.valueOf(tok);
+        }
+        return "Token";
+    }
+
+    private static int num(JSONObject o, String k) {
+        Object v = o.get(k);
+        return v instanceof Number ? ((Number) v).intValue() : -1;
+    }
+
     private void copy(String s) {
+        copy(s, "Address copied");
+    }
+
+    private void copy(String s, String toast) {
         if (s == null || s.isEmpty()) return;
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE);
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("address", s));   // full, never truncated
-        mAct.toast("Address copied");
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("value", s));   // full, never truncated
+        mAct.toast(toast);
     }
 
     private void showQr(String s) {

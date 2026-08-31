@@ -52,6 +52,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".portal.CloudNodePanelActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".portal.PortalCallActivity"
             android:exported="false"
             android:launchMode="singleTop"
