@@ -150,6 +150,9 @@ public final class ParlonsCore {
             public CloudPaymentSender sender() {
                 return mPaymentSender;
             }
+            public String walletError() {
+                return mWalletError;
+            }
         });
         mControl.registerOn(mNode.services());
         mChat.setListener(loggingListener());
@@ -289,6 +292,7 @@ public final class ParlonsCore {
         }, 30, 45, TimeUnit.SECONDS);
         mMaint.scheduleWithFixedDelay(() -> {
             try { mControl.maintenanceSweep(); } catch (Exception ignored) { }
+            try { walletUpkeep(); } catch (Exception ignored) { }
         }, 60, 60, TimeUnit.SECONDS);
         // A restart gives this node FRESH relay addresses; until contacts learn them, their
         // replies rot in the old addresses' mailboxes (core's first refresh is at +3min — a
@@ -310,6 +314,8 @@ public final class ParlonsCore {
     private volatile CloudWallet mAccountWallet;
     private volatile CloudPaymentSender mPaymentSender;
     private volatile String mWalletMx = "";
+    private volatile String mWalletError = "";
+    private volatile boolean mScriptTracked;
 
     /**
      * Open the account wallet off-thread (the first WOTS address derivation takes seconds),
@@ -327,16 +333,54 @@ public final class ParlonsCore {
                 mPaymentSender = new CloudPaymentSender(w, mWallet);
                 log("account wallet ready: " + mWalletMx
                         + " (key uses " + w.uses() + " / " + CloudWallet.MAX_USES + ")");
-                try { mWallet.trackScript(w.script()); } catch (Exception ignored) { }
-                for (com.eurobuddha.maxima.core.contacts.Contact c : mNode.contacts()) {
-                    try { mChat.shareWalletAddress(c, mWalletMx); } catch (Exception ignored) { }
-                }
+                // trackScript + address-share retry on the maintenance heartbeat: this first
+                // attempt runs pre-attach and a swallowed failure here used to break payments
+                // (no proofs) and receivability (address never shared) until a restart.
+                walletUpkeep();
             } catch (Exception e) {
-                log("account wallet failed to open: " + e.getMessage());
+                mWalletError = e.getMessage() == null ? e.toString() : e.getMessage();
+                log("account wallet failed to open: " + mWalletError);
             }
         }, "parlons-wallet-open");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** Last share time per contact key — the address is re-shared hourly (cheap idempotent
+     *  control record; the app re-shares on every chat open). */
+    private final java.util.Map<String, Long> mAddrShared =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Wallet upkeep, retried on the heartbeat: gateway script tracking (payments need the
+     *  proofs) and receive-address shares to contacts. Cheap, idempotent, network-bound. */
+    private void walletUpkeep() {
+        CloudWallet w = mAccountWallet;
+        if (w == null) {
+            return;
+        }
+        if (!mScriptTracked) {
+            try {
+                mWallet.trackScript(w.script());
+                mScriptTracked = true;
+                log("wallet script tracked on the gateway");
+            } catch (Exception e) {
+                log("wallet script tracking failed (will retry): " + e.getMessage());
+            }
+        }
+        long now = System.currentTimeMillis();
+        for (com.eurobuddha.maxima.core.contacts.Contact c : mNode.contacts()) {
+            String key = c.publicKey == null ? "" : c.publicKey;
+            Long last = mAddrShared.get(key);
+            if (last != null && now - last < 3600_000L) {
+                continue;
+            }
+            try {
+                mChat.shareWalletAddress(c, mWalletMx);
+                mAddrShared.put(key, now);
+            } catch (Exception ignored) {
+                // offline peer — retried next heartbeat round
+            }
+        }
     }
 
     // ---- persisted account settings (read receipts etc.) ----

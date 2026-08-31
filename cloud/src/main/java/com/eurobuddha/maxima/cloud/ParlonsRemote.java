@@ -361,12 +361,15 @@ public final class ParlonsRemote {
     }
 
     /** Pay a contact from the ACCOUNT's wallet (built+signed on the node, gateway-relayed).
-     *  Returns fast with state "building"; the bubble + its states arrive via push. */
+     *  Returns fast with state "building"; the bubble + its states arrive via push.
+     *  Carries a client idempotency key: rpc() RETRIES on a lost reply, and without the key a
+     *  retried M_PAY would queue a SECOND build — one tap, two payments. */
     public JSONObject pay(String zPeer, String zAmount, String zMemo) throws Exception {
         JSONObject p = new JSONObject();
         p.put("peer", zPeer);
         p.put("amount", zAmount);
         p.put("memo", zMemo == null ? "" : zMemo);
+        p.put("pid", java.util.UUID.randomUUID().toString());
         return rpc(ParlonsControl.M_PAY, p);
     }
 

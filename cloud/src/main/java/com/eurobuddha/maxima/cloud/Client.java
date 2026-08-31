@@ -328,8 +328,8 @@ public final class Client {
         System.out.println("  read <peer key>        a conversation");
         System.out.println("  send <peer key> <msg>  send a message");
         System.out.println("  pay <key> <amt> [memo] pay a contact from the ACCOUNT's wallet");
-        System.out.println("  wallet address         your account's watch-only address");
-        System.out.println("  wallet set <Mx>        set the address to watch (funds stay on your device)");
-        System.out.println("  wallet balance         watch-only balance (read-only; the node can't spend)");
+        System.out.println("  wallet address         the ACCOUNT's receive address (its keys live on the node)");
+        System.out.println("  wallet set <Mx>        watch a DIFFERENT (cold) address instead");
+        System.out.println("  wallet balance         balance of the shown address");
     }
 }

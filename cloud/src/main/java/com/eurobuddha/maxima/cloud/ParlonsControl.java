@@ -145,6 +145,15 @@ public final class ParlonsControl {
     /** Recent group creations (name → at): a retried create must not mint a duplicate. */
     private final java.util.Map<String, Long> mRecentGroups =
             new java.util.concurrent.ConcurrentHashMap<>();
+    /** Payment idempotency (pid → when): a retried M_PAY (lost reply, relay replay) must be
+     *  acked, never re-queued — one tap must never pay twice. FUND-CRITICAL. */
+    private final java.util.Map<String, Long> mRecentPays =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** Balance cache (address → {json, at}) so M_WALLET_BAL never blocks the pump. */
+    private final java.util.Map<String, Object[]> mBalanceCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<String> mBalanceFetching =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     /** Called from the node's maintenance pump: sweep idle uploads / stale call + group records. */
     public void maintenanceSweep() {
@@ -153,6 +162,7 @@ public final class ParlonsControl {
         mDoneUploads.entrySet().removeIf(e -> now - (Long) e.getValue()[1] > 5 * 60_000L);
         mCallTaken.entrySet().removeIf(e -> now - e.getValue().at > 10 * 60_000L);
         mRecentGroups.entrySet().removeIf(e -> now - e.getValue() > 5 * 60_000L);
+        mRecentPays.entrySet().removeIf(e -> now - e.getValue() > 30 * 60_000L);
     }
 
     public ParlonsControl(MaximaNode zNode, ChatEngine zChat, DevicePairing zPairing, WatchWallet zWallet) {
@@ -184,6 +194,7 @@ public final class ParlonsControl {
     public interface PaySource {
         String myWalletAddress();          // Mx… receive address ("" until derived)
         CloudPaymentSender sender();       // null until the wallet is open
+        String walletError();              // "" unless the wallet failed to open
     }
 
     private volatile PaySource mPaySource;
@@ -641,7 +652,16 @@ public final class ParlonsControl {
             JSONObject in = parse(req);
             String peer = str(in, "peer");
             String amount = str(in, "amount").trim();
-            final String memo = str(in, "memo");
+            String memoRaw = str(in, "memo");
+            final String memo = memoRaw.length() > 300 ? memoRaw.substring(0, 300) : memoRaw;
+            // IDEMPOTENCY (fund-critical): the client rpc() retries on a lost reply — a retried
+            // pid must be acked, never queued again. One tap must never pay twice.
+            String pid = str(in, "pid");
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent(pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
+            }
             final Contact c = mNode.contact(peer);
             if (c == null) {
                 return bytes(err("unknown contact " + peer));
@@ -651,7 +671,15 @@ public final class ParlonsControl {
             }
             PaySource ps = mPaySource;
             if (ps == null || ps.sender() == null) {
-                return bytes(err("the account wallet is still opening — try again in a moment"));
+                String why = ps == null ? "" : ps.walletError();
+                return bytes(err(why == null || why.isEmpty()
+                        ? "the account wallet is still opening — try again in a moment"
+                        : "the account wallet failed to open: " + why));
+            }
+            // Plain decimal only — MiniNumber accepts scientific notation ("1e2" pays 100),
+            // which is a foot-gun in a money field.
+            if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
+                return bytes(err("that amount doesn't look right"));
             }
             final org.minima.objects.base.MiniNumber amt;
             try {
@@ -672,16 +700,30 @@ public final class ParlonsControl {
             // FAILED (or a payfail toast) if anything breaks.
             mSendExec.execute(() -> {
                 ChatEngine.Entry e = null;
+                boolean published = false;
                 try {
                     CloudPaymentSender.Built built = sender.build(to, amt);
                     e = mChat.beginPayment(c, amt.toString(), "Minima", memo, built.txid);
                     sender.publish(built);
-                    mChat.completePayment(c, e);
-                    mNode.log("payment " + amt + " → " + safe(c.name) + " txid " + built.txid);
+                    published = true;
+                    boolean told = mChat.completePayment(c, e);
+                    mNode.log("payment " + amt + " → " + safe(c.name) + " txid " + built.txid
+                            + (told ? "" : " (peer not yet notified — resend loop owns it)"));
                 } catch (Exception ex) {
                     String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-                    if (e != null) {
-                        mChat.failPayment(e);
+                    boolean gatewaySaidNo = why.startsWith("txnimport:")
+                            || why.startsWith("txnbasics:") || why.startsWith("txnpost:");
+                    if (e != null && !published) {
+                        if (gatewaySaidNo) {
+                            // The gateway REPORTED the failure — the txn did not post. Safe ✗.
+                            mChat.failPayment(e);
+                        } else {
+                            // Transport failure at/after the post: the outcome is UNKNOWN — the
+                            // money may have moved. NEVER show a plain ✗ that invites a re-pay;
+                            // leave the bubble pending and tell the user to check the balance.
+                            why = "outcome unknown (network trouble mid-broadcast) — check the "
+                                    + "wallet balance before paying again";
+                        }
                     }
                     mNode.log("payment to " + safe(c.name) + " FAILED: " + why);
                     JSONObject ev = new JSONObject();
@@ -712,11 +754,17 @@ public final class ParlonsControl {
                 return bytes(err("settings unavailable"));
             }
             Object rr = in.get("readReceipts");
+            boolean applied = s.readReceipts();
             if (rr instanceof Boolean) {
-                s.setReadReceipts((Boolean) rr);
+                applied = (Boolean) rr;
+                final boolean v = applied;
+                // The sink persists to disk — off the pump thread.
+                mSendExec.execute(() -> {
+                    try { s.setReadReceipts(v); } catch (Exception ignored) { }
+                });
             }
             JSONObject out = ok();
-            out.put("readReceipts", s.readReceipts());
+            out.put("readReceipts", applied);
             return bytes(out);
         });
 
@@ -793,14 +841,34 @@ public final class ParlonsControl {
             PaySource ps = mPaySource;
             String own = ps == null ? "" : safe(ps.myWalletAddress());
             String watch = safe(mWallet.watchAddress());
-            String addr = watch.isEmpty() ? own : watch;
+            final String addr = watch.isEmpty() ? own : watch;
             if (addr.isEmpty()) {
                 return bytes(err("wallet still opening — try again in a moment"));
             }
-            JSONObject bal = mWallet.cmd("balance megammr:true address:" + addr);
+            // NEVER a gateway HTTP call on the pump thread (node.handle is synchronized — a
+            // 60s timeout here deafened the whole node). Serve the cached balance and refresh
+            // it in the background; the device's poll picks the fresh one up next round.
+            Object[] cached = mBalanceCache.get(addr);
+            long now = System.currentTimeMillis();
+            if (cached == null || now - (Long) cached[1] > 15_000) {
+                if (mBalanceFetching.add(addr)) {
+                    mSendExec.execute(() -> {
+                        try {
+                            JSONObject bal = mWallet.cmd("balance megammr:true address:" + addr);
+                            mBalanceCache.put(addr, new Object[]{bal, System.currentTimeMillis()});
+                        } catch (Exception ignored) {
+                        } finally {
+                            mBalanceFetching.remove(addr);
+                        }
+                    });
+                }
+            }
+            if (cached == null) {
+                return bytes(err("balance loading — try again in a moment"));
+            }
             JSONObject out = ok();
             out.put("address", addr);
-            out.put("balance", bal);
+            out.put("balance", (JSONObject) cached[0]);
             return bytes(out);
         });
     }

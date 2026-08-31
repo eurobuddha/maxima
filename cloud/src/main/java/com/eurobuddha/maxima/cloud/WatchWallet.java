@@ -50,7 +50,13 @@ public final class WatchWallet {
 
     /** A paired device sets its (cold) spend address for the node to watch. */
     public synchronized void setWatchAddress(String zAddress) throws Exception {
-        Files.write(mWatchFile, zAddress.trim().getBytes(StandardCharsets.UTF_8));
+        String a = zAddress == null ? "" : zAddress.trim();
+        // The address is interpolated into gateway command strings — accept ONLY a plain
+        // Mx…/0x… address, never anything that could smuggle extra parameters.
+        if (!a.matches("Mx[0-9A-Z]+") && !a.matches("0x[0-9A-Fa-f]+")) {
+            throw new IllegalArgumentException("that doesn't look like a Minima address");
+        }
+        Files.write(mWatchFile, a.getBytes(StandardCharsets.UTF_8));
         try {
             Files.setPosixFilePermissions(mWatchFile, PosixFilePermissions.fromString("rw-------"));
         } catch (UnsupportedOperationException ignored) {

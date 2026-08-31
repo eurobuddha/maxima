@@ -66,9 +66,12 @@ public final class CloudPaymentSender {
         // 3. Build + sign locally (reserve-before-sign: the key-use counter is fsync'd to disk
         //    BEFORE the leaf signs — a crash wastes a leaf, never reuses one).
         TxnFactory factory = new TxnFactory(mWallet.core());
+        // UUID txn row id: millis ids are guessable + collide on the SHARED gateway — a
+        // predicted id could be txndelete'd (or pre-imported) by another token holder in the
+        // import→post window.
         TxnFactory.BuiltTxn built = factory.buildSend(inputs, zToAddress, zAmount,
                 TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
-                "pcw" + System.currentTimeMillis());
+                "pcw" + java.util.UUID.randomUUID());
         return new Built(built.getID(), built.getTxnImportCommand(), built.getTxnPostCommand());
     }
 
