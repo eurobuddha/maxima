@@ -316,9 +316,126 @@ public final class CloudWalletPage implements Page {
                 + "goes cold and keeps a watch-only view."));
         mRoot.addView(sendCard);
 
+        // --- history: this device's ledger (sends + received payments seen while paired) ---
+        java.util.List<WalletLedger.Entry> ledger = WalletLedger.entries(mAct);
+        if (!ledger.isEmpty()) {
+            mRoot.addView(PortalUi.section(c, "History"));
+            LinearLayout hc = PortalUi.card(c);
+            int shown = 0;
+            for (WalletLedger.Entry e : ledger) {
+                if (shown >= 30) break;   // keep the tab snappy; full record persists
+                if (shown > 0) {
+                    View div = new View(c);
+                    div.setLayoutParams(new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, PortalUi.dp(c, 1)));
+                    div.setBackgroundColor(c.getColor(R.color.ux_divider));
+                    hc.addView(div);
+                }
+                hc.addView(ledgerRow(c, e));
+                shown++;
+            }
+            mRoot.addView(hc);
+        }
+
         if (!mError.isEmpty()) {
             mRoot.addView(PortalUi.label(c, "Balance note: " + mError));
         }
+    }
+
+    private View ledgerRow(Context c, WalletLedger.Entry e) {
+        LinearLayout row = new LinearLayout(c);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        int pv = PortalUi.dp(c, 10);
+        row.setPadding(0, pv, 0, pv);
+        boolean failed = WalletLedger.FAILED.equals(e.direction);
+        boolean sent = WalletLedger.SENT.equals(e.direction) || failed;
+
+        TextView glyph = new TextView(c);
+        glyph.setText(failed ? "✕" : (sent ? "↑" : "↓"));
+        glyph.setTextSize(18);
+        glyph.setTextColor(c.getColor(failed ? R.color.ux_error
+                : (sent ? R.color.ux_subtext : R.color.ux_success)));
+        glyph.setPadding(0, 0, PortalUi.dp(c, 12), 0);
+        row.addView(glyph);
+
+        LinearLayout col = new LinearLayout(c);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView who = new TextView(c);
+        who.setText(failed ? "Send failed"
+                : (sent ? "To " : "From ") + shortWho(e.counterparty));
+        who.setTextColor(c.getColor(R.color.ux_text));
+        who.setTextSize(15);
+        col.addView(who);
+        TextView when = new TextView(c);
+        when.setText(e.time > 0 ? stamp(e.time) : "");
+        when.setTextColor(c.getColor(R.color.ux_subtext));
+        when.setTextSize(12);
+        col.addView(when);
+        row.addView(col, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (!failed && !e.amount.isEmpty()) {
+            TextView amt = new TextView(c);
+            amt.setText((sent ? "−" : "+") + e.amount + " " + (e.token.isEmpty() ? "MINIMA" : e.token));
+            amt.setTextColor(c.getColor(sent ? R.color.ux_text : R.color.ux_success));
+            amt.setTextSize(15);
+            amt.setGravity(android.view.Gravity.END);
+            row.addView(amt);
+        }
+        row.setOnClickListener(v -> ledgerDetail(e));
+        return row;
+    }
+
+    private void ledgerDetail(WalletLedger.Entry e) {
+        boolean failed = WalletLedger.FAILED.equals(e.direction);
+        boolean sent = WalletLedger.SENT.equals(e.direction) || failed;
+        StringBuilder sb = new StringBuilder();
+        sb.append(failed ? "Send failed\n\n" : (sent ? "Sent\n\n" : "Received\n\n"));
+        if (!e.amount.isEmpty()) {
+            sb.append("Amount:\n").append(e.amount).append(" ")
+                    .append(e.token.isEmpty() ? "MINIMA" : e.token).append("\n\n");
+        }
+        if (!e.counterparty.isEmpty()) {
+            sb.append(sent ? "To:\n" : "From:\n").append(e.counterparty).append("\n\n");   // full
+        }
+        if (e.time > 0) {
+            sb.append("When:\n").append(fullStamp(e.time)).append("\n\n");
+        }
+        if (!e.memo.isEmpty()) {
+            sb.append("Note:\n").append(e.memo).append("\n\n");
+        }
+        if (!e.txid.isEmpty()) {
+            sb.append("Transaction id:\n").append(e.txid).append("\n\n");   // full, never truncated
+        }
+        if (!e.error.isEmpty()) {
+            sb.append("Error:\n").append(e.error).append("\n\n");
+        }
+        AlertDialog d = new AlertDialog.Builder(mAct)
+                .setTitle("Transaction")
+                .setMessage(sb.toString().trim())
+                .setPositiveButton("Close", null)
+                .setNeutralButton(e.txid.isEmpty() ? null : "Copy txid",
+                        e.txid.isEmpty() ? null : (di, w) -> copy(e.txid, "Transaction id copied"))
+                .show();
+    }
+
+    private static String shortWho(String s) {
+        if (s == null || s.isEmpty()) return "someone";
+        // A name stays whole; a raw address is long — show a readable head but the DETAIL sheet
+        // and copy always carry the full value (never a truncated identifier the user acts on).
+        if (s.startsWith("Mx") || s.startsWith("0x") || s.startsWith("MAX#")) {
+            return s.length() > 16 ? s.substring(0, 16) + "…" : s;
+        }
+        return s;
+    }
+
+    private static String stamp(long t) {
+        return android.text.format.DateFormat.format("d MMM · HH:mm", t).toString();
+    }
+
+    private static String fullStamp(long t) {
+        return android.text.format.DateFormat.format("EEE d MMM yyyy, HH:mm:ss", t).toString();
     }
 
     /** Send from the ACCOUNT wallet to any Minima address — one confirm naming amount+address

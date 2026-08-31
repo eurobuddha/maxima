@@ -227,6 +227,8 @@ public final class CloudSession {
             } else if ("walletsent".equals(type) || "walletfail".equals(type)) {
                 PortalNotifier.onWalletEvent(app, ev);
             }
+            // Feed the client-side wallet history ledger (sends + received payments).
+            WalletLedger.onEvent(app, ev);
             PortalHub.dispatch(ev);
         });
         IO.execute(() -> {
