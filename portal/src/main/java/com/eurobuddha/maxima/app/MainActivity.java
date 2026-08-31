@@ -114,13 +114,17 @@ public final class MainActivity extends AppCompatActivity {
         findViewById(R.id.btn_main_theme).setOnClickListener(v -> cycleTheme());
         findViewById(R.id.btn_main_more).setOnClickListener(v -> {
             android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);
+            m.getMenu().add("Settings");
             m.getMenu().add("Set account name");
             m.getMenu().add("Copy account address");
             m.getMenu().add("Node status");
             m.getMenu().add("Unpair this device");
             m.setOnMenuItemClickListener(item -> {
                 CharSequence t = item.getTitle();
-                if ("Set account name".contentEquals(t)) {
+                if ("Settings".contentEquals(t)) {
+                    startActivity(new Intent(this,
+                            com.eurobuddha.maxima.app.portal.CloudSettingsActivity.class));
+                } else if ("Set account name".contentEquals(t)) {
                     showTab(3);
                     if (mNode != null) {
                         mNode.promptSetName();

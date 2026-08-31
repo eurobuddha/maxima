@@ -50,7 +50,9 @@ public final class PortalNotifier {
             name = peer;
         }
         String body = str(ev, "body");
-        String line = ChatMedia.isMedia(body) ? ChatMedia.preview(body) : body;
+        String line = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(body)
+                ? com.eurobuddha.maxima.core.chat.ChatPay.preview(body)
+                : ChatMedia.isMedia(body) ? ChatMedia.preview(body) : body;
 
         Intent open = new Intent(c, CloudChatActivity.class);
         open.putExtra(CloudChatActivity.EXTRA_PEER, peer);

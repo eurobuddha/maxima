@@ -265,6 +265,17 @@ public final class CloudChatActivity extends AppCompatActivity {
      *  the visible "waiting for the chat to re-print". */
     private final PortalHub.Listener mPush = ev -> {
         String type = String.valueOf(ev.get("type"));
+        if ("payfail".equals(type)
+                && mPeer != null && mPeer.equalsIgnoreCase(String.valueOf(ev.get("peer")))) {
+            runOnUiThread(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    Toast.makeText(this, "Payment failed: " + str(ev, "error"),
+                            Toast.LENGTH_LONG).show();
+                    load();
+                }
+            });
+            return;
+        }
         if (!"message".equals(type) && !"state".equals(type)) {
             return;
         }
@@ -879,13 +890,81 @@ public final class CloudChatActivity extends AppCompatActivity {
     // ---- attach / camera / caption / send-photo ----
 
     private void attachSheet() {
+        final java.util.List<String> items = new ArrayList<>();
+        items.add("Photo library");
+        items.add("Voice note");
+        if (!mGroup) {
+            items.add("Send payment");
+        }
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setItems(new CharSequence[]{"Photo library", "Voice note"}, (d, which) -> {
-                    if (which == 0) {
-                        pickPhoto();
-                    } else {
+                .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
+                    String pick = items.get(which);
+                    if ("Send payment".equals(pick)) {
+                        payContact();
+                    } else if ("Voice note".equals(pick)) {
                         startVoiceNote();
+                    } else {
+                        pickPhoto();
                     }
+                })
+                .show();
+    }
+
+    /** Pay this contact from the ACCOUNT's wallet — built + signed on your node, the same
+     *  Parlons pattern as the phone (the seed is the wallet). */
+    private void payContact() {
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        final EditText amt = new EditText(this);
+        amt.setHint("Amount (MINIMA)");
+        amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        box.addView(amt);
+        final EditText memo = new EditText(this);
+        memo.setHint("Memo (optional)");
+        memo.setSingleLine(true);
+        box.addView(memo);
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Send payment to " + mName)
+                .setMessage("Paid from your cloud account's wallet.")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Send", (d, w) -> {
+                    final String amount = amt.getText().toString().trim();
+                    final String note = memo.getText().toString().trim();
+                    if (amount.isEmpty()) {
+                        toast("Enter an amount");
+                        return;
+                    }
+                    toast("Payment building on your node…");
+                    CloudSession.connectInteractive(this, new CloudSession.Cb() {
+                        public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
+                            String error = null;
+                            try {
+                                JSONObject res = r.pay(mPeer, amount, note);
+                                Object ok = res.get("ok");
+                                if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                                    error = String.valueOf(res.get("error"));
+                                }
+                            } catch (Exception e) {
+                                error = e.getMessage() == null ? e.toString() : e.getMessage();
+                            }
+                            final String err = error;
+                            runOnUiThread(() -> {
+                                if (isFinishing() || isDestroyed()) {
+                                    return;
+                                }
+                                if (err != null) {
+                                    toast("Payment failed: " + err);
+                                }
+                                load();
+                            });
+                        }
+                        public void err(String m) {
+                            runOnUiThread(() -> toast("Payment failed: " + m));
+                        }
+                    });
                 })
                 .show();
     }
@@ -1440,9 +1519,17 @@ public final class CloudChatActivity extends AppCompatActivity {
             int ink = getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
             h.sender.setVisibility(View.GONE);
 
-            boolean media = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
+            boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body);
+            boolean media = !pay && com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
             String mime = media ? com.eurobuddha.maxima.core.chat.ChatMedia.mime(m.body) : "";
-            if (media && mime.startsWith("audio")) {
+            if (pay) {
+                h.image.setVisibility(View.GONE);
+                h.audio.setVisibility(View.GONE);
+                h.body.setVisibility(View.VISIBLE);
+                h.body.setText(com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body));
+                h.body.setTextColor(ink);
+                h.body.setTypeface(h.body.getTypeface(), android.graphics.Typeface.BOLD);
+            } else if (media && mime.startsWith("audio")) {
                 h.image.setVisibility(View.GONE);
                 h.audio.setVisibility(View.VISIBLE);
                 h.body.setVisibility(View.GONE);
@@ -1461,6 +1548,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.body.setVisibility(View.VISIBLE);
                 h.body.setText(m.body);
                 h.body.setTextColor(ink);
+                h.body.setTypeface(null, android.graphics.Typeface.NORMAL);
             }
 
             String meta = stamp(m.time);
