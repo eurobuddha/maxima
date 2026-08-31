@@ -52,8 +52,10 @@ public final class MainActivity extends AppCompatActivity {
 
     // pill state, refreshed off-thread
     private volatile int mReach = -1;   // -1 unknown, 0 offline, 1 online
+    private volatile int mHosts = -1;   // relays attached (from node.status)
     private volatile boolean mPolling;
     private long mLastPoll;
+    private android.animation.ObjectAnimator mBreathe;   // the online "breathing" dot
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Runnable mTick = new Runnable() {
@@ -199,6 +201,7 @@ public final class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
+        stopBreathing();
         if (mLock != null) {
             mLock.onStop();
         }
@@ -219,34 +222,56 @@ public final class MainActivity extends AppCompatActivity {
     private void renderPill() {
         int reach = mReach;
         if (reach == 1) {
-            mPill.setText("online");
+            int unread = CloudChatsPage.unreadTotal();
+            int hosts = mHosts;
+            String text;
+            if (unread > 0) {
+                text = unread + " new";   // most useful thing to surface when it's non-zero
+            } else if (hosts > 0) {
+                text = "online · " + hosts + (hosts == 1 ? " host" : " hosts");
+            } else {
+                text = "online";
+            }
+            mPill.setText(text);
             mPill.setTextColor(getColor(R.color.ux_success));
             setDot(R.color.ux_success);
+            startBreathing();
         } else if (reach == 0) {
             mPill.setText("can't reach");
             mPill.setTextColor(getColor(R.color.ux_error));
             setDot(R.color.ux_error);
+            stopBreathing();
         } else {
             mPill.setText("connecting…");
             mPill.setTextColor(getColor(R.color.ux_on_header));
             setDot(R.color.ux_subtext);
+            stopBreathing();
         }
         long now = System.currentTimeMillis();
         if (!mPolling && now - mLastPoll > 4000) {
             mPolling = true;
+            // node.status is one round-trip that gives BOTH reachability and the attached-host
+            // count for the pill (ping only told us up/down).
             CloudSession.connect(this, new CloudSession.Cb() {
                 public void ok(ParlonsRemote r) {
-                    int res;
+                    int res, hosts = -1;
                     try {
-                        JSONObject p = r.ping();
+                        JSONObject p = r.nodeStatus();
                         Object ok = p.get("ok");
                         res = (ok instanceof Boolean && (Boolean) ok) ? 1 : 0;
+                        Object h = p.get("hosts");
+                        if (h instanceof Number) {
+                            hosts = ((Number) h).intValue();
+                        }
                     } catch (Exception e) {
                         res = 0;
                     }
-                    final int fres = res;
+                    final int fres = res, fhosts = hosts;
                     runOnUiThread(() -> {
                         mReach = fres;
+                        if (fhosts >= 0) {
+                            mHosts = fhosts;
+                        }
                         mLastPoll = System.currentTimeMillis();
                         mPolling = false;
                     });
@@ -259,6 +284,28 @@ public final class MainActivity extends AppCompatActivity {
                     });
                 }
             });
+        }
+    }
+
+    /** A slow alpha pulse on the status dot while online — a subtle sign of life. */
+    private void startBreathing() {
+        if (mDot == null || (mBreathe != null && mBreathe.isRunning())) {
+            return;
+        }
+        mBreathe = android.animation.ObjectAnimator.ofFloat(mDot, "alpha", 1f, 0.35f);
+        mBreathe.setDuration(1400);
+        mBreathe.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        mBreathe.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        mBreathe.start();
+    }
+
+    private void stopBreathing() {
+        if (mBreathe != null) {
+            mBreathe.cancel();
+            mBreathe = null;
+        }
+        if (mDot != null) {
+            mDot.setAlpha(1f);
         }
     }
 

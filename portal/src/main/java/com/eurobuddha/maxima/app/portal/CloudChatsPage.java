@@ -47,6 +47,22 @@ public final class CloudChatsPage implements Page {
     private final TextView mEmpty;
     private final EditText mSearch;
     private final List<Row> mAll = new ArrayList<>();
+
+    /** Total unread across all conversations — published for the shell pill/badge. */
+    private static final java.util.concurrent.atomic.AtomicInteger sUnread =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    public static int unreadTotal() {
+        return sUnread.get();
+    }
+
+    private void publishUnread() {
+        int total = 0;
+        for (Row r : mAll) {
+            total += Math.max(0, r.unread);
+        }
+        sUnread.set(total);
+    }
     private final List<Row> mRows = new ArrayList<>();
     private final Adapter mAdapter = new Adapter();
     private String mQuery = "";
@@ -181,6 +197,7 @@ public final class CloudChatsPage implements Page {
                     Object o = new org.minima.utils.json.parser.JSONParser().parse(cached);
                     if (o instanceof JSONObject) {
                         mAll.addAll(parseRows((JSONObject) o));
+                        publishUnread();
                         applyFilter();
                     }
                 } catch (Exception ignored) {
@@ -211,6 +228,7 @@ public final class CloudChatsPage implements Page {
                     if (err == null) {
                         mAll.clear();
                         mAll.addAll(rows);
+                        publishUnread();
                         applyFilter();
                     } else if (mAll.isEmpty()) {
                         mEmpty.setVisibility(View.VISIBLE);
