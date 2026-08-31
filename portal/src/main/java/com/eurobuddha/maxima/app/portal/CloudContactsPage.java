@@ -50,6 +50,34 @@ public final class CloudContactsPage implements Page {
     private volatile boolean mBusy;
     private long mLastLoad;
     private boolean mBuilt;
+    private String mQuery = "";
+    private boolean mSearchFocused;
+
+    /** Contacts matching the current search query (name or key). */
+    private List<C> filtered() {
+        if (mQuery.isEmpty()) {
+            return mContacts;
+        }
+        List<C> out = new ArrayList<>();
+        for (C c : mContacts) {
+            if (c.name.toLowerCase(java.util.Locale.UK).contains(mQuery)
+                    || c.key.toLowerCase(java.util.Locale.UK).contains(mQuery)) {
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
+    private void shareAddress(String s) {
+        if (s == null || s.isEmpty()) {
+            return;
+        }
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_TEXT, s);            // full address, never truncated
+        send.putExtra(Intent.EXTRA_SUBJECT, "My Parlons Cloud address");
+        mAct.startActivity(Intent.createChooser(send, "Share your address"));
+    }
 
     public CloudContactsPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -71,6 +99,9 @@ public final class CloudContactsPage implements Page {
     public void render() {
         if (mBusy) {
             return;
+        }
+        if (mSearchFocused) {
+            return;   // don't rebuild under the user's fingers while they're searching
         }
         long now = System.currentTimeMillis();
         if (mBuilt && now - mLastLoad < 4000) {
@@ -185,17 +216,47 @@ public final class CloudContactsPage implements Page {
         qr.setOnClickListener(v -> showQr(mPermanent));
         btns.addView(qr, lp2);
         addr.addView(btns);
+        addr.addView(PortalUi.gap(c, 6));
+        TextView share = PortalUi.ghost(c, "Share address");
+        share.setOnClickListener(v -> shareAddress(mPermanent));
+        addr.addView(share);
         mRoot.addView(addr);
 
         // --- contacts ---
+        java.util.List<C> shown = filtered();
         mRoot.addView(PortalUi.section(c, "Contacts (" + mContacts.size() + ")"));
-        if (mContacts.isEmpty()) {
+        // Search filter — only shown once there are enough contacts to be worth filtering.
+        if (mContacts.size() >= 5 || !mQuery.isEmpty()) {
+            EditText search = new EditText(c);
+            search.setHint("Search contacts");
+            search.setText(mQuery);
+            search.setSelection(mQuery.length());
+            search.setSingleLine(true);
+            search.setTextColor(c.getColor(R.color.ux_text));
+            search.setHintTextColor(c.getColor(R.color.ux_subtext));
+            search.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+            search.setTextSize(14);
+            search.setOnFocusChangeListener((v, has) -> mSearchFocused = has);
+            search.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence s, int a, int b, int d) { }
+                public void onTextChanged(CharSequence s, int a, int b, int d) { }
+                public void afterTextChanged(android.text.Editable s) {
+                    mQuery = s.toString().trim().toLowerCase(java.util.Locale.UK);
+                    rebuild();   // safe: mSearchFocused guards the auto-render from stealing focus
+                }
+            });
+            mRoot.addView(search);
+            mRoot.addView(PortalUi.gap(c, 8));
+        }
+        if (shown.isEmpty()) {
             LinearLayout empty = PortalUi.card(c);
-            empty.addView(PortalUi.label(c, "No contacts yet. Add someone by their address below."));
+            empty.addView(PortalUi.label(c, mQuery.isEmpty()
+                    ? "No contacts yet. Add someone by their address below."
+                    : "No contacts match \"" + mQuery + "\"."));
             mRoot.addView(empty);
         } else {
             LinearLayout list = PortalUi.card(c);
-            for (int i = 0; i < mContacts.size(); i++) {
+            for (int i = 0; i < shown.size(); i++) {
                 if (i > 0) {
                     View div = new View(c);
                     LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
@@ -204,7 +265,7 @@ public final class CloudContactsPage implements Page {
                     div.setBackgroundColor(c.getColor(R.color.ux_divider));
                     list.addView(div);
                 }
-                list.addView(contactRow(c, mContacts.get(i)));
+                list.addView(contactRow(c, shown.get(i)));
             }
             mRoot.addView(list);
         }
