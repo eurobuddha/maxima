@@ -364,9 +364,22 @@ public final class MainActivity extends AppCompatActivity {
 
     /** Launch the QR scanner; deliver the result to the Contacts add-field. */
     public void scanIntoContacts() {
+        scan("Scan a contact's address QR", null);
+    }
+
+    /** Launch the QR scanner and deliver the scanned text to a one-shot sink (e.g. the wallet
+     *  send-to-address field). A null sink routes to the Contacts add-field. */
+    public void scanTo(java.util.function.Consumer<String> sink) {
+        scan("Scan an address QR", sink);
+    }
+
+    private java.util.function.Consumer<String> mScanSink;
+
+    private void scan(String prompt, java.util.function.Consumer<String> sink) {
+        mScanSink = sink;
         com.journeyapps.barcodescanner.ScanOptions o = new com.journeyapps.barcodescanner.ScanOptions();
         o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
-        o.setPrompt("Scan a contact's address QR");
+        o.setPrompt(prompt);
         o.setBeepEnabled(false);
         o.setOrientationLocked(true);
         mScanLauncher.launch(o);
@@ -375,10 +388,14 @@ public final class MainActivity extends AppCompatActivity {
     private final androidx.activity.result.ActivityResultLauncher<
             com.journeyapps.barcodescanner.ScanOptions> mScanLauncher =
             registerForActivityResult(new com.journeyapps.barcodescanner.ScanContract(), result -> {
+                java.util.function.Consumer<String> sink = mScanSink;
+                mScanSink = null;
                 if (result == null || result.getContents() == null) {
                     return;
                 }
-                if (mContacts != null) {
+                if (sink != null) {
+                    sink.accept(result.getContents());
+                } else if (mContacts != null) {
                     showTab(1);
                     mContacts.onScanned(result.getContents());
                 }

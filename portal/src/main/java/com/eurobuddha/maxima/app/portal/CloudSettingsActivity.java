@@ -247,6 +247,32 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         });
         dev.addView(notif);
         dev.addView(PortalUi.label(c, "Sounds, vibration and channels — handled by Android."));
+
+        // Battery exemption — the portal must stay live on the push channel; battery optimisation
+        // can kill the foreground service. Only offer it when NOT already exempt.
+        android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+        boolean exempt = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        if (!exempt) {
+            dev.addView(PortalUi.gap(c, 12));
+            TextView batt = PortalUi.title(c, "Keep running in the background");
+            batt.setOnClickListener(v -> {
+                try {
+                    Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            .setData(android.net.Uri.parse("package:" + getPackageName()));
+                    startActivity(i);
+                } catch (Exception e) {
+                    // Some OEMs block the direct request — fall back to the settings list.
+                    try {
+                        startActivity(new Intent(
+                                Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+            dev.addView(batt);
+            dev.addView(PortalUi.label(c, "Let Parlons Cloud stay connected so messages and calls "
+                    + "arrive instantly, even when the screen is off."));
+        }
         body.addView(dev);
 
         // --- about ---

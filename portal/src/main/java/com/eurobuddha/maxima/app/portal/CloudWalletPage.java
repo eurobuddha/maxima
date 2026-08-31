@@ -449,6 +449,13 @@ public final class CloudWalletPage implements Page {
         addr.setHint("Mx… or 0x… address");
         addr.setSingleLine(true);
         box.addView(addr);
+        TextView scan = PortalUi.ghost(mAct, "Scan QR");
+        scan.setOnClickListener(v -> mAct.scanTo(text -> {
+            if (text != null && !text.trim().isEmpty()) {
+                addr.setText(text.trim());   // scanned address drops straight into the field
+            }
+        }));
+        box.addView(scan);
         final EditText amt = new EditText(mAct);
         amt.setHint("Amount (MINIMA)");
         amt.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
