@@ -45,6 +45,7 @@ public final class MainActivity extends AppCompatActivity {
     private TextView mPill;
     private View mDot;
     private ViewPager mPager;
+    private LockGate mLock;
     private final List<Page> mPages = new ArrayList<>();
     private CloudContactsPage mContacts;
     private CloudNodePage mNode;
@@ -175,11 +176,17 @@ public final class MainActivity extends AppCompatActivity {
                 renderCurrent();
             }
         });
+
+        mLock = new LockGate(this);
+        mLock.onCreate();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (mLock != null) {
+            mLock.onResume();
+        }
         mHandler.post(mTick);
     }
 
@@ -187,6 +194,14 @@ public final class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         mHandler.removeCallbacks(mTick);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mLock != null) {
+            mLock.onStop();
+        }
     }
 
     private void renderCurrent() {

@@ -29,6 +29,8 @@ import org.minima.utils.json.JSONObject;
 public final class CloudSettingsActivity extends AppCompatActivity {
 
     private Switch mReceipts;
+    private Switch mAppLock;
+    private Switch mScreenShare;
     private volatile boolean mApplying;   // guard: programmatic set must not fire the RPC
 
     @Override
@@ -91,6 +93,57 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         rrRow.addView(mReceipts);
         acc.addView(rrRow);
         body.addView(acc);
+
+        // --- privacy & security: app lock + screen-share (device-local, mirrors the phone app) ---
+        body.addView(PortalUi.section(c, "Privacy & security"));
+        LinearLayout sec = PortalUi.card(c);
+        boolean lockAvail = com.eurobuddha.maxima.app.AppLock.isAvailable(c);
+
+        LinearLayout lockRow = new LinearLayout(c);
+        lockRow.setOrientation(LinearLayout.HORIZONTAL);
+        lockRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout lockCol = new LinearLayout(c);
+        lockCol.setOrientation(LinearLayout.VERTICAL);
+        lockCol.addView(PortalUi.title(c, "App lock"));
+        lockCol.addView(PortalUi.label(c, "Require your fingerprint or device PIN to open "
+                + "Parlons Cloud."));
+        lockRow.addView(lockCol, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mAppLock = new Switch(c);
+        mAppLock.setChecked(com.eurobuddha.maxima.app.AppLock.isEnabled(c));
+        mAppLock.setEnabled(lockAvail);
+        lockRow.addView(mAppLock);
+        sec.addView(lockRow);
+        if (!lockAvail) {
+            sec.addView(PortalUi.label(c, "Set up a fingerprint or screen lock in your phone's "
+                    + "settings first."));
+        }
+
+        sec.addView(PortalUi.gap(c, 12));
+
+        LinearLayout ssRow = new LinearLayout(c);
+        ssRow.setOrientation(LinearLayout.HORIZONTAL);
+        ssRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout ssCol = new LinearLayout(c);
+        ssCol.setOrientation(LinearLayout.VERTICAL);
+        ssCol.addView(PortalUi.title(c, "Allow screen sharing"));
+        ssCol.addView(PortalUi.label(c, "On by default. Turn off to hide the app from "
+                + "screenshots and screen recording while it's locked."));
+        ssRow.addView(ssCol, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mScreenShare = new Switch(c);
+        mScreenShare.setChecked(com.eurobuddha.maxima.app.AppLock.allowScreenShare(c));
+        mScreenShare.setEnabled(com.eurobuddha.maxima.app.AppLock.isEnabled(c));
+        mScreenShare.setOnCheckedChangeListener((v, on) ->
+                com.eurobuddha.maxima.app.AppLock.setAllowScreenShare(c, on));
+        ssRow.addView(mScreenShare);
+        sec.addView(ssRow);
+        // Wire the lock switch last so it can flip the screen-share row's enabled state.
+        mAppLock.setOnCheckedChangeListener((v, on) -> {
+            com.eurobuddha.maxima.app.AppLock.setEnabled(c, on);
+            mScreenShare.setEnabled(on);
+        });
+        body.addView(sec);
 
         // --- keys & backup: the identity lifecycle, app-parity discipline ---
         body.addView(PortalUi.section(c, "Keys & backup"));

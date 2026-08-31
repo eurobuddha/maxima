@@ -56,6 +56,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     private String mPeer;
     private String mName;
+    private com.eurobuddha.maxima.app.LockGate mLock;
     private boolean mGroup;
     private RecyclerView mList;
     private EditText mInput;
@@ -270,6 +271,9 @@ public final class CloudChatActivity extends AppCompatActivity {
                 }
             }
         });
+
+        mLock = new com.eurobuddha.maxima.app.LockGate(this);
+        mLock.onCreate();   // FLAG_SECURE + cover a chat opened straight from a notification
     }
 
     /** Cloud push → apply the event DIRECTLY. The push already carries the message body and the
@@ -366,6 +370,9 @@ public final class CloudChatActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (mLock != null) {
+            mLock.onResume();
+        }
         PortalHub.setForeground(mPeer);
         PortalHub.add(mPush);
         PortalNotifier.clear(this, mPeer);
@@ -379,6 +386,14 @@ public final class CloudChatActivity extends AppCompatActivity {
         PortalHub.remove(mPush);
         mHandler.removeCallbacks(mTick);
         stopAudio();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mLock != null) {
+            mLock.onStop();
+        }
     }
 
     private void startCall(boolean zVideo) {
