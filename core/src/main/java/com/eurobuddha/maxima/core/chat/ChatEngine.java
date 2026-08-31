@@ -396,6 +396,11 @@ public final class ChatEngine {
         return mMessages.get(zId);
     }
 
+    /** A snapshot of every stored message — a single pass for search/audit (read-only). */
+    public java.util.Collection<Entry> allMessages() {
+        return new ArrayList<>(mMessages.values());
+    }
+
     /**
      * Forget a conversation's history on THIS device. Removes every message that
      * belongs to it (the same match {@link #conversation} uses) and its read
