@@ -166,7 +166,7 @@ public final class WalletPage implements Page {
      * instead of waiting for the next 5s render tick.
      */
     private void trackWallet(final MaximaWallet w, final int zTry) {
-        mPub.trackScript(w.script(), new WalletPublisher.Cb() {
+        mPub.prepare(w.script(), w.hexAddress(), new WalletPublisher.Cb() {
             public void onResult(JSONObject r) {
                 mTracked = true;
                 mLastFetch = 0;       // let the next render fetch immediately

@@ -38,6 +38,12 @@ public final class WalletPublisher {
     private final Context mCtx;
     private final GatewayNode mGateway;
     private final NodeLink mNode;
+    /** Our wallet's hex address, learned in {@link #prepare}. Needed for node-side reads. */
+    private volatile String mAddr = null;
+    /** True once the paired node has our address tracked AND every historic coin
+     *  back-filled into its tracked set — only then are reads/publish safe to route
+     *  to the node (before that a node read would under-report the balance). */
+    private volatile boolean mNodeReady = false;
 
     public WalletPublisher(Context zCtx, NodeLink zNodeOrNull) {
         mCtx = zCtx.getApplicationContext();
@@ -58,11 +64,20 @@ public final class WalletPublisher {
 
     /** Which backend answers right now (for the UI). */
     public String backendName() {
-        return usingCore() ? "local minimaCore node" : "gateway";
+        return useNode() ? "local minimaCore node" : "gateway";
     }
 
+    /** minimaCore installed AND paired/enabled right now. */
     private boolean usingCore() {
         return mNode != null && mNode.isEnabled();
+    }
+
+    /** Use the paired node for wallet ops: it's enabled AND its tracked set is prepared
+     *  (address tracked + historic coins back-filled). Falls back to the gateway otherwise,
+     *  so a node that goes away mid-session, or one we couldn't fully back-fill, never
+     *  under-reports the balance. */
+    private boolean useNode() {
+        return usingCore() && mNodeReady;
     }
 
     // ---- the uniform surface ----
@@ -90,30 +105,200 @@ public final class WalletPublisher {
     }
 
     public void balance(String zAddress, Cb zCb) {
-        gcmd("balance megammr:true address:" + zAddress, zCb);
+        if (useNode()) {
+            mNode.cmd("balance address:" + zAddress,
+                    wrapNodeOrGateway("balance megammr:true address:" + zAddress, zCb));
+        } else {
+            gcmd("balance megammr:true address:" + zAddress, zCb);
+        }
     }
 
     public void coins(String zAddress, Cb zCb) {
-        gcmd("coins megammr:true address:" + zAddress, zCb);
+        if (useNode()) {
+            mNode.cmd("coins address:" + zAddress,
+                    wrapNodeOrGateway("coins megammr:true address:" + zAddress, zCb));
+        } else {
+            gcmd("coins megammr:true address:" + zAddress, zCb);
+        }
     }
 
+    /** A node callback that, on node error, transparently retries the equivalent command on
+     *  the gateway — so a flaky or vanished node never breaks a read. */
+    private NodeLink.Cb wrapNodeOrGateway(final String zGatewayCmd, final Cb zCb) {
+        return new NodeLink.Cb() {
+            public void onResult(JSONObject r) { zCb.onResult(r); }
+            public void onError(String m)      { gcmd(zGatewayCmd, zCb); }
+        };
+    }
+
+    /** Legacy entry point (gateway-track only). Prefer {@link #prepare}. */
     public void trackScript(String zScript, Cb zCb) {
         gcmd("newscript trackall:true script:\"" + zScript + "\"", zCb);
     }
 
     /**
-     * Publish a LOCALLY-SIGNED txn: txnimport -> txnbasics -> txnpost. ALWAYS through
-     * the hosted MegaMMR gateway (see {@link #gcmd}): txnbasics must attach the coins'
-     * MMR proofs from the node that actually tracks them, which — after the backfill —
-     * is the gateway, not the user's node.
+     * Register our address and, when a node is paired, prepare it for node-side wallet ops:
+     *   1. {@code newscript trackall:true} — forward tracking on the node,
+     *   2. back-fill — pull our existing coins from the gateway (megammr) and
+     *      {@code coinimport track:true} each into the node's tracked set, so node
+     *      balance/coins (and later publish) see the FULL wallet. A plain node cannot
+     *      discover coins funded before it started tracking; this closes that gap.
+     * {@link #mNodeReady} flips true only when EVERY historic coin imports — otherwise
+     * reads stay on the gateway so the balance is never under-reported. With no node paired
+     * this is just the gateway track (unchanged behaviour).
+     */
+    public void prepare(String zScript, String zHexAddr, Cb zCb) {
+        mAddr = zHexAddr;
+        // Keep the gateway aware of our script too (idempotent) so the fallback path works.
+        mGateway.trackScript(zScript, new GatewayNode.Cb() {
+            public void onResult(JSONObject r) {}
+            public void onError(String m) {}
+        });
+        if (!usingCore()) {
+            gcmd("newscript trackall:true script:\"" + zScript + "\"", zCb);
+            return;
+        }
+        mNode.cmd("newscript trackall:true script:\"" + zScript + "\"", new NodeLink.Cb() {
+            public void onResult(JSONObject r) { reconcile(zHexAddr, zCb); }
+            public void onError(String m)      { if (zCb != null) zCb.onError(m); } // stay on gateway
+        });
+    }
+
+    /**
+     * Decide whether the node is ready to serve the wallet — NODE-FIRST, so a down gateway
+     * never blocks it (the resilience requirement). Read the node's OWN tracked coins, then:
+     *   - gateway reachable  → import only the coins the node is missing; ready iff all land.
+     *   - gateway unreachable → trust the node's tracked set and go ready anyway.
+     * If the node read itself fails we stay on the gateway (never under-report).
+     */
+    private void reconcile(final String zHexAddr, final Cb zCb) {
+        mNode.cmd("coins address:" + zHexAddr, new NodeLink.Cb() {
+            public void onResult(JSONObject nodeCoins) {
+                final java.util.Set<String> have = idsOf(nodeCoins);
+                mGateway.coins(zHexAddr, new GatewayNode.Cb() {
+                    public void onResult(JSONObject gw) {
+                        java.util.List<String> missing = new java.util.ArrayList<>();
+                        for (String id : idsOf(gw)) if (!have.contains(id)) missing.add(id);
+                        importNext(missing, 0, new int[]{0}, zCb);   // ready iff every missing imports
+                    }
+                    public void onError(String m) {
+                        // Gateway down — trust what the node already tracks; use the node.
+                        mNodeReady = true;
+                        if (zCb != null) zCb.onResult(new JSONObject());
+                    }
+                });
+            }
+            public void onError(String m) {
+                if (zCb != null) zCb.onError("node coins: " + m);   // stay on gateway
+            }
+        });
+    }
+
+    /** Coin-ids present in a {coins} response (works for node and gateway replies alike). */
+    private static java.util.Set<String> idsOf(JSONObject coinsResp) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        try {
+            org.json.JSONArray arr = coinsResp.optJSONArray("response");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    String cid = arr.getJSONObject(i).optString("coinid", "");
+                    if (!cid.isEmpty()) out.add(cid);
+                }
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    private void importNext(final java.util.List<String> zIds, final int zI,
+                            final int[] zOk, final Cb zCb) {
+        if (zI >= zIds.size()) {
+            mNodeReady = (zOk[0] == zIds.size());   // ready only if every historic coin landed
+            if (zCb != null) {
+                if (mNodeReady) zCb.onResult(new JSONObject());
+                else zCb.onError("backfill incomplete: " + zOk[0] + "/" + zIds.size());
+            }
+            return;
+        }
+        mGateway.coinExport(zIds.get(zI), new GatewayNode.Cb() {
+            public void onResult(JSONObject ex) {
+                String blob = blobOf(ex);
+                if (blob == null || blob.isEmpty()) { importNext(zIds, zI + 1, zOk, zCb); return; }
+                mNode.cmd("coinimport data:" + blob + " track:true", new NodeLink.Cb() {
+                    public void onResult(JSONObject r) {
+                        if (r.optBoolean("status", false)) zOk[0]++;
+                        importNext(zIds, zI + 1, zOk, zCb);
+                    }
+                    public void onError(String m) { importNext(zIds, zI + 1, zOk, zCb); }
+                });
+            }
+            public void onError(String m) { importNext(zIds, zI + 1, zOk, zCb); }
+        });
+    }
+
+    /** Extract the coinexport blob (0x…) from a gateway response, tolerating a bare-string
+     *  response and a nested {@code {response:{data:…}}} shape. */
+    private static String blobOf(JSONObject ex) {
+        Object resp = ex.opt("response");
+        if (resp instanceof String) return ((String) resp).trim();
+        JSONObject ro = ex.optJSONObject("response");
+        if (ro != null) {
+            String d = ro.optString("data", ro.optString("coin", ""));
+            if (!d.isEmpty()) return d.trim();
+        }
+        return null;
+    }
+
+    /**
+     * Publish a LOCALLY-SIGNED txn: txnimport -> txnbasics -> txnpost. Routes to the paired
+     * node when it's prepared — {@link #prepare}/{@link #reconcile} have imported our coins
+     * (and their MMR proofs) into the node's tracked set, so {@code txnbasics} can attach them
+     * there. Otherwise the hosted gateway. Signing already happened on-device; both backends
+     * only relay. Every failure path {@code txndelete}s so a half-built txn can't be re-spent.
      */
     public void publish(String zImportCmd, String zId, String zPostCmd, Cb zCb) {
-        // Publishing via a paired local node would require that node to be a MegaMMR
-        // node AND to already track our backfilled coins (so txnbasics can attach their
-        // proofs) — a normal paired node is neither. So publish through the same hosted
-        // gateway the coins were imported to. (Node-side publishing can return when the
-        // node also does the backfill.)
-        mGateway.publish(zImportCmd, zId, zPostCmd, wrapG(zCb));
+        if (useNode()) {
+            nodePublish(zImportCmd, zId, zPostCmd, zCb);
+        } else {
+            mGateway.publish(zImportCmd, zId, zPostCmd, wrapG(zCb));
+        }
+    }
+
+    /** txnimport -> txnbasics -> txnpost through the paired node; txndelete on any failure. */
+    private void nodePublish(final String zImportCmd, final String zId,
+                             final String zPostCmd, final Cb zCb) {
+        mNode.cmd(zImportCmd, new NodeLink.Cb() {
+            public void onResult(JSONObject r1) {
+                if (!r1.optBoolean("status", false)) {
+                    nodeFail(zId, "txnimport: " + r1.optString("error", r1.toString()), zCb); return;
+                }
+                mNode.cmd("txnbasics id:" + zId, new NodeLink.Cb() {
+                    public void onResult(JSONObject r2) {
+                        if (!r2.optBoolean("status", false)) {
+                            nodeFail(zId, "txnbasics: " + r2.optString("error", r2.toString()), zCb); return;
+                        }
+                        mNode.cmd(zPostCmd, new NodeLink.Cb() {
+                            public void onResult(JSONObject r3) {
+                                if (!r3.optBoolean("status", false)) {
+                                    nodeFail(zId, "txnpost: " + r3.optString("error", r3.toString()), zCb); return;
+                                }
+                                if (zCb != null) zCb.onResult(r3);
+                            }
+                            public void onError(String m) { nodeFail(zId, m, zCb); }
+                        });
+                    }
+                    public void onError(String m) { nodeFail(zId, m, zCb); }
+                });
+            }
+            public void onError(String m) { nodeFail(zId, m, zCb); }
+        });
+    }
+
+    /** Clean the half-built txn off the node, THEN report the failure. */
+    private void nodeFail(final String zId, final String zMsg, final Cb zCb) {
+        mNode.cmd("txndelete id:" + zId, new NodeLink.Cb() {
+            public void onResult(JSONObject r) { if (zCb != null) zCb.onError(zMsg); }
+            public void onError(String m)      { if (zCb != null) zCb.onError(zMsg); }
+        });
     }
 
     // ---- adapters between the two backends' callback shapes ----

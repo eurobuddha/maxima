@@ -62,7 +62,7 @@ public final class PaymentSender {
             }
             // Make pre-existing funds spendable via the gateway - idempotent,
             // can never move funds.
-            mPub.trackScript(w.script(), new WalletPublisher.Cb() {
+            mPub.prepare(w.script(), w.hexAddress(), new WalletPublisher.Cb() {
                 public void onResult(JSONObject r) {
                 }
 
