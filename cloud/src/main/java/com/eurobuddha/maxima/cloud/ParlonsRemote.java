@@ -390,12 +390,12 @@ public final class ParlonsRemote {
     }
 
     /** Send from the ACCOUNT wallet to any Minima address (pid-idempotent). Result arrives
-     *  as a walletsent/walletfail push. */
-    public JSONObject walletSend(String zTo, String zAmount) throws Exception {
+     *  as a walletsent/walletfail push carrying this pid. */
+    public JSONObject walletSend(String zTo, String zAmount, String zPid) throws Exception {
         JSONObject p = new JSONObject();
         p.put("to", zTo);
         p.put("amount", zAmount);
-        p.put("pid", java.util.UUID.randomUUID().toString());
+        p.put("pid", zPid);
         return rpc(ParlonsControl.M_WALLET_SEND, p);
     }
 
@@ -415,6 +415,50 @@ public final class ParlonsRemote {
         JSONObject p = new JSONObject();
         p.put("key", zKey);
         return rpc(ParlonsControl.M_CONTACT_REMOVE, p);
+    }
+
+    /** Clear a conversation locally on the account (does NOT unsend or leave a group). */
+    public JSONObject clearConversation(String zPeer) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("peer", zPeer);
+        return rpc(ParlonsControl.M_CHAT_CLEAR, p);
+    }
+
+    /** Search contacts, group names and message bodies. */
+    public JSONObject search(String zQuery) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("q", zQuery);
+        return rpc(ParlonsControl.M_CHAT_SEARCH, p);
+    }
+
+    /** Group roster + admins. */
+    public JSONObject groupInfo(String zId) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        return rpc(ParlonsControl.M_GROUP_INFO, p);
+    }
+
+    /** Rename a group and/or set its member list (admin only). */
+    public JSONObject updateGroup(String zId, String zName, java.util.List<String> zMembers)
+            throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        if (zName != null) {
+            p.put("name", zName);
+        }
+        if (zMembers != null) {
+            org.minima.utils.json.JSONArray arr = new org.minima.utils.json.JSONArray();
+            arr.addAll(zMembers);
+            p.put("members", arr);
+        }
+        return rpc(ParlonsControl.M_GROUP_UPDATE, p);
+    }
+
+    /** Full contact detail (kind, caps, lastSeen, addresses, minima/wallet). */
+    public JSONObject contactInfo(String zKey) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("key", zKey);
+        return rpc(ParlonsControl.M_CONTACT_INFO, p);
     }
 
     /** Mark a conversation read on the account (clears unread; sends the read receipt if the

@@ -56,25 +56,16 @@ public final class CloudBackupManager {
      */
     public static void applyRestore(Path zDataDir, BackupBundle zBundle) throws Exception {
         Path seedFile = zDataDir.resolve("seed.txt");
+        // seed.txt is the "identity exists" marker, so it is written LAST. Its ABSENCE means an
+        // incomplete restore is safe to retry; a half-written one that left seed.txt behind
+        // would look complete and (counters at 0) risk Winternitz reuse on first send.
         if (Files.exists(seedFile)) {
             throw new IllegalStateException("this data dir already holds an identity ("
                     + seedFile + ") — move it away first; restore never overwrites");
         }
         Files.createDirectories(zDataDir);
-        // Atomic 0600 create — same discipline as RelayRuntime.loadOrCreateSeed.
-        try {
-            Files.createFile(seedFile, PosixFilePermissions.asFileAttribute(
-                    PosixFilePermissions.fromString("rw-------")));
-        } catch (UnsupportedOperationException nonPosix) {
-            // non-POSIX FS — plain create below
-        }
-        try {
-            Files.write(seedFile, zBundle.phrase.trim().getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            try { Files.deleteIfExists(seedFile); } catch (Exception ignored) { }
-            throw e;
-        }
 
+        // 1. Everything EXCEPT the seed first — contacts, name/mls, and the sacred counters.
         FileStore node = new FileStore(new File(zDataDir.toFile(), "node"));
         for (Map.Entry<String, String> e : zBundle.contacts.entrySet()) {
             node.put("contacts", e.getKey(), e.getValue());
@@ -86,8 +77,22 @@ public final class CloudBackupManager {
             node.put("settings", "staticmls", zBundle.mls);
         }
         node.flush();
-
         CloudKeyUses.importRaiseOnly(new File(zDataDir.toFile(), "wallet"), zBundle.keyUses);
+
+        // 2. The seed LAST, atomically 0600. Any failure removes it so the restore is retryable
+        //    and never leaves a "complete-looking" identity with zeroed counters.
+        try {
+            try {
+                Files.createFile(seedFile, PosixFilePermissions.asFileAttribute(
+                        PosixFilePermissions.fromString("rw-------")));
+            } catch (UnsupportedOperationException nonPosix) {
+                // non-POSIX FS — plain create below
+            }
+            Files.write(seedFile, zBundle.phrase.trim().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            try { Files.deleteIfExists(seedFile); } catch (Exception ignored) { }
+            throw e;
+        }
     }
 
     static String readPhrase(Path zDataDir) throws Exception {

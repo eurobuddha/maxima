@@ -194,9 +194,12 @@ public final class Client {
             case "backup": {
                 requireArg(rest, "backup <output-file.pbk>");
                 java.io.Console con = System.console();
-                String pass = con != null
-                        ? new String(con.readPassword("Backup passphrase (min 6): "))
-                        : rest.size() > 2 ? rest.get(2) : "";
+                if (con == null) {
+                    System.err.println("backup needs an interactive console for the passphrase "
+                            + "(never pass a secret on the command line).");
+                    System.exit(2);
+                }
+                String pass = new String(con.readPassword("Backup passphrase (min 6): "));
                 if (pass.length() < 6) {
                     System.err.println("passphrase too short"); System.exit(2);
                 }

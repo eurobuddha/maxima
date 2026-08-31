@@ -181,14 +181,7 @@ public final class CloudKeyUses implements KeyUses {
     private void writeRaw(File f, String zKey, int zValue) {
         Properties p = load(f);
         p.setProperty(zKey, Integer.toString(zValue));
-        try (FileOutputStream out = new FileOutputStream(f)) {
-            p.store(out, "parlons cloud wallet key-uses — DO NOT EDIT (one-time-signature counter)");
-            out.flush();
-            out.getFD().sync();
-        } catch (IOException e) {
-            throw new IllegalStateException("KeyUses: failed to persist " + zKey
-                    + " to " + f + " — refusing (would risk key reuse)", e);
-        }
+        writeProps(f, p, zKey);
     }
 
     // ---- durable file ops ----
@@ -205,26 +198,50 @@ public final class CloudKeyUses implements KeyUses {
 
     private Properties load(File f) {
         Properties p = new Properties();
-        if (f.exists()) {
-            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
-                p.load(in);
-            } catch (Exception ignored) {
-            }
+        if (!f.exists()) {
+            return p;   // absent = genuinely 0 uses (first boot)
+        }
+        // A file that EXISTS but can't be read must NEVER read as 0 — that would hand out a
+        // used leaf again (key disclosure). Refuse instead.
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            p.load(in);
+        } catch (Exception e) {
+            throw new IllegalStateException("KeyUses: " + f + " exists but is unreadable — "
+                    + "refusing to sign/export (would risk key reuse)", e);
         }
         return p;
     }
 
-    /** Write the value and fsync; throw (fund-safety) if the durable write fails. */
+    /** Write the value and fsync, via a temp file + atomic rename so a crash mid-write can never
+     *  leave a truncated/partial counter file. Throw (fund-safety) on any durable-write failure. */
     private void write(File f, int keyIndex, int value) {
         Properties p = load(f);
         p.setProperty(key(keyIndex), Integer.toString(value));
-        try (FileOutputStream out = new FileOutputStream(f)) {
+        writeProps(f, p, "key " + keyIndex);
+    }
+
+    private void writeProps(File f, Properties p, String what) {
+        File tmp = new File(f.getParentFile(), f.getName() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
             p.store(out, "parlons cloud wallet key-uses — DO NOT EDIT (one-time-signature counter)");
             out.flush();
-            out.getFD().sync();   // fsync: the +1 must be on disk before we return a leaf
+            out.getFD().sync();   // the new contents must be durable before the rename
         } catch (IOException e) {
-            throw new IllegalStateException("KeyUses: failed to persist use for key " + keyIndex
-                    + " to " + f + " — refusing to sign (would risk key reuse)", e);
+            throw new IllegalStateException("KeyUses: failed to persist " + what
+                    + " to " + tmp + " — refusing (would risk key reuse)", e);
+        }
+        try {
+            java.nio.file.Files.move(tmp.toPath(), f.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception atomicFail) {
+            try {
+                java.nio.file.Files.move(tmp.toPath(), f.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (Exception e) {
+                throw new IllegalStateException("KeyUses: failed to commit " + what
+                        + " to " + f + " — refusing (would risk key reuse)", e);
+            }
         }
     }
 }

@@ -58,6 +58,11 @@ public final class ParlonsControl {
     public static final String M_SEED_REVEAL  = "parlons.seed.reveal";
     public static final String M_BACKUP_EXPORT = "parlons.backup.export";
     public static final String M_WALLET_SEND  = "parlons.wallet.send";
+    public static final String M_CHAT_CLEAR   = "parlons.chat.clear";
+    public static final String M_CHAT_SEARCH  = "parlons.chat.search";
+    public static final String M_GROUP_INFO   = "parlons.group.info";
+    public static final String M_GROUP_UPDATE = "parlons.group.update";
+    public static final String M_CONTACT_INFO = "parlons.contacts.info";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -388,8 +393,13 @@ public final class ParlonsControl {
             for (ChatEngine.Summary s : mChat.summaries()) {
                 JSONObject o = new JSONObject();
                 o.put("peer", safe(s.conversation));
+                boolean isGrp = mChat.group(s.conversation) != null;
                 o.put("name", safe(nameFor(s.conversation)));
-                o.put("group", mChat.group(s.conversation) != null);
+                o.put("group", isGrp);
+                // In a group, the preview names who spoke ("Alice: hi") — the app's convention.
+                if (isGrp && !s.lastMine && s.lastSender != null && !s.lastSender.isEmpty()) {
+                    o.put("lastName", nameFor(s.lastSender));
+                }
                 // Bounded reply: a full media body is a multi-KB manifest, and the WHOLE reply
                 // must fit one 256K wire message or it silently black-holes. Previews only.
                 String last = safe(s.lastBody);
@@ -456,6 +466,7 @@ public final class ParlonsControl {
                 entries = entries.subList(entries.size() - limit, entries.size());
             }
             JSONArray arr = new JSONArray();
+            boolean grp = mChat.group(peer) != null;
             for (ChatEngine.Entry e : entries) {
                 JSONObject o = new JSONObject();
                 o.put("id", safe(e.id));
@@ -464,6 +475,13 @@ public final class ParlonsControl {
                 o.put("mine", e.mine);
                 o.put("time", e.time);
                 o.put("state", safe(e.state));
+                o.put("arrived", e.arrived);          // late-relay dual clock
+                if (grp && !e.mine) {
+                    o.put("sname", nameFor(e.sender));   // group sender name
+                }
+                if (grp && e.mine) {
+                    o.put("delivered", e.deliveredBy.size());   // per-member delivery count
+                }
                 arr.add(o);
             }
             JSONObject out = ok();
@@ -515,6 +533,162 @@ public final class ParlonsControl {
                 try { mChat.markRead(peer); } catch (Exception ignored) { }
             });
             return bytes(ok());
+        });
+
+        // --- clear a conversation locally on the account (does NOT unsend / leave a group) ---
+        zReg.register(M_CHAT_CLEAR, req -> {
+            requireAuth(req);
+            String peer = str(parse(req), "peer");
+            if (peer.isEmpty()) {
+                return bytes(err("peer required"));
+            }
+            int n = mChat.clearConversation(peer);
+            JSONObject out = ok();
+            out.put("cleared", n);
+            return bytes(out);
+        });
+
+        // --- search: names, group names, message bodies (media captions + payment previews;
+        //     voice-note waveform hex excluded) — the app's SearchActivity matching ---
+        zReg.register(M_CHAT_SEARCH, req -> {
+            requireAuth(req);
+            String q = str(parse(req), "q").trim().toLowerCase();
+            JSONObject out = ok();
+            JSONArray convs = new JSONArray();
+            JSONArray msgs = new JSONArray();
+            if (!q.isEmpty()) {
+                for (Contact c : mNode.contacts()) {
+                    String nm = c.name == null ? "" : c.name;
+                    if (nm.toLowerCase().contains(q) || safe(c.publicKey).toLowerCase().contains(q)) {
+                        JSONObject o = new JSONObject();
+                        o.put("peer", safe(c.publicKey));
+                        o.put("name", nm.isEmpty() ? safe(c.publicKey) : nm);
+                        o.put("group", false);
+                        convs.add(o);
+                    }
+                }
+                for (com.eurobuddha.maxima.core.chat.Group g : mChat.groups()) {
+                    if (g.name != null && g.name.toLowerCase().contains(q)) {
+                        JSONObject o = new JSONObject();
+                        o.put("peer", g.id);
+                        o.put("name", g.name);
+                        o.put("group", true);
+                        convs.add(o);
+                    }
+                }
+                int cap = 60;
+                java.util.List<ChatEngine.Summary> sums = mChat.summaries();
+                outer:
+                for (ChatEngine.Summary s : sums) {
+                    for (ChatEngine.Entry e : mChat.conversation(s.conversation)) {
+                        String body = searchable(e.body);
+                        if (body.toLowerCase().contains(q)) {
+                            JSONObject o = new JSONObject();
+                            o.put("peer", safe(s.conversation));
+                            o.put("name", nameFor(s.conversation));
+                            o.put("group", mChat.group(s.conversation) != null);
+                            o.put("id", safe(e.id));
+                            o.put("body", body);
+                            o.put("time", e.time);
+                            o.put("mine", e.mine);
+                            msgs.add(o);
+                            if (msgs.size() >= cap) {
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
+            out.put("conversations", convs);
+            out.put("messages", msgs);
+            return bytes(out);
+        });
+
+        // --- group info: roster + admins (from the Group accessors) ---
+        zReg.register(M_GROUP_INFO, req -> {
+            requireAuth(req);
+            String id = str(parse(req), "id");
+            com.eurobuddha.maxima.core.chat.Group g = mChat.group(id);
+            if (g == null) {
+                return bytes(err("no such group"));
+            }
+            String me = mNode.publicKeyHex();
+            JSONArray members = new JSONArray();
+            for (String k : g.members()) {
+                JSONObject o = new JSONObject();
+                o.put("key", safe(k));
+                o.put("name", nameFor(k));
+                o.put("admin", g.isAdmin(k));
+                o.put("me", com.eurobuddha.maxima.core.identity.Keys.same(k, me));
+                members.add(o);
+            }
+            JSONObject out = ok();
+            out.put("id", g.id);
+            out.put("name", safe(g.name));
+            out.put("iAmAdmin", g.isAdmin(me));
+            out.put("members", members);
+            return bytes(out);
+        });
+
+        // --- group update: add/remove members, rename (admin only; roster pushed) ---
+        zReg.register(M_GROUP_UPDATE, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String id = str(in, "id");
+            com.eurobuddha.maxima.core.chat.Group g = mChat.group(id);
+            if (g == null) {
+                return bytes(err("no such group"));
+            }
+            if (!g.isAdmin(mNode.publicKeyHex())) {
+                return bytes(err("only an admin can change the group"));
+            }
+            String newName = str(in, "name").trim();
+            if (!newName.isEmpty()) {
+                g.name = newName;
+            }
+            JSONArray mems = (JSONArray) in.get("members");
+            if (mems != null) {
+                java.util.List<String> keys = new java.util.ArrayList<>();
+                for (Object o : mems) {
+                    keys.add(String.valueOf(o));
+                }
+                keys.add(mNode.publicKeyHex());   // never drop myself
+                g.setMembers(keys);
+                g.addAdmin(mNode.publicKeyHex());
+            }
+            // updateGroup pushes the roster to members — blocking, off the pump.
+            final com.eurobuddha.maxima.core.chat.Group fg = g;
+            mSendExec.execute(() -> {
+                try { mChat.updateGroup(fg); } catch (Exception ignored) { }
+            });
+            JSONObject out = ok();
+            out.put("name", g.name);
+            return bytes(out);
+        });
+
+        // --- contact info: full detail (kind, caps, lastSeen, all addresses, minima/mls) ---
+        zReg.register(M_CONTACT_INFO, req -> {
+            requireAuth(req);
+            String key = str(parse(req), "key");
+            Contact c = mNode.contact(key);
+            if (c == null) {
+                return bytes(err("no such contact"));
+            }
+            JSONObject out = ok();
+            out.put("key", safe(c.publicKey));
+            out.put("name", safe(c.name));
+            out.put("lastSeen", c.lastSeen);
+            out.put("kind", safe(c.kind));
+            out.put("classic", c.isClassic());
+            out.put("minima", safe(c.minimaAddress));
+            String wallet = mChat.walletAddress(key);
+            out.put("wallet", wallet == null ? "" : wallet);
+            JSONArray addrs = new JSONArray();
+            for (String a : c.addresses) {
+                addrs.add(a);
+            }
+            out.put("addresses", addrs);
+            return bytes(out);
         });
 
         // --- push channel: an explicit heartbeat. requireAuth records the live addresses. ---
@@ -669,14 +843,7 @@ public final class ParlonsControl {
             String amount = str(in, "amount").trim();
             String memoRaw = str(in, "memo");
             final String memo = memoRaw.length() > 300 ? memoRaw.substring(0, 300) : memoRaw;
-            // IDEMPOTENCY (fund-critical): the client rpc() retries on a lost reply — a retried
-            // pid must be acked, never queued again. One tap must never pay twice.
             String pid = str(in, "pid");
-            if (!pid.isEmpty() && mRecentPays.putIfAbsent(pid, System.currentTimeMillis()) != null) {
-                JSONObject out = ok();
-                out.put("state", "building");
-                return bytes(out);
-            }
             final Contact c = mNode.contact(peer);
             if (c == null) {
                 return bytes(err("unknown contact " + peer));
@@ -708,6 +875,13 @@ public final class ParlonsControl {
             final String to = mChat.walletAddress(peer);
             if (to == null || to.isEmpty()) {
                 return bytes(err("no wallet address from them yet — ask them to open this chat"));
+            }
+            // IDEMPOTENCY (fund-critical) — record only AFTER validation, so a lost reply to a
+            // REJECTED request can retry; a retried valid pid is acked, never queued twice.
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent("p:" + pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
             }
             final CloudPaymentSender sender = ps.sender();
             // Build+sign+publish are blocking network work — the send lane, never the pump.
@@ -803,13 +977,10 @@ public final class ParlonsControl {
             String to = str(in, "to").trim();
             String amount = str(in, "amount").trim();
             String pid = str(in, "pid");
-            if (!pid.isEmpty() && mRecentPays.putIfAbsent(pid, System.currentTimeMillis()) != null) {
-                JSONObject out = ok();
-                out.put("state", "building");
-                return bytes(out);
-            }
-            if (!to.matches("Mx[0-9A-Z]+") && !to.matches("0x[0-9A-Fa-f]+")) {
-                return bytes(err("that doesn't look like a Minima address"));
+            // 0x must be a FULL address (64 hex) — a truncated paste would build+sign to a
+            // 2-byte unspendable output and burn a key use. Mx is checksummed by the engine.
+            if (!to.matches("Mx[0-9A-Z]+") && !to.matches("0x[0-9A-Fa-f]{64}")) {
+                return bytes(err("that doesn't look like a full Minima address"));
             }
             PaySource ps = mPaySource;
             if (ps == null || ps.sender() == null) {
@@ -820,6 +991,14 @@ public final class ParlonsControl {
             }
             if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
                 return bytes(err("that amount doesn't look right"));
+            }
+            final String fpid = pid;
+            // Record the pid ONLY after validation passes — a lost reply to a rejected request
+            // must be able to retry, not get acked as "building".
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent("w:" + pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
             }
             final org.minima.objects.base.MiniNumber amt;
             try {
@@ -842,13 +1021,16 @@ public final class ParlonsControl {
                     ev.put("to", fto);
                     ev.put("amount", amt.toString());
                     ev.put("txid", built.txid);
+                    ev.put("pid", fpid);   // the device gates its detach-watch flip on this
                     push(ev);
                 } catch (Exception ex) {
                     String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                    // Only a gateway-REPORTED rejection is a safe failure; ANYTHING else
+                    // (transport error mid-publish) is outcome-unknown — the money may have
+                    // moved, so never invite a re-send (same discipline as chat.pay).
                     boolean gatewaySaidNo = why.startsWith("txnimport:")
                             || why.startsWith("txnbasics:") || why.startsWith("txnpost:");
-                    if (!gatewaySaidNo && (why.contains("timed out") || why.contains("timeout")
-                            || why.toLowerCase().contains("connect"))) {
+                    if (!gatewaySaidNo) {
                         why = "outcome unknown (network trouble mid-broadcast) — check the "
                                 + "wallet balance before sending again";
                     }
@@ -1153,6 +1335,23 @@ public final class ParlonsControl {
     private static long lngOf(JSONObject o, String key) {
         Object v = o.get(key);
         return v instanceof Number ? ((Number) v).longValue() : 0L;
+    }
+
+    /** A message body reduced to searchable text: media → its caption, payment → its preview,
+     *  voice-note waveform hex excluded (matches the app's SearchActivity). */
+    private static String searchable(String zBody) {
+        if (zBody == null) {
+            return "";
+        }
+        if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(zBody)) {
+            return com.eurobuddha.maxima.core.chat.ChatPay.preview(zBody);
+        }
+        if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(zBody)) {
+            String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(zBody);
+            int bar = cap.indexOf('|');   // voice notes: "0:12|<hex>" — drop the waveform
+            return bar >= 0 ? cap.substring(0, bar) : cap;
+        }
+        return zBody;
     }
 
     private String permanent() {

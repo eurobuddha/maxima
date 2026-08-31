@@ -301,7 +301,14 @@ public final class ParlonsCore {
         }, 30, 45, TimeUnit.SECONDS);
         mMaint.scheduleWithFixedDelay(() -> {
             try { mControl.maintenanceSweep(); } catch (Exception ignored) { }
-            try { walletUpkeep(); } catch (Exception ignored) { }
+            // Wallet upkeep does blocking gateway HTTP (2+2N calls) — its OWN thread, so a slow
+            // gateway can't starve maintain()/gossip/resend/MLS on the shared maint executor.
+            if (mWalletUpkeepRunning.compareAndSet(false, true)) {
+                mWalletExec.execute(() -> {
+                    try { walletUpkeep(); } catch (Exception ignored) { }
+                    finally { mWalletUpkeepRunning.set(false); }
+                });
+            }
         }, 60, 60, TimeUnit.SECONDS);
         // A restart gives this node FRESH relay addresses; until contacts learn them, their
         // replies rot in the old addresses' mailboxes (core's first refresh is at +3min — a
@@ -329,6 +336,15 @@ public final class ParlonsCore {
     private volatile String mWalletMx = "";
     private volatile String mWalletError = "";
     private volatile boolean mScriptTracked;
+    /** Wallet upkeep runs on its OWN thread (blocking gateway HTTP), never the maint executor. */
+    private final java.util.concurrent.ExecutorService mWalletExec =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "parlons-wallet-upkeep");
+                t.setDaemon(true);
+                return t;
+            });
+    private final java.util.concurrent.atomic.AtomicBoolean mWalletUpkeepRunning =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     /**
      * Open the account wallet off-thread (the first WOTS address derivation takes seconds),
