@@ -31,6 +31,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
     private Switch mReceipts;
     private Switch mAppLock;
     private Switch mScreenShare;
+    private Switch mMsgSound;
     private volatile boolean mApplying;   // guard: programmatic set must not fire the RPC
 
     @Override
@@ -144,6 +145,26 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             mScreenShare.setEnabled(on);
         });
         body.addView(sec);
+
+        // --- notifications: the Parlons "pssst" sound (device-local) ---
+        body.addView(PortalUi.section(c, "Notifications"));
+        LinearLayout notifCard = PortalUi.card(c);
+        LinearLayout sndRow = new LinearLayout(c);
+        sndRow.setOrientation(LinearLayout.HORIZONTAL);
+        sndRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout sndCol = new LinearLayout(c);
+        sndCol.setOrientation(LinearLayout.VERTICAL);
+        sndCol.addView(PortalUi.title(c, "Message sound"));
+        sndCol.addView(PortalUi.label(c, "Play the Parlons chime for new messages. Off keeps the "
+                + "notification but stays silent (it still vibrates)."));
+        sndRow.addView(sndCol, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mMsgSound = new Switch(c);
+        mMsgSound.setChecked(PortalNotifier.messageSound(c));
+        mMsgSound.setOnCheckedChangeListener((v, on) -> PortalNotifier.setMessageSound(c, on));
+        sndRow.addView(mMsgSound);
+        notifCard.addView(sndRow);
+        body.addView(notifCard);
 
         // --- keys & backup: the identity lifecycle, app-parity discipline ---
         body.addView(PortalUi.section(c, "Keys & backup"));
