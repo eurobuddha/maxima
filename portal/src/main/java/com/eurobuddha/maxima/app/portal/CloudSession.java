@@ -219,17 +219,29 @@ public final class CloudSession {
         final Context app = appCtx.getApplicationContext();
         r.setPushListener(ev -> {
             notePushAlive();
+            // The dedup set already recorded this event's eid BEFORE this listener ran, so a retry
+            // of a thrown event is dropped as a duplicate — one fan-out step must never abort the
+            // rest. Guard each independently.
             String type = String.valueOf(ev.get("type"));
-            if ("message".equals(type)) {
-                PortalNotifier.onPushedMessage(app, ev);
-            } else if ("call".equals(type)) {
-                PortalCalls.onPushedSignal(app, ev);
-            } else if ("walletsent".equals(type) || "walletfail".equals(type)) {
-                PortalNotifier.onWalletEvent(app, ev);
+            try {
+                if ("message".equals(type)) {
+                    PortalNotifier.onPushedMessage(app, ev);
+                } else if ("call".equals(type)) {
+                    PortalCalls.onPushedSignal(app, ev);
+                } else if ("walletsent".equals(type) || "walletfail".equals(type)) {
+                    PortalNotifier.onWalletEvent(app, ev);
+                }
+            } catch (Exception ignored) {
             }
             // Feed the client-side wallet history ledger (sends + received payments).
-            WalletLedger.onEvent(app, ev);
-            PortalHub.dispatch(ev);
+            try {
+                WalletLedger.onEvent(app, ev);
+            } catch (Exception ignored) {
+            }
+            try {
+                PortalHub.dispatch(ev);
+            } catch (Exception ignored) {
+            }
         });
         IO.execute(() -> {
             try { r.registerPush(); } catch (Exception ignored) { }
@@ -265,5 +277,9 @@ public final class CloudSession {
             }
         }
         e.apply();
+        // The wallet history ledger holds the PREVIOUS account's sends/receipts (amounts,
+        // counterparty addresses, full txids) — a new account paired on this device must never
+        // see them.
+        WalletLedger.clear(c);
     }
 }

@@ -51,7 +51,7 @@ public final class CloudContactsPage implements Page {
     private long mLastLoad;
     private boolean mBuilt;
     private String mQuery = "";
-    private boolean mSearchFocused;
+    private LinearLayout mContactsHost;   // the list container refilled in place while searching
 
     /** Contacts matching the current search query (name or key). */
     private List<C> filtered() {
@@ -66,6 +66,38 @@ public final class CloudContactsPage implements Page {
             }
         }
         return out;
+    }
+
+    /** Refill ONLY the contacts list container from the current filter — keeps the search field
+     *  (and its focus/cursor) alive while typing. */
+    private void repopulateContacts() {
+        if (mContactsHost == null) {
+            return;
+        }
+        Context c = mAct;
+        mContactsHost.removeAllViews();
+        List<C> shown = filtered();
+        if (shown.isEmpty()) {
+            LinearLayout empty = PortalUi.card(c);
+            empty.addView(PortalUi.label(c, mQuery.isEmpty()
+                    ? "No contacts yet. Add someone by their address below."
+                    : "No contacts match \"" + mQuery + "\"."));
+            mContactsHost.addView(empty);
+        } else {
+            LinearLayout list = PortalUi.card(c);
+            for (int i = 0; i < shown.size(); i++) {
+                if (i > 0) {
+                    View div = new View(c);
+                    LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, PortalUi.dp(c, 1));
+                    div.setLayoutParams(dlp);
+                    div.setBackgroundColor(c.getColor(R.color.ux_divider));
+                    list.addView(div);
+                }
+                list.addView(contactRow(c, shown.get(i)));
+            }
+            mContactsHost.addView(list);
+        }
     }
 
     private void shareAddress(String s) {
@@ -100,8 +132,8 @@ public final class CloudContactsPage implements Page {
         if (mBusy) {
             return;
         }
-        if (mSearchFocused) {
-            return;   // don't rebuild under the user's fingers while they're searching
+        if (mBuilt && !mQuery.isEmpty()) {
+            return;   // an active search filters in place; don't tear the page down under the user
         }
         long now = System.currentTimeMillis();
         if (mBuilt && now - mLastLoad < 4000) {
@@ -223,9 +255,10 @@ public final class CloudContactsPage implements Page {
         mRoot.addView(addr);
 
         // --- contacts ---
-        java.util.List<C> shown = filtered();
         mRoot.addView(PortalUi.section(c, "Contacts (" + mContacts.size() + ")"));
-        // Search filter — only shown once there are enough contacts to be worth filtering.
+        // Search filter — only shown once there are enough contacts to be worth filtering. Filters
+        // the list card IN PLACE (see repopulateContacts) so the field keeps focus while typing;
+        // render() skips its full rebuild while a query is active, so the field is never torn down.
         if (mContacts.size() >= 5 || !mQuery.isEmpty()) {
             EditText search = new EditText(c);
             search.setHint("Search contacts");
@@ -236,39 +269,24 @@ public final class CloudContactsPage implements Page {
             search.setHintTextColor(c.getColor(R.color.ux_subtext));
             search.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
             search.setTextSize(14);
-            search.setOnFocusChangeListener((v, has) -> mSearchFocused = has);
             search.addTextChangedListener(new android.text.TextWatcher() {
                 public void beforeTextChanged(CharSequence s, int a, int b, int d) { }
                 public void onTextChanged(CharSequence s, int a, int b, int d) { }
                 public void afterTextChanged(android.text.Editable s) {
                     mQuery = s.toString().trim().toLowerCase(java.util.Locale.UK);
-                    rebuild();   // safe: mSearchFocused guards the auto-render from stealing focus
+                    repopulateContacts();   // in place — never rebuilds the page under the field
                 }
             });
             mRoot.addView(search);
+            if (!mQuery.isEmpty()) {
+                search.requestFocus();
+            }
             mRoot.addView(PortalUi.gap(c, 8));
         }
-        if (shown.isEmpty()) {
-            LinearLayout empty = PortalUi.card(c);
-            empty.addView(PortalUi.label(c, mQuery.isEmpty()
-                    ? "No contacts yet. Add someone by their address below."
-                    : "No contacts match \"" + mQuery + "\"."));
-            mRoot.addView(empty);
-        } else {
-            LinearLayout list = PortalUi.card(c);
-            for (int i = 0; i < shown.size(); i++) {
-                if (i > 0) {
-                    View div = new View(c);
-                    LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT, PortalUi.dp(c, 1));
-                    div.setLayoutParams(dlp);
-                    div.setBackgroundColor(c.getColor(R.color.ux_divider));
-                    list.addView(div);
-                }
-                list.addView(contactRow(c, shown.get(i)));
-            }
-            mRoot.addView(list);
-        }
+        mContactsHost = new LinearLayout(c);
+        mContactsHost.setOrientation(LinearLayout.VERTICAL);
+        mRoot.addView(mContactsHost);
+        repopulateContacts();
 
         // --- add a contact ---
         mRoot.addView(PortalUi.section(c, "Add a contact"));

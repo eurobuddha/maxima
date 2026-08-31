@@ -58,8 +58,16 @@ public final class PortalNotifier {
         Line(String k, String n, String t, long ms) { senderKey = k; senderName = n; text = t; time = ms; }
     }
 
-    /** Per-conversation recent-line stacks (Android keeps none; the portal has no engine). */
-    private static final Map<String, Deque<Line>> sStacks = new HashMap<>();
+    /** Per-conversation recent-line stacks (Android keeps none; the portal has no engine).
+     *  LRU-bounded so a device notified by many distinct peers doesn't retain a deque forever. */
+    private static final int MAX_CONVERSATIONS = 50;
+    private static final Map<String, Deque<Line>> sStacks =
+            new java.util.LinkedHashMap<String, Deque<Line>>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Deque<Line>> eldest) {
+                    return size() > MAX_CONVERSATIONS;
+                }
+            };
 
     private PortalNotifier() {
     }
@@ -220,8 +228,12 @@ public final class PortalNotifier {
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(line))
                 .setAutoCancel(true)
                 .build();
-        c.getSystemService(NotificationManager.class).notify(
-                0x574C0000 | (int) (System.currentTimeMillis() & 0xFFF), n);
+        try {
+            c.getSystemService(NotificationManager.class).notify(
+                    0x574C0000 | (int) (System.currentTimeMillis() & 0xFFF), n);
+        } catch (Exception ignored) {
+            // POST_NOTIFICATIONS can be denied — must not abort the push fan-out (ledger/dispatch).
+        }
     }
 
     public static void clear(Context c, String zPeer) {

@@ -184,6 +184,21 @@ public final class WalletLedger {
         return out;
     }
 
+    /** Wipe the ledger — file and in-memory cache — on account switch (see CloudSession.reset). */
+    public static void clear(Context c) {
+        synchronized (LOCK) {
+            sEntries = new ArrayList<>();
+            try {
+                File f = file(c);
+                if (f.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     private static long now(JSONObject ev) {
         Object t = ev.get("time");
         return t instanceof Number ? ((Number) t).longValue() : System.currentTimeMillis();

@@ -18,8 +18,9 @@ public final class BootReceiver extends BroadcastReceiver {
             return;
         }
         String action = intent.getAction();
+        // Only post-unlock boot: the receiver isn't direct-boot-aware and the pairing prefs live in
+        // credential-encrypted storage, unreadable before first unlock.
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)
-                || Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(action)
                 || "android.intent.action.QUICKBOOT_POWERON".equals(action)) {
             if (CloudSession.isPaired(context)) {
                 PortalService.start(context);

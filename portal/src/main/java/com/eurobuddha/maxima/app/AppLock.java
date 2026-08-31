@@ -69,9 +69,9 @@ public final class AppLock {
 
     public static void setEnabled(Context zCtx, boolean zOn) {
         prefs(zCtx).edit().putBoolean(K_ENABLED, zOn).apply();
-        if (!zOn) {
-            sUnlocked = true;   // lock off → treat as open
-        }
+        // Off → treat as open. On → engage immediately (else a freshly enabled lock wouldn't
+        // gate until the process died or the 5-min grace elapsed).
+        sUnlocked = !zOn;
     }
 
     /** Screen sharing allowed = FLAG_SECURE off even while the lock is on (default on so demos and
@@ -91,6 +91,7 @@ public final class AppLock {
 
     public static void markUnlocked() {
         sUnlocked = true;
+        sBackgroundedAt = 0;   // a successful unlock cancels any pending re-lock grace
     }
 
     /** Call from onStop: start the re-lock grace timer. */
@@ -98,11 +99,17 @@ public final class AppLock {
         sBackgroundedAt = android.os.SystemClock.elapsedRealtime();
     }
 
-    /** Call from onResume: re-lock if we were away longer than the grace period. */
+    /** Call from onResume: re-lock if we were away longer than the grace period. Clears the grace
+     *  stamp either way — with two gated activities an inter-activity transition looks like a
+     *  background/foreground pair, and a stale stamp would force a spurious second unlock on the
+     *  very next navigation. */
     public static void onForeground(Context zCtx) {
-        if (isEnabled(zCtx) && sUnlocked && sBackgroundedAt > 0
-                && android.os.SystemClock.elapsedRealtime() - sBackgroundedAt > RELOCK_AFTER_MS) {
-            sUnlocked = false;
+        if (sBackgroundedAt > 0) {
+            if (isEnabled(zCtx) && sUnlocked
+                    && android.os.SystemClock.elapsedRealtime() - sBackgroundedAt > RELOCK_AFTER_MS) {
+                sUnlocked = false;
+            }
+            sBackgroundedAt = 0;
         }
     }
 
@@ -125,7 +132,7 @@ public final class AppLock {
                     @Override
                     public void onAuthenticationSucceeded(
                             @NonNull BiometricPrompt.AuthenticationResult result) {
-                        sUnlocked = true;
+                        markUnlocked();   // sets unlocked + clears the re-lock grace stamp
                         zCallback.onSuccess();
                     }
 

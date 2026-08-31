@@ -48,6 +48,14 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
             setTurnScreenOn(true);
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // The call screen shows the caller's identity and live video. It must stay answerable over
+        // the keyguard (setShowWhenLocked), so we do NOT gate it behind the app lock — but when the
+        // app lock is on and screen-sharing is disallowed, FLAG_SECURE keeps the call out of
+        // screenshots and the recent-apps thumbnail, matching every other private surface.
+        if (com.eurobuddha.maxima.app.AppLock.isEnabled(this)
+                && !com.eurobuddha.maxima.app.AppLock.allowScreenShare(this)) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
 
         mPeer = getIntent().getStringExtra(EXTRA_PEER);
         if (mPeer == null || mPeer.isEmpty()) {
