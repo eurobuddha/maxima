@@ -337,6 +337,46 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_NODE_STATUS, new JSONObject());
     }
 
+    /** The node's recent event-log lines (newest first). {@code clear=true} clears the ring. */
+    public JSONObject nodeLog(boolean zClear) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("clear", zClear);
+        return rpc(ParlonsControl.M_NODE_LOG, p);
+    }
+
+    /** Transport figures: hosts (connected flag), mailbox/outbox, reachability, mesh, relay stats. */
+    public JSONObject nodeFigures() throws Exception {
+        return rpc(ParlonsControl.M_NODE_FIGURES, new JSONObject());
+    }
+
+    /** Add / remove an attach host at runtime. Pass "" to skip either. */
+    public JSONObject nodeHosts(String zAdd, String zRemove) throws Exception {
+        JSONObject p = new JSONObject();
+        if (zAdd != null) p.put("add", zAdd);
+        if (zRemove != null) p.put("remove", zRemove);
+        return rpc(ParlonsControl.M_NODE_HOSTS, p);
+    }
+
+    /** MLS/location control: action = pin (optional address) / clear / republish. */
+    public JSONObject nodeMls(String zAction, String zAddress) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("action", zAction);
+        if (zAddress != null) p.put("address", zAddress);
+        return rpc(ParlonsControl.M_NODE_MLS, p);
+    }
+
+    /** The account wallet's full token balance array. */
+    public JSONObject walletTokens() throws Exception {
+        return rpc(ParlonsControl.M_WALLET_TOKENS, new JSONObject());
+    }
+
+    /** Key-uses count (read); pass raiseTo>0 to raise the counter (raise-only). */
+    public JSONObject walletUses(int zRaiseTo) throws Exception {
+        JSONObject p = new JSONObject();
+        if (zRaiseTo > 0) p.put("raiseTo", zRaiseTo);
+        return rpc(ParlonsControl.M_WALLET_USES, p);
+    }
+
     /** Set the account's display name; the node re-announces it to every contact. */
     public JSONObject setName(String zName) throws Exception {
         JSONObject p = new JSONObject();

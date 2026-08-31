@@ -80,4 +80,10 @@ public final class CloudWallet {
     public int uses() {
         return new CloudKeyUses(mWalletDir, USES_NAMESPACE).currentUses(KEY_INDEX);
     }
+
+    /** Raise-only counter adjust — for the "set signatures used" control when a wallet has
+     *  signed elsewhere. recordExternalUses folds in under the MAX rule; it can only raise. */
+    public void raiseUsesTo(int zTo) {
+        new CloudKeyUses(mWalletDir, USES_NAMESPACE).recordExternalUses(KEY_INDEX, zTo);
+    }
 }

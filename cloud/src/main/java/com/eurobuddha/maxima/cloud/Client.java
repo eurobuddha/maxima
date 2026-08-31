@@ -307,6 +307,59 @@ public final class Client {
                 }
                 break;
             }
+            case "figures": {
+                JSONObject o = r.nodeFigures();
+                if (!isOk(o)) { fail(o); break; }
+                System.out.println("  contacts   : " + o.get("contacts"));
+                System.out.println("  mailbox    : " + o.get("mailboxHeld") + " held");
+                System.out.println("  outbox     : " + o.get("outbox"));
+                System.out.println("  reachable  : " + (Boolean.TRUE.equals(o.get("directlyReachable"))
+                        ? "yes (" + o.get("directAddress") + ")" : "no (via relays)"));
+                System.out.println("  relay      : " + o.get("relayConnections") + " clients, "
+                        + o.get("relayRelayed") + " relayed, " + o.get("relayStored") + " blobs");
+                for (Object h : arr(o, "hosts")) {
+                    JSONObject ho = (JSONObject) h;
+                    System.out.println("    " + (Boolean.TRUE.equals(ho.get("connected")) ? "● " : "○ ")
+                            + ho.get("host"));   // full host:port, never truncated
+                }
+                break;
+            }
+            case "nodelog": {
+                boolean clear = rest.size() > 1 && "clear".equalsIgnoreCase(rest.get(1));
+                JSONObject o = r.nodeLog(clear);
+                if (!isOk(o)) { fail(o); break; }
+                JSONArray lines = arr(o, "lines");
+                if (lines.isEmpty()) {
+                    System.out.println("  (log empty)");
+                } else {
+                    for (Object l : lines) {
+                        System.out.println("  " + l);
+                    }
+                }
+                break;
+            }
+            case "hosts": {
+                String add = "", remove = "";
+                if (rest.size() > 2 && "add".equalsIgnoreCase(rest.get(1))) add = rest.get(2);
+                else if (rest.size() > 2 && "remove".equalsIgnoreCase(rest.get(1))) remove = rest.get(2);
+                JSONObject o = r.nodeHosts(add, remove);
+                if (!isOk(o)) { fail(o); break; }
+                for (Object h : arr(o, "hosts")) {
+                    JSONObject ho = (JSONObject) h;
+                    System.out.println("  " + (Boolean.TRUE.equals(ho.get("connected")) ? "● " : "○ ")
+                            + ho.get("host"));   // full host:port
+                }
+                break;
+            }
+            case "mls": {
+                String action = rest.size() > 1 ? rest.get(1).toLowerCase() : "";
+                if (!action.equals("pin") && !action.equals("clear") && !action.equals("republish")) {
+                    System.err.println("usage: mls pin|clear|republish");
+                    System.exit(2);
+                }
+                report(r.nodeMls(action, null), action + " ✓");
+                break;
+            }
             default:
                 usage();
         }

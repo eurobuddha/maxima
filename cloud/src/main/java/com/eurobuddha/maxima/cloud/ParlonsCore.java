@@ -73,8 +73,10 @@ public final class ParlonsCore {
         public int directPort = 9536;
         /** Public host to advertise for the relay (blank = say nothing). */
         public String publicHost = "";
-        /** Extra fleet relays to attach to, on top of {@link Bootstrap#RELAYS}. */
-        public List<String> extraRelays = new ArrayList<>();
+        /** Extra fleet relays to attach to, on top of {@link Bootstrap#RELAYS}. Runtime host
+         *  adds/removes mutate this from the node pump while boot/configuredHosts read it, so it
+         *  is copy-on-write. */
+        public List<String> extraRelays = new java.util.concurrent.CopyOnWriteArrayList<>();
         /** Mesh peers the pool relay forwards resolve-misses to (host:port). */
         public List<String> meshPeers = new ArrayList<>();
         /** Media blob-shelf cap for the relay (MB, 0 = off). */
@@ -109,7 +111,7 @@ public final class ParlonsCore {
         mChat.setStore(new FileStore(new File(base, "chat")));
         mChat.setMediaService(mMedia);
         // (listener wired AFTER mControl below — it fans events out through the control push)
-        mNode.setLogListener(s -> log("node: " + s));
+        mNode.setLogListener(s -> log("node: " + s));   // log() tees into the ring itself
         mNode.setMessageListener((msg, msgid) -> {
             try {
                 mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
@@ -154,6 +156,85 @@ public final class ParlonsCore {
             public String walletError() {
                 return mWalletError;
             }
+            public int uses() {
+                CloudWallet w = mAccountWallet;
+                return w == null ? -1 : w.uses();
+            }
+            public void raiseUsesTo(int zTo) {
+                CloudWallet w = mAccountWallet;
+                if (w != null) {
+                    w.raiseUsesTo(zTo);
+                }
+            }
+        });
+        mControl.setNodeControl(new ParlonsControl.NodeControl() {
+            public java.util.List<String> recentLog(int zMax) { return ParlonsCore.this.recentLog(zMax); }
+            public void clearLog() { ParlonsCore.this.clearLog(); }
+            public java.util.List<String> hosts() {
+                try { return mNode.pool().activeHosts(); }
+                catch (Exception e) { return new java.util.ArrayList<>(); }
+            }
+            public java.util.List<String> configuredHosts() {
+                java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>(
+                        com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
+                all.addAll(mCfg.extraRelays);
+                // include anything currently attached that isn't in the floor (runtime adds)
+                try { all.addAll(mNode.pool().activeHosts()); } catch (Exception ignored) { }
+                return new java.util.ArrayList<>(all);
+            }
+            public boolean addHost(String zHostPort) {
+                try {
+                    mNode.pool().addCandidate(zHostPort);
+                    if (!mCfg.extraRelays.contains(zHostPort)) {
+                        mCfg.extraRelays.add(zHostPort);
+                        persistExtraRelays();          // survives restart (reattached on boot)
+                    }
+                    // attachOne does a BLOCKING socket connect + greeting (up to 20s). This runs
+                    // from the synchronized node pump — doing it inline would deafen the whole node.
+                    // Defer to the send lane and reply "connecting"; the panel re-refreshes and the
+                    // connected dot appears on the next round-trip.
+                    mHostExec.execute(() -> {
+                        try { mNode.pool().attachOne(zHostPort, 20_000); } catch (Exception ignored) { }
+                    });
+                    return true;                       // accepted (connecting), not yet confirmed up
+                } catch (Exception e) {
+                    return false;
+                }
+            }
+            public boolean removeHost(String zHostPort) {
+                try { mNode.pool().detach(zHostPort); } catch (Exception ignored) { }
+                if (mCfg.extraRelays.remove(zHostPort)) {
+                    persistExtraRelays();
+                }
+                return true;
+            }
+            public int mailboxHeld() {
+                try { return mNode.mailbox().totalItems(); } catch (Exception e) { return 0; }
+            }
+            public int outboxDepth() {
+                try { return mNode.outbox().size(); } catch (Exception e) { return 0; }
+            }
+            public boolean directlyReachable() {
+                try { return mNode.isDirectlyReachable(); } catch (Exception e) { return false; }
+            }
+            public String directAddress() {
+                try { return mNode.directAddress(); } catch (Exception e) { return ""; }
+            }
+            public java.util.List<String> meshPeers() {
+                return new java.util.ArrayList<>(mCfg.meshPeers);
+            }
+            public int relayConnections() {
+                RelayRuntime.Stats s = relayStats();
+                return s == null ? 0 : s.connections;
+            }
+            public long relayRelayed() {
+                RelayRuntime.Stats s = relayStats();
+                return s == null ? 0 : s.relayed;
+            }
+            public long relayStored() {
+                RelayRuntime.Stats s = relayStats();
+                return s == null ? 0 : s.stored;
+            }
         });
         mControl.setBackupSource(new ParlonsControl.BackupSource() {
             public String revealPhrase() throws Exception {
@@ -175,7 +256,35 @@ public final class ParlonsCore {
     public MediaService media() { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
     public boolean relayRunning() { return mRelay != null; }
-    public RelayRuntime.Stats relayStats() { return mRelay == null ? null : null; }
+    // ---- event-log ring buffer (the node has no store; :cloud keeps the last 200 lines) ----
+    private final java.util.ArrayDeque<String> mLog = new java.util.ArrayDeque<>();
+    private static final int LOG_MAX = 200;
+    private final java.text.SimpleDateFormat mLogTime =
+            new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.UK);
+
+    private synchronized void ring(String zLine) {
+        mLog.addLast(mLogTime.format(new java.util.Date()) + "  " + zLine);
+        while (mLog.size() > LOG_MAX) {
+            mLog.removeFirst();
+        }
+    }
+
+    /** Newest-first snapshot of the last {@code zMax} log lines. */
+    public synchronized java.util.List<String> recentLog(int zMax) {
+        java.util.List<String> all = new java.util.ArrayList<>(mLog);
+        java.util.Collections.reverse(all);
+        return zMax > 0 && all.size() > zMax ? all.subList(0, zMax) : all;
+    }
+
+    public synchronized void clearLog() {
+        mLog.clear();
+    }
+
+    private volatile RelayRuntime.Stats mLastRelayStats;
+
+    public RelayRuntime.Stats relayStats() {
+        return mLastRelayStats;
+    }
 
     public int connectedCount() {
         try {
@@ -243,7 +352,7 @@ public final class ParlonsCore {
             if (!mCfg.meshPeers.isEmpty()) {
                 mRelay.setPeers(mCfg.meshPeers);
             }
-            mRelay.setTickListener(s -> { /* Phase 2+: surface to the control channel */ });
+            mRelay.setTickListener(s -> mLastRelayStats = s);
             mRelay.start();
             log("pool relay up on port " + mCfg.relayPort
                     + (mCfg.meshPeers.isEmpty() ? "" : " (mesh: " + mCfg.meshPeers.size() + " peers)"));
@@ -345,6 +454,15 @@ public final class ParlonsCore {
             });
     private final java.util.concurrent.atomic.AtomicBoolean mWalletUpkeepRunning =
             new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /** Runtime host attach/detach network work — a blocking socket connect (up to 20s) must never
+     *  run on the node pump, and shouldn't stall wallet upkeep or maintenance either. */
+    private final java.util.concurrent.ExecutorService mHostExec =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "parlons-host-attach");
+                t.setDaemon(true);
+                return t;
+            });
 
     /**
      * Open the account wallet off-thread (the first WOTS address derivation takes seconds),
@@ -490,6 +608,21 @@ public final class ParlonsCore {
         } catch (Exception ignored) {
             // first boot — defaults apply
         }
+        // Merge any runtime-added hosts back in, so a host added from the panel is reattached
+        // on the next boot (see addHost). Deduped against --relays by the LinkedHashSet in start().
+        String extras = mSettings.getProperty("extrarelays", "");
+        for (String h : extras.split(",")) {
+            String t = h.trim();
+            if (!t.isEmpty() && !mCfg.extraRelays.contains(t)) {
+                mCfg.extraRelays.add(t);
+            }
+        }
+    }
+
+    /** Write the current extra-relay set to settings so runtime host adds/removes survive restart. */
+    private void persistExtraRelays() {
+        mSettings.setProperty("extrarelays", String.join(",", mCfg.extraRelays));
+        saveSettings();
     }
 
     private synchronized void saveSettings() {
@@ -609,7 +742,11 @@ public final class ParlonsCore {
         try { mNode.stop(); } catch (Exception ignored) { }
     }
 
-    private static void log(String s) {
+    /** Operator log: to stdout (systemd journal) AND the in-memory ring the control panel reads.
+     *  Never fed the seed — only public identity/addresses and event lines (see the ring's
+     *  paired-device-only exposure). */
+    private void log(String s) {
         System.out.println("[parlons-cloud] " + s);
+        ring(s);
     }
 }

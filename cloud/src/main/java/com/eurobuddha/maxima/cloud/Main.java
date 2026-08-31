@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.8.2";
+    public static final String VERSION = "0.9.0";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -73,10 +73,14 @@ public final class Main {
                     cfg.publicHost = strArg(args, ++i, "--host");
                     break;
                 case "--relays":
-                    cfg.extraRelays = csv(strArg(args, ++i, "--relays"));
+                    // Keep the copy-on-write list type: runtime host add/detach mutates this from
+                    // the node pump while configuredHosts()/persist iterate it.
+                    cfg.extraRelays = new java.util.concurrent.CopyOnWriteArrayList<>(
+                            csv(strArg(args, ++i, "--relays")));
                     break;
                 case "--peers":
-                    cfg.meshPeers = csv(strArg(args, ++i, "--peers"));
+                    cfg.meshPeers = new java.util.concurrent.CopyOnWriteArrayList<>(
+                            csv(strArg(args, ++i, "--peers")));
                     break;
                 case "--blobstore":
                     cfg.relayBlobMb = intArg(args, ++i, "--blobstore");

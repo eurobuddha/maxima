@@ -63,6 +63,12 @@ public final class ParlonsControl {
     public static final String M_GROUP_INFO   = "parlons.group.info";
     public static final String M_GROUP_UPDATE = "parlons.group.update";
     public static final String M_CONTACT_INFO = "parlons.contacts.info";
+    public static final String M_NODE_LOG     = "parlons.node.log";
+    public static final String M_NODE_FIGURES = "parlons.node.figures";
+    public static final String M_NODE_HOSTS   = "parlons.node.hosts";
+    public static final String M_NODE_MLS     = "parlons.node.mls";
+    public static final String M_WALLET_TOKENS = "parlons.wallet.tokens";
+    public static final String M_WALLET_USES  = "parlons.wallet.uses";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -203,6 +209,8 @@ public final class ParlonsControl {
         String myWalletAddress();          // Mx… receive address ("" until derived)
         CloudPaymentSender sender();       // null until the wallet is open
         String walletError();              // "" unless the wallet failed to open
+        int uses();                        // key uses so far (-1 if wallet not open)
+        void raiseUsesTo(int zTo);         // raise-only counter adjust
     }
 
     private volatile PaySource mPaySource;
@@ -221,6 +229,32 @@ public final class ParlonsControl {
 
     public void setBackupSource(BackupSource zSource) {
         mBackupSource = zSource;
+    }
+
+    /** The VPS control surface — node figures, hosts, event log, relay stats (owned by
+     *  {@link ParlonsCore}, which holds the pool + relay + log ring). */
+    public interface NodeControl {
+        java.util.List<String> recentLog(int zMax);
+        void clearLog();
+        java.util.List<String> hosts();             // currently attached host:port list
+        java.util.List<String> configuredHosts();   // the persisted floor + extras
+        boolean addHost(String zHostPort);          // runtime attach; returns accepted
+        boolean removeHost(String zHostPort);       // runtime detach
+        int mailboxHeld();
+        int outboxDepth();
+        boolean directlyReachable();
+        String directAddress();
+        java.util.List<String> meshPeers();
+        // relay stats (0 if the relay is off)
+        int relayConnections();
+        long relayRelayed();
+        long relayStored();
+    }
+
+    private volatile NodeControl mNodeControl;
+
+    public void setNodeControl(NodeControl zControl) {
+        mNodeControl = zControl;
     }
 
     public void registerOn(ServiceRegistry zReg) {
@@ -303,6 +337,183 @@ public final class ParlonsControl {
             out.put("relayOn", s != null && s.relayOn());
             out.put("meshPeers", s == null ? 0 : s.meshPeers());
             out.put("pairedDevices", mPairing.authorizedCount());
+            return bytes(out);
+        });
+
+        // --- VPS control panel: event log, transport figures, host management, MLS ---
+        zReg.register(M_NODE_LOG, req -> {
+            requireAuth(req);
+            NodeControl nc = mNodeControl;
+            JSONObject in = parse(req);
+            if (bool(in, "clear") && nc != null) {
+                nc.clearLog();
+            }
+            JSONArray lines = new JSONArray();
+            if (nc != null) {
+                for (String l : nc.recentLog(80)) {
+                    lines.add(l);
+                }
+            }
+            JSONObject out = ok();
+            out.put("lines", lines);
+            return bytes(out);
+        });
+        zReg.register(M_NODE_FIGURES, req -> {
+            requireAuth(req);
+            NodeControl nc = mNodeControl;
+            JSONObject out = ok();
+            if (nc != null) {
+                JSONArray hosts = new JSONArray();
+                java.util.List<String> active = nc.hosts();
+                for (String h : nc.configuredHosts()) {
+                    JSONObject o = new JSONObject();
+                    o.put("host", h);
+                    o.put("connected", active.contains(h));
+                    hosts.add(o);
+                }
+                out.put("hosts", hosts);
+                out.put("mailboxHeld", nc.mailboxHeld());
+                out.put("outbox", nc.outboxDepth());
+                out.put("directlyReachable", nc.directlyReachable());
+                out.put("directAddress", safe(nc.directAddress()));
+                JSONArray mesh = new JSONArray();
+                for (String p : nc.meshPeers()) {
+                    mesh.add(p);
+                }
+                out.put("meshPeers", mesh);
+                out.put("relayConnections", nc.relayConnections());
+                out.put("relayRelayed", nc.relayRelayed());
+                out.put("relayStored", nc.relayStored());
+                out.put("contacts", mNode.contacts().size());
+            }
+            return bytes(out);
+        });
+        zReg.register(M_NODE_HOSTS, req -> {
+            requireAuth(req);
+            NodeControl nc = mNodeControl;
+            if (nc == null) {
+                return bytes(err("not available"));
+            }
+            JSONObject in = parse(req);
+            String add = str(in, "add").trim();
+            String remove = str(in, "remove").trim();
+            if (!add.isEmpty()) {
+                int colon = add.lastIndexOf(':');
+                int port = -1;
+                if (colon > 0 && add.substring(0, colon).matches("[0-9A-Za-z.\\-]+")) {
+                    try { port = Integer.parseInt(add.substring(colon + 1)); } catch (Exception ignored) { }
+                }
+                if (port < 1 || port > 65535) {
+                    return bytes(err("enter host:port, e.g. 45.77.246.226:9501"));
+                }
+                nc.addHost(add);          // attach happens off-pump; log reflects "connecting"
+                mNode.log("host add requested (connecting): " + add);
+            }
+            if (!remove.isEmpty()) {
+                nc.removeHost(remove);
+                mNode.log("host detached: " + remove);
+            }
+            JSONArray hosts = new JSONArray();
+            java.util.List<String> active = nc.hosts();
+            for (String h : nc.configuredHosts()) {
+                JSONObject o = new JSONObject();
+                o.put("host", h);
+                o.put("connected", active.contains(h));
+                hosts.add(o);
+            }
+            JSONObject out = ok();
+            out.put("hosts", hosts);
+            return bytes(out);
+        });
+        zReg.register(M_NODE_MLS, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String action = str(in, "action");
+            try {
+                if ("pin".equals(action)) {
+                    String anchor = str(in, "address").trim();
+                    if (anchor.isEmpty()) {
+                        anchor = mNode.bestPoolMls();   // pin the best attached pool relay
+                    }
+                    if (anchor.isEmpty()) {
+                        return bytes(err("no pool relay attached yet — try again shortly"));
+                    }
+                    mNode.setStaticMls(anchor);
+                } else if ("clear".equals(action)) {
+                    mNode.setStaticMls("");
+                } else if ("republish".equals(action)) {
+                    final MaximaNode n = mNode;
+                    mSendExec.execute(() -> {
+                        try { n.publishToMls(); } catch (Exception ignored) { }
+                    });
+                }
+            } catch (Exception e) {
+                return bytes(err(e.getMessage() == null ? e.toString() : e.getMessage()));
+            }
+            JSONObject out = ok();
+            out.put("pinned", mNode.isStaticMls());
+            out.put("mls", safe(mNode.mlsAddress()));
+            out.put("permanent", safe(permanent()));
+            return bytes(out);
+        });
+
+        // --- wallet: full token list + key-uses (raise-only) ---
+        zReg.register(M_WALLET_TOKENS, req -> {
+            requireAuth(req);
+            PaySource ps = mPaySource;
+            String addr = ps == null ? "" : safe(ps.myWalletAddress());
+            if (addr.isEmpty()) {
+                return bytes(err("wallet still opening"));
+            }
+            Object[] cached = mBalanceCache.get(addr);
+            if (cached == null) {
+                // warm it on the send lane; the device retries
+                mSendExec.execute(() -> {
+                    try {
+                        JSONObject bal = mWallet.cmd("balance megammr:true address:" + addr);
+                        mBalanceCache.put(addr, new Object[]{bal, System.currentTimeMillis()});
+                    } catch (Exception ignored) { }
+                });
+                return bytes(err("loading — try again in a moment"));
+            }
+            JSONObject out = ok();
+            out.put("balance", (JSONObject) cached[0]);
+            return bytes(out);
+        });
+        zReg.register(M_WALLET_USES, req -> {
+            requireAuth(req);
+            final PaySource ps = mPaySource;
+            if (ps == null) {
+                return bytes(err("wallet still opening"));
+            }
+            int cur = ps.uses();                 // one cheap (lock-free) read off the two mirrors
+            if (cur < 0) {
+                return bytes(err("wallet still opening"));
+            }
+            JSONObject in = parse(req);
+            Object raise = in.get("raiseTo");
+            int reported = cur;
+            if (raise instanceof Number) {
+                final int to = ((Number) raise).intValue();
+                if (to <= cur) {
+                    return bytes(err("can only RAISE above the current " + cur));
+                }
+                // Fund-critical ceiling: never fold the counter past the key's leaf maximum, or
+                // the wallet can never sign again (and tens of thousands of one-time keys burn).
+                if (to > CloudWallet.MAX_USES) {
+                    return bytes(err("above the key's maximum " + CloudWallet.MAX_USES));
+                }
+                // The write takes a cross-process FileLock + fsyncs BOTH mirrors — never on the
+                // pump. Defer to the send lane; the raise is validated and raise-only, so reply
+                // optimistically and the device re-reads the persisted value on its next refresh.
+                mSendExec.execute(() -> {
+                    try { ps.raiseUsesTo(to); } catch (Exception ignored) { }
+                });
+                reported = to;
+            }
+            JSONObject out = ok();
+            out.put("uses", reported);
+            out.put("max", CloudWallet.MAX_USES);
             return bytes(out);
         });
 
