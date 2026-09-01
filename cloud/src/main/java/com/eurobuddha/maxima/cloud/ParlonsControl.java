@@ -58,6 +58,7 @@ public final class ParlonsControl {
     public static final String M_SEED_REVEAL  = "parlons.seed.reveal";
     public static final String M_BACKUP_EXPORT = "parlons.backup.export";
     public static final String M_WALLET_SEND  = "parlons.wallet.send";
+    public static final String M_WALLET_BUILDSEND = "parlons.wallet.buildsend";
     public static final String M_CHAT_CLEAR   = "parlons.chat.clear";
     public static final String M_CHAT_SEARCH  = "parlons.chat.search";
     public static final String M_GROUP_INFO   = "parlons.group.info";
@@ -211,6 +212,8 @@ public final class ParlonsControl {
         String walletError();              // "" unless the wallet failed to open
         int uses();                        // key uses so far (-1 if wallet not open)
         void raiseUsesTo(int zTo);         // raise-only counter adjust
+        String walletScript();             // the account address's spend script (a device tracks it)
+        String walletHex();                // the account address as 0x hex (for a device's coin reads)
     }
 
     private volatile PaySource mPaySource;
@@ -1288,6 +1291,75 @@ public final class ParlonsControl {
             return bytes(out);
         });
 
+        // --- wallet: build+sign ONLY, return the signed blob so the FRONT-END broadcasts it via
+        //     its own minimaCore (else gateway). sally holds the seed + key-use counter and signs
+        //     (reserve-before-sign, single counter → no leaf reuse across devices); it does NOT
+        //     relay here. Same validation as M_WALLET_SEND; the signed blob rides the pushed event.
+        zReg.register(M_WALLET_BUILDSEND, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String to = str(in, "to").trim();
+            String amount = str(in, "amount").trim();
+            String pid = str(in, "pid");
+            if (!to.matches("Mx[0-9A-Z]+") && !to.matches("0x[0-9A-Fa-f]{64}")) {
+                return bytes(err("that doesn't look like a full Minima address"));
+            }
+            PaySource ps = mPaySource;
+            if (ps == null || ps.sender() == null) {
+                String why = ps == null ? "" : ps.walletError();
+                return bytes(err(why == null || why.isEmpty()
+                        ? "the account wallet is still opening — try again in a moment"
+                        : "the account wallet failed to open: " + why));
+            }
+            if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
+                return bytes(err("that amount doesn't look right"));
+            }
+            final String fpid = pid;
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent("wb:" + pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
+            }
+            final org.minima.objects.base.MiniNumber amt;
+            try {
+                amt = new org.minima.objects.base.MiniNumber(amount);
+            } catch (Exception e) {
+                return bytes(err("that amount doesn't look right"));
+            }
+            if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
+                return bytes(err("the amount must be more than zero"));
+            }
+            final CloudPaymentSender sender = ps.sender();
+            final String fto = to;
+            mSendExec.execute(() -> {
+                try {
+                    CloudPaymentSender.Built built = sender.build(fto, amt);   // reserve+sign; NO publish
+                    mNode.log("wallet build " + amt + " → " + fto + " txid " + built.txid);
+                    JSONObject ev = new JSONObject();
+                    ev.put("type", "walletbuilt");
+                    ev.put("to", fto);
+                    ev.put("amount", amt.toString());
+                    ev.put("txid", built.txid);
+                    ev.put("importcmd", built.importCmd());   // signed txnimport — the device broadcasts it
+                    ev.put("postcmd", built.postCmd());
+                    ev.put("pid", fpid);
+                    push(ev);
+                } catch (Exception ex) {
+                    String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                    mNode.log("wallet build to " + fto + " FAILED: " + why);
+                    JSONObject ev = new JSONObject();
+                    ev.put("type", "walletfail");
+                    ev.put("to", fto);
+                    ev.put("error", why);
+                    ev.put("pid", fpid);
+                    push(ev);
+                }
+            });
+            JSONObject out = ok();
+            out.put("state", "building");
+            return bytes(out);
+        });
+
         // --- account settings (persisted by ParlonsCore across restarts) ---
         zReg.register(M_SETTINGS_GET, req -> {
             requireAuth(req);
@@ -1375,6 +1447,8 @@ public final class ParlonsControl {
             JSONObject out = ok();
             out.put("address", watch.isEmpty() ? own : watch);
             out.put("own", own);
+            out.put("script", ps == null ? "" : safe(ps.walletScript()));  // for a device to track+relay
+            out.put("hex", ps == null ? "" : safe(ps.walletHex()));
             return bytes(out);
         });
         zReg.register(M_WALLET_SET, req -> {

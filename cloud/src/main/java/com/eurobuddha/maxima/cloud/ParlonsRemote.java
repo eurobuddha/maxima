@@ -439,6 +439,18 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_WALLET_SEND, p);
     }
 
+    /** Build+SIGN a send on the node (which holds the seed + key-use counter) but do NOT
+     *  broadcast — the signed {@code txnimport}/{@code txnpost} blob arrives as a walletbuilt
+     *  push (matching this pid), for THIS device to broadcast via its own minimaCore (else
+     *  gateway). Keeps signing single-source on the VPS; the relay rides the device's node. */
+    public JSONObject buildSend(String zTo, String zAmount, String zPid) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("to", zTo);
+        p.put("amount", zAmount);
+        p.put("pid", zPid);
+        return rpc(ParlonsControl.M_WALLET_BUILDSEND, p);
+    }
+
     /** Account settings: {readReceipts}. */
     public JSONObject settings() throws Exception {
         return rpc(ParlonsControl.M_SETTINGS_GET, new JSONObject());

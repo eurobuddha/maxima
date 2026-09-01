@@ -28,6 +28,11 @@ public final class CloudPaymentSender {
             importCmd = zImportCmd;
             postCmd = zPostCmd;
         }
+        /** The signed {@code txnimport} command — a front-end can broadcast this itself
+         *  (txnimport → txnbasics → txnpost) via its own minimaCore, so the signing stays on
+         *  the node while the relay rides the device's node. */
+        public String importCmd() { return importCmd; }
+        public String postCmd()   { return postCmd; }
     }
 
     private final CloudWallet mWallet;

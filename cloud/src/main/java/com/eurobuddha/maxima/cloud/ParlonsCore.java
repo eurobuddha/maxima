@@ -166,6 +166,14 @@ public final class ParlonsCore {
                     w.raiseUsesTo(zTo);
                 }
             }
+            public String walletScript() {
+                CloudWallet w = mAccountWallet;
+                return w == null ? "" : w.script();
+            }
+            public String walletHex() {
+                CloudWallet w = mAccountWallet;
+                return w == null ? "" : w.hexAddress();
+            }
         });
         mControl.setNodeControl(new ParlonsControl.NodeControl() {
             public java.util.List<String> recentLog(int zMax) { return ParlonsCore.this.recentLog(zMax); }
