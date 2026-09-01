@@ -21,8 +21,8 @@ android {
         applicationId "com.eurobuddha.parlons.cloud"
         minSdk 28
         targetSdk 35
-        versionCode 25
-        versionName "0.18.0"
+        versionCode 26
+        versionName "0.19.0"
     }
 
     signingConfigs {
@@ -60,10 +60,18 @@ android {
             ]
         }
     }
+
+    // Compile the SAME wallet engine as the app (WalletPublisher/MaximaWallet/NodeLink/
+    // GatewayNode/SeedStore + com.eurobuddha.wallet) from the shared source, so the cloud
+    // front-end wallet is literal parity — build+sign locally, broadcast via minimaCore.
+    sourceSets {
+        main { java.srcDirs += ['../walletshared'] }
+    }
 }
 
 dependencies {
     implementation project(':core')
+    implementation files('libs/minimaapi.aar')   // minimaCore broadcast IPC (NodeLink wallet node path)
     implementation project(':server')          // RelayRuntime.loadOrCreateSeed for the device key
     implementation project(':cloud')            // ParlonsRemote + ParlonsControl method names
     implementation project(':minima-common')    // org.minima.utils.json

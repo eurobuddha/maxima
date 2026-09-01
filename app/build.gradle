@@ -53,6 +53,12 @@ android {
             ]
         }
     }
+
+    // Shared wallet source (moved out of app/src so :portal can compile the same
+    // code — same pattern :cloud/:desktop already use). Byte-identical; app owns nothing extra.
+    sourceSets {
+        main { java.srcDirs += ['../walletshared'] }
+    }
 }
 
 dependencies {
