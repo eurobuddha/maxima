@@ -16,6 +16,8 @@ import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.R;
 import com.eurobuddha.maxima.app.ui.Page;
 import com.eurobuddha.maxima.app.ui.Qr;
+import com.eurobuddha.maxima.app.wallet.NodeLink;
+import com.eurobuddha.maxima.app.wallet.WalletPublisher;
 import com.eurobuddha.maxima.cloud.CloudWallet;
 import com.eurobuddha.maxima.cloud.ParlonsRemote;
 
@@ -46,10 +48,18 @@ public final class CloudWalletPage implements Page {
     private int mUses = -1;               // one-time-signature counter (from walletUses)
     private int mMaxUses = CloudWallet.MAX_USES;
 
+    // Broadcaster: sally SIGNS; THIS device relays the signed txn via its own minimaCore (else
+    // gateway). The publisher tracks the account's public address so txnbasics has the proofs.
+    private final WalletPublisher mPub;
+    private final NodeLink mNode;
+    private volatile boolean mPrepared;   // account address tracked on the local node yet
+
     public CloudWalletPage(MainActivity zAct, View zView) {
         mAct = zAct;
         mView = zView;
         mRoot = zView.findViewById(R.id.wallet_container);
+        mNode = WalletPublisher.coreInstalled(mAct) ? new NodeLink(mAct, enabled -> {}) : null;
+        mPub = new WalletPublisher(mAct, mNode);
     }
 
     @Override
@@ -93,6 +103,17 @@ public final class CloudWalletPage implements Page {
                 try {
                     JSONObject a = r.walletAddress();
                     addr = str(a, "address");
+                    // Track the account's PUBLIC address on this device's minimaCore (script+hex
+                    // from sally), so a signed txn from sally can be relayed here — txnbasics needs
+                    // the coin proofs. Idempotent; back-fills historic coins the same way the app does.
+                    String script = str(a, "script");
+                    String hex = str(a, "hex");
+                    if (!mPrepared && !script.isEmpty() && !hex.isEmpty()) {
+                        mPub.prepare(script, hex, new WalletPublisher.Cb() {
+                            public void onResult(org.json.JSONObject r2) { mPrepared = true; }
+                            public void onError(String m) {}
+                        });
+                    }
                     if (!addr.isEmpty()) {
                         JSONObject b = r.balance();
                         JSONObject bal = obj(b, "balance");
@@ -495,30 +516,46 @@ public final class CloudWalletPage implements Page {
             return;
         }
         mSending = true;
-        mAct.toast("Building on your node…");
+        mAct.toast("Signing on your node…");
         final String pid = java.util.UUID.randomUUID().toString();
         final PortalHub.Listener[] holder = new PortalHub.Listener[1];
-        if (zWatchOnSuccess != null) {
-            // Arm a one-shot listener: flip the watch only when THIS send confirms. Match on
-            // pid for BOTH outcomes so an unrelated device's send can't disarm us, and so a
-            // send-RPC failure can tear it down.
-            holder[0] = ev -> {
-                String type = String.valueOf(ev.get("type"));
-                boolean mine = pid.equals(String.valueOf(ev.get("pid")));
-                if ("walletsent".equals(type) && mine) {
-                    PortalHub.remove(holder[0]);
-                    mAct.runOnUiThread(() -> setWatch(zWatchOnSuccess));
-                } else if ("walletfail".equals(type) && mine) {
-                    PortalHub.remove(holder[0]);
-                }
-            };
-            PortalHub.add(holder[0]);
-        }
+        // Arm BEFORE the RPC: sally SIGNS, then pushes 'walletbuilt' carrying the signed blob for
+        // THIS device to broadcast (via its minimaCore, else gateway). 'walletfail' tears us down.
+        holder[0] = ev -> {
+            String type = String.valueOf(ev.get("type"));
+            if (!pid.equals(String.valueOf(ev.get("pid")))) return;
+            if ("walletbuilt".equals(type)) {
+                PortalHub.remove(holder[0]);
+                final String importcmd = String.valueOf(ev.get("importcmd"));
+                final String postcmd = String.valueOf(ev.get("postcmd"));
+                final String txid = String.valueOf(ev.get("txid"));
+                mAct.runOnUiThread(() -> mAct.toast("Broadcasting via " + mPub.backendName() + "…"));
+                mPub.publish(importcmd, txid, postcmd, new WalletPublisher.Cb() {
+                    public void onResult(org.json.JSONObject r2) {
+                        mAct.runOnUiThread(() -> {
+                            mSending = false;
+                            mAct.toast("Sent");
+                            if (zWatchOnSuccess != null) setWatch(zWatchOnSuccess);
+                            mLastLoad = 0;
+                            render();
+                        });
+                    }
+                    public void onError(String m) {
+                        mAct.runOnUiThread(() -> { mSending = false; mAct.toast("Broadcast failed: " + m); });
+                    }
+                });
+            } else if ("walletfail".equals(type)) {
+                PortalHub.remove(holder[0]);
+                final String why = String.valueOf(ev.get("error"));
+                mAct.runOnUiThread(() -> { mSending = false; mAct.toast("Send failed: " + why); });
+            }
+        };
+        PortalHub.add(holder[0]);
         CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
                 try {
-                    JSONObject res = r.walletSend(zTo, zAmount, pid);
+                    JSONObject res = r.buildSend(zTo, zAmount, pid);   // sally signs; blob via push
                     Object okv = res.get("ok");
                     if (!(okv instanceof Boolean) || !((Boolean) okv)) {
                         error = String.valueOf(res.get("error"));
@@ -526,16 +563,15 @@ public final class CloudWalletPage implements Page {
                 } catch (Exception e) {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
-                final String err = error;
-                mAct.runOnUiThread(() -> {
-                    mSending = false;
-                    mAct.toast(err == null
-                            ? "Signing & broadcasting — watch the balance" : "Send failed: " + err);
-                    mLastLoad = 0;
-                    render();
-                });
+                if (error != null) {
+                    final String err = error;
+                    PortalHub.remove(holder[0]);
+                    mAct.runOnUiThread(() -> { mSending = false; mAct.toast("Send failed: " + err); });
+                }
+                // success → wait for the walletbuilt push (the listener above finishes the send)
             }
             public void err(String m) {
+                PortalHub.remove(holder[0]);
                 mAct.runOnUiThread(() -> {
                     mSending = false;
                     mAct.toast("Send failed: " + m);
