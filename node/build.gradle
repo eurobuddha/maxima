@@ -1,0 +1,39 @@
+plugins {
+    id 'application'
+}
+
+/*
+ * Parlons Node — the merged VPS binary: a FULL Minima node (org.minima, from the bundled
+ * minima-core jar) running in one JVM alongside the clean-room :core Maxima and the Parlons
+ * account layer. See the plan: "minimaCore wearing the Parlons cape".
+ *
+ * Guardrail: this module depends ONLY on the full node's org.minima (node/libs/minima-node.jar).
+ * It must NEVER pull :minima-common or :maxjar (the vendored org.minima), or fully-qualified
+ * classes (Address, JSONObject, GeneralParams, …) collide with the node's. :core and :server are
+ * clean-room com.eurobuddha.* (verified: :core has no project deps, :server → :core only), so they
+ * mesh with the node with no collision.
+ */
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+    // The full minima-core node (org.minima) — chain, P2P, wallet, MMR. Bundled jar because the
+    // minima-core Gradle toolchain predates JDK 26; we compile/run it here under maxima's Gradle.
+    implementation files('libs/minima-node.jar')
+    // The node's own runtime deps (from core/minima-core/build.gradle).
+    implementation 'com.h2database:h2:2.4.240'
+    implementation 'org.bouncycastle:bcpkix-jdk15on:1.69'
+    implementation 'mysql:mysql-connector-java:8.0.26'
+
+    // Parlons Maxima cape (clean-room) + relay.
+    implementation project(':core')
+    implementation project(':server')
+
+    implementation 'org.json:json:20231013'
+}
+
+application {
+    mainClass = 'com.eurobuddha.maxima.node.ParlonsNodeMain'
+}

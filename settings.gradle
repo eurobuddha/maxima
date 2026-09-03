@@ -23,6 +23,9 @@ include ':core'
 // Added as they are built (milestones 7 and 8 in the plan):
 include ':server'
 
+// Parlons Node — full Minima node (org.minima, bundled jar) + :core Maxima in one binary.
+include ':node'
+
 // Classic Maxima, extracted whole and chain-free -> maxima.jar. Vendored
 // org.minima.* sources stay diffable against core/Minima; seams in
 // org.minima.maxjar. Never on the same classpath as real Minima.
