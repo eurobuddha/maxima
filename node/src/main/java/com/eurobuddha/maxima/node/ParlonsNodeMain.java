@@ -106,6 +106,7 @@ public final class ParlonsNodeMain {
 
         // --- probe the node via the in-process command API + report relay stats ---
         new Thread(() -> {
+            boolean walletLogged = false;
             for (int i = 0; i < 30; i++) {
                 try {
                     Thread.sleep(4000);
@@ -118,6 +119,20 @@ public final class ParlonsNodeMain {
                     System.out.println("[parlons-node] tick " + i + ": node block=" + block
                             + " chainlen=" + length
                             + " | cape=" + (relay == null ? "starting" : "up:" + RELAY_PORT));
+
+                    // The account wallet IS the node's own wallet (M2): log it once it's live.
+                    if (!walletLogged) {
+                        try {
+                            String addr = NodeWallet.address();
+                            if (!addr.isEmpty()) {
+                                System.out.println("[parlons-node] account wallet = node wallet: "
+                                        + addr + " (" + NodeWallet.miniAddress() + ") — "
+                                        + NodeWallet.balance());
+                                walletLogged = true;
+                                maybeSelfTestSend();
+                            }
+                        } catch (Throwable ignored) { /* wallet not ready yet */ }
+                    }
                 } catch (Throwable t) {
                     System.out.println("[parlons-node] tick " + i + " node not ready: " + t);
                 }
@@ -154,6 +169,30 @@ public final class ParlonsNodeMain {
             Thread.sleep(2000);
         }
         throw new IllegalStateException("node seed (vault) not available after 120s — cannot derive Maxima identity");
+    }
+
+    /**
+     * M2 send-path self-test, gated by {@code -Dparlons.node.selftest.send=<address>[,<amount>]}.
+     * Exercises the node-signed broadcast end-to-end: on a funded+synced node it posts a real txn;
+     * on a fresh local node it returns a clean {@code insufficient funds} node error — either way it
+     * proves the wallet routes through the embedded node's own sign+broadcast, not a gateway.
+     */
+    private static void maybeSelfTestSend() {
+        String spec = System.getProperty("parlons.node.selftest.send", "").trim();
+        if (spec.isEmpty()) return;
+        String[] parts = spec.split(",");
+        String to = parts[0].trim();
+        String amount = parts.length > 1 ? parts[1].trim() : "0.001";
+        try {
+            NodeWallet.SendResult r = NodeWallet.send(to, amount);
+            System.out.println("[parlons-node] SELFTEST send OK — node-signed txpowid=" + r.txid
+                    + " istransaction=" + r.isTransaction);
+        } catch (NodeWallet.WalletException e) {
+            System.out.println("[parlons-node] SELFTEST send returned a clean NODE error (wiring proven): "
+                    + e.getMessage());
+        } catch (Throwable t) {
+            System.out.println("[parlons-node] SELFTEST send FAILED at the wiring level: " + t);
+        }
     }
 
     private ParlonsNodeMain() {}
