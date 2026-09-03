@@ -84,10 +84,15 @@ public final class ParlonsNodeMain {
         // --- boot the full node in-process (Main is a MessageProcessor; spawns its own threads) ---
         final Main main = new Main();
 
-        // --- co-boot the Parlons Maxima relay on the node's OWN seed, once the node is ready ---
+        // --- the phone-facing wallet gateway (M3): hardened read+relay /cmd proxy over the node ---
+        final NodeGateway[] gatewayHolder = new NodeGateway[1];
+
+        // --- co-boot the Parlons Maxima relay + wallet gateway on the node's OWN seed, once ready ---
         final RelayRuntime[] relayHolder = new RelayRuntime[1];
         Thread capeThread = new Thread(() -> {
             try {
+                // deriveMaximaIdentityFromNode() only returns once the node wallet is initialised
+                // (vault succeeded) — so past this line the wallet is provably up.
                 MaximaIdentity identity = deriveMaximaIdentityFromNode();
                 Path relayDir = new File(dataFolder, "relay").toPath();
                 RelayRuntime relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
@@ -98,15 +103,30 @@ public final class ParlonsNodeMain {
                 System.out.println("[parlons-node] Maxima cape up on port " + RELAY_PORT
                         + " — identity " + identity.mxIdentity()
                         + " (derived from the node seed; one seed drives both)");
+
+                // The account wallet IS the node's own wallet (M2).
+                System.out.println("[parlons-node] account wallet = node wallet: "
+                        + NodeWallet.address() + " (" + NodeWallet.miniAddress() + ") — "
+                        + NodeWallet.balance());
+                maybeSelfTestSend();
+
+                // Wallet is live => open the phone-facing gateway (M3).
+                try {
+                    NodeGateway gw = NodeGateway.create(dataFolder.toPath(), gatewayPort);
+                    gw.start();
+                    gatewayHolder[0] = gw;
+                    System.out.println("[parlons-node] wallet gateway up on " + gw.bindHost() + ":"
+                            + gw.port() + "/cmd (megammr=" + GeneralParams.IS_MEGAMMR
+                            + ", bearer token in " + dataFolder + "/gateway-token.txt)");
+                } catch (Throwable gt) {
+                    System.out.println("[parlons-node] wallet gateway FAILED: " + gt);
+                }
             } catch (Throwable t) {
                 System.out.println("[parlons-node] Maxima cape FAILED to start: " + t);
                 t.printStackTrace();
             }
         }, "parlons-node-cape");
         capeThread.start();
-
-        // --- the phone-facing wallet gateway (M3): hardened read+relay /cmd proxy over the node ---
-        final NodeGateway[] gatewayHolder = new NodeGateway[1];
 
         // --- single shutdown hook stops ALL halves cleanly ---
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -115,53 +135,27 @@ public final class ParlonsNodeMain {
             try { main.shutdown(); } catch (Throwable ignored) {}
         }));
 
-        // --- probe the node via the in-process command API + report relay stats ---
+        // --- heartbeat: report chain height + subsystem liveness via the in-process command API ---
         new Thread(() -> {
-            boolean walletLogged = false;
-            for (int i = 0; i < 30; i++) {
+            while (true) {
                 try {
-                    Thread.sleep(4000);
+                    Thread.sleep(30_000);
                     JSONObject res = CommandRunner.getRunner().runSingleCommand("status");
                     Object chain = res.get("response") instanceof JSONObject
                             ? ((JSONObject) res.get("response")).get("chain") : null;
                     Object length = (chain instanceof JSONObject) ? ((JSONObject) chain).get("length") : "?";
                     Object block  = (chain instanceof JSONObject) ? ((JSONObject) chain).get("block")  : "?";
-                    RelayRuntime relay = relayHolder[0];
-                    System.out.println("[parlons-node] tick " + i + ": node block=" + block
+                    System.out.println("[parlons-node] heartbeat: node block=" + block
                             + " chainlen=" + length
-                            + " | cape=" + (relay == null ? "starting" : "up:" + RELAY_PORT));
-
-                    // The account wallet IS the node's own wallet (M2): log it once it's live.
-                    if (!walletLogged) {
-                        try {
-                            String addr = NodeWallet.address();
-                            if (!addr.isEmpty()) {
-                                System.out.println("[parlons-node] account wallet = node wallet: "
-                                        + addr + " (" + NodeWallet.miniAddress() + ") — "
-                                        + NodeWallet.balance());
-                                walletLogged = true;
-                                maybeSelfTestSend();
-                                // node is serving the wallet => safe to open the phone gateway
-                                try {
-                                    NodeGateway gw = NodeGateway.create(minimaFolder.getParentFile().toPath(), gatewayPort);
-                                    gw.start();
-                                    gatewayHolder[0] = gw;
-                                    System.out.println("[parlons-node] wallet gateway up on "
-                                            + gw.bindHost() + ":" + gw.port()
-                                            + "/cmd (megammr=" + GeneralParams.IS_MEGAMMR
-                                            + ", bearer token in " + GeneralParams.DATA_FOLDER
-                                            + "/../gateway-token.txt)");
-                                } catch (Throwable gt) {
-                                    System.out.println("[parlons-node] wallet gateway FAILED: " + gt);
-                                }
-                            }
-                        } catch (Throwable ignored) { /* wallet not ready yet */ }
-                    }
+                            + " | cape=" + (relayHolder[0]   == null ? "down" : "up:" + RELAY_PORT)
+                            + " | gateway=" + (gatewayHolder[0] == null ? "down" : "up:" + gatewayPort));
+                } catch (InterruptedException ie) {
+                    return;
                 } catch (Throwable t) {
-                    System.out.println("[parlons-node] tick " + i + " node not ready: " + t);
+                    System.out.println("[parlons-node] heartbeat: node not ready: " + t);
                 }
             }
-        }, "parlons-node-probe").start();
+        }, "parlons-node-heartbeat").start();
 
         // Keep the JVM alive — both halves run on their own threads.
         Object lock = new Object();
