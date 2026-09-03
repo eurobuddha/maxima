@@ -67,6 +67,13 @@ public final class ParlonsNodeMain {
             System.out.println("[parlons-node] static connect list: " + connect);
         }
 
+        // MegaMMR: keep the full MegaMMR so `coins/balance megammr:true address:<any>` proves coins
+        // for ANY address — this is what makes the node a wallet gateway for phones (M3). Default on
+        // for the gateway role; -Dparlons.node.megammr=false to run a plain full node.
+        boolean megammr = Boolean.parseBoolean(System.getProperty("parlons.node.megammr", "true"));
+        GeneralParams.IS_MEGAMMR = megammr;
+        int gatewayPort = Integer.getInteger("parlons.gateway.port", GeneralParams.MINIMA_PORT + 5);
+
         // JDBC drivers the node's SqlDB layer needs (same registration Minima.main does).
         try { new org.h2.Driver(); } catch (Exception ignored) {}
         try { Class.forName("com.mysql.cj.jdbc.Driver"); } catch (Exception ignored) {}
@@ -98,9 +105,13 @@ public final class ParlonsNodeMain {
         }, "parlons-node-cape");
         capeThread.start();
 
-        // --- single shutdown hook stops BOTH halves cleanly ---
+        // --- the phone-facing wallet gateway (M3): hardened read+relay /cmd proxy over the node ---
+        final NodeGateway[] gatewayHolder = new NodeGateway[1];
+
+        // --- single shutdown hook stops ALL halves cleanly ---
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try { if (relayHolder[0] != null) relayHolder[0].stop(); } catch (Throwable ignored) {}
+            try { if (gatewayHolder[0] != null) gatewayHolder[0].stop(); } catch (Throwable ignored) {}
+            try { if (relayHolder[0]   != null) relayHolder[0].stop();   } catch (Throwable ignored) {}
             try { main.shutdown(); } catch (Throwable ignored) {}
         }));
 
@@ -130,6 +141,19 @@ public final class ParlonsNodeMain {
                                         + NodeWallet.balance());
                                 walletLogged = true;
                                 maybeSelfTestSend();
+                                // node is serving the wallet => safe to open the phone gateway
+                                try {
+                                    NodeGateway gw = NodeGateway.create(minimaFolder.getParentFile().toPath(), gatewayPort);
+                                    gw.start();
+                                    gatewayHolder[0] = gw;
+                                    System.out.println("[parlons-node] wallet gateway up on "
+                                            + gw.bindHost() + ":" + gw.port()
+                                            + "/cmd (megammr=" + GeneralParams.IS_MEGAMMR
+                                            + ", bearer token in " + GeneralParams.DATA_FOLDER
+                                            + "/../gateway-token.txt)");
+                                } catch (Throwable gt) {
+                                    System.out.println("[parlons-node] wallet gateway FAILED: " + gt);
+                                }
                             }
                         } catch (Throwable ignored) { /* wallet not ready yet */ }
                     }
