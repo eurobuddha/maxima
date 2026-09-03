@@ -117,9 +117,16 @@ public final class NodeGateway {
             if (command == null || command.trim().isEmpty() || "null".equals(command)) {
                 fail(ex, 400, "empty command"); return;
             }
-            String verb = command.trim().split("\\s+", 2)[0].toLowerCase();
+            String trimmed = command.trim();
+            String verb = trimmed.split("\\s+", 2)[0].toLowerCase();
             if (!ALLOWED.contains(verb)) {
                 fail(ex, 403, "command not permitted through the gateway: " + verb);
+                return;
+            }
+            // coins/balance must target a specific address — never let a client enumerate the
+            // operator's OWN wallet coins (a privacy leak; the phone always passes address:).
+            if (("coins".equals(verb) || "balance".equals(verb)) && !trimmed.contains("address:")) {
+                fail(ex, 403, verb + " through the gateway requires an address: parameter");
                 return;
             }
             // Forward to the in-process node and hand its JSON straight back.
