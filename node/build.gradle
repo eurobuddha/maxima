@@ -37,3 +37,30 @@ dependencies {
 application {
     mainClass = 'com.eurobuddha.maxima.node.ParlonsNodeMain'
 }
+
+/*
+ * Self-contained runnable jar = the deployable Parlons Node binary: the bundled minima-node.jar
+ * (org.minima) + :core + :server + h2/bouncycastle/mysql, all flattened under one Main-Class.
+ * dependsOn/inputs on runtimeClasspath so an edit to :core/:server actually reaches the artifact
+ * (a jar with a new version and old code is the worst failure mode — see :server's fatJar note).
+ */
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Self-contained runnable Parlons Node jar'
+
+    dependsOn configurations.runtimeClasspath
+    inputs.files configurations.runtimeClasspath
+
+    archiveBaseName = 'parlons-node'
+    manifest {
+        attributes 'Main-Class': 'com.eurobuddha.maxima.node.ParlonsNodeMain'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+    // BouncyCastle jars are signed; flattening their META-INF/*.SF|DSA|RSA into one jar makes the
+    // JVM fail signature verification ("Invalid signature file digest"). Drop the signatures — the
+    // exclude must be scoped to the dependency tree (a task-level exclude doesn't reach zipTree).
+    from({ configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }) {
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC', 'META-INF/INDEX.LIST'
+    }
+}
