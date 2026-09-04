@@ -72,7 +72,9 @@ public final class ParlonsNodeMain {
         // for the gateway role; -Dparlons.node.megammr=false to run a plain full node.
         boolean megammr = Boolean.parseBoolean(System.getProperty("parlons.node.megammr", "true"));
         GeneralParams.IS_MEGAMMR = megammr;
-        int gatewayPort = Integer.getInteger("parlons.gateway.port", GeneralParams.MINIMA_PORT + 5);
+        // Fixed default 9585 to match ops/deploy-parlons-node.sh + cloud/NODE-SETUP.md (one value
+        // everywhere beats a node-port-relative offset that the docs would then contradict).
+        int gatewayPort = Integer.getInteger("parlons.gateway.port", 9585);
 
         // JDBC drivers the node's SqlDB layer needs (same registration Minima.main does).
         try { new org.h2.Driver(); } catch (Exception ignored) {}

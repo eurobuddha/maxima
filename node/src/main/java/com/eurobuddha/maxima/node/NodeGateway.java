@@ -118,25 +118,35 @@ public final class NodeGateway {
                 fail(ex, 400, "empty command"); return;
             }
             String trimmed = command.trim();
-            String verb = trimmed.split("\\s+", 2)[0].toLowerCase();
-            if (!ALLOWED.contains(verb)) {
-                fail(ex, 403, "command not permitted through the gateway: " + verb);
-                return;
-            }
-            // coins/balance must target a specific address — never let a client enumerate the
-            // operator's OWN wallet coins (a privacy leak; the phone always passes address:).
-            if (("coins".equals(verb) || "balance".equals(verb)) && !trimmed.contains("address:")) {
-                fail(ex, 403, verb + " through the gateway requires an address: parameter");
-                return;
+            // CRITICAL: the node executes EVERY ';'-separated segment (runMultiCommand splits on
+            // ';' with a StringTokenizer and runs each as a full admin command). So checking only
+            // the first verb is a fund-drain bypass: "status ; send address:<attacker> amount:<all>"
+            // passes a first-verb check and then DRAINS the wallet. Validate EVERY segment's verb.
+            for (String segment : trimmed.split(";")) {
+                String seg = segment.trim();
+                if (seg.isEmpty()) continue;
+                String verb = seg.split("\\s+", 2)[0].toLowerCase();
+                if (!ALLOWED.contains(verb)) {
+                    fail(ex, 403, "command not permitted through the gateway: " + verb);
+                    return;
+                }
+                // coins/balance must target a specific address — never let a client enumerate the
+                // operator's OWN wallet coins (a privacy leak; the phone always passes address:).
+                if (("coins".equals(verb) || "balance".equals(verb)) && !seg.contains("address:")) {
+                    fail(ex, 403, verb + " through the gateway requires an address: parameter");
+                    return;
+                }
             }
             // Forward to the in-process node and hand its JSON straight back.
-            JSONObject result = CommandRunner.getRunner().runSingleCommand(command.trim());
+            JSONObject result = CommandRunner.getRunner().runSingleCommand(trimmed);
             byte[] out = result.toString().getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().set("Content-Type", "application/json");
             ex.sendResponseHeaders(200, out.length);
             try (OutputStream os = ex.getResponseBody()) { os.write(out); }
         } catch (Throwable t) {
-            try { fail(ex, 500, "gateway error: " + t.getMessage()); } catch (IOException ignored) {}
+            // Don't echo internal exception detail to the client — log it, return a generic message.
+            System.out.println("[parlons-node] gateway request error: " + t);
+            try { fail(ex, 500, "gateway error"); } catch (IOException ignored) {}
         }
     }
 
