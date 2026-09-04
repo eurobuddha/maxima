@@ -245,7 +245,7 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
     -Dparlons.node.rootnode=$ROOTNODE}${PASSFILE:+ \\
     -Dparlons.node.passphrase.file=$PASSFILE}${NODE_ARGS:+ \\
-    "-Dparlons.node.args=$NODE_ARGS"} \\
+    \"-Dparlons.node.args=$NODE_ARGS\"} \\
     -jar /opt/maxima/parlons-node.jar
 Restart=on-failure
 RestartSec=10
