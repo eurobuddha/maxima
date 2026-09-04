@@ -48,4 +48,11 @@
     <color name="ux_tick_read">#FF6B6F76</color>
 
     <color name="ic_launcher_background">#0A0B0D</color>
+    <!-- Terminal IDE (the night-owl palette of the Terminal IDE companion app, ported whole). -->
+    <color name="ide_bg">#011627</color>
+    <color name="ide_bg_light">#0B2942</color>
+    <color name="ide_text">#D6DEEB</color>
+    <color name="ide_dim">#697098</color>
+    <color name="ide_accent">#82AAFF</color>
+    <color name="ide_warn">#F78C6C</color>
 </resources>

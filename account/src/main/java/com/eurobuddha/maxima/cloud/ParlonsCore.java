@@ -267,6 +267,8 @@ public final class ParlonsCore {
     }
 
     public MaximaNode node() { return mNode; }
+    /** The control channel (hosts plug in node-only capabilities such as the Terminal console). */
+    public ParlonsControl control() { return mControl; }
     public ChatEngine chat() { return mChat; }
     public MediaService media() { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }

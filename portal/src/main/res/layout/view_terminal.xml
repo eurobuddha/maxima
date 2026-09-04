@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ide_bg">
+
+    <com.eurobuddha.maxima.app.portal.ide.terminal.SelectionScrollView
+        android:id="@+id/terminal_scroller"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/terminal_output"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="bottom" />
+
+    </com.eurobuddha.maxima.app.portal.ide.terminal.SelectionScrollView>
+
+    <LinearLayout
+        android:id="@+id/terminal_selbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/ide_bg_light"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Select mode — long-press output"
+            android:textSize="11sp"
+            android:typeface="monospace"
+            android:textColor="@color/ide_dim" />
+
+        <TextView
+            android:id="@+id/terminal_sel_copyall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="COPY ALL"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/ide_accent" />
+
+        <TextView
+            android:id="@+id/terminal_sel_export"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="EXPORT"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/ide_accent" />
+
+        <TextView
+            android:id="@+id/terminal_sel_done"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="DONE"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/ide_warn" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/terminal_paramhint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:textSize="12sp"
+        android:typeface="monospace"
+        android:textColor="@color/ide_dim"
+        android:background="@color/ide_bg_light"
+        android:visibility="gone" />
+
+    <ScrollView
+        android:id="@+id/terminal_dropdown_scroller"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/ide_bg_light"
+        android:scrollbars="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/terminal_dropdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/ide_bg_light"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <TextView
+            android:id="@+id/terminal_hist_up"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="▲"
+            android:textSize="18sp"
+            android:textColor="@color/ide_accent" />
+
+        <TextView
+            android:id="@+id/terminal_hist_down"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="▼"
+            android:textSize="18sp"
+            android:textColor="@color/ide_accent" />
+
+        <TextView
+            android:id="@+id/terminal_tab"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="⇥"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/ide_accent"
+            android:visibility="gone" />
+
+        <com.eurobuddha.maxima.app.portal.ide.terminal.CaretEditText
+            android:id="@+id/terminal_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:singleLine="true"
+            android:imeOptions="actionDone"
+            android:typeface="monospace"
+            android:textSize="14sp"
+            android:textColor="@color/ide_text"
+            android:textColorHint="@color/ide_dim"
+            android:hint="command…"
+            android:inputType="text|textNoSuggestions" />
+
+        <TextView
+            android:id="@+id/terminal_fav"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="★"
+            android:textSize="18sp"
+            android:textColor="@color/ide_warn" />
+
+        <Button
+            android:id="@+id/terminal_send"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Run" />
+
+    </LinearLayout>
+
+</LinearLayout>

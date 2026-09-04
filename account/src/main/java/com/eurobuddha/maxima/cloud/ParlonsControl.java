@@ -72,6 +72,7 @@ public final class ParlonsControl {
     public static final String M_WALLET_USES  = "parlons.wallet.uses";
     /** Re-point the account WALLET at a new phrase; the identity stays (node accounts only). */
     public static final String M_WALLET_RESYNC = "parlons.wallet.resync";
+    public static final String M_NODE_CMD     = "parlons.node.cmd";      // Terminal IDE: any node command
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -261,6 +262,50 @@ public final class ParlonsControl {
     public void setNodeControl(NodeControl zControl) {
         mNodeControl = zControl;
     }
+
+    /**
+     * The embedded Minima node's command line, for the Terminal IDE on a paired device. Only a
+     * Parlons NODE has one (parlons-cloud carries no chain); null means "no console here".
+     * Commands run on their own lane — the control channel replies within a short leash and
+     * the device polls the job key until the command finishes.
+     */
+    public interface NodeConsole {
+        org.minima.utils.json.JSONObject run(String zCommand) throws Exception;
+    }
+
+    private volatile NodeConsole mConsole;
+
+    public void setNodeConsole(NodeConsole zConsole) {
+        mConsole = zConsole;
+    }
+
+    /** One Terminal command in flight or finished; its output is paged out in CMD_CHUNK pieces. */
+    private static final class ConsoleJob {
+        final String command;
+        final long started = System.currentTimeMillis();
+        volatile String output;       // the full JSON text once finished
+        volatile long ms;
+        ConsoleJob(String zCommand) { command = zCommand; }
+    }
+
+    /** Per reply: well under the 256K Maxima package ceiling even after JSON escaping + encryption. */
+    static final int CMD_CHUNK = 120_000;
+    /** How long a single RPC waits for the command before replying "pending" (the node's inbound
+     *  reader is blocked for this long at most). */
+    private static final long CMD_LEASH_MS = 2_500;
+
+    private final java.util.concurrent.ExecutorService mConsoleExec =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "parlons-console");
+                t.setDaemon(true);
+                return t;
+            });
+    private final java.util.LinkedHashMap<String, ConsoleJob> mConsoleJobs =
+            new java.util.LinkedHashMap<String, ConsoleJob>(8, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ConsoleJob> e) {
+                    return size() > 6;
+                }
+            };
 
     public void registerOn(ServiceRegistry zReg) {
         // --- pairing ---
@@ -1492,6 +1537,55 @@ public final class ParlonsControl {
             out.put("note", "the node restarts when the resync finishes (about a minute); same account, new wallet address");
             return bytes(out);
         });
+        zReg.register(M_NODE_CMD, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String key = str(in, "key");
+            if (!key.isEmpty()) {
+                // a follow-up: poll a running job, or fetch the next page of a finished one
+                ConsoleJob job;
+                synchronized (mConsoleJobs) { job = mConsoleJobs.get(key); }
+                if (job == null) {
+                    return bytes(err("that output has expired - run the command again"));
+                }
+                long offset = 0;
+                try { offset = Long.parseLong(str(in, "offset").isEmpty() ? "0" : str(in, "offset")); }
+                catch (NumberFormatException ignored) { }
+                return bytes(consoleReply(key, job, (int) offset));
+            }
+            NodeConsole console = mConsole;
+            if (console == null) {
+                return bytes(err("this account runs on parlons-cloud, which has no embedded Minima node - the Terminal needs a Parlons Node"));
+            }
+            final String command = str(in, "cmd").trim();
+            if (command.isEmpty()) {
+                return bytes(err("no command"));
+            }
+            String head = command.split("\\s+")[0].toLowerCase();
+            if ("quit".equals(head)) {
+                return bytes(err("quit is refused over the paired channel - restart the node from the box (systemctl restart parlons-node)"));
+            }
+            final ConsoleJob job = new ConsoleJob(command);
+            final String jobKey = Long.toHexString(System.nanoTime()) + Integer.toHexString(command.hashCode());
+            synchronized (mConsoleJobs) { mConsoleJobs.put(jobKey, job); }
+            mNode.log("terminal: " + head + " (paired device)");
+            mConsoleExec.execute(() -> {
+                String out;
+                try {
+                    JSONObject r = console.run(command);
+                    out = r == null ? "{}" : r.toString();
+                } catch (Throwable e) {
+                    JSONObject r = new JSONObject();
+                    r.put("command", command);
+                    r.put("status", false);
+                    r.put("error", "node error: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                    out = r.toString();
+                }
+                job.ms = System.currentTimeMillis() - job.started;
+                job.output = out;   // volatile write publishes ms + output
+            });
+            return bytes(consoleReply(jobKey, job, 0));
+        });
         zReg.register(M_WALLET_BAL, req -> {
             requireAuth(req);
             PaySource ps = mPaySource;
@@ -1741,6 +1835,32 @@ public final class ParlonsControl {
     private static String str(JSONObject o, String key) {
         Object v = o.get(key);
         return v == null ? "" : String.valueOf(v);
+    }
+
+    /** Wait up to the leash for the job, then reply pending / one page of the output. */
+    private static JSONObject consoleReply(String zKey, ConsoleJob zJob, int zOffset) {
+        long until = System.currentTimeMillis() + CMD_LEASH_MS;
+        while (zJob.output == null && System.currentTimeMillis() < until) {
+            try { Thread.sleep(50); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+        }
+        JSONObject out = ok();
+        out.put("key", zKey);
+        out.put("command", zJob.command);
+        String full = zJob.output;
+        if (full == null) {
+            out.put("pending", true);
+            out.put("elapsed", System.currentTimeMillis() - zJob.started);
+            return out;
+        }
+        int from = Math.max(0, Math.min(zOffset, full.length()));
+        int to = Math.min(full.length(), from + CMD_CHUNK);
+        out.put("pending", false);
+        out.put("output", full.substring(from, to));
+        out.put("offset", from);
+        out.put("total", full.length());
+        out.put("more", to < full.length());
+        out.put("ms", zJob.ms);
+        return out;
     }
 
     private static JSONObject ok() {

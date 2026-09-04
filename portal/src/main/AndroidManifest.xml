@@ -55,6 +55,17 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".portal.ide.IdeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Maxima.Ide"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".portal.ide.ide.ScriptEditorActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Maxima.Ide"
+            android:parentActivityName=".portal.ide.IdeActivity"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".portal.CloudNodePanelActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="payloads" path="maximapayloads/" />
+    <!-- Terminal IDE session exports shared as file attachments. -->
+    <cache-path name="export" path="export/" />
 </paths>

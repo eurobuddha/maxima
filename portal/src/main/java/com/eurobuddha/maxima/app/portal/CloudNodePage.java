@@ -305,6 +305,19 @@ public final class CloudNodePage implements Page {
         mRoot.addView(addr);
 
         // --- VPS control panel (the "superior to a phone" surface) ---
+        mRoot.addView(PortalUi.section(c, "Node tools"));
+        LinearLayout tools = PortalUi.card(c);
+        TextView ide = PortalUi.button(c, "Open Terminal IDE");
+        ide.setOnClickListener(v -> mAct.startActivity(
+                new android.content.Intent(mAct, com.eurobuddha.maxima.app.portal.ide.IdeActivity.class)));
+        tools.addView(ide);
+        tools.addView(PortalUi.gap(c, 6));
+        tools.addView(PortalUi.label(c, "The full Minima command line of YOUR node, plus the KISS "
+                + "script IDE and the manual-transaction workbench - every command runs on the node "
+                + "over this paired channel, output complete and copyable."));
+        mRoot.addView(tools);
+        mRoot.addView(PortalUi.gap(c, 12));
+
         mRoot.addView(PortalUi.section(c, "Transport & hosts"));
         LinearLayout ctrl = PortalUi.card(c);
         TextView open = PortalUi.button(c, "Open control panel");

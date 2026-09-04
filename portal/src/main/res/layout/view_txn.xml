@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ide_bg"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <EditText
+            android:id="@+id/txn_id"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:typeface="monospace"
+            android:textSize="14sp"
+            android:textColor="@color/ide_text"
+            android:textColorHint="@color/ide_dim"
+            android:hint="transaction id (e.g. mytxn)"
+            android:inputType="text|textNoSuggestions" />
+
+        <Button
+            android:id="@+id/txn_create"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Create" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:typeface="monospace"
+        android:textSize="11sp"
+        android:textColor="@color/ide_dim"
+        android:paddingBottom="4dp"
+        android:text="flow: create → inputs → outputs → state → SIGN → BASICS → POST" />
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button android:id="@+id/txn_addinput" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="+ Input" />
+            <Button android:id="@+id/txn_addoutput" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="+ Output" />
+            <Button android:id="@+id/txn_change" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="+ Change" />
+            <Button android:id="@+id/txn_setstate" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="State" />
+            <Button android:id="@+id/txn_sign" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Sign" />
+            <Button android:id="@+id/txn_basics" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Basics" />
+            <Button android:id="@+id/txn_post" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Post" />
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button android:id="@+id/txn_check" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Check" />
+            <Button android:id="@+id/txn_export" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Export" />
+            <Button android:id="@+id/txn_import" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Import" />
+            <Button android:id="@+id/txn_list" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="List all" />
+            <Button android:id="@+id/txn_delete" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Delete" />
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
+
+    <TextView
+        android:id="@+id/txn_summary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:typeface="monospace"
+        android:textSize="12sp"
+        android:textColor="@color/ide_text"
+        android:padding="6dp"
+        android:background="@color/ide_bg_light"
+        android:text="no transaction — set an id and Create" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="6dp">
+
+        <TextView
+            android:id="@+id/txn_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:typeface="monospace"
+            android:textSize="12sp"
+            android:textIsSelectable="true"
+            android:textColor="@color/ide_dim"
+            android:text="The workbench builds raw UTXO transactions with the node&#8217;s txn* commands.\n\nRules it enforces for you:\n• inputs must equal outputs — the difference BURNS\n• sign BEFORE basics, then post\n• status:true = accepted (async mining — istransaction:false is normal)\n• delete abandoned txns or their input coins stay locked" />
+
+    </ScrollView>
+
+</LinearLayout>

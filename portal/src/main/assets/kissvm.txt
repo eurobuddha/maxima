@@ -1,0 +1,61 @@
+KISS VM QUICK REFERENCE
+(full docs: https://docs.minima.global)
+
+VARIABLES
+  LET myvar = 5
+  LET hpk = PREVSTATE(0)
+  NO underscores in names — they silently fail on-chain!
+
+CONTROL FLOW
+  IF cond THEN ... ELSEIF cond THEN ... ELSE ... ENDIF
+  WHILE cond DO ... ENDWHILE
+  ASSERT expression        (fails script if false)
+  RETURN TRUE|FALSE        (must return a boolean)
+
+STATE
+  STATE(port)              read from the SPENDING transaction
+  PREVSTATE(port)          read from the INPUT COIN (set at creation)
+  SAMESTATE(start end)     assert STATE==PREVSTATE over a port range
+
+SIGNATURES
+  SIGNEDBY(pubkey)         tx signed by this key
+  MULTISIG(n pk1 pk2 ...)  n-of-m signature check
+
+TXN VERIFICATION
+  VERIFYOUT(idx address amount tokenid keepstate)
+    keepstate TRUE  = phase transition (output keeps state, storestate:true)
+    keepstate FALSE = final payout (output must NOT store state)
+  VERIFYIN(idx address amount tokenid)
+  GETOUTADDR/GETOUTAMT/GETOUTTOK/GETOUTKEEPSTATE(idx)
+  GETINADDR/GETINAMT/GETINTOK/GETINID(idx)
+  SUMINPUTS(tokenid)  SUMOUTPUTS(tokenid)
+
+CRYPTO
+  SHA3(data)  SHA2(data)          32-byte hash
+  CONCAT(a b)                     0xAA+0xBB -> 0xAABB
+  SUBSET(start len data)          slice hex bytes
+  NUMBER(hex)                     small hex -> number (max ~4 bytes!)
+  Random pattern: LET r = NUMBER(SUBSET(0 4 SHA3(CONCAT(s1 s2)))) % range
+
+GLOBALS
+  @COINAGE   blocks since coin created  — USE THIS for timeouts
+  @BLKNUM    current block — BROKEN on synced nodes, avoid
+  @INPUT @AMOUNT @ADDRESS @TOKENID @COINID
+  @TOTIN @TOTOUT @SCRIPT @FLOATING @CREATED @BLOCK
+
+OPERATORS
+  Compare:  EQ NEQ GT GTE LT LTE
+  Boolean:  AND OR XOR NAND NOR NXOR NOT   (TRUE/FALSE only, NOT bitwise)
+  Math:     + - * / %   (MiniNumber arbitrary precision)
+
+HARD LIMITS (proven on-chain)
+  ~1200 chars max script size — silently fails beyond
+  1024 instructions per execution · 64 stack depth · 256 state ports
+  NUMBER() on a full 32-byte hash overflows — SUBSET(0 4 ...) first
+
+PROVEN RULES
+  - Phase transitions: VERIFYOUT(... TRUE) + output storestate:true
+  - Final payouts:     VERIFYOUT(... FALSE) + output storestate:false
+  - Store timeout in state, check @COINAGE GT timeout
+  - Set every state port your script reads — unset ports can crash
+  - Test offline with Run (runscript) before deploying real funds

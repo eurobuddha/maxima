@@ -25,6 +25,14 @@
 
     <style name="Theme.Maxima" parent="Base.Theme.Maxima" />
 
+    <!-- The Terminal IDE screens: always dark (the IDE's night-owl palette), Manrope kept. -->
+    <style name="Theme.Maxima.Ide" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/ide_bg</item>
+        <item name="colorPrimary">@color/ide_accent</item>
+        <item name="android:fontFamily">@font/manrope</item>
+        <item name="fontFamily">@font/manrope</item>
+    </style>
+
     <!-- A section heading: small, spaced, muted. Used everywhere so the eye
          can find the structure of a screen without reading it. -->
     <style name="MaximaSectionLabel">

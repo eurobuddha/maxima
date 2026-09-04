@@ -329,6 +329,18 @@ public final class Client {
                 }
                 break;
             }
+            case "cmd": {
+                if (rest.size() < 2) {
+                    System.err.println("usage: cmd <node command…>   e.g. cmd status  |  cmd balance megammr:true address:Mx…");
+                    break;
+                }
+                String command = String.join(" ", rest.subList(1, rest.size()));
+                JSONObject o = r.nodeCmd(command, 180_000);
+                if (!isOk(o)) { fail(o); break; }
+                System.out.println(o.get("output"));
+                System.out.println("(node ran it in " + o.get("ms") + " ms)");
+                break;
+            }
             case "nodelog": {
                 boolean clear = rest.size() > 1 && "clear".equalsIgnoreCase(rest.get(1));
                 JSONObject o = r.nodeLog(clear);
@@ -419,6 +431,7 @@ public final class Client {
         System.out.println("  wallet set <Mx>        watch a DIFFERENT (cold) address instead");
         System.out.println("  wallet resync <file>   re-point the wallet at a NEW 24-word phrase (identity kept; node accounts)");
         System.out.println("  wallet balance         balance of the shown address");
+        System.out.println("  cmd <node command…>    run ANY Minima command on the account's node (Terminal); full output, never cut");
         System.out.println("  seed                   reveal the account's 24-word phrase");
         System.out.println("  backup <file.pbk>      write an encrypted backup (phone-compatible)");
     }

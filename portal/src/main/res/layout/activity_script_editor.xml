@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/editor_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ide_bg">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/editor_toolbar"
+        app:titleTextColor="@color/white"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/ide_bg_light"
+        android:minHeight="?attr/actionBarSize"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar" />
+
+    <EditText
+        android:id="@+id/editor_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:singleLine="true"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@color/ide_text"
+        android:textColorHint="@color/ide_dim"
+        android:hint="script name"
+        android:background="@color/ide_bg_light" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/editor_source"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minLines="10"
+                android:gravity="top|start"
+                android:padding="12dp"
+                android:typeface="monospace"
+                android:textSize="13sp"
+                android:textColor="@color/ide_text"
+                android:textColorHint="@color/ide_dim"
+                android:hint="/* KISS VM script */\nRETURN TRUE"
+                android:background="@color/ide_bg"
+                android:inputType="textMultiLine|textNoSuggestions" />
+
+            <TextView
+                android:id="@+id/editor_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:typeface="monospace"
+                android:textSize="12sp"
+                android:textColor="@color/ide_dim"
+                android:background="@color/ide_bg_light"
+                android:text="0/1200 chars" />
+
+            <Button
+                android:id="@+id/editor_toggle_config"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/ide_accent"
+                android:text="▶ Test inputs" />
+
+            <LinearLayout
+                android:id="@+id/editor_runconfig"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:visibility="gone">
+
+                <EditText
+                    android:id="@+id/editor_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:typeface="monospace"
+                    android:textSize="12sp"
+                    android:textColor="@color/ide_text"
+                    android:textColorHint="@color/ide_dim"
+                    android:hint='state e.g. {"0":"0xFF..","6":"1"}'
+                    android:inputType="text|textNoSuggestions" />
+
+                <EditText
+                    android:id="@+id/editor_prevstate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:typeface="monospace"
+                    android:textSize="12sp"
+                    android:textColor="@color/ide_text"
+                    android:textColorHint="@color/ide_dim"
+                    android:hint='prevstate e.g. {"0":"0xFF..","6":"0"}'
+                    android:inputType="text|textNoSuggestions" />
+
+                <EditText
+                    android:id="@+id/editor_globals"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:typeface="monospace"
+                    android:textSize="12sp"
+                    android:textColor="@color/ide_text"
+                    android:textColorHint="@color/ide_dim"
+                    android:hint='globals e.g. {"@COINAGE":"64","@AMOUNT":"10"}'
+                    android:inputType="text|textNoSuggestions" />
+
+                <EditText
+                    android:id="@+id/editor_signatures"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:typeface="monospace"
+                    android:textSize="12sp"
+                    android:textColor="@color/ide_text"
+                    android:textColorHint="@color/ide_dim"
+                    android:hint='signatures e.g. ["0xFF.."]'
+                    android:inputType="text|textNoSuggestions" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/editor_results"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:typeface="monospace"
+                android:textSize="12sp"
+                android:textIsSelectable="true"
+                android:textColor="@color/ide_dim"
+                android:text="Check = parse + address · Run = execute in the node VM with your test inputs" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+    <HorizontalScrollView
+        android:id="@+id/editor_chipscroller"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/editor_chiprow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+
+    </HorizontalScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/ide_bg_light"
+        android:padding="4dp">
+
+        <Button
+            android:id="@+id/editor_check"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:text="Check" />
+
+        <Button
+            android:id="@+id/editor_run"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:text="Run" />
+
+        <Button
+            android:id="@+id/editor_deploy"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Deploy" />
+
+    </LinearLayout>
+
+</LinearLayout>

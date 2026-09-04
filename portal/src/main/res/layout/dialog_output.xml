@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp">
+
+    <EditText
+        android:id="@+id/out_amount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="amount"
+        android:inputType="numberDecimal" />
+
+    <EditText
+        android:id="@+id/out_address"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="address (0x… or Mx…)"
+        android:inputType="text|textNoSuggestions" />
+
+    <EditText
+        android:id="@+id/out_tokenid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="tokenid (empty = Minima 0x00)"
+        android:inputType="text|textNoSuggestions" />
+
+    <CheckBox
+        android:id="@+id/out_storestate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="storestate (keep txn state in this coin — covenants only)" />
+
+</LinearLayout>

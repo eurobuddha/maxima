@@ -162,6 +162,20 @@ public final class ParlonsRemote {
         return callOnce(zMethod, zPayload, 30_000);
     }
 
+    /** {@link #rpc(String, JSONObject)} with an explicit reply timeout. */
+    public JSONObject rpc(String zMethod, JSONObject zPayload, long zTimeoutMs) throws Exception {
+        try {
+            return callOnce(zMethod, zPayload, zTimeoutMs);
+        } catch (Exception first) {
+            try {
+                resolve(mCloudMax);
+                return callOnce(zMethod, zPayload, zTimeoutMs);
+            } catch (Exception second) {
+                throw first;
+            }
+        }
+    }
+
     private JSONObject callOnce(String zMethod, JSONObject zPayload, long zTimeoutMs) throws Exception {
         final CompletableFuture<String> fut = new CompletableFuture<>();
         byte[] payload = (zPayload == null ? new JSONObject() : zPayload)
@@ -599,6 +613,53 @@ public final class ParlonsRemote {
     }
 
     /** Re-point the account wallet at a new 24-word phrase; the identity stays. Node accounts only. */
+    /**
+     * Run ONE node command on the account's embedded Minima node (Terminal IDE). The node runs
+     * it on its own lane and pages the output out in pieces under the Maxima package ceiling;
+     * this call polls until the command finishes (up to {@code zMaxWaitMs}) and stitches the
+     * pages back together, so the result carries the COMPLETE output text under {@code output}
+     * (never truncated), plus {@code ms} (the node-side run time) and {@code command}.
+     */
+    public JSONObject nodeCmd(String zCommand, long zMaxWaitMs) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("cmd", zCommand);
+        long deadline = System.currentTimeMillis() + zMaxWaitMs;
+        JSONObject r = rpc(ParlonsControl.M_NODE_CMD, p);
+        while (Boolean.TRUE.equals(r.get("ok")) && Boolean.TRUE.equals(r.get("pending"))) {
+            if (System.currentTimeMillis() > deadline) {
+                JSONObject slow = new JSONObject();
+                slow.put("ok", false);
+                slow.put("error", "still running on the node after " + (zMaxWaitMs / 1000)
+                        + "s - it carries on there; check with a follow-up command");
+                return slow;
+            }
+            JSONObject poll = new JSONObject();
+            poll.put("key", String.valueOf(r.get("key")));
+            r = rpc(ParlonsControl.M_NODE_CMD, poll);
+        }
+        if (!Boolean.TRUE.equals(r.get("ok"))) {
+            return r;
+        }
+        StringBuilder out = new StringBuilder(String.valueOf(r.get("output")));
+        String key = String.valueOf(r.get("key"));
+        while (Boolean.TRUE.equals(r.get("more"))) {
+            JSONObject next = new JSONObject();
+            next.put("key", key);
+            next.put("offset", out.length());
+            r = rpc(ParlonsControl.M_NODE_CMD, next);
+            if (!Boolean.TRUE.equals(r.get("ok"))) {
+                return r;
+            }
+            out.append(String.valueOf(r.get("output")));
+        }
+        JSONObject done = new JSONObject();
+        done.put("ok", true);
+        done.put("command", zCommand);
+        done.put("output", out.toString());
+        done.put("ms", r.get("ms"));
+        return done;
+    }
+
     public JSONObject walletResync(String zPhrase) throws Exception {
         JSONObject p = new JSONObject();
         p.put("phrase", zPhrase);

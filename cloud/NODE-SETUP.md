@@ -174,6 +174,25 @@ should live on a fresh seed — and the identity, paired devices and contacts al
 `parlons.seed.reveal` / backups reveal the IDENTITY phrase; the wallet phrase is read with
 `vault` over the admin RPC on the box.
 
+### 3g. Terminal IDE in Parlons Cloud (node 0.2.5, cloud 0.11.3, portal 0.30.0)
+
+Parlons Cloud → Node tab → **Open Terminal IDE**: the Terminal IDE companion app (Terminal /
+Scripts / Txn / Logs) ported whole into the portal, with every command running on the ACCOUNT's
+Parlons Node instead of a phone-local Minima Core. Same on the Mac: `parlons cmd <any node command>`.
+
+- RPC `parlons.node.cmd` (paired devices only — the account's own DevicePairing auth, end-to-end
+  encrypted like every other control method). The command runs on the node's `parlons-console`
+  lane, never on the inbound reader: the RPC waits 2.5 s, then replies `pending:true` + `key`
+  and the device polls with `{key}` until it finishes (so a long `send` / `megammrsync` cannot
+  deafen the node). Output is paged out in 120 000-char pieces (`{key, offset}`) under the 256K
+  Maxima package ceiling and stitched back by `ParlonsRemote.nodeCmd` — a 2 MB `printtree` comes
+  back complete, never truncated. `quit` is refused (restart from the box). Each command is
+  logged as `terminal: <command word> (paired device)` in the node log (the IDE's Logs tab).
+- parlons-cloud (no embedded node) answers `this account runs on parlons-cloud… the Terminal
+  needs a Parlons Node`.
+- Guard rails from the Terminal IDE app still apply client-side (unbounded `coins`, oversized
+  `history` pages).
+
 ## 4. Seed: fresh vs. migrated (fund-critical — do this by hand)
 
 On first boot the node **generates its own seed** at `/var/lib/parlons-node`. That
@@ -276,11 +295,11 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 (8 GB) | 0.2.2, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
-| eurobuddha 65.109.31.226 (64 GB) | 0.2.2, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
-| megammr 192.248.151.55 (32 GB) | 0.2.1, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
-| vigilance 45.77.57.24 (8 GB, shared) | 0.2.2, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
-| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.2, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
+| sally 95.179.179.181 (8 GB) | 0.2.5, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 (64 GB) | 0.2.5, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 (32 GB) | 0.2.5, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.5, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.5, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
 | maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
 | openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
 

@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.4";
+    public static final String  NODE_VERSION = "0.2.5";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -295,6 +295,8 @@ public final class ParlonsNodeMain {
         com.eurobuddha.maxima.cloud.ParlonsCore core = new com.eurobuddha.maxima.cloud.ParlonsCore(
                 zIdentity, zDataFolder.toPath(), cfg, new NodeAccountWallet(zDataFolder), backup);
         core.useExternalRelay(zRelay);
+        // The Terminal IDE on a paired device: any node command, run on the console lane.
+        core.control().setNodeConsole(NodeWallet::run);
         int hosts = core.start();
         System.out.println("[parlons-node] account up: attached to " + hosts + " relay(s), "
                 + core.pairing().authorizedCount() + " paired device(s)"
