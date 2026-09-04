@@ -111,6 +111,14 @@ public final class MainActivity extends AppCompatActivity {
             ((TextView) findViewById(R.id.main_version)).setText("v" + v);
         } catch (Exception ignored) {
         }
+        // Fit the title to whatever width the icons + status pill leave it (a foldable's cover
+        // display leaves ~110dp): step the size down from 22sp until "Parlons…" fits on ONE
+        // line, never let it wrap or ellipsize. Re-run on every layout pass (rotation, fold).
+        final TextView title = findViewById(R.id.main_title);
+        fitTitle(title);
+        title.addOnLayoutChangeListener((tv, l0, t0, r0, b0, ol, ot, or, ob) -> {
+            if ((r0 - l0) != (or - ol)) fitTitle(title);
+        });
 
         // Search runs server-side over the account. Theme cycles day/night. More = account menu.
         findViewById(R.id.btn_main_search).setOnClickListener(v ->
@@ -400,4 +408,18 @@ public final class MainActivity extends AppCompatActivity {
                     mContacts.onScanned(result.getContents());
                 }
             });
+
+    /** Shrink the app-bar title (22sp → 9sp) until its single line fits the width it was given. */
+    private static void fitTitle(final TextView zTitle) {
+        zTitle.post(() -> {
+            int avail = zTitle.getWidth() - zTitle.getPaddingLeft() - zTitle.getPaddingRight();
+            if (avail <= 0) return;
+            float density = zTitle.getResources().getDisplayMetrics().scaledDensity;
+            CharSequence text = zTitle.getText();
+            for (float sp = 22f; sp >= 9f; sp -= 1f) {
+                zTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp);
+                if (zTitle.getPaint().measureText(text, 0, text.length()) <= avail) break;
+            }
+        });
+    }
 }
