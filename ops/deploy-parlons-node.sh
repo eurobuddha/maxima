@@ -15,6 +15,7 @@
 #       [--relay-port N] [--gateway-port N] [--rootnode host:port]
 #       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps] [--memmax 2560M]
 #       [--p2p-port 9001] [--rpc] [--megammr-seed https://eurobuddha.com/mega.mmr]
+#       [--peers h:p,h:p] [--blobstore 1024] [--replace-relay]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # What it does, in order:
@@ -34,6 +35,10 @@
 # the layer-1 port off 9001 for a box whose 9001 is already a stock Minima node.
 # --megammr-seed URL (needs --rpc) fills an EMPTY MegaMMR from a published snapshot:
 # download -> `megammr action:import` over loopback RPC -> restart -> prove non-empty.
+# --peers / --blobstore mirror maxima-server.jar's flags (Phase-B mesh bootstrap list,
+# media blob shelf) so the node's relay is a full fleet relay. --replace-relay stops +
+# disables the box's maxima-relay.service first so the node's relay can take its port
+# (the unit stays on disk: rollback = systemctl enable --now maxima-relay).
 #
 # It never prints your seed. The seed at /var/lib/parlons-node/<ver>/... is your
 # wallet AND identity — read it once with `vault` over ssh and back it up. To run
@@ -44,7 +49,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--peers h:p,..] [--blobstore MB] [--replace-relay] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -59,6 +64,9 @@ MEMMAX=""
 P2P_PORT=9001
 RPC="false"
 MEGA_SEED=""
+PEERS=""
+BLOB_MB=0
+REPLACE_RELAY="false"
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -70,6 +78,9 @@ while [ $# -gt 0 ]; do
         --p2p-port)       P2P_PORT="$2"; shift 2 ;;
         --rpc)            RPC="true"; shift ;;
         --megammr-seed)   MEGA_SEED="$2"; shift 2 ;;
+        --peers)          PEERS="$2"; shift 2 ;;
+        --blobstore)      BLOB_MB="$2"; shift 2 ;;
+        --replace-relay)  REPLACE_RELAY="true"; shift ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
@@ -109,6 +120,9 @@ echo "Deploying Parlons Node $VER -> $TARGET"
 echo "  jar     $JAR"
 echo "  heap    $HEAP (MemoryMax $MEMMAX)   p2p :$P2P_PORT   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   megammr=$MEGAMMR   rpc=$RPC$([ "$RPC" = true ] && echo " (loopback :$((P2P_PORT+4)), not opened in the firewall)")"
 [ -n "$ROOTNODE" ] && echo "  peer    $ROOTNODE" || echo "  peer    (none set — node won't sync; pass --rootnode host:port)"
+[ -n "$PEERS" ] && echo "  mesh    $PEERS"
+[ "$BLOB_MB" -gt 0 ] && echo "  blobs   $BLOB_MB MB shelf"
+[ "$REPLACE_RELAY" = true ] && echo "  relay   REPLACING maxima-relay.service on this box (its port becomes the node's)"
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
 
@@ -189,7 +203,9 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.node.data=/var/lib/parlons-node \\
     -Dparlons.node.port=$P2P_PORT \\
     -Dparlons.node.rpc=$RPC \\
-    -Dparlons.relay.port=$RELAY_PORT \\
+    -Dparlons.relay.port=$RELAY_PORT \\${PEERS:+
+    -Dparlons.relay.peers=$PEERS \\}
+    -Dparlons.relay.blob=$BLOB_MB \\
     -Dparlons.gateway.port=$GW_PORT \\
     -Dparlons.gateway.bind=$GW_BIND \\
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
@@ -277,6 +293,16 @@ REMOTE
 
 # ---- 6. start and prove --------------------------------------------------
 echo "[6/7] starting"
+if [ "$REPLACE_RELAY" = true ]; then
+    $SSH 'bash -s' <<'REMOTE'
+if systemctl is-enabled maxima-relay >/dev/null 2>&1 || systemctl is-active maxima-relay >/dev/null 2>&1; then
+    systemctl disable --now maxima-relay
+    echo "      maxima-relay.service stopped + disabled (unit kept: rollback = systemctl enable --now maxima-relay)"
+else
+    echo "      maxima-relay.service not running here - nothing to replace"
+fi
+REMOTE
+fi
 $SSH "bash -s" <<REMOTE
 set -e
 systemctl daemon-reload

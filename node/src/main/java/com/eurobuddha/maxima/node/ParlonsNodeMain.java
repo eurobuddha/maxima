@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.1.2";
+    public static final String  NODE_VERSION = "0.1.3";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -125,6 +125,21 @@ public final class ParlonsNodeMain {
                 RelayRuntime relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
                         System.getProperty("parlons.relay.host", ""), relayDir);
                 relay.setPool(true);   // a VPS node is always-on + public => a permanent-anchor host
+                // Fleet parity with maxima-server.jar: the Phase-B mesh bootstrap list (--peers) and
+                // the media blob shelf (--blobstore MB). Without peers a resolve MISS on this relay
+                // is unanswerable fleet-wide; without the shelf store users' photos have nowhere to go.
+                String peers = System.getProperty("parlons.relay.peers", "").trim();
+                if (!peers.isEmpty()) {
+                    java.util.List<String> list = new java.util.ArrayList<>();
+                    for (String p : peers.split(",")) if (!p.trim().isEmpty()) list.add(p.trim());
+                    relay.setPeers(list);
+                    System.out.println("[parlons-node] mesh: " + list.size() + " bootstrap peer(s)");
+                }
+                long blobMb = Long.getLong("parlons.relay.blob", 0L);
+                if (blobMb > 0) {
+                    relay.setBlobBytes(blobMb * 1024L * 1024L);
+                    System.out.println("[parlons-node] blob shelf: " + blobMb + " MB");
+                }
                 relay.start();
                 relayHolder.set(relay);
                 System.out.println("[parlons-node] Maxima cape up on port " + RELAY_PORT
