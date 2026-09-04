@@ -258,10 +258,10 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 (8 GB) | 0.2.2, heap 3g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| sally 95.179.179.181 (8 GB) | 0.2.2, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
 | eurobuddha 65.109.31.226 (64 GB) | 0.2.2, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
 | megammr 192.248.151.55 (32 GB) | 0.2.1, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
-| vigilance 45.77.57.24 (8 GB, shared) | 0.2.2, heap 2560m | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.2, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
 | the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.2, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
 | maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
 | openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
