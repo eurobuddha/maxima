@@ -7,7 +7,7 @@ plugins {
 // A fresh artifact line. macOS jpackage requires a major version >= 1
 // (independent of the relay protocol version). 1.1.0 adds the windowed chat
 // client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
-version = '1.5.32'
+version = '1.5.33'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
@@ -120,13 +120,18 @@ runtime {
             installerType = 'dmg'
             installerOptions = ['--mac-package-identifier', 'com.eurobuddha.maxima.node',
                                 '--vendor', 'eurobuddha']
-            // Developer ID signing, when CI (or a local release) supplies the
-            // identity: -PmacSignIdentity="Developer ID Application: ...".
+            // Developer ID signing, when CI (or desktop/release-mac.sh) supplies the
+            // identity: -PmacSignIdentity="Developer ID Application: Name (TEAMID)" or just
+            // "Name (TEAMID)" — jpackage's --mac-signing-key-user-name wants the part AFTER the
+            // "Developer ID Application: " prefix and adds the prefix itself, so strip it here.
+            // jpackage signs with hardened runtime + its default entitlements; notarization +
+            // stapling happen after the build (release-mac.sh / the workflow's notarize step).
             // Unsigned builds stay possible for local testing.
             def sign = project.findProperty('macSignIdentity')
             if (sign) {
-                imageOptions += ['--mac-sign', '--mac-signing-key-user-name', sign]
-                installerOptions += ['--mac-sign', '--mac-signing-key-user-name', sign]
+                def user = sign.toString().replaceFirst(/^Developer ID Application:\s*/, '')
+                imageOptions += ['--mac-sign', '--mac-signing-key-user-name', user]
+                installerOptions += ['--mac-sign', '--mac-signing-key-user-name', user]
             }
         } else if (os.windows) {
             installerType = 'msi'

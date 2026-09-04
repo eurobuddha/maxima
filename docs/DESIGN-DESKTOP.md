@@ -124,10 +124,13 @@ bootstrap set cannot be crowded out by construction.
   windows-latest / ubuntu-latest, Temurin 21), `-PskipAndroid=true` keeps AGP
   out of configuration, artifacts on every run, GitHub Release on
   `desktop-v*` tags.
-- Signing is WIRED BUT DORMANT: macOS Developer ID + notarytool + stapler and
-  Windows Authenticode run only when the repo secrets exist
-  (`MACOS_CERT_P12/…`, `WINDOWS_CERT_PFX/…`, `APPLE_ID/…`). Until then
-  installers are unsigned (right-click-Open / "Run anyway").
+- Signing: macOS Developer ID + notarytool + stapler run in CI only when the
+  repo secrets exist (`MACOS_CERT_P12/…`, `APPLE_ID/…`); Windows Authenticode
+  when `WINDOWS_CERT_PFX/…` exist. Locally (since 1.5.33, 2026-09-04):
+  `desktop/release-mac.sh` builds with `-PmacSignIdentity`, notarizes through
+  the `minimadesk` notarytool keychain profile, staples, then
+  `desktop/verify-mac.sh` proves Gatekeeper accepts the DMG. Unsigned builds
+  (right-click-Open) remain the fallback when nothing is configured.
 
 ## Verification
 

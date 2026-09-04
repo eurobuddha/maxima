@@ -11,8 +11,10 @@ name: Build desktop node (mac / win / linux)
 #
 # SIGNING (wired, dormant until secrets exist):
 #   macOS  — set MACOS_CERT_P12 (base64 .p12), MACOS_CERT_PASSWORD and
-#            MACOS_SIGN_IDENTITY ("Developer ID Application: ..."), plus
+#            MACOS_SIGN_IDENTITY ("Developer ID Application: Barry Sherman (Z4JD286WF4)" —
+#            the gradle build strips the prefix for jpackage), plus
 #            APPLE_ID / APPLE_APP_PASSWORD / APPLE_TEAM_ID to notarize+staple.
+#            Locally: desktop/release-mac.sh does sign → notarize → staple → verify.
 #   Windows — set WINDOWS_CERT_PFX (base64 .pfx) and WINDOWS_CERT_PASSWORD.
 # With no secrets, unsigned installers are produced (Gatekeeper: right-click
 # Open; SmartScreen: More info -> Run anyway).
@@ -111,6 +113,7 @@ jobs:
             --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
             --team-id "$APPLE_TEAM_ID"
           xcrun stapler staple "$DMG"
+          desktop/verify-mac.sh "$DMG"
 
       - name: Checksums
         shell: bash
