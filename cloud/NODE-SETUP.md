@@ -295,11 +295,11 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 (8 GB) | 0.2.5, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
-| eurobuddha 65.109.31.226 (64 GB) | 0.2.5, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
-| megammr 192.248.151.55 (32 GB) | 0.2.5, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
-| vigilance 45.77.57.24 (8 GB, shared) | 0.2.5, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
-| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.5, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
+| sally 95.179.179.181 (8 GB) | 0.2.6, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 (64 GB) | 0.2.6, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 (32 GB) | 0.2.6, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.6, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.6, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
 | maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
 | openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
 
@@ -311,6 +311,27 @@ minimum** (sally at 2g and 2560m OOM-looped and stalled; hetzner at 3g OOM-crash
 start limit left it DOWN); relay-only nodes need ~2.5–3g of headroom to serve IBDs to peers. A
 node that crash-loops trips `StartLimitBurst` and stays down — check `systemctl is-active
 parlons-node` after any heap change. 9101 is open in the Vultr console on megammr + vigilance.
+
+### 3h. The cape is the node's public door (node 0.2.6, portal 0.31.0)
+
+An account keeps `RELAY_TARGET = 2` relays attached and scores start equal at boot, so a node's
+account used to fill its two slots with whichever relays answered first — sally spent an evening
+advertising `@45.77.246.226:9501` (Maxima-Lite) while its own cape sat idle, and the control
+panel's "Directly reachable: no" (the account's 9536 direct listener, off on nodes) read like a
+fault. Since 0.2.6 a Parlons Node **prefers its own cape**: `ParlonsCore.Config.ownRelay` =
+`<public host>:<RELAY_PORT>` (host from `-Dparlons.relay.host`, else what the Minima node
+detected for itself in `status` → network.host; private/loopback hosts are skipped with a log
+line). The pool (`HostPool.setPreferred`) attaches it first, never evicts it by merit (fill drops
+the worst OTHER host to make room), lists it first in the advertised contact addresses and in the
+score order the MLS anchor is picked from — so the permanent address ends in the node's own
+`@host:9501`. The second slot is filled from the fleet by merit as before.
+
+The panel/CLI replace "Directly reachable" on nodes with **Public relay `<host:port>`** and a
+**Relay check**: `verified — relays to this node` once the account's self-addressed check-connect
+has come back through the cape (`ownRelayVerified` in `parlons.node.figures`), else "attached,
+verifying…" / "not attached". Cloud accounts (no cape) keep the direct-port rows. The direct-port
+(9536) machinery is untouched for phones/desktops in Parlons proper, where a device may genuinely
+act as a relay.
 
 ## Ports
 

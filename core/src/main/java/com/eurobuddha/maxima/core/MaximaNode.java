@@ -222,6 +222,12 @@ public final class MaximaNode implements ChatPort {
         return mIdentity;
     }
 
+    /** Prefer one host (a node's own public cape): attached first, advertised first, never
+     *  evicted by merit. See {@link HostPool#setPreferred}. */
+    public void setPreferredHost(String zHostPort) {
+        mPool.setPreferred(zHostPort);
+    }
+
     public HostPool pool() {
         return mPool;
     }

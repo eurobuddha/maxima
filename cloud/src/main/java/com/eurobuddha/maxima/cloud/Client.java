@@ -318,8 +318,15 @@ public final class Client {
                 System.out.println("  contacts   : " + o.get("contacts"));
                 System.out.println("  mailbox    : " + o.get("mailboxHeld") + " held");
                 System.out.println("  outbox     : " + o.get("outbox"));
-                System.out.println("  reachable  : " + (Boolean.TRUE.equals(o.get("directlyReachable"))
-                        ? "yes (" + o.get("directAddress") + ")" : "no (via relays)"));
+                String own = String.valueOf(o.getOrDefault("ownRelay", ""));
+                if (!own.isEmpty()) {
+                    System.out.println("  public relay: " + own + " ("
+                            + (Boolean.TRUE.equals(o.get("ownRelayVerified")) ? "verified - relays to this node"
+                               : Boolean.TRUE.equals(o.get("ownRelayAttached")) ? "attached, verifying" : "NOT attached") + ")");
+                } else {
+                    System.out.println("  reachable  : " + (Boolean.TRUE.equals(o.get("directlyReachable"))
+                            ? "yes (" + o.get("directAddress") + ")" : "no (via relays)"));
+                }
                 System.out.println("  relay      : " + o.get("relayConnections") + " clients, "
                         + o.get("relayRelayed") + " relayed, " + o.get("relayStored") + " blobs");
                 for (Object h : arr(o, "hosts")) {

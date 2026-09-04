@@ -74,6 +74,10 @@ public final class ParlonsCore {
         public int relayPort = 9501;
         /** The node's own direct listener port (Tier-2 reachability). 0 = off. */
         public int directPort = 9536;
+        /** A Parlons Node's OWN public relay (host:port of its in-process cape): attached
+         *  first, advertised first, the MLS anchor - so the permanent address points at the
+         *  node's own box. "" for the cloud (no cape of its own). */
+        public String ownRelay = "";
         /** Public host to advertise for the relay (blank = say nothing). */
         public String publicHost = "";
         /** Extra fleet relays to attach to, on top of {@link Bootstrap#RELAYS}. Runtime host
@@ -185,6 +189,16 @@ public final class ParlonsCore {
         mControl.setNodeControl(new ParlonsControl.NodeControl() {
             public java.util.List<String> recentLog(int zMax) { return ParlonsCore.this.recentLog(zMax); }
             public void clearLog() { ParlonsCore.this.clearLog(); }
+            public String ownRelay() { return mCfg.ownRelay == null ? "" : mCfg.ownRelay; }
+            public boolean ownRelayAttached() {
+                String o = ownRelay();
+                try { return !o.isEmpty() && mNode.pool().activeHosts().contains(o); }
+                catch (Exception e) { return false; }
+            }
+            public boolean ownRelayVerified() {
+                String o = ownRelay();
+                return !o.isEmpty() && ownRelayAttached() && mNode.isHostVerified(o);
+            }
             public java.util.List<String> hosts() {
                 try { return mNode.pool().activeHosts(); }
                 catch (Exception e) { return new java.util.ArrayList<>(); }
@@ -331,6 +345,10 @@ public final class ParlonsCore {
         // 1. Attach the client half to the fleet (bootstrap + configured extras).
         LinkedHashSet<String> relays = new LinkedHashSet<>(Bootstrap.RELAYS);
         relays.addAll(mCfg.extraRelays);
+        if (mCfg.ownRelay != null && !mCfg.ownRelay.isEmpty()) {
+            mNode.setPreferredHost(mCfg.ownRelay);
+            log("own relay (the cape) preferred: " + mCfg.ownRelay);
+        }
         mNode.start(new ArrayList<>(relays), 30_000);
 
         // 2. The maintenance pump — relay reconcile / MLS / outbox, gossip, resend.

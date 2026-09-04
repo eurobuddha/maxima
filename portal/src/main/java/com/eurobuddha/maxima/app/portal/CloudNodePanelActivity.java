@@ -146,11 +146,20 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         st.addView(PortalUi.kv(this, "Contacts", String.valueOf(lng(mFigures, "contacts"))));
         st.addView(PortalUi.kv(this, "Mailbox held", String.valueOf(lng(mFigures, "mailboxHeld"))));
         st.addView(PortalUi.kv(this, "Outbox", String.valueOf(lng(mFigures, "outbox"))));
-        st.addView(PortalUi.kv(this, "Directly reachable",
-                bool(mFigures, "directlyReachable") ? "yes" : "no"));
-        String da = str(mFigures, "directAddress");
-        if (!da.isEmpty()) {
-            st.addView(PortalUi.kv(this, "Direct address", da));
+        String own = str(mFigures, "ownRelay");
+        if (!own.isEmpty()) {
+            // A Parlons Node: its own cape IS its public door - no separate "direct port" story.
+            st.addView(PortalUi.kv(this, "Public relay", own));
+            st.addView(PortalUi.kv(this, "Relay check",
+                    bool(mFigures, "ownRelayVerified") ? "verified — relays to this node"
+                    : bool(mFigures, "ownRelayAttached") ? "attached, verifying…" : "not attached"));
+        } else {
+            st.addView(PortalUi.kv(this, "Directly reachable",
+                    bool(mFigures, "directlyReachable") ? "yes" : "no"));
+            String da = str(mFigures, "directAddress");
+            if (!da.isEmpty()) {
+                st.addView(PortalUi.kv(this, "Direct address", da));
+            }
         }
         mRoot.addView(st);
 

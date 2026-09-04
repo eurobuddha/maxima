@@ -242,6 +242,11 @@ public final class ParlonsControl {
     public interface NodeControl {
         java.util.List<String> recentLog(int zMax);
         void clearLog();
+        /** A node's own public relay (its cape), "" on the cloud. */
+        default String ownRelay() { return ""; }
+        default boolean ownRelayAttached() { return false; }
+        /** Attached AND proven to relay to us (the self-addressed check-connect). */
+        default boolean ownRelayVerified() { return false; }
         java.util.List<String> hosts();             // currently attached host:port list
         java.util.List<String> configuredHosts();   // the persisted floor + extras
         boolean addHost(String zHostPort);          // runtime attach; returns accepted
@@ -426,6 +431,9 @@ public final class ParlonsControl {
                 out.put("outbox", nc.outboxDepth());
                 out.put("directlyReachable", nc.directlyReachable());
                 out.put("directAddress", safe(nc.directAddress()));
+                out.put("ownRelay", safe(nc.ownRelay()));
+                out.put("ownRelayAttached", nc.ownRelayAttached());
+                out.put("ownRelayVerified", nc.ownRelayVerified());
                 JSONArray mesh = new JSONArray();
                 for (String p : nc.meshPeers()) {
                     mesh.add(p);

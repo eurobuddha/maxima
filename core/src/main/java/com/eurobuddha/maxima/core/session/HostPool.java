@@ -128,6 +128,15 @@ public final class HostPool {
     /** hostPort -> epoch-ms until which a proven-dead host is barred from re-adoption. */
     private final Map<String, Long> mCooldown = new ConcurrentHashMap<>();
 
+    /**
+     * A host this node ALWAYS wants attached and advertised first: a Parlons Node's own
+     * in-process cape (its public relay). Attached before merit fill, never evicted by
+     * scoring (fill drops the worst OTHER host to make room), first in the advertised
+     * contact addresses and in the score order the MLS anchor is picked from - so the
+     * node's permanent address points at its own box. "" = no preference (phones, cloud).
+     */
+    private volatile String mPreferred = "";
+
     /** Delivered every inbound message from every attached host's reader thread.
      *  Set ONCE (by the node) before the first attach. */
     private volatile HostConnection.Sink mSink;
@@ -162,6 +171,17 @@ public final class HostPool {
     /** Tell the pool a relay exists. Does not connect. */
     public void addCandidate(String zHostPort) {
         mKnown.computeIfAbsent(zHostPort, HostRecord::new);
+    }
+
+    public void setPreferred(String zHostPort) {
+        mPreferred = zHostPort == null ? "" : zHostPort.trim();
+        if (!mPreferred.isEmpty()) {
+            addCandidate(mPreferred);
+        }
+    }
+
+    public String preferred() {
+        return mPreferred;
     }
 
     public void addCandidates(List<String> zHostPorts) {
@@ -199,6 +219,10 @@ public final class HostPool {
             HostRecord r = mKnown.get(h);
             return r == null ? 0.0 : r.score();
         }).reversed());
+        String pref = mPreferred;
+        if (!pref.isEmpty() && hosts.remove(pref)) {
+            hosts.add(0, pref);
+        }
         return hosts;
     }
 
@@ -209,12 +233,20 @@ public final class HostPool {
      */
     public List<String> contactAddresses() {
         List<String> out = new ArrayList<>();
+        String first = null;
         for (Map.Entry<String, HostConnection> e : mActive.entrySet()) {
             if (e.getValue().isAttached()) {
-                out.add(e.getValue().contactAddress());
+                if (e.getKey().equals(mPreferred)) {
+                    first = e.getValue().contactAddress();
+                } else {
+                    out.add(e.getValue().contactAddress());
+                }
             }
         }
         Collections.sort(out);
+        if (first != null) {
+            out.add(0, first);
+        }
         return out;
     }
 
@@ -277,6 +309,27 @@ public final class HostPool {
      * @return how many are attached afterwards
      */
     public int fill(int zTimeoutMs) {
+        String pref = mPreferred;
+        if (!pref.isEmpty() && !mActive.containsKey(pref)
+                && attachOne(pref, zTimeoutMs) && mActive.size() > mTarget) {
+            // The preferred host is back: make room by dropping the worst-scoring OTHER host.
+            String worst = null;
+            double worstScore = Double.MAX_VALUE;
+            for (String h : mActive.keySet()) {
+                if (h.equals(pref)) {
+                    continue;
+                }
+                HostRecord r = mKnown.get(h);
+                double sc = r == null ? 0.0 : r.score();
+                if (sc < worstScore) {
+                    worstScore = sc;
+                    worst = h;
+                }
+            }
+            if (worst != null) {
+                detach(worst);
+            }
+        }
         for (HostRecord rec : knownByScore()) {
             if (mActive.size() >= mTarget) {
                 break;

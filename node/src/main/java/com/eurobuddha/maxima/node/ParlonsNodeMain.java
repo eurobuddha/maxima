@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.5";
+    public static final String  NODE_VERSION = "0.2.6";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -278,6 +278,17 @@ public final class ParlonsNodeMain {
         cfg.relayPort = 0;                                   // the cape is the relay
         cfg.directPort = Integer.getInteger("parlons.account.direct", 0);
         cfg.publicHost = System.getProperty("parlons.relay.host", "");
+        // The node's OWN cape is its public door: attach to it first, advertise it first, anchor
+        // the permanent address on it. Public host = -Dparlons.relay.host, else what the Minima
+        // node detected for itself; a private/loopback host is useless to contacts, so skip.
+        String ownHost = cfg.publicHost.isEmpty() ? detectedPublicHost() : cfg.publicHost;
+        if (isPublicHost(ownHost)) {
+            cfg.ownRelay = ownHost + ":" + RELAY_PORT;
+            System.out.println("[parlons-node] own relay: " + cfg.ownRelay + " (preferred + advertised first)");
+        } else {
+            System.out.println("[parlons-node] own relay NOT advertised: public host unknown or private ("
+                    + ownHost + ") - set -Dparlons.relay.host=<public ip>");
+        }
         String name = System.getProperty("parlons.account.name", "").trim();
         cfg.displayName = name.isEmpty() ? null : name;
         String peers = System.getProperty("parlons.relay.peers", "").trim();
@@ -303,6 +314,35 @@ public final class ParlonsNodeMain {
                 + (core.pairing().authorizedCount() == 0
                     ? " — pair the first one with the code in " + core.pairing().codeFile() : ""));
         return core;
+    }
+
+    /** The host the embedded Minima node detected for itself ({@code status} → network.host). */
+    private static String detectedPublicHost() {
+        try {
+            org.minima.utils.json.JSONObject st = NodeWallet.response(NodeWallet.run("status"));
+            Object net = st.get("network");
+            if (net instanceof org.minima.utils.json.JSONObject) {
+                return String.valueOf(((org.minima.utils.json.JSONObject) net).getOrDefault("host", "")).trim();
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    /** True for a routable public IPv4/host: not empty, loopback, link-local or RFC1918. */
+    private static boolean isPublicHost(String zHost) {
+        if (zHost == null || zHost.isEmpty() || "null".equals(zHost)) return false;
+        if (zHost.startsWith("127.") || zHost.startsWith("10.") || zHost.startsWith("192.168.")
+                || zHost.startsWith("169.254.") || zHost.equals("0.0.0.0") || zHost.equals("localhost")) {
+            return false;
+        }
+        if (zHost.startsWith("172.")) {
+            try {
+                int b = Integer.parseInt(zHost.split("\\.")[1]);
+                if (b >= 16 && b <= 31) return false;
+            } catch (Exception ignored) { }
+        }
+        return true;
     }
 
     /** The ACCOUNT identity phrase: identity.txt if pinned, else the vault. Never logged. */
