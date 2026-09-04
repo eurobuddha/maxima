@@ -47,11 +47,40 @@ ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 `--rootnode host:port` seeds P2P discovery (the node then finds more peers itself).
 Watch it climb: `journalctl -u parlons-node -f | grep heartbeat`.
 
+If the box's 9001 is already a stock Minima node, move the layer-1 port with
+`--p2p-port 9101` (the derived RPC port follows it: p2p + 4).
+
+## 3b. Seed the MegaMMR (once — an IBD does NOT carry it)
+
+A fresh `-megammr` node syncs the chain from its peer but its MegaMMR starts **empty**
+(`databases/megammr.mmr` is 20 bytes) — it only tracks coins created from now on, so
+`balance`/`coins megammr:true address:<existing>` come back EMPTY and the node is useless
+as a wallet gateway. Seed it from any MegaMMR node you control (export takes a read lock,
+no downtime there; import shuts the receiving node down when it finishes):
+
+```bash
+# on the DONOR MegaMMR node (its RPC, loopback):
+curl 'http://127.0.0.1:9005/megammr%20action:export%20file:/root/donor.megammr'
+# copy the file to the new node's data dir (the service can only read under /var/lib/parlons-node):
+scp donor:/root/donor.megammr ./ && scp donor.megammr newnode:/var/lib/parlons-node/
+ssh newnode 'chown maxima:maxima /var/lib/parlons-node/donor.megammr'
+# on the NEW node (deployed with --rpc; its RPC is p2p+4, loopback via the firewall):
+ssh newnode "curl 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/donor.megammr'"
+ssh newnode 'systemctl restart parlons-node'      # import ends with a clean node shutdown
+# prove it: a known funded address must now show its coins
+ssh newnode "curl 'http://127.0.0.1:9005/coins%20megammr:true%20address:<Mx…>'"
+```
+
+`--rpc` is what makes this (and the seed backup below) possible: the wallet gateway is
+read+relay only by design, so the admin RPC is the operator's only channel. It binds every
+interface but the deploy script never opens its port in the firewall — keep it that way.
+
 ## 4. Seed: fresh vs. migrated (fund-critical — do this by hand)
 
 On first boot the node **generates its own seed** at `/var/lib/parlons-node`. That
 seed is the node wallet **and** the Maxima identity — back it up (read it with the
-`vault` command over ssh; it is never logged).
+`vault` command over the loopback RPC on the box — `curl http://127.0.0.1:9005/vault` —
+which needs `--rpc`; it is never logged).
 
 To run this node on an **existing account seed** (e.g. migrate the sally account so
 its address is unchanged), do a one-time restore **before** it syncs — this is manual
@@ -75,7 +104,11 @@ The node exposes a hardened `POST /cmd` proxy — the server side of the phone's
 relay of a phone's **pre-signed** txn pass; `send`/`vault`/`keys`/`sign`/`quit` are
 refused. It binds **loopback by default** — put TLS in front.
 
-**Caddy** (recommended), on the same box — **include the `rate_limit` block**: behind a
+**Caddy** (recommended), on the same box — **include the `rate_limit` block**. (On a box
+that already runs **apache**, the equivalent is a `<Location "/parlons-node/cmd">` with
+`ProxyPass http://127.0.0.1:9585/cmd` inside an existing TLS vhost — that is how sally
+serves `https://store.eurobuddha.com/parlons-node/cmd`; the node's own token buckets are
+the rate limit there.) The `rate_limit` block matters because behind a
 loopback front every request looks like `127.0.0.1` to the node, so per-IP throttling
 there is moot; Caddy is where real per-client limiting happens (the node keeps a global
 backstop, below):

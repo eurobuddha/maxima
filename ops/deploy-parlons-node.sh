@@ -14,6 +14,7 @@
 #   ops/deploy-parlons-node.sh <ssh-target> [--jar FILE] [--heap 2g]
 #       [--relay-port N] [--gateway-port N] [--rootnode host:port]
 #       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps] [--memmax 2560M]
+#       [--p2p-port 9001] [--rpc]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # What it does, in order:
@@ -26,6 +27,12 @@
 #   6. restarts, waits, proves the node is listening + the gateway answers
 #   7. prints the account address, the Maxima identity, and the gateway bearer token
 #
+# --rpc turns on the node's admin RPC (loopback use only: it binds every interface, so
+# it is NOT opened in the firewall). The gateway is read+relay only by design, so this
+# is the operator's ONLY channel for `vault` (seed backup) and `megammr action:import`
+# (an IBD does NOT carry the MegaMMR — see cloud/NODE-SETUP.md §3b). --p2p-port moves
+# the layer-1 port off 9001 for a box whose 9001 is already a stock Minima node.
+#
 # It never prints your seed. The seed at /var/lib/parlons-node/<ver>/... is your
 # wallet AND identity — read it once with `vault` over ssh and back it up. To run
 # THIS node on an EXISTING account seed (migration), see cloud/NODE-SETUP.md — it
@@ -35,7 +42,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--rpc] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -47,6 +54,8 @@ GW_BIND="127.0.0.1"
 MEGAMMR="true"
 PASSFILE=""
 MEMMAX=""
+P2P_PORT=9001
+RPC="false"
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -55,6 +64,8 @@ while [ $# -gt 0 ]; do
         # Default = heap + 512M: a MemoryMax EQUAL to -Xmx OOM-kills the JVM as soon as its
         # off-heap overhead shows up, which under MegaMMR is minutes, not days.
         --memmax)         MEMMAX="$2"; shift 2 ;;
+        --p2p-port)       P2P_PORT="$2"; shift 2 ;;
+        --rpc)            RPC="true"; shift ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
@@ -92,7 +103,7 @@ fi
 
 echo "Deploying Parlons Node $VER -> $TARGET"
 echo "  jar     $JAR"
-echo "  heap    $HEAP (MemoryMax $MEMMAX)   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   megammr=$MEGAMMR"
+echo "  heap    $HEAP (MemoryMax $MEMMAX)   p2p :$P2P_PORT   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   megammr=$MEGAMMR   rpc=$RPC$([ "$RPC" = true ] && echo " (loopback :$((P2P_PORT+4)), not opened in the firewall)")"
 [ -n "$ROOTNODE" ] && echo "  peer    $ROOTNODE" || echo "  peer    (none set — node won't sync; pass --rootnode host:port)"
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
@@ -172,6 +183,8 @@ Group=maxima
 # how you lose a small VPS. Every knob is a -D system property (see ParlonsNodeMain).
 ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.node.data=/var/lib/parlons-node \\
+    -Dparlons.node.port=$P2P_PORT \\
+    -Dparlons.node.rpc=$RPC \\
     -Dparlons.relay.port=$RELAY_PORT \\
     -Dparlons.gateway.port=$GW_PORT \\
     -Dparlons.gateway.bind=$GW_BIND \\
@@ -246,7 +259,7 @@ open_port() {
         firewall-cmd --permanent --add-port=\$p/tcp >/dev/null; echo "      firewalld: allowed \$p/tcp"; opened=yes
     fi
 }
-open_port 9001            # Minima P2P (layer-1 peers)
+open_port $P2P_PORT       # Minima P2P (layer-1 peers)
 open_port $RELAY_PORT     # Maxima relay (phones attach here)
 if [ "$GW_BIND" = "0.0.0.0" ]; then
     open_port $GW_PORT    # wallet gateway exposed directly (prefer a TLS front instead)
@@ -301,6 +314,9 @@ if [ -n "$tok" ]; then
     echo "   phone's WalletPublisher.gateway_url + token at it. See cloud/NODE-SETUP.md."
 fi
 echo "   Watch it sync:  journalctl -u parlons-node -f | grep heartbeat"
+echo "   MegaMMR:        an IBD does NOT carry it - seed it once from another MegaMMR"
+echo "                   node (export -> import), see cloud/NODE-SETUP.md 3b. Until then"
+echo "                   balance/coins for pre-existing addresses come back EMPTY."
 echo "   Seed backup:    ssh <host> 'systemctl stop parlons-node' then read it with"
 echo "                   the vault command — the seed is a spendable wallet, guard it."
 echo "  ------------------------------------------------------------"
