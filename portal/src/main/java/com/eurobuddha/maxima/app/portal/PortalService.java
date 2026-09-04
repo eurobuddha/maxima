@@ -7,6 +7,8 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
@@ -31,6 +33,12 @@ public final class PortalService extends Service {
 
     private static final String CHANNEL = "parlons_cloud_svc";
     private ScheduledExecutorService mBeat;
+    private ConnectivityManager.NetworkCallback mNetCb;
+    /** The default network we last saw; a different one means our relay sockets are dead. */
+    private volatile Network mNet;
+    private boolean mNetSeen;
+    /** Consecutive heartbeat RPC failures — 2 in a row (~2 min) means the connection is dead. */
+    private int mBeatFails;
 
     public static void start(Context c) {
         try {
@@ -83,10 +91,45 @@ public final class PortalService extends Service {
                     CloudSession.notePushAlive();   // acked → screens can relax their polls
                     // Keep the warm-reconnect address fresh if the account moved mid-session.
                     CloudSession.noteLiveAddress(getApplicationContext(), r.liveAddress());
+                    mBeatFails = 0;
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                // A dead connection the network callback never told us about (same interface,
+                // router/NAT change): two misses in a row and we rebuild it ourselves.
+                if (++mBeatFails >= 2) {
+                    mBeatFails = 0;
+                    CloudSession.reconnect(getApplicationContext(), "heartbeat dead: " + e.getMessage());
+                }
             }
         }, 10, 60, TimeUnit.SECONDS);
+
+        // The device changed network (Wi-Fi → other Wi-Fi / mobile): every relay socket of the
+        // shared connection is dead, and nothing else would notice for minutes. Rebuild it at
+        // once — exactly what the phone app's MaximaService does on onAvailable.
+        try {
+            ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+            mNetCb = new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network network) {
+                    Network prev = mNet;
+                    mNet = network;
+                    if (!mNetSeen) {            // the registration-time callback: nothing changed
+                        mNetSeen = true;
+                        return;
+                    }
+                    if (prev == null || !prev.equals(network)) {
+                        CloudSession.reconnect(getApplicationContext(), "network changed");
+                    }
+                }
+                @Override public void onLost(Network network) {
+                    if (network.equals(mNet)) {
+                        mNet = null;
+                    }
+                }
+            };
+            cm.registerDefaultNetworkCallback(mNetCb);
+        } catch (Exception e) {
+            mNetCb = null;
+        }
     }
 
     @Override
@@ -105,6 +148,11 @@ public final class PortalService extends Service {
     public void onDestroy() {
         if (mBeat != null) {
             mBeat.shutdownNow();
+        }
+        if (mNetCb != null) {
+            try { getSystemService(ConnectivityManager.class).unregisterNetworkCallback(mNetCb); }
+            catch (Exception ignored) { }
+            mNetCb = null;
         }
         super.onDestroy();
     }

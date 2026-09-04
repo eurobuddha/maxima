@@ -261,6 +261,54 @@ public final class CloudSession {
     /** Drop the connection AND everything cached from it (re-pair / unpair / account switch).
      *  Clearing the cache_* keys matters twice over: a stale warm address must never probe the
      *  old account, and a new account must never instant-paint the previous account's chats. */
+    // ---- network-change / dead-connection recovery ----
+
+    /** UI hook: fired (on the calling thread) when a reconnect starts and when it finishes. */
+    private static volatile Runnable sStateListener;
+
+    public static void setStateListener(Runnable zListener) {
+        sStateListener = zListener;
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean sReconnecting =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
+     * Tear the shared connection down and build it again — the device moved to another network
+     * (the old relay sockets are dead) or the heartbeat found the RPC dead. Same as a cold start
+     * minus the app restart the user used to need. The warm path (cached live address, one 8s
+     * ping) makes it fast; the resolve ladder runs only if the account really moved. Idempotent:
+     * a reconnect already in flight is not started twice.
+     */
+    public static void reconnect(Context c, String zWhy) {
+        final Context app = c.getApplicationContext();
+        if (!sReconnecting.compareAndSet(false, true)) {
+            return;
+        }
+        android.util.Log.i("ParlonsCloud", "[portal] reconnect: " + zWhy);
+        Runnable l = sStateListener;
+        if (l != null) { try { l.run(); } catch (Exception ignored) { } }
+        IO.execute(() -> {
+            try {
+                sGen++;                       // an in-flight connect must not publish after this
+                ParlonsRemote old = sRemote;
+                sRemote = null;
+                sMedia = null;                // bound to the OLD node — rebuilt on the new one
+                if (old != null) {
+                    try { old.close(); } catch (Exception ignored) { }
+                }
+                ensureRemote(app);
+                android.util.Log.i("ParlonsCloud", "[portal] reconnected");
+            } catch (Exception e) {
+                android.util.Log.w("ParlonsCloud", "[portal] reconnect failed: " + e.getMessage());
+            } finally {
+                sReconnecting.set(false);
+                Runnable l2 = sStateListener;
+                if (l2 != null) { try { l2.run(); } catch (Exception ignored) { } }
+            }
+        });
+    }
+
     public static void reset(Context c) {
         sGen++;                       // an in-flight connect must not publish after this
         ParlonsRemote r = sRemote;

@@ -197,12 +197,21 @@ public final class MainActivity extends AppCompatActivity {
         if (mLock != null) {
             mLock.onResume();
         }
+        // A reconnect (network change / dead heartbeat) flips the pill to "connecting…" at once
+        // and re-polls immediately when it finishes, instead of waiting out the 4s cadence.
+        CloudSession.setStateListener(() -> mHandler.post(() -> {
+            mReach = -1;
+            mLastPoll = 0;
+            mPolling = false;
+            renderPill();
+        }));
         mHandler.post(mTick);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        CloudSession.setStateListener(null);
         mHandler.removeCallbacks(mTick);
     }
 
