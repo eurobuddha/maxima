@@ -13,7 +13,7 @@
 #
 #   ops/deploy-parlons-node.sh <ssh-target> [--jar FILE] [--heap 2g]
 #       [--relay-port N] [--gateway-port N] [--rootnode host:port]
-#       [--gateway-public] [--no-megammr]
+#       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # What it does, in order:
@@ -35,7 +35,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--gateway-public] [--no-megammr]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -45,6 +45,7 @@ GW_PORT=9585
 ROOTNODE=""
 GW_BIND="127.0.0.1"
 MEGAMMR="true"
+PASSFILE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -54,6 +55,9 @@ while [ $# -gt 0 ]; do
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
         --gateway-public) GW_BIND="0.0.0.0"; shift ;;
         --no-megammr)     MEGAMMR="false"; shift ;;
+        # Path (ON THE VPS) to a mode-600 file holding the node passphrase — only for a
+        # password-locked node, so the cape/wallet/gateway can unlock and start. See NODE-SETUP.md.
+        --passphrase-file) PASSFILE="$2"; shift 2 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
@@ -105,6 +109,20 @@ mkdir -p /opt/maxima /var/lib/parlons-node
 chown -R maxima:maxima /var/lib/parlons-node
 chmod 700 /var/lib/parlons-node
 REMOTE
+# Passphrase file (locked-node only): must exist on the VPS, readable by maxima, mode 600.
+if [ -n "$PASSFILE" ]; then
+    $SSH "bash -s" <<REMOTE
+set -e
+if [ ! -f "$PASSFILE" ]; then
+    echo "      ERROR: --passphrase-file $PASSFILE does not exist on the VPS." >&2
+    echo "      Create it (the node passphrase, one line), then re-run." >&2
+    exit 1
+fi
+chown maxima:maxima "$PASSFILE"
+chmod 600 "$PASSFILE"
+echo "      passphrase file secured (maxima:maxima, 600): $PASSFILE"
+REMOTE
+fi
 
 # ---- 3. the jar ----------------------------------------------------------
 echo "[3/7] uploading jar"
@@ -146,7 +164,8 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.gateway.port=$GW_PORT \\
     -Dparlons.gateway.bind=$GW_BIND \\
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
-    -Dparlons.node.rootnode=$ROOTNODE} \\
+    -Dparlons.node.rootnode=$ROOTNODE}${PASSFILE:+ \\
+    -Dparlons.node.passphrase.file=$PASSFILE} \\
     -jar /opt/maxima/parlons-node.jar
 Restart=on-failure
 RestartSec=10

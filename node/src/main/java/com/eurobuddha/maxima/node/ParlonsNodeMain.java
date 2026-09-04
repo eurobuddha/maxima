@@ -108,9 +108,9 @@ public final class ParlonsNodeMain {
                         + " (derived from the node seed; one seed drives both)");
 
                 // The account wallet IS the node's own wallet (M2).
+                NodeWallet.Address acct = NodeWallet.defaultAddress();
                 System.out.println("[parlons-node] account wallet = node wallet: "
-                        + NodeWallet.address() + " (" + NodeWallet.miniAddress() + ") — "
-                        + NodeWallet.balance());
+                        + acct.hex + " (" + acct.mini + ") — " + NodeWallet.balance());
                 maybeSelfTestSend();
 
                 // Wallet is live => open the phone-facing gateway (M3).

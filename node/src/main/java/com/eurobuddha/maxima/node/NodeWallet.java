@@ -29,20 +29,22 @@ public final class NodeWallet {
     // ── read ────────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * A default receive address for this account. The node hands out a fresh unused address; for a
-     * stable "account address" we take {@code getaddress} (the node's default script address).
-     *
-     * @return the full {@code 0x…} hex address (never truncated — it is meant to be copied)
+     * The account's stable default address, both forms, in ONE {@code getaddress} call (the node
+     * returns its default script address — {@code wallet.getDefaultAddress()} — so it is stable).
      */
-    public static String address() throws Exception {
+    public static Address defaultAddress() throws Exception {
         JSONObject resp = response(run("getaddress"));
-        return str(resp, "address");
+        return new Address(str(resp, "address"), str(resp, "miniaddress"));
+    }
+
+    /** Full {@code 0x…} hex address (never truncated — it is meant to be copied). */
+    public static String address() throws Exception {
+        return defaultAddress().hex;
     }
 
     /** The user-facing {@code Mx…} form of {@link #address()} (full, copyable). */
     public static String miniAddress() throws Exception {
-        JSONObject resp = response(run("getaddress"));
-        return str(resp, "miniaddress");
+        return defaultAddress().mini;
     }
 
     /** Confirmed spendable Minima balance as a decimal string (e.g. {@code "0"}, {@code "12.5"}). */
@@ -130,6 +132,13 @@ public final class NodeWallet {
     private static String str(JSONObject zObj, String zKey) {
         Object v = zObj.get(zKey);
         return v == null ? "" : String.valueOf(v);
+    }
+
+    /** The account's default address in both forms (full, copyable). */
+    public static final class Address {
+        public final String hex;    // 0x…
+        public final String mini;   // Mx…
+        Address(String hex, String mini) { this.hex = hex; this.mini = mini; }
     }
 
     /** A token balance triple, all decimal strings. */

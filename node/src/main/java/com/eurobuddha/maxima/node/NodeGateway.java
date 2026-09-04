@@ -52,6 +52,7 @@ public final class NodeGateway {
     private final String mToken;
     private final RateLimiter mLimiter;
     private HttpServer mServer;
+    private java.util.concurrent.ExecutorService mExecutor;
 
     private NodeGateway(String zBindHost, int zPort, String zToken, RateLimiter zLimiter) {
         mBindHost = zBindHost; mPort = zPort; mToken = zToken; mLimiter = zLimiter;
@@ -103,12 +104,15 @@ public final class NodeGateway {
     public void start() throws IOException {
         mServer = HttpServer.create(new InetSocketAddress(mBindHost, mPort), 0);
         mServer.createContext("/cmd", this::handleCmd);
-        mServer.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
+        mExecutor = java.util.concurrent.Executors.newFixedThreadPool(4);
+        mServer.setExecutor(mExecutor);
         mServer.start();
     }
 
     public void stop() {
         if (mServer != null) mServer.stop(0);
+        // HttpServer.stop() does NOT shut down a user-supplied executor — do it ourselves.
+        if (mExecutor != null) mExecutor.shutdownNow();
     }
 
     // ── request handling ──────────────────────────────────────────────────────────────────────────
@@ -158,6 +162,9 @@ public final class NodeGateway {
             // Forward to the in-process node and hand its JSON straight back.
             JSONObject result = CommandRunner.getRunner().runSingleCommand(trimmed);
             byte[] out = result.toString().getBytes(StandardCharsets.UTF_8);
+            // Ceiling on what we'll push back (above the phone's 8 MB read cap; a bigger response is
+            // pathological — e.g. coins for an address with an enormous UTXO set).
+            if (out.length > MAX_RESP) { fail(ex, 502, "node response too large"); return; }
             ex.getResponseHeaders().set("Content-Type", "application/json");
             ex.sendResponseHeaders(200, out.length);
             try (OutputStream os = ex.getResponseBody()) { os.write(out); }
@@ -180,7 +187,8 @@ public final class NodeGateway {
 
     // ── plumbing ──────────────────────────────────────────────────────────────────────────────────
 
-    private static final int MAX_BODY = 1 * 1024 * 1024;   // 1 MB: a signed txnimport is the largest
+    private static final int MAX_BODY = 1 * 1024 * 1024;    // 1 MB: a signed txnimport is the largest
+    private static final int MAX_RESP = 12 * 1024 * 1024;   // 12 MB: above the phone's 8 MB read cap
     private static String readAll(InputStream is) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[4096]; int n, total = 0;

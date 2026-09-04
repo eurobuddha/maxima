@@ -110,13 +110,25 @@ and `-Dparlons.gateway.rate.perip=<req/sec>` (default 10); `0` disables either.
 The cape + wallet + gateway derive from the node's seed, so a **password-locked** node
 must be unlocked or they never start (the node itself keeps running; the journal says
 so). Supply the passphrase out-of-band — never on the command line (argv is world-
-readable via `ps`). Either:
+readable via `ps`). Easiest is the deploy flag:
 
-- a systemd `EnvironmentFile` (mode 600) setting `PARLONS_NODE_PASSPHRASE=…`, or
-- `-Dparlons.node.passphrase.file=/path/to/pass.txt` (mode 600).
+```bash
+# put the passphrase (one line) in a file ON THE VPS first, e.g.:
+#   /var/lib/parlons-node/passphrase.txt
+ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode <peer:9001> \
+    --passphrase-file /var/lib/parlons-node/passphrase.txt
+```
+
+The script secures the file (`maxima:maxima`, mode 600) and wires
+`-Dparlons.node.passphrase.file` into the unit. **Keep the file under
+`/var/lib/parlons-node` or `/etc`** — the sandbox's `ProtectHome=true` makes
+`/home` and `/root` unreadable to the service. Equivalent manual options: a systemd
+`EnvironmentFile` (mode 600) setting `PARLONS_NODE_PASSPHRASE=…`, or the same `-D`
+flag by hand.
 
 The node unlocks once on boot (`vault action:passwordunlock`). A node started unlocked
-needs none of this.
+needs none of this. (The passphrase can't contain spaces/quotes/`;` — the `vault`
+command can't parse those anyway.)
 
 ## 6. Make the fleet the phone default (last step, after ≥2 nodes are live + synced)
 
