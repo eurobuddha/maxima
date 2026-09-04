@@ -16,6 +16,7 @@
 #       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps] [--memmax 2560M]
 #       [--p2p-port 9001] [--rpc] [--megammr-seed https://eurobuddha.com/mega.mmr]
 #       [--peers h:p,h:p] [--blobstore 1024] [--replace-relay]
+#       [--seed-from /path/on/vps/seed.txt --archive 65.109.31.226:8001]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # What it does, in order:
@@ -39,6 +40,14 @@
 # media blob shelf) so the node's relay is a full fleet relay. --replace-relay stops +
 # disables the box's maxima-relay.service first so the node's relay can take its port
 # (the unit stays on disk: rollback = systemctl enable --now maxima-relay).
+# --seed-from FILE (needs --rpc) makes the node adopt an EXISTING 24-word phrase — the
+# box's relay seed (/var/lib/maxima/seed.txt) or a cloud account's — so its Maxima
+# identity, and therefore every address pinned to it, is unchanged. Done ON the box over
+# the loopback admin RPC: `megammrsync action:resync host:<--archive> phrase:"…"`, which
+# resets the wallet keys to the phrase and pulls its coins from an archive node, then the
+# node shuts itself down and is restarted. The phrase never leaves the box and is never
+# printed; the script only reports whether the vault matches the file afterwards. One
+# time: a marker file makes re-runs skip it.
 #
 # It never prints your seed. The seed at /var/lib/parlons-node/<ver>/... is your
 # wallet AND identity — read it once with `vault` over ssh and back it up. To run
@@ -67,6 +76,8 @@ MEGA_SEED=""
 PEERS=""
 BLOB_MB=0
 REPLACE_RELAY="false"
+SEED_FROM=""
+ARCHIVE="65.109.31.226:8001"
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -81,6 +92,8 @@ while [ $# -gt 0 ]; do
         --peers)          PEERS="$2"; shift 2 ;;
         --blobstore)      BLOB_MB="$2"; shift 2 ;;
         --replace-relay)  REPLACE_RELAY="true"; shift ;;
+        --seed-from)      SEED_FROM="$2"; shift 2 ;;
+        --archive)        ARCHIVE="$2"; shift 2 ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
@@ -123,6 +136,7 @@ echo "  heap    $HEAP (MemoryMax $MEMMAX)   p2p :$P2P_PORT   relay :$RELAY_PORT 
 [ -n "$PEERS" ] && echo "  mesh    $PEERS"
 [ "$BLOB_MB" -gt 0 ] && echo "  blobs   $BLOB_MB MB shelf"
 [ "$REPLACE_RELAY" = true ] && echo "  relay   REPLACING maxima-relay.service on this box (its port becomes the node's)"
+[ -n "$SEED_FROM" ] && echo "  seed    adopting the phrase in $SEED_FROM (on the box) via archive $ARCHIVE — identity preserved"
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
 
@@ -354,6 +368,54 @@ REMOTE
     fi
 fi
 
+# ---- 6c. adopt an existing seed phrase (identity-preserving, one time) -----
+if [ -n "$SEED_FROM" ]; then
+    echo "[6c]  seed adoption"
+    if [ "$RPC" != true ]; then
+        echo "      --seed-from needs --rpc (resync runs over the node's loopback RPC); skipping" >&2
+    else
+        $SSH "bash -s" <<REMOTE
+set -e
+RPC_PORT=$((P2P_PORT + 4))
+marker=/var/lib/parlons-node/.seed-adopted
+if [ -f "\$marker" ]; then
+    echo "      already adopted on \$(cat \$marker) - nothing to do"
+    exit 0
+fi
+if [ ! -s "$SEED_FROM" ]; then
+    echo "      ERROR: $SEED_FROM missing or empty on the box" >&2
+    exit 1
+fi
+words=\$(tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//' | wc -w | tr -d ' ')
+if [ "\$words" != "24" ]; then
+    echo "      ERROR: $SEED_FROM holds \$words words, expected 24" >&2
+    exit 1
+fi
+for i in \$(seq 1 60); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
+# The command goes as a POST body from a 600 temp file: never in argv, never in a log.
+tmp=\$(mktemp /var/lib/parlons-node/.resync.XXXXXX); chmod 600 "\$tmp"
+printf 'megammrsync action:resync host:%s phrase:"%s"' "$ARCHIVE" "\$(tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//')" > "\$tmp"
+echo "      resyncing the wallet to the phrase via archive $ARCHIVE (this takes a few minutes)"
+out=\$(curl -s -m 3600 --data-binary @"\$tmp" "http://127.0.0.1:\$RPC_PORT/")
+shred -u "\$tmp" 2>/dev/null || rm -f "\$tmp"
+case "\$out" in *'"status":true'*) ;; *) echo "      RESYNC FAILED: \$(echo "\$out" | head -c 300)" >&2; exit 1 ;; esac
+echo "      resync finished - restarting (resync ends with a node shutdown)"
+systemctl restart parlons-node
+for i in \$(seq 1 90); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
+# Prove it without printing anything secret: vault phrase == file phrase?
+want=\$(tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//' | tr 'a-z' 'A-Z')
+got=\$(curl -s -m 30 "http://127.0.0.1:\$RPC_PORT/vault" | python3 -c 'import sys,json; print(json.load(sys.stdin)["response"]["phrase"].strip().upper())' 2>/dev/null || echo "?")
+if [ "\$want" = "\$got" ]; then
+    date -u +%Y-%m-%dT%H:%M:%SZ > "\$marker"; chown maxima:maxima "\$marker"
+    echo "      vault MATCHES $SEED_FROM - identity preserved"
+else
+    echo "      vault does NOT match $SEED_FROM after resync - investigate before trusting this node" >&2
+    exit 1
+fi
+REMOTE
+    fi
+fi
+
 # ---- 7. hand over the details --------------------------------------------
 echo "[7/7] node details"
 $SSH "bash -s" <<'REMOTE'
@@ -361,6 +423,8 @@ set -e
 mx=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'identity Mx[0-9A-Z]+' | tail -1 | sed 's/identity //')
 acct=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'account wallet = node wallet: 0x[0-9A-F]+' | tail -1 | grep -oE '0x[0-9A-F]+')
 tok=$(cat /var/lib/parlons-node/gateway-token.txt 2>/dev/null || true)
+perm=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'permanent address MAX#[^ ]+' | tail -1 | sed 's/permanent address //')
+devs=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'account up: attached to [0-9]+ relay\(s\), [0-9]+ paired' | tail -1 | grep -oE '[0-9]+ paired' | cut -d' ' -f1)
 
 echo
 echo "  ------------------------------------------------------------"
@@ -368,6 +432,16 @@ echo "   PARLONS NODE"
 echo "  ------------------------------------------------------------"
 [ -n "$acct" ] && { echo "   Account / node wallet address:"; echo; echo "      $acct"; echo; }
 [ -n "$mx" ]   && { echo "   Maxima identity (phones reach the node here):"; echo; echo "      $mx"; echo; }
+if [ -n "$perm" ]; then
+    echo "   Parlons ACCOUNT address (paste into the Parlons Cloud app):"; echo; echo "      $perm"; echo
+    if [ "${devs:-0}" = "0" ]; then
+        echo "   No device paired yet. One-time pairing code (consumed on first pair):"
+        echo "      cat /var/lib/parlons-node/pair-code.txt"
+    else
+        echo "   $devs device(s) paired."
+    fi
+    echo
+fi
 if [ -n "$tok" ]; then
     echo "   Wallet-gateway bearer token (phones' gateway_url = https://<host>/cmd):"
     echo
