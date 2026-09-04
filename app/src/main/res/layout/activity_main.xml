@@ -26,19 +26,32 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Title row. On a narrow screen (a foldable's cover display) the icons + status
+                 pill leave this column ~110dp: a wrap_content row used to hand the version label
+                 the leftover few px, so it wrapped one CHARACTER per line and, baseline-aligned,
+                 dragged the title off the top. Now the row is match_parent, the title takes the
+                 slack and auto-shrinks (22sp -> 14sp) on one line, the version stays one line. -->
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:baselineAligned="true"
+                android:baselineAligned="false"
                 android:gravity="bottom">
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="32dp"
+                    android:gravity="bottom|start"
                     android:fontFamily="@font/manrope_extrabold"
                     android:text="@string/app_name"
                     android:textColor="@color/ux_on_header"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:autoSizeTextType="uniform"
+                    android:autoSizeMinTextSize="14sp"
+                    android:autoSizeMaxTextSize="22sp"
+                    android:autoSizeStepGranularity="1sp"
                     android:textSize="22sp" />
 
                 <TextView
@@ -46,7 +59,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="7dp"
+                    android:layout_marginBottom="4dp"
                     android:alpha="0.6"
+                    android:singleLine="true"
+                    android:maxLines="1"
                     android:textColor="@color/ux_on_header"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -84,6 +100,8 @@
                 android:id="@+id/status_pill"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:maxLines="1"
                 android:text="starting…"
                 android:textColor="@color/ux_on_header"
                 android:textSize="11sp" />
