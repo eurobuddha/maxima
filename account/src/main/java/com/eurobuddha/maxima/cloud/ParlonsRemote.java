@@ -598,6 +598,14 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_WALLET_ADDR, new JSONObject());
     }
 
+    /** Re-point the account wallet at a new 24-word phrase; the identity stays. Node accounts only. */
+    public JSONObject walletResync(String zPhrase) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("phrase", zPhrase);
+        p.put("confirm", true);
+        return rpc(ParlonsControl.M_WALLET_RESYNC, p);
+    }
+
     public JSONObject setWatch(String zAddress) throws Exception {
         JSONObject p = new JSONObject();
         p.put("address", zAddress);

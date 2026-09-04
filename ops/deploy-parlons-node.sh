@@ -253,6 +253,10 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -jar /opt/maxima/parlons-node.jar
 Restart=on-failure
 RestartSec=10
+# Exit code 3 = "restart me" (a wallet resync requested from a paired device ends with the
+# chain engine stopped; the node exits 3 and comes straight back on the same identity).
+RestartForceExitStatus=3
+SuccessExitStatus=3
 
 # ---- filesystem: the node needs exactly its data dir, nothing more ----
 NoNewPrivileges=true
@@ -401,7 +405,12 @@ want=\$(tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//' | tr 'a-z' 
 got=\$(curl -s -m 30 "http://127.0.0.1:\$RPC_PORT/vault" | python3 -c 'import sys,json; print(json.load(sys.stdin)["response"]["phrase"].strip().upper())' 2>/dev/null || echo "?")
 if [ "\$want" = "\$got" ]; then
     date -u +%Y-%m-%dT%H:%M:%SZ > "\$marker"; chown maxima:maxima "\$marker"
-    echo "      vault MATCHES $SEED_FROM - identity preserved"
+    # Pin the identity to the adopted phrase (0.2.4+: identity.txt, not the vault, is what the
+    # cape derives from - so a later wallet resync keeps this identity).
+    tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//' > /var/lib/parlons-node/identity.txt
+    chown maxima:maxima /var/lib/parlons-node/identity.txt; chmod 600 /var/lib/parlons-node/identity.txt
+    systemctl restart parlons-node
+    echo "      vault MATCHES $SEED_FROM - identity preserved (and pinned in identity.txt)"
 else
     echo "      vault does NOT match $SEED_FROM after resync - investigate before trusting this node" >&2
     exit 1

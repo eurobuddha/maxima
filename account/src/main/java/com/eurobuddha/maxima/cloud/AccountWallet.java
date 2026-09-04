@@ -75,4 +75,16 @@ public interface AccountWallet {
     /** Periodic upkeep (script tracking, coin backfill…). Blocking allowed — runs on its own
      *  thread. Log lines go to the account's operator log. */
     void upkeep(java.util.function.Consumer<String> zLog);
+
+    /** Can this wallet be re-pointed at a NEW seed phrase while the account identity stays? */
+    boolean canResync();
+
+    /**
+     * Re-point the wallet at a new 24-word phrase (identity untouched): the way out when a
+     * wallet's one-time-signature keys are used up, or the user wants funds on a fresh seed.
+     * On a node this resyncs the node wallet from an archive host and then RESTARTS the node;
+     * the call returns once the resync has been started. Funds at the old phrase's addresses
+     * stay with the old phrase.
+     */
+    void resyncTo(String zPhrase) throws Exception;
 }

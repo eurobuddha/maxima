@@ -86,6 +86,12 @@ public final class CloudAccountWallet implements AccountWallet {
 
     @Override public boolean canBuildWithoutPublish() { return true; }
 
+    /** The cloud wallet IS key #1000 of the identity seed — no separate wallet phrase here. */
+    @Override public boolean canResync() { return false; }
+    @Override public void resyncTo(String zPhrase) {
+        throw new UnsupportedOperationException("this account's wallet is bound to its identity seed");
+    }
+
     /** A gateway-REPORTED failure (txnimport/txnbasics/txnpost said no, or the build never got to
      *  the wire) is a safe ✗; a transport error mid-publish is outcome-unknown. */
     private static Exception classify(Exception e) {

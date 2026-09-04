@@ -156,6 +156,24 @@ Refused at boot (the node prints why and exits 2):
 The MDS flags (`-mdsenable` …) are accepted but do nothing: this fork has no MDS package. The
 node warns at boot.
 
+## 3f. Identity is pinned; the wallet can be resynced (node 0.2.4+)
+
+The account's Maxima identity (its `MAX#`, what devices pair to and contacts know) is derived from
+the phrase in `/var/lib/parlons-node/identity.txt`, written ONCE from the vault on the first
+0.2.4 boot (or from `--seed-from`). The node WALLET stays on the vault. So the wallet can be
+re-pointed at a NEW 24-word phrase — when its one-time-signature keys are used up, or funds
+should live on a fresh seed — and the identity, paired devices and contacts all survive:
+
+- from a paired device: Parlons Cloud → Wallet → "Resync wallet to a new phrase…", or the CLI
+  `parlons wallet resync <file-with-24-words>` (RPC `parlons.wallet.resync`);
+- the node runs `megammrsync action:resync host:<-Dparlons.node.archive, default
+  65.109.31.226:9001> phrase:…`, then exits 3 and systemd restarts it (`RestartForceExitStatus=3`).
+  About a minute; devices reconnect on their own.
+- Funds at the OLD phrase's addresses stay with the old phrase (import it in any Parlons wallet).
+- To re-pin the identity to whatever the vault holds: delete `identity.txt` and restart.
+`parlons.seed.reveal` / backups reveal the IDENTITY phrase; the wallet phrase is read with
+`vault` over the admin RPC on the box.
+
 ## 4. Seed: fresh vs. migrated (fund-critical — do this by hand)
 
 On first boot the node **generates its own seed** at `/var/lib/parlons-node`. That

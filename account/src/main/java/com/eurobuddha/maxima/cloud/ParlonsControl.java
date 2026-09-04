@@ -70,6 +70,8 @@ public final class ParlonsControl {
     public static final String M_NODE_MLS     = "parlons.node.mls";
     public static final String M_WALLET_TOKENS = "parlons.wallet.tokens";
     public static final String M_WALLET_USES  = "parlons.wallet.uses";
+    /** Re-point the account WALLET at a new phrase; the identity stays (node accounts only). */
+    public static final String M_WALLET_RESYNC = "parlons.wallet.resync";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -1458,6 +1460,37 @@ public final class ParlonsControl {
             }
             mWallet.setWatchAddress(address);
             return bytes(ok());
+        });
+        zReg.register(M_WALLET_RESYNC, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            if (!bool(in, "confirm")) {
+                return bytes(err("confirmation required"));
+            }
+            if (!mWallet.canResync()) {
+                return bytes(err("this account's wallet is bound to its identity seed - detach instead"));
+            }
+            String phrase = str(in, "phrase").trim().replaceAll("\\s+", " ");
+            if (phrase.split(" ").length != 24) {
+                return bytes(err("a 24-word phrase is required"));
+            }
+            try {
+                // Minima-node phrases carry no checksum word: only the word LIST is enforced
+                // (cleanSeedPhrase throws on an unknown or too-short word).
+                com.eurobuddha.maxima.core.identity.Bip39.cleanSeedPhrase(phrase);
+            } catch (Exception bad) {
+                return bytes(err(bad.getMessage()));
+            }
+            try {
+                mWallet.resyncTo(phrase);
+            } catch (Exception e) {
+                return bytes(err("resync refused: " + e.getMessage()));
+            }
+            mNode.log("wallet resync to a NEW phrase requested by a paired device - node restarting");
+            JSONObject out = ok();
+            out.put("state", "resyncing");
+            out.put("note", "the node restarts when the resync finishes (about a minute); same account, new wallet address");
+            return bytes(out);
         });
         zReg.register(M_WALLET_BAL, req -> {
             requireAuth(req);

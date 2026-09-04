@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.3";
+    public static final String  NODE_VERSION = "0.2.4";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -69,6 +69,7 @@ public final class ParlonsNodeMain {
         } else {
             dataFolder = new File(System.getProperty("user.home"), ".parlons-node");
         }
+        sDataFolder = dataFolder;
         File minimaFolder = new File(dataFolder, GlobalParams.MINIMA_BASE_VERSION);
         GeneralParams.DATA_FOLDER     = minimaFolder.getAbsolutePath();
         // Layer-1 P2P port: -Dparlons.node.port > Minima -port > 9001. Every big fleet box already
@@ -288,7 +289,7 @@ public final class ParlonsNodeMain {
             for (String r : relays.split(",")) if (!r.trim().isEmpty()) cfg.extraRelays.add(r.trim());
         }
         com.eurobuddha.maxima.cloud.AccountBackup.Source backup = new com.eurobuddha.maxima.cloud.AccountBackup.Source() {
-            public String phrase() throws Exception { return readVaultPhrase(); }
+            public String phrase() throws Exception { return identityPhrase(); }
             public java.util.Map<String, Integer> keyUses() { return new java.util.LinkedHashMap<>(); }   // node-owned
         };
         com.eurobuddha.maxima.cloud.ParlonsCore core = new com.eurobuddha.maxima.cloud.ParlonsCore(
@@ -302,7 +303,18 @@ public final class ParlonsNodeMain {
         return core;
     }
 
-    /** The node's 24-word phrase, read through {@code vault} (never logged, never cached). */
+    /** The ACCOUNT identity phrase: identity.txt if pinned, else the vault. Never logged. */
+    private static String identityPhrase() throws Exception {
+        File pin = new File(sDataFolder, "identity.txt");
+        if (pin.isFile()) {
+            String p = new String(java.nio.file.Files.readAllBytes(pin.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8).trim();
+            if (!p.isEmpty()) return p;
+        }
+        return readVaultPhrase();
+    }
+
+    /** The node's WALLET phrase, read through {@code vault} (never logged, never cached). */
     private static String readVaultPhrase() throws Exception {
         JSONObject res = CommandRunner.getRunner().runSingleCommand("vault");
         Object resp = res.get("response");
@@ -327,6 +339,39 @@ public final class ParlonsNodeMain {
      * the secret out of argv/ps — a systemd {@code EnvironmentFile} mode 600 is the intended path).
      */
     private static MaximaIdentity deriveMaximaIdentityFromNode() throws Exception {
+        // PINNED identity (0.2.4+): <data>/identity.txt holds the phrase the Maxima identity is
+        // derived from, written ONCE from the vault on first boot. From then on the vault (the
+        // wallet) can be resynced to a new phrase without changing the MAX#, paired devices or
+        // contacts — the phone's "resync wallet, keep identity" model. Delete the file to re-pin.
+        File pin = new File(sDataFolder, "identity.txt");
+        if (pin.isFile()) {
+            String phrase = new String(java.nio.file.Files.readAllBytes(pin.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8).trim();
+            if (!phrase.isEmpty()) {
+                System.out.println("[parlons-node] identity: pinned (identity.txt)");
+                return MaximaIdentity.fromPhrase(Arrays.asList(phrase.split("\\s+")));
+            }
+        }
+        MaximaIdentity id = deriveMaximaIdentityFromVault();
+        try {
+            java.nio.file.Path pp = pin.toPath();
+            try {
+                java.nio.file.Files.createFile(pp, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+            } catch (Exception nonPosix) { }
+            java.nio.file.Files.write(pp, sVaultPhrase.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            System.out.println("[parlons-node] identity: pinned from the vault into identity.txt "
+                    + "(wallet resyncs no longer change the identity)");
+        } catch (Exception e) {
+            System.out.println("[parlons-node] could not pin identity.txt: " + e);
+        }
+        return id;
+    }
+
+    private static File sDataFolder;
+    private static String sVaultPhrase = "";
+
+    private static MaximaIdentity deriveMaximaIdentityFromVault() throws Exception {
         boolean unlockTried = false;
         for (int i = 0; i < 60; i++) {
             try {
@@ -342,7 +387,8 @@ public final class ParlonsNodeMain {
                     }
                     if (phrase instanceof String && !((String) phrase).isEmpty()
                             && !Boolean.TRUE.equals(locked)) {
-                        List<String> words = Arrays.asList(((String) phrase).trim().split("\\s+"));
+                        sVaultPhrase = ((String) phrase).trim();
+                        List<String> words = Arrays.asList(sVaultPhrase.split("\\s+"));
                         return MaximaIdentity.fromPhrase(words);
                     }
                 }

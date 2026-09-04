@@ -1,32 +1,32 @@
-# Graph Report - maxima  (2026-08-21)
+# Graph Report - maxima  (2026-09-04)
 
 ## Corpus Check
-- 357 files · ~318,121 words
+- 434 files · ~469,065 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5075 nodes · 15382 edges · 171 communities (130 shown, 41 thin omitted)
-- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 2212 edges (avg confidence: 0.8)
+- 6409 nodes · 19408 edges · 221 communities (164 shown, 57 thin omitted)
+- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 2705 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b7a423e2`
+- Built from commit: `f6c7e273`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - android.view.View
-- MiniNumber
+- TxPoW
 - ChatActivity
-- java.io.DataInputStream
+- Streamable
 - MiniData
 - .render
 - UpnpIgd
-- android.content.Context
-- CallManager
-- .add
+- MaximaApiReceiver
+- .onCreate
+- DirectReachability
 - Coin
-- MaximaManager.java
+- JSONObject
 - JsonDB
 - MiniByte
 - ChatsPanel
@@ -35,107 +35,107 @@
 - MiniNumber
 - DesktopJarEngine
 - MaximaIdentity
-- Contact
+- CloudChatActivity
 - MiniData
-- .startPumping
-- JPanel
+- android.content.SharedPreferences
+- javax.swing.JComponent
 - TxPoW
 - .fromPhrase
-- java.awt.Color
+- Theme
 - WalletPage
-- javax.swing.JComponent
-- .log
+- javax.swing.JLabel
+- MiniFile
 - Group
 - Message
-- .manualForward
+- .startReachability
 - MaximaManager
 - MaximaNode
-- GenerateKey
+- CryptoPackage
 - HostConnection
-- ChatMedia
-- .sendRaw
+- ChatPay
+- .registerOn
 - HostPool
 - LockGate
-- .onCreate
-- DesktopNode
+- .DesktopNode
+- .build
 - JarEngine
-- java.awt.image.BufferedImage
+- DesktopImagePrep
 - .processMessage
 - SocketTransport
-- DesktopWalletPublisher
-- Tier1Services
-- .processMessage
-- Address
-- Main
-- BlobStore
+- WalletPanel
+- ServiceRegistry
+- .log
+- ParlonsCore
+- .dp
+- MediaService
 - Classic Maxima Feature Audit
-- .build
+- .deserialise
 - MaximaWindow
 - .record
 - Outbox
 - Maxima — an annotated walkthrough
-- MMRData
+- java.io.DataInputStream
 - MessageProcessor
 - WalletPublisher
 - RelayServer
-- android.graphics.Bitmap
-- .bootJarEngine
-- CodecUnitTest.java
+- android.graphics.Canvas
+- MaximaService
+- .main
 - MiniByte
 - DesktopMain
-- .chat
-- MaximaNode.java
+- ChatPort
+- Writer
 - .recordVoiceDialog
 - ChatsPage
 - android.app.Activity
-- ContactsPage
-- MaximaWallet
+- Contact
+- WalletCore
 - ReachabilityManager
-- .deserialise
+- MLSPacketGETResp
 - .render
-- .bubble
+- NodeGateway
 - Mailbox
 - MMR
 - FileStore
-- .derive
-- .bindMessage
-- ContactsPanel
+- DeterministicRsaTest
+- Cb
+- WalletPublisher
 - MLSPacketSET
 - .main
-- .showContactCard
+- PortalCallManager
 - org.junit.Test
-- NodeLink
+- org.json.JSONObject
 - NatPmp
 - DirectEndpoint
-- .run
+- DesktopNode
 - ReachabilityManager.java
-- JSONWriter
+- JSONParser
 - ZoomImageView
-- MaximaMessage
+- Tier1Services
 - Greeting
 - PortMapper
 - MiniStunTest
-- Yylex
-- Override
+- CloudSession
+- android.content.Context
 - GatewayNode
 - DesktopWalletLedger
-- KeyUses
+- BackupActivity
 - SearchActivity
 - ItemList
-- .parse
-- RelayRuntime
+- CloudWalletPage
+- .stats
 - Util
 - .merge
-- MLSPacketSET
+- .publicKeyHex
 - MaximaContactManager
-- Avatars
-- DesktopNodeLink
+- android.graphics.Bitmap
+- .onSignal
 - Phases
-- .postConversation
-- .toast
-- MLSPacketGETReq
+- MainActivity
+- DevicePairing
+- .main
 - Annotated Maxima Frame (1225 bytes)
-- Greeting
+- CloudChatsPage
 - .decode
 - Desktop Node Build Workflow
 - Classic Maxima — complete feature audit
@@ -143,65 +143,112 @@
 - .main
 - The phone app and contacts suite — design
 - The desktop node — set-and-forget relays for everyone
-- MaximaErrorMsg
+- .onSignal
 - MLSPacketGETResp
 - DirectReachability.java
-- .parse
+- Capabilities
 - .main
 - AutoStart
-- ParseException
+- JSONArray
 - Amounts
-- MaximaDB
+- Wallet
 - .mailboxAckCanonical
-- .main
+- RelayRuntime
 - Maxima for Minima Core — what this is
 - CoinAggregator
+- CallManager
 - Maths
 - :core JVM library
 - The Interop Gate (byte-exactness)
-- ContainerFactory
+- RelayHost
+- .keyPair
+- OnboardingActivity
 - Presence
 - FastByteArrayStream
+- MaxTxPoW
+- AppLock
 - Threat model and residual risks
 - gradlew
-- Yytoken
+- OnboardingActivity
+- SeedStore
 - MaximaApiMessages
-- ScanSink
+- PaymentSender
 - maxima — working rules
 - Seed derivation from BIP39 mnemonic
-- JSONStreamAware
+- GatewayNode
 - Pre-commit version-bump hook
 - install.sh
 - pre-commit
 - deploy-relay.sh
 - verify-relay.sh
+- PaymentSender
 - Classic carriers have a body (opaque re-emit)
 - CTRL/TYPE_MLS bare Mx key (no @host) bug
 - Reliability (dedup, replay window, outbox retry)
+- SqlDB
+- .onPushedMessage
+- VoiceNote
+- SeedStore
+- .toSeed
+- .main
+- .rebuild
+- DirAnswer
+- PrefsKeyUses
+- PortalService.java
+- javax.crypto.SecretKey
+- java.awt.image.BufferedImage
+- WalletLedger
+- BackupManager.java
+- .doWork
+- CoinSelector
+- Parlons Node — VPS setup
+- .deliver
+- Set up Parlons Cloud on your own VPS
+- MLSPacketGETReq
+- WaveformView
+- .install
+- Canvas
+- ImageViewer
+- TransferableImage
+- Blocker
+- Parlons Cloud — threat model
+- BackupCrypto
+- Sdp
+- BackupCrypto
+- Sdp
+- Main
+- ImageTools
+- .parse
+- State
+- Presence
+- DesktopQr
+- JSONAware
+- deploy-parlons-cloud.sh
+- deploy-parlons-node.sh
 
 ## God Nodes (most connected - your core abstractions)
-1. `MiniData` - 233 edges
-2. `MaximaNode` - 188 edges
-3. `MiniNumber` - 140 edges
-4. `JSONObject` - 118 edges
-5. `MaximaIdentity` - 110 edges
-6. `ChatEngine` - 104 edges
-7. `MiniData` - 104 edges
-8. `Contact` - 101 edges
-9. `Streamable` - 95 edges
-10. `ChatActivity` - 94 edges
+1. `JSONObject` - 277 edges
+2. `MiniData` - 237 edges
+3. `MaximaNode` - 204 edges
+4. `MiniNumber` - 144 edges
+5. `MaximaIdentity` - 139 edges
+6. `ChatEngine` - 114 edges
+7. `MiniData` - 113 edges
+8. `Contact` - 104 edges
+9. `ChatActivity` - 95 edges
+10. `Streamable` - 95 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Desktop Node Build Workflow` --references--> `:desktop node`  [INFERRED]
   .github/workflows/desktop-node.yml → README.md
 - `tools/vectorgen/Annotate.java` --references--> `Annotated Maxima Frame (1225 bytes)`  [INFERRED]
   WALKTHROUGH.md → docs/annotated-frame.txt
-- `AndroidContribution` --implements--> `ContributionPolicy`  [EXTRACTED]
-  app/src/main/java/com/eurobuddha/maxima/app/AndroidContribution.java → core/src/main/java/com/eurobuddha/maxima/core/services/ContributionPolicy.java
-- `MaximaService` --references--> `ChatEngine`  [EXTRACTED]
-  app/src/main/java/com/eurobuddha/maxima/app/MaximaService.java → core/src/main/java/com/eurobuddha/maxima/core/chat/ChatEngine.java
-- `MaximaService` --references--> `MaximaNode`  [EXTRACTED]
-  app/src/main/java/com/eurobuddha/maxima/app/MaximaService.java → core/src/main/java/com/eurobuddha/maxima/core/MaximaNode.java
+- `ChatActivity` --references--> `PaymentSender`  [EXTRACTED]
+  maxima/app/src/main/java/com/eurobuddha/maxima/app/chat/ChatActivity.java → app/src/main/java/com/eurobuddha/maxima/app/wallet/PaymentSender.java
+- `WalletPage` --references--> `MaximaWallet`  [EXTRACTED]
+  maxima/app/src/main/java/com/eurobuddha/maxima/app/ui/WalletPage.java → app/src/main/java/com/eurobuddha/maxima/app/wallet/MaximaWallet.java
+- `WalletPage` --references--> `NodeLink`  [EXTRACTED]
+  maxima/app/src/main/java/com/eurobuddha/maxima/app/ui/WalletPage.java → app/src/main/java/com/eurobuddha/maxima/app/wallet/NodeLink.java
 
 ## Import Cycles
 - None detected.
@@ -211,213 +258,201 @@
 - **Byte-exact interop gate toolchain** — readme_interop_gate, readme_parity_test, readme_vectorgen, readme_minima_reference_jar, walkthrough_carrier_check [EXTRACTED 0.85]
 - **Tier 2 map-probe-advertise reachability pipeline** — docs_design_tier2_portmap, docs_design_tier2_direct_endpoint, docs_design_tier2_probe_dial, docs_design_tier2_direct_reachability, docs_design_desktop_reachability_manager [EXTRACTED 0.85]
 
-## Communities (171 total, 41 thin omitted)
+## Communities (221 total, 57 thin omitted)
 
 ### Community 0 - "android.view.View"
-Cohesion: 0.07
-Nodes (28): ActivityResultLauncher, android.app.Notification, android.app.Service, android.graphics.Typeface, android.os.Bundle, android.os.Handler, android.view.View, android.widget.EditText (+20 more)
-
-### Community 1 - "MiniNumber"
 Cohesion: 0.06
-Nodes (10): Override, MiniNumber, MiniData, Override, Magic, Override, TxHeader, MiniData (+2 more)
+Nodes (34): android.app.Notification, android.graphics.drawable.Drawable, android.graphics.drawable.GradientDrawable, android.graphics.Typeface, android.os.Bundle, android.os.Handler, android.view.View, android.widget.BaseAdapter (+26 more)
+
+### Community 1 - "TxPoW"
+Cohesion: 0.09
+Nodes (8): MiniData, Override, Magic, Override, TxHeader, MiniData, Override, TxPoW
 
 ### Community 2 - "ChatActivity"
-Cohesion: 0.10
-Nodes (10): androidx.recyclerview.widget.RecyclerView, ChatActivity, Bitmap, EditText, Intent, Uri, ImageButton, Listener (+2 more)
-
-### Community 3 - "java.io.DataInputStream"
 Cohesion: 0.07
-Nodes (15): TxPoWGenerator, java.io.DataInputStream, java.io.DataOutputStream, java.math.MathContext, java.nio.charset.Charset, Override, MiniString, Crypto (+7 more)
+Nodes (16): Adapter, ChatActivity, Bitmap, EditText, Entry, ImageView, LinearLayout, LruCache (+8 more)
+
+### Community 3 - "Streamable"
+Cohesion: 0.05
+Nodes (25): java.nio.charset.Charset, java.security.SecureRandom, java.sql.ResultSet, MinimaDB, Main, MaximaErrorMsg, DataInputStream, MaximaInternal (+17 more)
 
 ### Community 4 - "MiniData"
-Cohesion: 0.06
-Nodes (20): Codec, MiniData, Override, MiniString, Streamable, DeterministicRsa, Hashes, MaximaCrypto (+12 more)
+Cohesion: 0.05
+Nodes (18): Codec, Hex, MiniData, Override, MiniNumber, Override, MiniString, Streamable (+10 more)
 
 ### Community 5 - ".render"
+Cohesion: 0.08
+Nodes (14): BottomSheetDialog, Drawable, EditText, LayoutParams, LinearLayout, TextView, Kit, OnToggle (+6 more)
+
+### Community 7 - "MaximaApiReceiver"
+Cohesion: 0.10
+Nodes (14): android.content.BroadcastReceiver, android.content.Intent, BootReceiver, Override, HeartbeatReceiver, Intent, Override, Intent (+6 more)
+
+### Community 8 - ".onCreate"
 Cohesion: 0.09
-Nodes (15): BottomSheetDialog, Drawable, EditText, LayoutParams, LinearLayout, TextView, Kit, OnToggle (+7 more)
+Nodes (15): CallActivity, LinearLayout, OnClickListener, Override, SurfaceViewRenderer, TextView, Listener, State (+7 more)
 
-### Community 6 - "UpnpIgd"
-Cohesion: 0.17
-Nodes (4): UpnpIgd, ServerSocket, PortMapTest, DatagramSocket
-
-### Community 7 - "android.content.Context"
-Cohesion: 0.05
-Nodes (27): android.content.BroadcastReceiver, android.content.Context, android.content.Intent, android.net.Uri, androidx.annotation.NonNull, androidx.work.Worker, androidx.work.WorkerParameters, BootReceiver (+19 more)
-
-### Community 8 - "CallManager"
-Cohesion: 0.05
-Nodes (32): android.media.Ringtone, LinearLayout, Override, TextView, CallManager, Override, Listener, Sdp (+24 more)
-
-### Community 9 - ".add"
-Cohesion: 0.05
-Nodes (25): AndroidContribution, Override, Blocker, CONTRIB_OFF, NEEDS_CHARGING, NEEDS_PUBLIC_IP, NEEDS_WIFI, NONE (+17 more)
+### Community 9 - "DirectReachability"
+Cohesion: 0.13
+Nodes (3): AndroidContribution, Override, DirectReachability
 
 ### Community 10 - "Coin"
-Cohesion: 0.03
-Nodes (22): BuiltTxn, InputCoin, MiniData, MiniNumber, Output, TxnFactory, Coin, DataInputStream (+14 more)
+Cohesion: 0.02
+Nodes (25): BuiltTxn, InputCoin, MiniData, MiniNumber, Output, TxnFactory, DataInputStream, Override (+17 more)
 
-### Community 11 - "MaximaManager.java"
-Cohesion: 0.08
-Nodes (14): java.sql.ResultSet, DataInputStream, Override, MaximaInternal, DataInputStream, Override, MaximaMessage, NIOMessage (+6 more)
+### Community 11 - "JSONObject"
+Cohesion: 0.07
+Nodes (4): Client, ParlonsRemote, PushListener, JSONObject
 
 ### Community 12 - "JsonDB"
 Cohesion: 0.07
 Nodes (6): UserDB, MiniData, MiniNumber, Override, JsonDB, MiniUtil
 
 ### Community 13 - "MiniByte"
-Cohesion: 0.10
-Nodes (6): DataInputStream, Override, MaximaCTRLMessage, MiniData, Override, MiniByte
+Cohesion: 0.05
+Nodes (12): MaximaTransport, NotifyListener, DataInputStream, Override, MaximaCTRLMessage, MiniData, NIOManager, TrafficListener (+4 more)
 
 ### Community 14 - "ChatsPanel"
 Cohesion: 0.07
-Nodes (11): SimpleDateFormat, Summary, ChatsPanel, Hit, Entry, JDialog, JLabel, JScrollPane (+3 more)
+Nodes (5): SimpleDateFormat, ChatsPanel, Hit, Entry, java.awt.event.MouseEvent
 
 ### Community 15 - ".serialise"
-Cohesion: 0.06
-Nodes (13): Sha3Provider, MxAddressTest, Result, MlsClient, Resolved, MiniData, MiniData, IdentityTest (+5 more)
+Cohesion: 0.05
+Nodes (17): MxAddressTest, KeyPair, Result, MlsClient, MiniData, MiniData, Built, MiniData (+9 more)
 
 ### Community 16 - "ChatEngine"
-Cohesion: 0.07
-Nodes (5): CallSignals, ChatEngine, Entry, ChatMessage, ChatPort
+Cohesion: 0.09
+Nodes (5): CallSignals, ChatEngine, Entry, Listener, ChatMessage
 
 ### Community 17 - "MiniNumber"
-Cohesion: 0.03
-Nodes (18): CoinSelector, InsufficientFundsException, MiniNumber, DataInputStream, DataOutputStream, MiniData, MiniNumber, MiniString (+10 more)
+Cohesion: 0.04
+Nodes (11): DataInputStream, MiniNumber, Token, MiniData, MiniNumber, Override, Magic, MathContext (+3 more)
 
 ### Community 18 - "DesktopJarEngine"
-Cohesion: 0.12
+Cohesion: 0.09
 Nodes (5): DesktopJarEngine, Inbound, MaximaMessage, Override, Preferences
 
 ### Community 19 - "MaximaIdentity"
-Cohesion: 0.07
-Nodes (6): Bip39, Created, MaximaIdentity, Probe, ClassicThroughOurRelay, Bip39Check
+Cohesion: 0.06
+Nodes (13): DeterministicRsa, Hkdf, MaximaCrypto, Bip39, Keys, Created, MaximaIdentity, MaximaSender (+5 more)
 
-### Community 20 - "Contact"
-Cohesion: 0.09
-Nodes (6): Chat, Contact, Override, Parsed, Inbound, ConcurrencyTest
+### Community 20 - "CloudChatActivity"
+Cohesion: 0.07
+Nodes (17): Adapter, CloudChatActivity, Holder, Bitmap, EditText, ImageView, Intent, LinearLayout (+9 more)
 
 ### Community 21 - "MiniData"
-Cohesion: 0.04
-Nodes (17): DataInputStream, Override, Signature, Override, SignatureProof, MiniData, TreeKey, TreeKeyNode (+9 more)
+Cohesion: 0.03
+Nodes (24): MiniData, DataInputStream, Signature, SignatureProof, MiniData, TreeKey, TreeKeyNode, MiniData (+16 more)
 
-### Community 22 - ".startPumping"
+### Community 22 - "android.content.SharedPreferences"
+Cohesion: 0.10
+Nodes (4): android.content.SharedPreferences, HomeStore, SwarmStore, PrefsKeyUses
+
+### Community 23 - "javax.swing.JComponent"
 Cohesion: 0.08
-Nodes (9): android.content.SharedPreferences, HomeStore, ConnectionFinder, Listener, RelayStore, SwarmStore, Override, PrefsKeyUses (+1 more)
-
-### Community 23 - "JPanel"
-Cohesion: 0.06
-Nodes (14): DesktopEventLog, JLabel, JDialog, JLabel, NetworkPanel, JLabel, JComponent, JDialog (+6 more)
+Nodes (21): Summary, JLabel, ContactsPanel, Graphics, JDialog, JLabel, JTextField, QrDisc (+13 more)
 
 ### Community 24 - "TxPoW"
-Cohesion: 0.06
-Nodes (13): DataInputStream, MiniData, Override, TxHeader, DataOutputStream, MiniData, Override, TxPoW (+5 more)
+Cohesion: 0.07
+Nodes (10): TxPoWTree, TxPoWTreeNode, DataInputStream, MiniData, Override, TxHeader, DataOutputStream, MiniData (+2 more)
 
 ### Community 25 - ".fromPhrase"
-Cohesion: 0.12
-Nodes (4): BooleanSupplier, MediaRelayTest, BooleanSupplier, RelayKeepaliveTest
+Cohesion: 0.11
+Nodes (6): Resolved, MeshForwardTest, BooleanSupplier, MediaRelayTest, BooleanSupplier, RelayKeepaliveTest
 
-### Community 26 - "java.awt.Color"
-Cohesion: 0.06
-Nodes (12): Bubble, Override, PlayButton, Avatar, RoundPanel, Btn, Icons, IconButton (+4 more)
+### Community 26 - "Theme"
+Cohesion: 0.04
+Nodes (28): Preferences, DownFab, JTextField, Override, PlayButton, SendFab, SendFabLike, SimpleDoc (+20 more)
 
 ### Community 27 - "WalletPage"
-Cohesion: 0.15
-Nodes (8): BottomSheetDialog, Drawable, ImageView, LayoutParams, LinearLayout, TextView, WalletPage, Agg
+Cohesion: 0.14
+Nodes (9): BottomSheetDialog, Drawable, ImageView, LayoutParams, LinearLayout, Override, TextView, WalletPage (+1 more)
 
-### Community 28 - "javax.swing.JComponent"
-Cohesion: 0.06
-Nodes (21): JTextArea, JDialog, DesktopExplain, Override, ScrollableColumn, WrapText, Tab, JDialog (+13 more)
-
-### Community 29 - ".log"
+### Community 28 - "javax.swing.JLabel"
 Cohesion: 0.07
-Nodes (4): java.sql.Connection, MiniFile, SqlDB, MiniData
+Nodes (19): Bubble, JDialogRef, DesktopExplain, JLabel, Override, PlaceholderField, ScrollableColumn, WrapText (+11 more)
 
 ### Community 30 - "Group"
-Cohesion: 0.09
+Cohesion: 0.08
 Nodes (6): Group, Receipt, ChatTest, MaximaMessage, BooleanSupplier, LiveChatTest
 
 ### Community 31 - "Message"
-Cohesion: 0.10
-Nodes (7): Result, Result, maxima, MiniData, Override, Message, MessageListener
-
-### Community 32 - ".manualForward"
-Cohesion: 0.14
-Nodes (4): Chirp, DesktopManualForward, java.util.prefs.Preferences, javax.sound.sampled.Clip
+Cohesion: 0.09
+Nodes (8): Result, Result, maxima, MiniData, Override, MaxMsgHandler, Message, MessageListener
 
 ### Community 33 - "MaximaManager"
-Cohesion: 0.08
-Nodes (4): MiniData, MaximaManager, MaxMsgHandler, ServerSocket
+Cohesion: 0.05
+Nodes (6): BackupBundle, MaxJarNode, MaximaManager, ServerSocket, Override, org.junit.After
 
 ### Community 34 - "MaximaNode"
-Cohesion: 0.05
-Nodes (7): EventListener, Override, LogListener, MaximaNode, MaximaLoopTest, BooleanSupplier, RelaySelfHealTest
+Cohesion: 0.06
+Nodes (8): EventListener, Inbound, MiniData, Override, LogListener, MaximaNode, MediaWire, LanPeerTest
 
-### Community 35 - "GenerateKey"
-Cohesion: 0.17
-Nodes (5): MiniData, EncryptDecrypt, GenerateKey, MiniData, PasswordCrypto
+### Community 35 - "CryptoPackage"
+Cohesion: 0.07
+Nodes (12): javax.crypto.Cipher, MaximaMessage, MiniData, CryptoPackage, DataInputStream, MiniData, Override, EncryptDecrypt (+4 more)
 
 ### Community 36 - "HostConnection"
-Cohesion: 0.10
-Nodes (10): HostConnection, DataInputStream, DataOutputStream, MaximaCTRLMessage, MiniData, Override, Socket, Sink (+2 more)
+Cohesion: 0.11
+Nodes (11): HostConnection, Inbound, DataInputStream, DataOutputStream, MaximaCTRLMessage, MiniData, Override, Socket (+3 more)
 
-### Community 38 - ".sendRaw"
+### Community 37 - "ChatPay"
 Cohesion: 0.12
-Nodes (4): MiniData, Result, MediaWire, LanPeerTest
+Nodes (4): ChatMediaTest, ChatPayTest, ChatMedia, ChatPay
+
+### Community 38 - ".registerOn"
+Cohesion: 0.05
+Nodes (10): BackupSource, Entry, Live, NodeControl, ParlonsControl, PaySource, SettingsSink, StatusSource (+2 more)
 
 ### Community 39 - "HostPool"
-Cohesion: 0.14
-Nodes (5): HostPool, HostRecord, Override, LiveMultiHomeTest, Sink
+Cohesion: 0.09
+Nodes (6): MeritOrderTest, HostPool, HostRecord, Override, LiveMultiHomeTest, Sink
 
 ### Community 40 - "LockGate"
-Cohesion: 0.12
-Nodes (4): androidx.fragment.app.FragmentActivity, AppLock, Callback, LockGate
+Cohesion: 0.09
+Nodes (5): androidx.fragment.app.FragmentActivity, AppLock, Callback, LockGate, LockGate
 
-### Community 41 - ".onCreate"
-Cohesion: 0.07
-Nodes (4): Listener, Store, StoreTest, DesktopJarMigration
-
-### Community 42 - "DesktopNode"
-Cohesion: 0.06
-Nodes (18): DownFab, JTextField, SendFabLike, DesktopCalls, Override, DesktopNode, State, DKit (+10 more)
+### Community 42 - ".build"
+Cohesion: 0.13
+Nodes (7): JDialog, JScrollPane, JTextArea, HoverButton, JDialog, SettingsPanel, MiniNumber
 
 ### Community 43 - "JarEngine"
-Cohesion: 0.10
-Nodes (6): Inbound, JarEngine, MaximaMessage, Override, MaximaMessage, Override
+Cohesion: 0.12
+Nodes (4): Inbound, JarEngine, MaximaMessage, Override
 
-### Community 44 - "java.awt.image.BufferedImage"
-Cohesion: 0.08
-Nodes (18): BufferedImage, TrayIcons, DesktopImagePrep, BufferedImage, Result, DesktopQr, Canvas, ImageViewer (+10 more)
+### Community 44 - "DesktopImagePrep"
+Cohesion: 0.27
+Nodes (3): DesktopImagePrep, BufferedImage, Result
 
 ### Community 45 - ".processMessage"
-Cohesion: 0.07
-Nodes (8): MiniData, MaximaHost, Override, MLSService, Override, NIOClient, NIOManager, TrafficListener
+Cohesion: 0.11
+Nodes (5): MiniData, MaximaHost, Override, Override, NIOClient
 
 ### Community 46 - "SocketTransport"
-Cohesion: 0.07
-Nodes (12): MaxJarNode, DataInputStream, DataOutputStream, MaximaCTRLMessage, MiniByte, Override, ServerSocket, Socket (+4 more)
+Cohesion: 0.10
+Nodes (10): java.net.Socket, DataInputStream, DataOutputStream, MaximaCTRLMessage, MiniByte, Override, ServerSocket, Socket (+2 more)
 
-### Community 47 - "DesktopWalletPublisher"
-Cohesion: 0.09
-Nodes (5): PayResult, DesktopWallet, Cb, DesktopWalletPublisher, org.json.JSONObject
-
-### Community 48 - "Tier1Services"
+### Community 47 - "WalletPanel"
 Cohesion: 0.05
-Nodes (14): MiniByte, MiniData, MiniString, Override, RpcEnvelope, Pending, ResponseHandler, RpcPeer (+6 more)
+Nodes (9): Chirp, PayResult, WalletPanel, DesktopNodeLink, DesktopWallet, Cb, DesktopWalletPublisher, java.util.prefs.Preferences (+1 more)
 
-### Community 49 - ".processMessage"
-Cohesion: 0.13
-Nodes (4): MiniData, MaximaContact, Override, MiniData
-
-### Community 50 - "Address"
+### Community 48 - "ServiceRegistry"
 Cohesion: 0.08
-Nodes (7): MiniData, WalletCore, Address, DataOutputStream, Override, BaseConverter, VectorGen
+Nodes (11): MiniByte, MiniData, MiniString, Override, RpcEnvelope, Pending, ResponseHandler, RpcPeer (+3 more)
 
-### Community 51 - "Main"
-Cohesion: 0.11
-Nodes (5): MaximaTransport, Main, NotifyListener, NetworkManager, P2PManager
+### Community 49 - ".log"
+Cohesion: 0.10
+Nodes (7): java.sql.PreparedStatement, MiniData, MaximaContact, Override, MaximaDB, Override, MiniData
 
-### Community 52 - "BlobStore"
+### Community 50 - "ParlonsCore"
+Cohesion: 0.06
+Nodes (8): Built, CloudPaymentSender, CloudWallet, Entry, Listener, SimpleDateFormat, ParlonsCore, WatchWallet
+
+### Community 51 - ".dp"
+Cohesion: 0.09
+Nodes (13): LinearLayout, Call, CloudNodePage, Dev, LinearLayout, Override, Override, LinearLayout (+5 more)
+
+### Community 52 - "MediaService"
 Cohesion: 0.09
 Nodes (7): ChunkSource, Encoded, MediaCodec, MediaManifest, MediaService, BlobStore, MediaTest
 
@@ -425,221 +460,241 @@ Nodes (7): ChunkSource, Encoded, MediaCodec, MediaManifest, MediaService, BlobSt
 Cohesion: 0.07
 Nodes (34): Contact record (contacts/Contact.java), Phone App and Contacts Suite Design, First contact (QR + invite link, MAX#pubkey#mls), Identity is stable, addresses are ephemeral, Resolution ladder (cached, MLS, gossip, mailbox), Never advertise hope (prove port before announce), ReachabilityManager (router magic), Relay gossip discovery (+26 more)
 
-### Community 54 - ".build"
-Cohesion: 0.07
-Nodes (12): MiniData, Override, MaximumMessage, CryptoUnitTest, RelayHardeningTest, SizeLimitTest, CryptoPackage, java.security.PrivateKey (+4 more)
+### Community 54 - ".deserialise"
+Cohesion: 0.09
+Nodes (11): MiniData, Override, MaximumMessage, CryptoUnitTest, IdentityTest, MiniData, CryptoPackage, java.security.PrivateKey (+3 more)
 
 ### Community 55 - "MaximaWindow"
-Cohesion: 0.08
-Nodes (13): BufferedImage, IntConsumer, JLabel, JPanel, Listener, Timer, MaximaWindow, Responsive (+5 more)
+Cohesion: 0.07
+Nodes (14): BufferedImage, IntConsumer, JPanel, Listener, Timer, MaximaWindow, Responsive, StatusDot (+6 more)
 
 ### Community 56 - ".record"
-Cohesion: 0.11
-Nodes (12): Graphics, JDialog, Override, Timer, LiveWave, Recorder, Sink, VoiceNotes (+4 more)
+Cohesion: 0.07
+Nodes (15): DesktopCalls, Override, Graphics, JDialog, Override, Timer, LiveWave, Recorder (+7 more)
 
 ### Community 57 - "Outbox"
 Cohesion: 0.10
-Nodes (9): MiniData, DedupCache, Verdict, ACCEPT, DUPLICATE, STALE, Item, Outbox (+1 more)
+Nodes (8): DedupCache, Verdict, ACCEPT, DUPLICATE, STALE, Item, Outbox, ReliabilityUnitTest
 
 ### Community 58 - "Maxima — an annotated walkthrough"
 Cohesion: 0.06
 Nodes (29): Design constraints, Layout, Limits & storage boundaries, Live validation against a running node, Maxima — decentralised information layer for Minima, Protocol notes worth knowing, Reading the code, Run a node (desktop) (+21 more)
 
-### Community 59 - "MMRData"
-Cohesion: 0.04
-Nodes (19): DataInputStream, Override, TxnRow, CoinProof, DataInputStream, Override, MiniString, Override (+11 more)
+### Community 59 - "java.io.DataInputStream"
+Cohesion: 0.03
+Nodes (29): DataInputStream, DataOutputStream, Override, Override, Override, Override, DataOutputStream, MiniData (+21 more)
 
 ### Community 60 - "MessageProcessor"
 Cohesion: 0.06
 Nodes (7): Override, MessageProcessor, MessageStack, Override, TimerMessage, Override, TimerProcessor
 
 ### Community 61 - "WalletPublisher"
-Cohesion: 0.07
-Nodes (7): Override, Arrival, Cb, PaymentSender, Cb, ROnly, WalletPublisher
+Cohesion: 0.15
+Nodes (3): Cb, ROnly, WalletPublisher
 
 ### Community 62 - "RelayServer"
-Cohesion: 0.13
-Nodes (11): DataOutputStream, Greeting, Conn, DataInputStream, DataOutputStream, MaximaCTRLMessage, MaximaPackage, PrivateKey (+3 more)
+Cohesion: 0.14
+Nodes (12): DataOutputStream, Greeting, Conn, DataInputStream, DataOutputStream, MaximaCTRLMessage, MaximaPackage, MiniData (+4 more)
 
-### Community 63 - "android.graphics.Bitmap"
-Cohesion: 0.15
-Nodes (8): android.graphics.Bitmap, android.graphics.Canvas, android.graphics.Paint, android.util.AttributeSet, Override, Qr, Identicon, Paint
+### Community 63 - "android.graphics.Canvas"
+Cohesion: 0.18
+Nodes (5): android.graphics.Canvas, android.graphics.Paint, android.util.AttributeSet, Override, Identicon
 
-### Community 64 - ".bootJarEngine"
-Cohesion: 0.07
-Nodes (10): android.net.nsd.NsdManager, android.net.nsd.NsdServiceInfo, android.os.IBinder, LanDiscovery, Peers, Override, DiscoveryListener, MulticastLock (+2 more)
+### Community 64 - "MaximaService"
+Cohesion: 0.09
+Nodes (11): android.net.nsd.NsdManager, android.net.nsd.NsdServiceInfo, LanDiscovery, Peers, Override, MaximaService, DiscoveryListener, MulticastLock (+3 more)
 
-### Community 65 - "CodecUnitTest.java"
-Cohesion: 0.10
-Nodes (6): Hex, Override, Reads, Base32, CodecUnitTest, Streamable
+### Community 65 - ".main"
+Cohesion: 0.14
+Nodes (4): Override, Reads, CodecUnitTest, Streamable
 
 ### Community 66 - "MiniByte"
 Cohesion: 0.11
 Nodes (6): Override, MiniByte, MiniByte, MiniData, Override, MaximaCTRLMessage
 
 ### Community 67 - "DesktopMain"
-Cohesion: 0.10
-Nodes (11): DesktopMain, Preferences, State, java.awt.MenuItem, java.awt.TrayIcon, java.io.RandomAccessFile, java.nio.channels.FileLock, MenuItem (+3 more)
+Cohesion: 0.17
+Nodes (7): Bootstrap, DesktopMain, State, java.awt.MenuItem, java.awt.TrayIcon, java.io.RandomAccessFile, RandomAccessFile
 
-### Community 69 - "MaximaNode.java"
-Cohesion: 0.15
-Nodes (5): ContactCtrl, Keys, Capabilities, Override, Json
+### Community 68 - "ChatPort"
+Cohesion: 0.10
+Nodes (5): Intent, MiniNumber, ChatNotifier, Entry, ChatPort
+
+### Community 69 - "Writer"
+Cohesion: 0.09
+Nodes (7): JsonTest, ClassicChat, ContactCtrl, Parsed, Json, Writer, DirectoryUnitTest
 
 ### Community 70 - ".recordVoiceDialog"
-Cohesion: 0.13
-Nodes (4): android.media.MediaRecorder, VoiceNote, WaveformView, MediaRecorder
+Cohesion: 0.12
+Nodes (6): VoiceNote, WaveformView, MediaRecorder, VoiceNote, WaveformView, Handler
 
 ### Community 71 - "ChatsPage"
-Cohesion: 0.15
-Nodes (7): android.widget.BaseAdapter, android.widget.ListView, Adapter, ChatsPage, EditText, Override, Row
+Cohesion: 0.21
+Nodes (4): Adapter, ChatsPage, Override, Row
 
 ### Community 72 - "android.app.Activity"
-Cohesion: 0.16
-Nodes (5): android.app.Activity, android.view.ViewGroup, Explain, TextView, Ui
+Cohesion: 0.08
+Nodes (9): android.app.Activity, android.view.ViewGroup, EditText, Explain, TextView, Ui, Explain, TextView (+1 more)
 
-### Community 73 - "ContactsPage"
-Cohesion: 0.14
-Nodes (3): ContactsPage, Drawable, Override
+### Community 73 - "Contact"
+Cohesion: 0.09
+Nodes (13): Chat, ScanSink, ContactsPage, BottomSheetDialog, Drawable, EditText, LayoutParams, LinearLayout (+5 more)
 
-### Community 74 - "MaximaWallet"
-Cohesion: 0.11
-Nodes (5): EditText, MiniData, MaximaWallet, SeedCrypt, javax.crypto.SecretKey
+### Community 74 - "WalletCore"
+Cohesion: 0.08
+Nodes (6): EditText, MaximaWallet, Address, WalletCore, MiniData, MaximaWallet
 
-### Community 75 - "ReachabilityManager"
-Cohesion: 0.19
-Nodes (3): Gates, ReachabilityManager, java.util.function.IntSupplier
-
-### Community 76 - ".deserialise"
-Cohesion: 0.10
-Nodes (6): MiniString, Override, MLSPacketGETReq, MiniString, Override, MLSPacketGETResp
+### Community 76 - "MLSPacketGETResp"
+Cohesion: 0.24
+Nodes (3): MiniString, Override, MLSPacketGETResp
 
 ### Community 77 - ".render"
-Cohesion: 0.09
-Nodes (7): android.app.Application, ChatPrefs, Override, MaximaApp, EditText, Override, SettingsPage
+Cohesion: 0.13
+Nodes (5): EditText, LinearLayout, Override, TextView, SettingsPage
+
+### Community 78 - "NodeGateway"
+Cohesion: 0.07
+Nodes (13): com.sun.net.httpserver.HttpExchange, com.sun.net.httpserver.HttpServer, MiniNumber, Bucket, NodeGateway, RateLimiter, Address, Balance (+5 more)
 
 ### Community 79 - "Mailbox"
-Cohesion: 0.15
-Nodes (9): Box, Item, Mailbox, Result, DUPLICATE, QUOTA_BYTES, QUOTA_COUNT, STORED (+1 more)
+Cohesion: 0.11
+Nodes (10): Box, Item, Mailbox, Result, DUPLICATE, QUOTA_BYTES, QUOTA_COUNT, STORED (+2 more)
 
 ### Community 80 - "MMR"
-Cohesion: 0.07
-Nodes (9): DataInputStream, DataOutputStream, MiniNumber, Override, MMR, Override, MMREntry, Override (+1 more)
+Cohesion: 0.05
+Nodes (15): Address, MiniString, ScriptProof, MiniString, DataInputStream, DataOutputStream, MMR, MMRData (+7 more)
 
 ### Community 81 - "FileStore"
+Cohesion: 0.06
+Nodes (11): KeyUses, BackupBundle, CloudBackupManager, BackupBundle, CloudKeyUses, Main, Config, FileStore (+3 more)
+
+### Community 83 - "Cb"
+Cohesion: 0.08
+Nodes (8): android.widget.Switch, C, CloudContactsPage, EditText, Override, Cb, CloudSettingsActivity, ActivityResultLauncher
+
+### Community 84 - "WalletPublisher"
 Cohesion: 0.11
-Nodes (5): ClassicChat, FileStore, Override, Writer, DirectoryUnitTest
-
-### Community 82 - ".derive"
-Cohesion: 0.11
-Nodes (9): DeterministicRsaTest, KeyPair, Hkdf, LiveContactTest, LiveRelayTest, java.security.interfaces.RSAPublicKey, java.security.KeyPair, CarrierCheck (+1 more)
-
-### Community 83 - ".bindMessage"
-Cohesion: 0.18
-Nodes (4): ImageView, LinearLayout, TextView, MsgVH
-
-### Community 84 - "ContactsPanel"
-Cohesion: 0.10
-Nodes (10): ContactsPanel, Graphics, JLabel, JTextField, QrDisc, SimpleDoc, BufferedImage, DocumentEvent (+2 more)
+Nodes (3): Cb, ROnly, WalletPublisher
 
 ### Community 85 - "MLSPacketSET"
-Cohesion: 0.14
-Nodes (4): DataInputStream, MiniString, Override, MLSPacketSET
+Cohesion: 0.10
+Nodes (5): DataInputStream, MiniString, Override, MLSPacketSET, MLSService
 
 ### Community 86 - ".main"
-Cohesion: 0.12
-Nodes (6): MessageListener, BooleanSupplier, LiveMailboxTest, LiveNetworkExchange, FullSendTest, BooleanSupplier
+Cohesion: 0.17
+Nodes (5): MessageListener, BooleanSupplier, LiveMailboxTest, FullSendTest, BooleanSupplier
 
-### Community 88 - ".showContactCard"
-Cohesion: 0.29
-Nodes (5): BottomSheetDialog, EditText, LayoutParams, LinearLayout, TextView
+### Community 88 - "PortalCallManager"
+Cohesion: 0.09
+Nodes (15): LinearLayout, OnClickListener, Override, SurfaceViewRenderer, TextView, PortalCallActivity, Listener, PortalCallManager (+7 more)
 
 ### Community 89 - "org.junit.Test"
 Cohesion: 0.10
-Nodes (6): MiniDataTest, MiniNumberTest, Bip39Test, KeysTest, MiniData, org.junit.Test
+Nodes (5): MiniDataTest, MiniNumberTest, KeysTest, CapacityScoreTest, org.junit.Test
 
-### Community 90 - "NodeLink"
-Cohesion: 0.16
-Nodes (7): Cb, NodeLink, PairingListener, MinimaAPI, MinimaAPIListener, org.minimarex.minimaapi.MinimaAPI, org.minimarex.minimaapi.MinimaAPIListener
+### Community 90 - "org.json.JSONObject"
+Cohesion: 0.06
+Nodes (11): Cb, NodeLink, PairingListener, MinimaAPI, MinimaAPIListener, org.json.JSONObject, org.minimarex.minimaapi.MinimaAPI, org.minimarex.minimaapi.MinimaAPIListener (+3 more)
 
 ### Community 91 - "NatPmp"
-Cohesion: 0.23
-Nodes (4): NatPmp, Result, java.net.DatagramSocket, java.net.InetAddress
+Cohesion: 0.27
+Nodes (3): NatPmp, Result, java.net.InetAddress
 
 ### Community 92 - "DirectEndpoint"
-Cohesion: 0.12
-Nodes (9): DirectEndpoint, DataOutputStream, ServerSocket, Sink, DirectEndpointTest, LiveProbeTest, ProbeTest, java.net.ServerSocket (+1 more)
+Cohesion: 0.10
+Nodes (8): DirectEndpoint, DataOutputStream, ServerSocket, Sink, Probe, DirectEndpointTest, LiveProbeTest, ProbeTest
 
-### Community 93 - ".run"
-Cohesion: 0.16
-Nodes (4): DesktopConnectionFinder, Listener, Listener, DesktopRelayStore
+### Community 93 - "DesktopNode"
+Cohesion: 0.06
+Nodes (8): DesktopConnectionFinder, Listener, DesktopEventLog, DesktopNode, Listener, State, DesktopRelayStore, NetworkPanel
 
 ### Community 94 - "ReachabilityManager.java"
-Cohesion: 0.12
-Nodes (8): Listener, pass(), State, ADVERTISED, MAPPING, OFF, PROBING, java.util.concurrent.ThreadFactory
+Cohesion: 0.14
+Nodes (8): Listener, pass(), State, ADVERTISED, MAPPING, OFF, PROBING, java.util.function.IntSupplier
 
-### Community 95 - "JSONWriter"
-Cohesion: 0.20
-Nodes (3): JSONValue, Override, JSONWriter
+### Community 95 - "JSONParser"
+Cohesion: 0.05
+Nodes (9): JSONStreamAware, JSONValue, Override, JSONWriter, ContainerFactory, ContentHandler, JSONParser, Yylex (+1 more)
 
 ### Community 96 - "ZoomImageView"
-Cohesion: 0.16
-Nodes (9): android.graphics.Matrix, android.view.GestureDetector, android.view.MotionEvent, android.view.ScaleGestureDetector, Override, ZoomImageView, GestureDetector, ImageView (+1 more)
+Cohesion: 0.11
+Nodes (13): android.graphics.Matrix, android.view.GestureDetector, android.view.MotionEvent, android.view.ScaleGestureDetector, GestureDetector, Override, ScaleGestureDetector, ZoomImageView (+5 more)
 
-### Community 97 - "MaximaMessage"
-Cohesion: 0.08
-Nodes (8): MiniData, MlsService, Entry, MlsStore, MiniData, Override, MaximaMessage, Inbound
+### Community 97 - "Tier1Services"
+Cohesion: 0.06
+Nodes (6): MiniData, MlsService, Entry, MlsStore, ContributionPolicy, Tier1Services
 
 ### Community 98 - "Greeting"
-Cohesion: 0.15
-Nodes (4): Greeting, MiniNumber, MiniString, Override
+Cohesion: 0.07
+Nodes (9): Greeting, MiniNumber, MiniString, Override, Override, MaximaInternal, Frame, KeepaliveUnitTest (+1 more)
 
 ### Community 99 - "PortMapper"
-Cohesion: 0.21
+Cohesion: 0.22
 Nodes (4): Override, Mapping, PortMapper, PortMapLiveTest
 
 ### Community 100 - "MiniStunTest"
 Cohesion: 0.22
 Nodes (6): java.net.DatagramPacket, DatagramPacket, MiniStunTest, DatagramPacket, Override, MiniStun
 
-### Community 102 - "Override"
-Cohesion: 0.26
-Nodes (3): Adapter, Override, ViewHolder
+### Community 101 - "CloudSession"
+Cohesion: 0.09
+Nodes (7): android.app.Application, Override, MaximaApp, CloudSession, PortalCalls, Override, PortalApp
+
+### Community 102 - "android.content.Context"
+Cohesion: 0.11
+Nodes (5): android.content.Context, Pssst, ChatPrefs, JarMigration, MlsStore
 
 ### Community 104 - "DesktopWalletLedger"
-Cohesion: 0.20
-Nodes (5): Row, WalletLedger, DesktopWalletLedger, Row, org.json.JSONArray
+Cohesion: 0.14
+Nodes (7): Row, WalletLedger, DesktopWalletLedger, Row, org.json.JSONArray, Row, WalletLedger
+
+### Community 105 - "BackupActivity"
+Cohesion: 0.11
+Nodes (8): androidx.activity.result.ActivityResultLauncher, BackupActivity, EditText, Override, PwCallback, ConnectionFinder, Listener, RelayStore
 
 ### Community 106 - "SearchActivity"
-Cohesion: 0.29
+Cohesion: 0.27
 Nodes (6): Hit, EditText, LinearLayout, Override, TextView, SearchActivity
 
-### Community 109 - "RelayRuntime"
-Cohesion: 0.12
-Nodes (3): Main, RelayRuntime, Stats
+### Community 108 - "CloudWalletPage"
+Cohesion: 0.08
+Nodes (4): CloudWalletPage, Override, Listener, PortalHub
 
-### Community 112 - "MLSPacketSET"
-Cohesion: 0.23
-Nodes (3): MiniString, Override, MLSPacketSET
+### Community 112 - ".publicKeyHex"
+Cohesion: 0.16
+Nodes (4): MlsProofTest, MiniString, Override, MLSPacketSET
+
+### Community 114 - "android.graphics.Bitmap"
+Cohesion: 0.08
+Nodes (8): android.graphics.Bitmap, android.util.LruCache, Avatars, Qr, Avatars, Qr, Paint, ImageLoader
+
+### Community 115 - ".onSignal"
+Cohesion: 0.13
+Nodes (3): IceCandidate, SessionDescription, PortalIncomingCall
 
 ### Community 116 - "Phases"
 Cohesion: 0.15
 Nodes (12): A. `:core` `portmap` — NAT-PMP and UPnP IGD clients  (pure JVM), B. `:core` `net.DirectEndpoint` — accepting a connection at all, C. Fleet `probe.dial` — third-party reachability proof  (server 0.1.6), D. `:app` `DirectReachability` — the policy loop, E. LAN discovery — mDNS/NSD  (second), F. Wi-Fi Direct / BLE — explicitly deferred, Order and estimates, Phases (+4 more)
 
-### Community 117 - ".postConversation"
-Cohesion: 0.12
-Nodes (5): ChatHub, Entry, Listener, ChatNotifier, Entry
+### Community 117 - "MainActivity"
+Cohesion: 0.09
+Nodes (10): ChatHub, Entry, Listener, ActivityResultLauncher, Entry, ObjectAnimator, Override, ScanOptions (+2 more)
 
-### Community 119 - "MLSPacketGETReq"
-Cohesion: 0.24
-Nodes (3): DataInputStream, Override, MLSPacketGETReq
+### Community 118 - "DevicePairing"
+Cohesion: 0.14
+Nodes (7): Device, DevicePairing, Result, ALREADY, AUTHORIZED, PENDING, SuppressWarnings
+
+### Community 119 - ".main"
+Cohesion: 0.13
+Nodes (3): MaximaLoopTest, BooleanSupplier, RelaySelfHealTest
 
 ### Community 120 - "Annotated Maxima Frame (1225 bytes)"
 Cohesion: 0.23
 Nodes (12): Annotated Maxima Frame (1225 bytes), Per-message delivery state (end-to-end ack), MSG_PING (type 8) ack channel + five ack bodies, tools/vectorgen/Annotate.java, Synthetic TxPoW carrier — why we do not mine, CryptoPackage {iv, secret, ciphertext}, HostConnection.receive (receive path), MaximaInternal {from, data, signature} (+4 more)
 
-### Community 121 - "Greeting"
-Cohesion: 0.25
-Nodes (4): Greeting, MiniNumber, MiniString, Override
+### Community 121 - "CloudChatsPage"
+Cohesion: 0.13
+Nodes (5): Adapter, Call, CloudChatsPage, Override, Row
 
 ### Community 123 - "Desktop Node Build Workflow"
 Cohesion: 0.20
@@ -661,25 +716,29 @@ Nodes (9): 1. The central problem: identity is stable, addresses are not, 2. Res
 Cohesion: 0.20
 Nodes (9): Architecture, Deployment notes, Discovery — relay gossip, in classic's own vocabulary, Packaging, CI, signing, The desktop app — chat client + set-and-forget relay, The desktop node — set-and-forget relays for everyone, The router magic — never advertise hope, Verification (+1 more)
 
-### Community 129 - "MaximaErrorMsg"
-Cohesion: 0.33
-Nodes (4): DataInputStream, MiniString, Override, MaximaErrorMsg
-
 ### Community 130 - "MLSPacketGETResp"
 Cohesion: 0.24
 Nodes (3): DataInputStream, Override, MLSPacketGETResp
 
+### Community 132 - "Capabilities"
+Cohesion: 0.18
+Nodes (3): ReachabilityGateTest, Capabilities, Override
+
 ### Community 133 - ".main"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (5): RelayGossipClient, RelayPeers, java.util.concurrent.LinkedBlockingQueue, BooleanSupplier, RelayGossipTest
 
-### Community 137 - "MaximaDB"
-Cohesion: 0.08
-Nodes (8): java.sql.PreparedStatement, Override, MaximaDB, MinimaDB, TxPoWTree, TxPoWTreeNode, ScriptRow, Wallet
+### Community 135 - "JSONArray"
+Cohesion: 0.09
+Nodes (4): TxPoWGenerator, JSONArray, ParseException, MiniFormat
 
 ### Community 140 - "Maxima for Minima Core — what this is"
 Cohesion: 0.29
 Nodes (6): For Core specifically, Improved — invisibly, Maxima for Minima Core — what this is, The same — provably, The two artifacts, and how they hold each other up, Store-and-forward mailbox
+
+### Community 142 - "CallManager"
+Cohesion: 0.20
+Nodes (15): android.media.Ringtone, CallManager, org.webrtc.AudioSource, org.webrtc.AudioTrack, org.webrtc.CameraVideoCapturer, org.webrtc.EglBase, org.webrtc.IceCandidate, org.webrtc.PeerConnection (+7 more)
 
 ### Community 145 - ":core JVM library"
 Cohesion: 0.33
@@ -689,6 +748,22 @@ Nodes (6): Chat as application string (maxima_chat_v1), MaximaService (foregroun
 Cohesion: 0.33
 Nodes (6): The same, provably (wire-for-wire interop), The Interop Gate (byte-exactness), Reference minima.jar, ParityTest / golden vectors, tools/vectorgen, CarrierCheck (reference accepts our unit)
 
+### Community 147 - "RelayHost"
+Cohesion: 0.13
+Nodes (10): Blocker, CONTRIB_OFF, NEEDS_BATTERY, NEEDS_CHARGING, NEEDS_WIFI, NONE, RelayHost, State (+2 more)
+
+### Community 148 - ".keyPair"
+Cohesion: 0.19
+Nodes (3): RelayHardeningTest, SizeLimitTest, Annotate
+
+### Community 149 - "OnboardingActivity"
+Cohesion: 0.26
+Nodes (5): android.widget.Button, Button, LayoutParams, Override, OnboardingActivity
+
+### Community 152 - "MaxTxPoW"
+Cohesion: 0.16
+Nodes (4): Override, MaximaPackage, Override, MaxTxPoW
+
 ### Community 154 - "Threat model and residual risks"
 Cohesion: 0.40
 Nodes (4): Defended, Not yet addressed, Residual risks — known and accepted, Threat model and residual risks
@@ -697,29 +772,125 @@ Nodes (4): Defended, Not yet addressed, Residual risks — known and accepted, T
 Cohesion: 0.60
 Nodes (3): gradlew script, die(), warn()
 
+### Community 156 - "OnboardingActivity"
+Cohesion: 0.23
+Nodes (5): Button, EditText, Override, TextView, OnboardingActivity
+
+### Community 157 - "SeedStore"
+Cohesion: 0.22
+Nodes (3): BackupBundle, ImportResult, SeedStore
+
+### Community 159 - "PaymentSender"
+Cohesion: 0.17
+Nodes (3): Arrival, Cb, PaymentSender
+
 ### Community 161 - "Seed derivation from BIP39 mnemonic"
 Cohesion: 0.67
 Nodes (3): Seed derivation from BIP39 mnemonic, BIP39 English wordlist (2048 words), Bip39Check seed parity harness
 
+### Community 174 - "PaymentSender"
+Cohesion: 0.17
+Nodes (3): Arrival, Cb, PaymentSender
+
+### Community 180 - "VoiceNote"
+Cohesion: 0.18
+Nodes (3): android.media.MediaRecorder, MediaRecorder, VoiceNote
+
+### Community 183 - ".main"
+Cohesion: 0.23
+Nodes (5): ServerSocket, PortMapTest, DatagramSocket, java.net.DatagramSocket, java.net.ServerSocket
+
+### Community 184 - ".rebuild"
+Cohesion: 0.24
+Nodes (3): CloudNodePanelActivity, LinearLayout, Override
+
+### Community 185 - "DirAnswer"
+Cohesion: 0.21
+Nodes (3): DirAnswer, MiniData, Override
+
+### Community 187 - "PortalService.java"
+Cohesion: 0.24
+Nodes (5): android.app.Service, android.os.IBinder, Intent, Override, PortalService
+
+### Community 188 - "javax.crypto.SecretKey"
+Cohesion: 0.23
+Nodes (3): SeedCrypt, javax.crypto.SecretKey, SeedCrypt
+
+### Community 189 - "java.awt.image.BufferedImage"
+Cohesion: 0.28
+Nodes (5): BufferedImage, TrayIcons, java.awt.image.BufferedImage, MenuItem, TrayIcon
+
+### Community 191 - "BackupManager.java"
+Cohesion: 0.24
+Nodes (3): BackupManager, Done, IdentityRestore
+
+### Community 192 - ".doWork"
+Cohesion: 0.24
+Nodes (6): androidx.annotation.NonNull, androidx.work.Worker, androidx.work.WorkerParameters, Override, Result, MaximaWorker
+
+### Community 193 - "CoinSelector"
+Cohesion: 0.33
+Nodes (3): CoinSelector, InsufficientFundsException, MiniNumber
+
+### Community 194 - "Parlons Node — VPS setup"
+Cohesion: 0.18
+Nodes (10): 1. Build the jar, 2. Size the box, 3. Give it a sync peer, 4. Seed: fresh vs. migrated (fund-critical — do this by hand), 5. The wallet gateway (phones), 6. Make the fleet the phone default (last step, after ≥2 nodes are live + synced), Locked node → supply the passphrase, Parlons Node — VPS setup (+2 more)
+
+### Community 195 - ".deliver"
+Cohesion: 0.31
+Nodes (3): android.net.Uri, MiniData, MaximaApiDelivery
+
+### Community 196 - "Set up Parlons Cloud on your own VPS"
+Cohesion: 0.20
+Nodes (9): Back up your seed — this is money, Firewall, Managing it, Pair your phone, Set up Parlons Cloud on your own VPS, The easy way — one command, The manual way, What's actually running (+1 more)
+
+### Community 197 - "MLSPacketGETReq"
+Cohesion: 0.27
+Nodes (3): MiniString, Override, MLSPacketGETReq
+
+### Community 200 - "Canvas"
+Cohesion: 0.28
+Nodes (3): Identicon, Canvas, java.awt.Point
+
+### Community 201 - "ImageViewer"
+Cohesion: 0.36
+Nodes (3): ImageViewer, javax.swing.JButton, JButton
+
+### Community 202 - "TransferableImage"
+Cohesion: 0.36
+Nodes (4): TransferableImage, java.awt.datatransfer.DataFlavor, java.awt.datatransfer.Transferable, java.awt.Image
+
+### Community 203 - "Blocker"
+Cohesion: 0.29
+Nodes (7): Blocker, CONTRIB_OFF, NEEDS_CHARGING, NEEDS_PUBLIC_IP, NEEDS_WIFI, NONE, ROUTER_NO_PORT
+
+### Community 204 - "Parlons Cloud — threat model"
+Cohesion: 0.29
+Nodes (6): Assets, Controls (built ✓ / planned ◻), Parlons Cloud — threat model, Residual risk (honest), Trust model, Verification
+
+### Community 212 - "State"
+Cohesion: 0.40
+Nodes (5): State, ADVERTISED, MAPPING, OFF, PROBING
+
 ## Knowledge Gaps
-- **127 isolated node(s):** `install.sh script`, `IDLE`, `OUTGOING_RINGING`, `INCOMING_RINGING`, `CONNECTING` (+122 more)
+- **159 isolated node(s):** `install.sh script`, `IDLE`, `OUTGOING_RINGING`, `INCOMING_RINGING`, `CONNECTING` (+154 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **41 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **57 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `MaximaNode` connect `MaximaNode` to `android.view.View`, `DirectReachability.java`, `MiniData`, `.render`, `.main`, `android.content.Context`, `.add`, `ChatEngine`, `MaximaIdentity`, `Contact`, `.startPumping`, `JPanel`, `.fromPhrase`, `javax.swing.JComponent`, `Group`, `.manualForward`, `HostConnection`, `.sendRaw`, `HostPool`, `.onCreate`, `DesktopNode`, `Tier1Services`, `.processMessage`, `BlobStore`, `Outbox`, `.bootJarEngine`, `DesktopMain`, `MaximaNode.java`, `ReachabilityManager`, `Mailbox`, `FileStore`, `.main`, `DirectEndpoint`, `ReachabilityManager.java`, `MaximaMessage`, `.main`?**
-  _High betweenness centrality (0.115) - this node is a cross-community bridge._
-- **Why does `MiniData` connect `MiniData` to `MaximaErrorMsg`, `MLSPacketGETResp`, `java.io.DataInputStream`, `Coin`, `MaximaManager.java`, `JsonDB`, `MiniByte`, `Maths`, `MiniNumber`, `MaximaIdentity`, `TxPoW`, `.log`, `Message`, `MaximaManager`, `GenerateKey`, `JarEngine`, `.processMessage`, `.processMessage`, `Address`, `.build`, `MMRData`, `MaximaWallet`, `MLSPacketSET`, `MLSPacketGETReq`, `Greeting`?**
-  _High betweenness centrality (0.093) - this node is a cross-community bridge._
-- **Why does `JSONObject` connect `java.io.DataInputStream` to `MLSPacketGETResp`, `MaximaDB`, `Coin`, `MaximaManager.java`, `JsonDB`, `MiniNumber`, `DesktopJarEngine`, `MiniData`, `JPanel`, `TxPoW`, `WalletPage`, `.log`, `MaximaManager`, `JSONStreamAware`, `JarEngine`, `.processMessage`, `DesktopWalletPublisher`, `.processMessage`, `Address`, `Main`, `MMRData`, `MMR`, `MLSPacketSET`, `JSONWriter`, `GatewayNode`, `ItemList`, `DesktopNodeLink`?**
-  _High betweenness centrality (0.065) - this node is a cross-community bridge._
+- **Why does `MaximaNode` connect `MaximaNode` to `android.view.View`, `DirectReachability.java`, `Capabilities`, `.render`, `.main`, `MaximaApiReceiver`, `DirectReachability`, `JSONObject`, `RelayRuntime`, `MaximaIdentity`, `RelayHost`, `android.content.SharedPreferences`, `.fromPhrase`, `javax.swing.JLabel`, `Group`, `.startReachability`, `HostConnection`, `.registerOn`, `HostPool`, `.DesktopNode`, `ServiceRegistry`, `.log`, `ParlonsCore`, `MediaService`, `Outbox`, `MaximaService`, `DesktopMain`, `ChatPort`, `Writer`, `Contact`, `ReachabilityManager`, `.render`, `Mailbox`, `.main`, `org.junit.Test`, `DirectEndpoint`, `DesktopNode`, `ReachabilityManager.java`, `JSONParser`, `Tier1Services`, `Greeting`, `CloudSession`, `.main`, `.main`?**
+  _High betweenness centrality (0.128) - this node is a cross-community bridge._
+- **Why does `JSONObject` connect `JSONObject` to `android.view.View`, `MLSPacketGETResp`, `Streamable`, `JSONArray`, `Coin`, `JsonDB`, `CoinAggregator`, `MiniByte`, `CallManager`, `MiniNumber`, `DesktopJarEngine`, `CloudChatActivity`, `MiniData`, `android.content.SharedPreferences`, `javax.swing.JComponent`, `TxPoW`, `WalletPage`, `MaximaManager`, `GatewayNode`, `ChatPay`, `.registerOn`, `JarEngine`, `.processMessage`, `WalletPanel`, `.log`, `ParlonsCore`, `SqlDB`, `.dp`, `.onPushedMessage`, `.rebuild`, `java.io.DataInputStream`, `PortalService.java`, `WalletLedger`, `CoinSelector`, `NodeGateway`, `MMR`, `Cb`, `WalletPublisher`, `MLSPacketSET`, `.parse`, `JSONAware`, `PortalCallManager`, `JSONParser`, `CloudSession`, `GatewayNode`, `ItemList`, `CloudWalletPage`, `.onSignal`, `CloudChatsPage`?**
+  _High betweenness centrality (0.125) - this node is a cross-community bridge._
+- **Why does `MiniData` connect `MiniData` to `MLSPacketGETResp`, `Streamable`, `JSONArray`, `Coin`, `JsonDB`, `MiniByte`, `Maths`, `MiniNumber`, `MaximaIdentity`, `android.content.SharedPreferences`, `TxPoW`, `Message`, `MaximaManager`, `CryptoPackage`, `.processMessage`, `.log`, `SqlDB`, `java.io.DataInputStream`, `WalletCore`, `MMR`, `MLSPacketSET`?**
+  _High betweenness centrality (0.112) - this node is a cross-community bridge._
 - **What connects `install.sh script`, `IDLE`, `OUTGOING_RINGING` to the rest of the system?**
-  _127 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _159 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `android.view.View` be split into smaller, more focused modules?**
-  _Cohesion score 0.07343987823439878 - nodes in this community are weakly interconnected._
-- **Should `MiniNumber` be split into smaller, more focused modules?**
-  _Cohesion score 0.06382978723404255 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0597979797979798 - nodes in this community are weakly interconnected._
+- **Should `TxPoW` be split into smaller, more focused modules?**
+  _Cohesion score 0.09247311827956989 - nodes in this community are weakly interconnected._
 - **Should `ChatActivity` be split into smaller, more focused modules?**
-  _Cohesion score 0.09957325746799431 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06564364876385337 - nodes in this community are weakly interconnected._

@@ -335,6 +335,14 @@ public final class CloudWalletPage implements Page {
         sendCard.addView(PortalUi.label(c, "Detach = move ALL funds to a wallet whose seed "
                 + "lives on this phone (Minima Core). Your cloud identity stays; the VPS "
                 + "goes cold and keeps a watch-only view."));
+        sendCard.addView(PortalUi.gap(c, 8));
+        TextView resync = PortalUi.ghost(c, "Resync wallet to a new phrase…");
+        resync.setOnClickListener(v -> resyncFlow());
+        sendCard.addView(resync);
+        sendCard.addView(PortalUi.gap(c, 6));
+        sendCard.addView(PortalUi.label(c, "Resync = the node's wallet moves to a NEW 24-word "
+                + "phrase (its signing keys used up, or you want a fresh seed). Your identity, "
+                + "devices and contacts stay; funds at the old phrase stay with the old phrase."));
         mRoot.addView(sendCard);
 
         // --- history: this device's ledger (sends + received payments seen while paired) ---
@@ -582,6 +590,54 @@ public final class CloudWalletPage implements Page {
 
     /** The resync flow (user decision: the new seed lives ON THE DEVICE): sweep everything to
      *  a Minima Core wallet on this phone, then watch that address from the cloud. */
+    /** Re-point the NODE wallet at a new phrase; identity untouched (node accounts only). */
+    private void resyncFlow() {
+        final android.widget.EditText field = new android.widget.EditText(mAct);
+        field.setHint("24 words, space separated");
+        field.setMinLines(3);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        int pad = PortalUi.dp(mAct, 16);
+        android.widget.FrameLayout wrap = new android.widget.FrameLayout(mAct);
+        wrap.setPadding(pad, pad / 2, pad, 0);
+        wrap.addView(field);
+        new AlertDialog.Builder(mAct)
+                .setTitle("Resync wallet to a new phrase")
+                .setMessage("The node's WALLET moves to this phrase; your identity, paired devices "
+                        + "and contacts stay exactly as they are. Funds at the current address stay "
+                        + "with the current phrase. The node restarts (about a minute).")
+                .setView(wrap)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Resync", (d, w) -> {
+                    final String phrase = field.getText().toString().trim();
+                    if (phrase.split("\\s+").length != 24) {
+                        android.widget.Toast.makeText(mAct, "That is not 24 words", android.widget.Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
+                        public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
+                            String msg;
+                            try {
+                                org.minima.utils.json.JSONObject o = r.walletResync(phrase);
+                                Object okv = o.get("ok");
+                                msg = (okv instanceof Boolean && (Boolean) okv)
+                                        ? "Resync started - the node restarts in about a minute; same account, new wallet address"
+                                        : "Refused: " + o.getOrDefault("error", o);
+                            } catch (Exception e) {
+                                msg = "Could not reach the node: " + e.getMessage();
+                            }
+                            final String fm = msg;
+                            mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, fm, android.widget.Toast.LENGTH_LONG).show());
+                        }
+                        public void err(String m) {
+                            mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, "Could not reach the node: " + m, android.widget.Toast.LENGTH_LONG).show());
+                        }
+                    });
+                })
+                .show();
+    }
+
     private void detachFlow() {
         boolean coreInstalled;
         try {

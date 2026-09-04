@@ -10,9 +10,9 @@
     "semantic_hash": "7d27969b36a5ddf5336d3e69f1807a10"
   },
   "app/build.gradle": {
-    "mtime": 1787310920.8022451,
-    "ast_hash": "816294eaae1d24fb5dd1f9d6219c57e2",
-    "semantic_hash": "816294eaae1d24fb5dd1f9d6219c57e2"
+    "mtime": 1788257185.555281,
+    "ast_hash": "62aebeb334101ba34218b12b14cc428f",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/AndroidContribution.java": {
     "mtime": 1786896209.7493122,
@@ -50,9 +50,9 @@
     "semantic_hash": "b815219a90a30e2e2bedca11c5d439a9"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/MainActivity.java": {
-    "mtime": 1787275727.279626,
-    "ast_hash": "f94945c8a72c60db03349c26c56b8d51",
-    "semantic_hash": "f94945c8a72c60db03349c26c56b8d51"
+    "mtime": 1788031572.1725307,
+    "ast_hash": "42145ca5544c7b73436b9e5588dfd715",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ManualForward.java": {
     "mtime": 1787010028.0661688,
@@ -65,9 +65,9 @@
     "semantic_hash": "3130cb6ef4b118c814f6e9b6961b2c0c"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/MaximaService.java": {
-    "mtime": 1787278125.1289113,
-    "ast_hash": "3366243a51201ab4df2bc5600c8aadbf",
-    "semantic_hash": "3366243a51201ab4df2bc5600c8aadbf"
+    "mtime": 1787592083.2814803,
+    "ast_hash": "3d3f16c0bddce0c5480e9fdb04a5777c",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/MaximaWorker.java": {
     "mtime": 1786641814.2145069,
@@ -84,11 +84,6 @@
     "ast_hash": "3d4fdbc4f4acdbb50783f6d77f7cbab2",
     "semantic_hash": "3d4fdbc4f4acdbb50783f6d77f7cbab2"
   },
-  "app/src/main/java/com/eurobuddha/maxima/app/SeedStore.java": {
-    "mtime": 1787275658.604399,
-    "ast_hash": "5a8cddaca294b409f97ae3b511dd18b8",
-    "semantic_hash": "5a8cddaca294b409f97ae3b511dd18b8"
-  },
   "app/src/main/java/com/eurobuddha/maxima/app/Sha3Provider.java": {
     "mtime": 1786652106.1126184,
     "ast_hash": "3d346257df4f42eed3a10e532bb5e2ed",
@@ -100,9 +95,9 @@
     "semantic_hash": "7cb82cfb9b73d3b0c370b187eff3ef23"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/chat/ChatActivity.java": {
-    "mtime": 1787278216.9030745,
-    "ast_hash": "ad7b065e49970fc8396e8191eeef12f5",
-    "semantic_hash": "ad7b065e49970fc8396e8191eeef12f5"
+    "mtime": 1787440578.4904568,
+    "ast_hash": "0ace3007d78acb6190ff3a65eac38e8b",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/chat/ChatHub.java": {
     "mtime": 1786664370.3634498,
@@ -150,9 +145,9 @@
     "semantic_hash": "ea21f98fa3f340f2777d733d0e9ae5b4"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/relay/RelayHost.java": {
-    "mtime": 1787007746.5678978,
-    "ast_hash": "70401c16730370753e8c2f3d1e70720f",
-    "semantic_hash": "70401c16730370753e8c2f3d1e70720f"
+    "mtime": 1787687535.434884,
+    "ast_hash": "226e1337957a36befa57ba97d0e28819",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/Avatars.java": {
     "mtime": 1787004509.6917999,
@@ -165,9 +160,9 @@
     "semantic_hash": "27042d2f2c4e1e963f29ffd5bd92bb20"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/ContactsPage.java": {
-    "mtime": 1787251586.334598,
-    "ast_hash": "b6022589d895a6b104d4b773ebe8755d",
-    "semantic_hash": "b6022589d895a6b104d4b773ebe8755d"
+    "mtime": 1787645014.464946,
+    "ast_hash": "a27b8a6a99367e67b7b0b90b9c8dc22a",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/Explain.java": {
     "mtime": 1786961876.0653403,
@@ -180,9 +175,9 @@
     "semantic_hash": "59ef382d08b54b0bcba63ff5656c7ab6"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/NetworkPage.java": {
-    "mtime": 1787247170.7052758,
-    "ast_hash": "b5edca968314e808e96d94a40989733d",
-    "semantic_hash": "b5edca968314e808e96d94a40989733d"
+    "mtime": 1787644996.3359597,
+    "ast_hash": "6f630877641f77048ec78851d6b86453",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/Page.java": {
     "mtime": 1786665698.8800046,
@@ -200,9 +195,9 @@
     "semantic_hash": "2ba6a0f6c124b869923d09db8d7b090d"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/SettingsPage.java": {
-    "mtime": 1787265593.2604294,
-    "ast_hash": "95c7558d0a7c0003e34d4ac6e1a9ce1c",
-    "semantic_hash": "95c7558d0a7c0003e34d4ac6e1a9ce1c"
+    "mtime": 1787592904.270018,
+    "ast_hash": "d2cf3512cec05ece92f268bc17f19749",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/Ui.java": {
     "mtime": 1786961785.2977042,
@@ -210,44 +205,9 @@
     "semantic_hash": "e33a7b80548063436ee8c011562294e5"
   },
   "app/src/main/java/com/eurobuddha/maxima/app/ui/WalletPage.java": {
-    "mtime": 1787131545.1277297,
-    "ast_hash": "1e605391d73cc9d3d1132cdc28ae4134",
-    "semantic_hash": "1e605391d73cc9d3d1132cdc28ae4134"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/GatewayNode.java": {
-    "mtime": 1787277840.764374,
-    "ast_hash": "65a25abd8b11af541b739db1ae516e11",
-    "semantic_hash": "65a25abd8b11af541b739db1ae516e11"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/MaximaWallet.java": {
-    "mtime": 1787131536.6136634,
-    "ast_hash": "ec1247b91ec7049396c4f8cf9cf95102",
-    "semantic_hash": "ec1247b91ec7049396c4f8cf9cf95102"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/NodeLink.java": {
-    "mtime": 1786828228.0636017,
-    "ast_hash": "0daba8950ddfba62ae538c6aeddda22e",
-    "semantic_hash": "0daba8950ddfba62ae538c6aeddda22e"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/PaymentSender.java": {
-    "mtime": 1787276030.6572826,
-    "ast_hash": "1b6607c8d210ef96b009ceaed8937153",
-    "semantic_hash": "1b6607c8d210ef96b009ceaed8937153"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/SeedCrypt.java": {
-    "mtime": 1786828314.5446415,
-    "ast_hash": "a46975a549514eff4aa3d777b030aeb1",
-    "semantic_hash": "a46975a549514eff4aa3d777b030aeb1"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/WalletLedger.java": {
-    "mtime": 1787013049.1881413,
-    "ast_hash": "3ee4d58693e80d780aaabde5d2c3a79f",
-    "semantic_hash": "3ee4d58693e80d780aaabde5d2c3a79f"
-  },
-  "app/src/main/java/com/eurobuddha/maxima/app/wallet/WalletPublisher.java": {
-    "mtime": 1787059089.3599606,
-    "ast_hash": "63173ca2da751a8063ccbf1f82b59b79",
-    "semantic_hash": "63173ca2da751a8063ccbf1f82b59b79"
+    "mtime": 1788206362.7326708,
+    "ast_hash": "56b61ed2ee77526344eb74556ae4d122",
+    "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/wallet/Amounts.java": {
     "mtime": 1786998822.1230454,
@@ -264,20 +224,10 @@
     "ast_hash": "21d31bbb84e4ea9b474eafa17e24b370",
     "semantic_hash": "21d31bbb84e4ea9b474eafa17e24b370"
   },
-  "app/src/main/java/com/eurobuddha/wallet/Identicon.java": {
-    "mtime": 1786998840.441405,
-    "ast_hash": "6769a45b1dc62c3ef3e9a2b36b7ba1d0",
-    "semantic_hash": "6769a45b1dc62c3ef3e9a2b36b7ba1d0"
-  },
   "app/src/main/java/com/eurobuddha/wallet/KeyUses.java": {
     "mtime": 1786828099.6857126,
     "ast_hash": "117f7abca5e8910df0d7c508d22d6fd3",
     "semantic_hash": "117f7abca5e8910df0d7c508d22d6fd3"
-  },
-  "app/src/main/java/com/eurobuddha/wallet/PrefsKeyUses.java": {
-    "mtime": 1787278709.2545435,
-    "ast_hash": "8041ddb7d0eb8fc93e08179578133e0c",
-    "semantic_hash": "8041ddb7d0eb8fc93e08179578133e0c"
   },
   "app/src/main/java/com/eurobuddha/wallet/TxnFactory.java": {
     "mtime": 1786982999.9298303,
@@ -385,9 +335,9 @@
     "semantic_hash": "4771e6ec9cd0e89ad58bb316d42c15a5"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/MaximaNode.java": {
-    "mtime": 1787277730.9997065,
-    "ast_hash": "412635ee85c4ce112e6217d982bf476a",
-    "semantic_hash": "412635ee85c4ce112e6217d982bf476a"
+    "mtime": 1787688880.1958132,
+    "ast_hash": "3b8c97b0a136bfd1cf1b0b9bf024e135",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/MaximaSender.java": {
     "mtime": 1787240443.0851219,
@@ -395,9 +345,9 @@
     "semantic_hash": "03b34a7b9e9e6c820515f8ab84a52713"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/chat/ChatEngine.java": {
-    "mtime": 1787302662.3905473,
-    "ast_hash": "23c2ef275315030c768418bfa3e22d2e",
-    "semantic_hash": "23c2ef275315030c768418bfa3e22d2e"
+    "mtime": 1788144114.2629843,
+    "ast_hash": "78c42e6c794f1073a9c8ab6b2531ebc6",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/chat/ChatMedia.java": {
     "mtime": 1787270397.8116324,
@@ -505,14 +455,14 @@
     "semantic_hash": "1b0a59b764181d79e9dcf4a8ad391e6a"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/directory/MlsService.java": {
-    "mtime": 1786640898.5118046,
-    "ast_hash": "93400479c3ab0f26b89a151ff298a978",
-    "semantic_hash": "93400479c3ab0f26b89a151ff298a978"
+    "mtime": 1787687912.0452754,
+    "ast_hash": "18aa99fd1b35b212bf936ebe40574bb0",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/directory/MlsStore.java": {
-    "mtime": 1787277731.0002832,
-    "ast_hash": "7915f2e2b875c992ebec327ebb5dc9c8",
-    "semantic_hash": "7915f2e2b875c992ebec327ebb5dc9c8"
+    "mtime": 1787687854.0902007,
+    "ast_hash": "fabc8b6e622363383ebb9bab85caeb6a",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/identity/Base32.java": {
     "mtime": 1786633379.1767952,
@@ -570,9 +520,9 @@
     "semantic_hash": "c5298fe8cb8fe25fc5598e79c20d45d2"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/msg/Greeting.java": {
-    "mtime": 1786819892.4621406,
-    "ast_hash": "454ea7edc8ba58cb0793225037374186",
-    "semantic_hash": "454ea7edc8ba58cb0793225037374186"
+    "mtime": 1787599061.7446296,
+    "ast_hash": "b2cedd7bbd78f3737331c178614bbac3",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/msg/MLSPacketGETReq.java": {
     "mtime": 1786633456.1707385,
@@ -635,19 +585,19 @@
     "semantic_hash": "8d7f5978097f7bb4597c5c6d152e8af7"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/net/Frame.java": {
-    "mtime": 1786911150.649731,
-    "ast_hash": "9deb6c5b23d7bdb56715d7f9cf551b7d",
-    "semantic_hash": "9deb6c5b23d7bdb56715d7f9cf551b7d"
+    "mtime": 1787688333.711881,
+    "ast_hash": "8a3b48d1bbdf10723f912009a2324426",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/net/HostConnection.java": {
-    "mtime": 1787276364.900922,
-    "ast_hash": "0193b21714a97a3c72ab8a6cf6b37764",
-    "semantic_hash": "0193b21714a97a3c72ab8a6cf6b37764"
+    "mtime": 1787599374.846419,
+    "ast_hash": "92a84a08fa7cf40f56613c1d4d408152",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/net/Probe.java": {
-    "mtime": 1786693523.371968,
-    "ast_hash": "74f69e41db73f6641aefad928e5b7989",
-    "semantic_hash": "74f69e41db73f6641aefad928e5b7989"
+    "mtime": 1787688303.3184278,
+    "ast_hash": "2c873fc32fdd24f890105256c5da5403",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/net/ReachabilityManager.java": {
     "mtime": 1787332871.6214705,
@@ -680,9 +630,9 @@
     "semantic_hash": "d2562c9fc636e270cfb46f6d869f9697"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/rpc/Capabilities.java": {
-    "mtime": 1786638754.9360943,
-    "ast_hash": "2fe4c24f6fca7bd50c961ea68cc633db",
-    "semantic_hash": "2fe4c24f6fca7bd50c961ea68cc633db"
+    "mtime": 1787431863.0140278,
+    "ast_hash": "db11c932ce1587cfe2aad6856668694a",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/rpc/RpcEnvelope.java": {
     "mtime": 1786638736.7423058,
@@ -715,9 +665,9 @@
     "semantic_hash": "39c4918bbf9adfcb10fdcd37382f523d"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/session/HostPool.java": {
-    "mtime": 1787163363.9710386,
-    "ast_hash": "9780240a4320b9fa166275574fcc8670",
-    "semantic_hash": "9780240a4320b9fa166275574fcc8670"
+    "mtime": 1787431851.4853663,
+    "ast_hash": "f5d1da02f603787971bf125a55079e27",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/session/RelayGossipClient.java": {
     "mtime": 1786820035.8724544,
@@ -725,9 +675,9 @@
     "semantic_hash": "3688bdea2f69452680db920771836338"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/session/RelayPeers.java": {
-    "mtime": 1786819870.4232588,
-    "ast_hash": "08166d01b111a715802cfdf51431150a",
-    "semantic_hash": "08166d01b111a715802cfdf51431150a"
+    "mtime": 1787688325.2893167,
+    "ast_hash": "9eb203345d9946238d9ab1133e65e607",
+    "semantic_hash": ""
   },
   "core/src/main/java/com/eurobuddha/maxima/core/store/BlobStore.java": {
     "mtime": 1786833342.6173854,
@@ -925,8 +875,8 @@
     "semantic_hash": "1a5aef4c67e2d26b1ec3b917d3417d00"
   },
   "desktop/build.gradle": {
-    "mtime": 1787341843.8331733,
-    "ast_hash": "97b4658baa4b39f401485f69760e1150",
+    "mtime": 1788257578.244527,
+    "ast_hash": "ea48132a86c56e8e7315b05c8d47e728",
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/AutoStart.java": {
@@ -935,8 +885,8 @@
     "semantic_hash": "809305a41b8a35cff7db0d78f766110d"
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/DesktopMain.java": {
-    "mtime": 1787341843.8389375,
-    "ast_hash": "3af0b45a23d4f72264db05f918815792",
+    "mtime": 1787687571.5633538,
+    "ast_hash": "4df95657471cbf879fb16a3dc102932b",
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/TrayIcons.java": {
@@ -950,9 +900,9 @@
     "semantic_hash": "02c16663c6f0aa37f98d94d698c22b8c"
   },
   "ops/deploy-relay.sh": {
-    "mtime": 1786834178.5873594,
-    "ast_hash": "8baa669305ad292d82655071cca77e13",
-    "semantic_hash": "8baa669305ad292d82655071cca77e13"
+    "mtime": 1787689038.5057483,
+    "ast_hash": "396929f9d998d2966530264b5c25784c",
+    "semantic_hash": ""
   },
   "ops/verify-relay.sh": {
     "mtime": 1786666927.7799711,
@@ -965,19 +915,19 @@
     "semantic_hash": "3e3614b79c8128bb3538974b55dc94fe"
   },
   "server/src/main/java/com/eurobuddha/maxima/server/Main.java": {
-    "mtime": 1787300583.4989052,
-    "ast_hash": "4b41a9a013579de429437f8d1fc6a943",
-    "semantic_hash": "4b41a9a013579de429437f8d1fc6a943"
+    "mtime": 1787729683.8741689,
+    "ast_hash": "2abc0b8303bab1f4dba884cd765e5b1a",
+    "semantic_hash": ""
   },
   "server/src/main/java/com/eurobuddha/maxima/server/RelayRuntime.java": {
-    "mtime": 1786833789.6712413,
-    "ast_hash": "7a750a4ba6b2a50e3eb5fe0bf6e502ee",
-    "semantic_hash": "7a750a4ba6b2a50e3eb5fe0bf6e502ee"
+    "mtime": 1787688579.7411613,
+    "ast_hash": "a69f4589ad62a82d4da25969d056583f",
+    "semantic_hash": ""
   },
   "server/src/main/java/com/eurobuddha/maxima/server/RelayServer.java": {
-    "mtime": 1787300583.498247,
-    "ast_hash": "a2b85c1eba17fba8ac6971f1856c6921",
-    "semantic_hash": "a2b85c1eba17fba8ac6971f1856c6921"
+    "mtime": 1787729671.9103537,
+    "ast_hash": "e7f4114eba6919834c6d5b8b4fbe11c0",
+    "semantic_hash": ""
   },
   "server/src/main/java/com/eurobuddha/maxima/server/SelfTest.java": {
     "mtime": 1786646582.4954324,
@@ -1010,9 +960,9 @@
     "semantic_hash": "4dd500ec009519a975db1de5efd8b9be"
   },
   "settings.gradle": {
-    "mtime": 1787240951.8547404,
-    "ast_hash": "59a4e831dd692ff59839532e15378747",
-    "semantic_hash": "59a4e831dd692ff59839532e15378747"
+    "mtime": 1788471963.169785,
+    "ast_hash": "85f331e405f854aecc542a6bb2c7b0ea",
+    "semantic_hash": ""
   },
   "tools/vectorgen/Annotate.java": {
     "mtime": 1786648048.5260656,
@@ -1100,78 +1050,78 @@
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-hdpi/ic_launcher.png": {
-    "mtime": 1787257716.3878322,
-    "ast_hash": "35c7a32d68ce025854923d2acee129a7",
+    "mtime": 1787589604.7910273,
+    "ast_hash": "1737136d75e0e173e809ed773ad5601b",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": {
-    "mtime": 1787257716.3857896,
-    "ast_hash": "8607c2747fdb7730a8e0f987a1c99ff1",
+    "mtime": 1787589604.7361631,
+    "ast_hash": "717768639e4397a8916ae570143d6b32",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-hdpi/ic_launcher_round.png": {
-    "mtime": 1787257716.389714,
-    "ast_hash": "039c03d9ae78c4600cd1d998987fef77",
+    "mtime": 1787589604.8500824,
+    "ast_hash": "97f1e204014f30ece8915bca95d54546",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-mdpi/ic_launcher.png": {
-    "mtime": 1787257716.3832667,
-    "ast_hash": "b13a421a80bfe43770c9c7d887ed332e",
+    "mtime": 1787589604.5966263,
+    "ast_hash": "bae09aad0aa540327eb58105f558a55f",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": {
-    "mtime": 1787257716.381221,
-    "ast_hash": "fc1d415d430d1b08f51bf16b77ca9b79",
+    "mtime": 1787589604.536063,
+    "ast_hash": "3b987ad92b45d609ff2b6e859712a831",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-mdpi/ic_launcher_round.png": {
-    "mtime": 1787257716.3843784,
-    "ast_hash": "4f266ed2984b4da06191df380f6805e0",
+    "mtime": 1787589604.6515687,
+    "ast_hash": "4e09025db6b0fdab4cf0c63f3e6c0201",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xhdpi/ic_launcher.png": {
-    "mtime": 1787257716.39485,
-    "ast_hash": "0b7976c0ca8ad13870a9abfca5bc6c89",
+    "mtime": 1787589605.0066776,
+    "ast_hash": "127fc810900e7636cdb47cc754356c12",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": {
-    "mtime": 1787257716.391909,
-    "ast_hash": "e9f7d285ad3edafbfbab22471781f59d",
+    "mtime": 1787589604.9513214,
+    "ast_hash": "28f44603748e7a401bd12afda797655b",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png": {
-    "mtime": 1787257716.3974428,
-    "ast_hash": "cbd4f50823c2ad75eb57e5365ecc46d7",
+    "mtime": 1787589605.072913,
+    "ast_hash": "63316f29e61f97869165b7b704c6e767",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
-    "mtime": 1787257716.405168,
-    "ast_hash": "60e38c51ebce38682d36434ad49495d1",
+    "mtime": 1787589605.2478263,
+    "ast_hash": "b92215614fa33ef02b8092dd7b3f7ebd",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": {
-    "mtime": 1787257716.4003694,
-    "ast_hash": "02e2442c342c4fba1c8d972087ca140e",
+    "mtime": 1787589605.1789258,
+    "ast_hash": "a5a6c3f9d5dbcb9277a629b17c09cd0f",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png": {
-    "mtime": 1787257716.409873,
-    "ast_hash": "521ade5204baf8a83efbfbe78c879d7f",
+    "mtime": 1787589605.3168938,
+    "ast_hash": "fc6943cee4cb2babbf14f5133429024c",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
-    "mtime": 1787257716.4208648,
-    "ast_hash": "93046b28936c5ef4c9c34110e29e9ab5",
+    "mtime": 1787589605.534033,
+    "ast_hash": "630e59939012025bf9ddf08933b588ba",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": {
-    "mtime": 1787257716.4123502,
-    "ast_hash": "38b7dc4c165fe80c45f413687a0d4d65",
+    "mtime": 1787589605.459722,
+    "ast_hash": "c812394be3e3c57393d3f9a1d9f42fc5",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png": {
-    "mtime": 1787257716.428043,
-    "ast_hash": "6759ed2256fc578a3d38891da0526f5c",
+    "mtime": 1787589605.616604,
+    "ast_hash": "00a4331981cdf6730f1334542fccc79c",
     "semantic_hash": ""
   },
   "app/src/main/java/com/eurobuddha/maxima/app/HomeStore.java": {
@@ -1195,7 +1145,7 @@
     "semantic_hash": "1e79b353b5471d62f792ff459667c875"
   },
   "core/src/main/java/com/eurobuddha/maxima/core/ChatPort.java": {
-    "mtime": 1787270257.6889238,
+    "mtime": 1787439068.6084664,
     "ast_hash": "6d7b98997ceee43d33ef2737094b865f",
     "semantic_hash": "6d7b98997ceee43d33ef2737094b865f"
   },
@@ -1230,8 +1180,8 @@
     "semantic_hash": "2f682e6a6a97ba0ffd648d3958ffff3f"
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/ui/DesktopNode.java": {
-    "mtime": 1787341027.8152606,
-    "ast_hash": "612c83b092eed93a5c225f8817994777",
+    "mtime": 1787687577.0092077,
+    "ast_hash": "4348bdff9100da43eb16a654bf6a7b8e",
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/ui/DesktopQr.java": {
@@ -1250,8 +1200,8 @@
     "semantic_hash": "2d216cd6f860a742fd6c253f1a254783"
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/ui/MaximaWindow.java": {
-    "mtime": 1787341022.4310832,
-    "ast_hash": "5ce24490f687f786ad4b0d70e5cab877",
+    "mtime": 1787589797.382475,
+    "ast_hash": "0f0ec60c874d9ec5726b150b585acf00",
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/ui/NetworkPanel.java": {
@@ -1260,8 +1210,8 @@
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/ui/SettingsPanel.java": {
-    "mtime": 1787316978.8518531,
-    "ast_hash": "a2945cea3efc021ed1c4931ac5f50ce8",
+    "mtime": 1787589797.36867,
+    "ast_hash": "a291a2d2c3282a0bf662f9f9739cdf4e",
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/ui/Theme.java": {
@@ -1870,8 +1820,8 @@
     "semantic_hash": "e43a80486182bac45b9d06ca7fa18862"
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/jar/DesktopJarEngine.java": {
-    "mtime": 1787341100.0934417,
-    "ast_hash": "0b1ef2f84d033e6d8bcc3924ead167ca",
+    "mtime": 1787513388.988625,
+    "ast_hash": "60b9c9d9d5dfd6f5c3e9d0bf7a4508c2",
     "semantic_hash": ""
   },
   "desktop/src/main/java/com/eurobuddha/maxima/desktop/jar/DesktopJarMigration.java": {
@@ -1895,18 +1845,548 @@
     "semantic_hash": ""
   },
   "desktop/icons/parlons-1024.png": {
-    "mtime": 1787338887.0621495,
-    "ast_hash": "74dc630b715dad6f867fdd6966ca6860",
+    "mtime": 1787590817.8984928,
+    "ast_hash": "070f66693cc86f902f0fb6a63115817f",
     "semantic_hash": ""
   },
   "desktop/icons/parlons-512.png": {
-    "mtime": 1787338887.3523908,
-    "ast_hash": "f93ccd0afe6b655062aec5249f23fb3a",
+    "mtime": 1787590818.0716617,
+    "ast_hash": "c0696c82b88aacaedcab39c61e337738",
     "semantic_hash": ""
   },
   "desktop/src/main/resources/app-icon.png": {
-    "mtime": 1787339047.5204337,
-    "ast_hash": "f93ccd0afe6b655062aec5249f23fb3a",
+    "mtime": 1787590818.2859674,
+    "ast_hash": "c0696c82b88aacaedcab39c61e337738",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/eurobuddha/maxima/app/IdentityRestore.java": {
+    "mtime": 1787592708.6844482,
+    "ast_hash": "df3d7f5903a7c80e16f60ccfab6c3f16",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/eurobuddha/maxima/app/OnboardingActivity.java": {
+    "mtime": 1787594263.2240136,
+    "ast_hash": "22fd8e6f7db050b055fd224b6c576983",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/eurobuddha/maxima/app/backup/BackupActivity.java": {
+    "mtime": 1787592844.9549317,
+    "ast_hash": "f38f2be873e0fecc5e17882642dde0b8",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/eurobuddha/maxima/app/backup/BackupBundle.java": {
+    "mtime": 1787592775.579265,
+    "ast_hash": "7caa0a8c911822c083e99902c99016aa",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/eurobuddha/maxima/app/backup/BackupCrypto.java": {
+    "mtime": 1787592795.7681136,
+    "ast_hash": "eee672f92af3da6f8de5662e282db5ab",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/eurobuddha/maxima/app/backup/BackupManager.java": {
+    "mtime": 1787592813.4797106,
+    "ast_hash": "c7547a05dc7d567da329022187a0bd33",
+    "semantic_hash": ""
+  },
+  "cloud/build.gradle": {
+    "mtime": 1788257578.2344773,
+    "ast_hash": "60860a8fbe55b8104287e1d3b70e3283",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/BackupBundle.java": {
+    "mtime": 1788140901.5681071,
+    "ast_hash": "addcbd9f9b72e16017c3c750340f462b",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/BackupCrypto.java": {
+    "mtime": 1788140901.5642061,
+    "ast_hash": "92f9cb4fa72d6602531eb47fe2adea99",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/Client.java": {
+    "mtime": 1788146035.5479252,
+    "ast_hash": "e51a4a1027a80e2cc1faecf1187029c2",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/CloudBackupManager.java": {
+    "mtime": 1788142506.9195204,
+    "ast_hash": "eb3e738820e0c697d1debf4d90357440",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/CloudKeyUses.java": {
+    "mtime": 1788142548.4748957,
+    "ast_hash": "fa026294b734e10b0e297e7e76c21557",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/CloudPaymentSender.java": {
+    "mtime": 1788287122.6952155,
+    "ast_hash": "5a57b4061e73e85fdce32e6e25fb9c00",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/CloudWallet.java": {
+    "mtime": 1788144877.8637128,
+    "ast_hash": "b9de828f8edea750a925e5b978d502ff",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/DevicePairing.java": {
+    "mtime": 1787953289.4263628,
+    "ast_hash": "fa1df10fe8210c8c625f0b923ea63ef0",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/Main.java": {
+    "mtime": 1788287299.8829,
+    "ast_hash": "93de0e63d2b1b818159f3d0e9536325e",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/ParlonsControl.java": {
+    "mtime": 1788347598.6105535,
+    "ast_hash": "b27d0cc88bf12f83aea54db89c9aaeb9",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/ParlonsCore.java": {
+    "mtime": 1788347588.8989184,
+    "ast_hash": "2a3e767cf0f7ed4c813e48bb1a16adbe",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/ParlonsRemote.java": {
+    "mtime": 1788287234.9282491,
+    "ast_hash": "ac6bc25c00a9aacd3abc2e20e6e087aa",
+    "semantic_hash": ""
+  },
+  "cloud/src/main/java/com/eurobuddha/maxima/cloud/WatchWallet.java": {
+    "mtime": 1788140837.1413143,
+    "ast_hash": "afe59bd8ecc284fbd276ff2e7d9e8dae",
+    "semantic_hash": ""
+  },
+  "core/src/junit/java/com/eurobuddha/maxima/core/directory/MlsProofTest.java": {
+    "mtime": 1787688113.0837414,
+    "ast_hash": "2d9670ff56795f9627b0799e6cc7184d",
+    "semantic_hash": ""
+  },
+  "core/src/junit/java/com/eurobuddha/maxima/core/rpc/ReachabilityGateTest.java": {
+    "mtime": 1787431871.6922379,
+    "ast_hash": "d484f2070ede48618bc84b63ae7a4a2d",
+    "semantic_hash": ""
+  },
+  "core/src/junit/java/com/eurobuddha/maxima/core/session/CapacityScoreTest.java": {
+    "mtime": 1787431883.4359033,
+    "ast_hash": "f3fd889a82bfb3867981853b2b8b8fc2",
+    "semantic_hash": ""
+  },
+  "core/src/junit/java/com/eurobuddha/maxima/core/session/MeritOrderTest.java": {
+    "mtime": 1787430125.5445988,
+    "ast_hash": "989359882a47cbb7379ad584e4c2f2a3",
+    "semantic_hash": ""
+  },
+  "node/build.gradle": {
+    "mtime": 1788475992.757679,
+    "ast_hash": "1a66e7efe90945777d64764a13e09a66",
+    "semantic_hash": ""
+  },
+  "node/src/main/java/com/eurobuddha/maxima/node/NodeGateway.java": {
+    "mtime": 1788517099.7798443,
+    "ast_hash": "e3bc30611f10c7b8214daefe5e256185",
+    "semantic_hash": ""
+  },
+  "node/src/main/java/com/eurobuddha/maxima/node/NodeWallet.java": {
+    "mtime": 1788517068.504515,
+    "ast_hash": "0be9b7d4c88261d1666f0551b6f37b44",
+    "semantic_hash": ""
+  },
+  "node/src/main/java/com/eurobuddha/maxima/node/ParlonsNodeMain.java": {
+    "mtime": 1788517074.6248927,
+    "ast_hash": "a12043a77ef106eec48b35fa746c666b",
+    "semantic_hash": ""
+  },
+  "ops/deploy-parlons-cloud.sh": {
+    "mtime": 1788191186.3618429,
+    "ast_hash": "d25cc02fb609e3cf8e79c4f30ee462e9",
+    "semantic_hash": ""
+  },
+  "ops/deploy-parlons-node.sh": {
+    "mtime": 1788517186.487775,
+    "ast_hash": "a9eaf218be57978af3cd2dc06e518f85",
+    "semantic_hash": ""
+  },
+  "portal/build.gradle": {
+    "mtime": 1788347758.0187037,
+    "ast_hash": "2cd28dd2fb691cb1566d21ba2e422c79",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/AppLock.java": {
+    "mtime": 1788179520.4156275,
+    "ast_hash": "dd655e8733d185a9abb2dfea3be55ec3",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/LockGate.java": {
+    "mtime": 1788176819.8468306,
+    "ast_hash": "26699ddf27afb7fea9779fd38c7ae741",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/MainActivity.java": {
+    "mtime": 1788179958.3685956,
+    "ast_hash": "1021c903f350183889eb9b3c994deca7",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/PortalApp.java": {
+    "mtime": 1788038719.8238437,
+    "ast_hash": "cdc2f26115a4e97f927b30c2de801971",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/Sha3Provider.java": {
+    "mtime": 1788038710.3400235,
+    "ast_hash": "883d60e13017d619fd1cf05d90722e3f",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/chat/Names.java": {
+    "mtime": 1788033435.3939493,
+    "ast_hash": "b66068dc1dc3ef5661fcdc60f4ede712",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/chat/VoiceNote.java": {
+    "mtime": 1788127710.4457643,
+    "ast_hash": "c1533c43371f7fb4219938efc3859bc8",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/chat/WaveformView.java": {
+    "mtime": 1788127710.445379,
+    "ast_hash": "84c5d0d383703fb8a2001c42924bd8cf",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/chat/ZoomImageView.java": {
+    "mtime": 1788127710.4462206,
+    "ast_hash": "327b3d0e34f1200c3d1a2052be0ad969",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/BootReceiver.java": {
+    "mtime": 1788179758.0817382,
+    "ast_hash": "181f12c16856bdc7abf9f5a9b741d744",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudChatActivity.java": {
+    "mtime": 1788185122.203634,
+    "ast_hash": "441cf26ea55eefc8e70a48aad30515e4",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudChatsPage.java": {
+    "mtime": 1788178049.5656395,
+    "ast_hash": "9dadc1db4bdddb0598341c6743d7b067",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudContactsPage.java": {
+    "mtime": 1788179722.9917712,
+    "ast_hash": "bde487e091cfd97c9758ee375931a381",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudNodePage.java": {
+    "mtime": 1788144950.8946338,
+    "ast_hash": "89e5c3bd6380c64e767f541ebdff461d",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudNodePanelActivity.java": {
+    "mtime": 1788147052.1577845,
+    "ast_hash": "d13304beeb994f6b6a7602258a91b77c",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudSearchActivity.java": {
+    "mtime": 1788144198.252597,
+    "ast_hash": "4af6330cdd3a621205f0b2706863c2a3",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudSession.java": {
+    "mtime": 1788179570.2619221,
+    "ast_hash": "85de8266e6c92bed6ea4dd525046b98b",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudSettingsActivity.java": {
+    "mtime": 1788180030.104089,
+    "ast_hash": "9606f889e18c0271a6394c1247f6e32f",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/CloudWalletPage.java": {
+    "mtime": 1788347804.7763853,
+    "ast_hash": "84255fd0478e1413e14d398525b9c16d",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/OnboardingActivity.java": {
+    "mtime": 1788191682.6034365,
+    "ast_hash": "242abedeed3337c6509b72b9e28d5be7",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalCallActivity.java": {
+    "mtime": 1788179616.6916602,
+    "ast_hash": "c84b98414ed4a402b440957dc78d55c0",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalCallManager.java": {
+    "mtime": 1788130259.792909,
+    "ast_hash": "a6ea5685c6adc5b9b14f23ccdd0cce47",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalCalls.java": {
+    "mtime": 1788127442.730385,
+    "ast_hash": "8af0583a49e64bfa1b71c6285401b20a",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalHub.java": {
+    "mtime": 1788127373.2206585,
+    "ast_hash": "c3b2c095f86e4cf71ac203cdf51ee812",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalIncomingCall.java": {
+    "mtime": 1788127599.0096679,
+    "ast_hash": "ba20fbf33ce9e6ec58a05a4684d27971",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalNotifier.java": {
+    "mtime": 1788179593.1328454,
+    "ast_hash": "52c8947dd85d5b1bc2c9535d3cf5cf8c",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalService.java": {
+    "mtime": 1788135569.24194,
+    "ast_hash": "a3e554a344172e10dd16c11cd559db78",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalUi.java": {
+    "mtime": 1788037949.0512943,
+    "ast_hash": "f891bf8762904fa1cea1d936658e4ffe",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/portal/WalletLedger.java": {
+    "mtime": 1788179580.7659094,
+    "ast_hash": "a830d5b8ede2fdb0f161430c4b1f7971",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/ui/Avatars.java": {
+    "mtime": 1788033435.3771033,
+    "ast_hash": "c8e7f9abfa9df8859242363a264f7271",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/ui/Explain.java": {
+    "mtime": 1788033435.380065,
+    "ast_hash": "278fe94b9d21ed477d97b8e691dd02a6",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/ui/Page.java": {
+    "mtime": 1788033435.3887832,
+    "ast_hash": "734f5d4e2a7768dd6d160ace51351eb8",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/ui/Presence.java": {
+    "mtime": 1788033435.3824415,
+    "ast_hash": "7eeaf84060bdf6b1473e468c89adf23a",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/ui/Qr.java": {
+    "mtime": 1788037983.258694,
+    "ast_hash": "8d16b908d57545405ed40972c47b7134",
+    "semantic_hash": ""
+  },
+  "portal/src/main/java/com/eurobuddha/maxima/app/ui/Ui.java": {
+    "mtime": 1788033435.3743606,
+    "ast_hash": "e33a7b80548063436ee8c011562294e5",
+    "semantic_hash": ""
+  },
+  "server/src/junit/java/com/eurobuddha/maxima/server/MeshForwardTest.java": {
+    "mtime": 1787688755.2790089,
+    "ast_hash": "5178fa6d583118fe3b7cdcb90b7ecd2d",
+    "semantic_hash": ""
+  },
+  "server/src/main/java/com/eurobuddha/maxima/server/DirAnswer.java": {
+    "mtime": 1787688395.4512038,
+    "ast_hash": "9e8598f73c8eb1da4f98bca0e892862b",
+    "semantic_hash": ""
+  },
+  "server/src/main/java/com/eurobuddha/maxima/server/DirQuery.java": {
+    "mtime": 1787688380.4385839,
+    "ast_hash": "eff78ae5ed25c219733ae21aa39688f9",
+    "semantic_hash": ""
+  },
+  "server/src/main/java/com/eurobuddha/maxima/server/RelayQueryClient.java": {
+    "mtime": 1787688428.578249,
+    "ast_hash": "48397db350083cf0af23d64bf36be11e",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/SeedStore.java": {
+    "mtime": 1787591954.4089785,
+    "ast_hash": "c84dcd780963e0468fa9bbba757596ee",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/GatewayNode.java": {
+    "mtime": 1787277840.764374,
+    "ast_hash": "65a25abd8b11af541b739db1ae516e11",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/MaximaWallet.java": {
+    "mtime": 1787131536.6136634,
+    "ast_hash": "ec1247b91ec7049396c4f8cf9cf95102",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/NodeLink.java": {
+    "mtime": 1786828228.0636017,
+    "ast_hash": "0daba8950ddfba62ae538c6aeddda22e",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/PaymentSender.java": {
+    "mtime": 1788287024.7686887,
+    "ast_hash": "0cf2e3c8f713f20b6122b597ec5ca30b",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/SeedCrypt.java": {
+    "mtime": 1786828314.5446415,
+    "ast_hash": "a46975a549514eff4aa3d777b030aeb1",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/WalletLedger.java": {
+    "mtime": 1787013049.1881413,
+    "ast_hash": "3ee4d58693e80d780aaabde5d2c3a79f",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/maxima/app/wallet/WalletPublisher.java": {
+    "mtime": 1788215060.512638,
+    "ast_hash": "1b8db0f62ddbf20ba2fbe568c30cb42c",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/wallet/IconResolver.java": {
+    "mtime": 1787647323.9052012,
+    "ast_hash": "260db64400f5b5cba915c57a056b88c4",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/wallet/Identicon.java": {
+    "mtime": 1786998840.441405,
+    "ast_hash": "6769a45b1dc62c3ef3e9a2b36b7ba1d0",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/wallet/ImageLoader.java": {
+    "mtime": 1787647367.9584806,
+    "ast_hash": "d8fee842223ce69f504a947c823ff01b",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/wallet/ImageTools.java": {
+    "mtime": 1787647337.555559,
+    "ast_hash": "a2038386069a4b7ce46b3e63ac68a515",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/wallet/PrefsKeyUses.java": {
+    "mtime": 1787592262.965287,
+    "ast_hash": "50e1aa5694985f5b2714c825567375eb",
+    "semantic_hash": ""
+  },
+  "walletshared/com/eurobuddha/wallet/TokenMeta.java": {
+    "mtime": 1787647307.5246022,
+    "ast_hash": "174e5838b77c376c560e34d890b81c9a",
+    "semantic_hash": ""
+  },
+  "cloud/NODE-SETUP.md": {
+    "mtime": 1788517170.4720323,
+    "ast_hash": "a64d2607a45d9ba84e1e43a4bb2fcf7e",
+    "semantic_hash": ""
+  },
+  "cloud/SETUP.md": {
+    "mtime": 1788191141.4296188,
+    "ast_hash": "22194be65212656d74decc17e967f059",
+    "semantic_hash": ""
+  },
+  "cloud/THREAT-MODEL.md": {
+    "mtime": 1787954762.979079,
+    "ast_hash": "6ebed1edd53cbc75eb190c8df508373e",
+    "semantic_hash": ""
+  },
+  "decentralized-chat-icon-appicon.svg": {
+    "mtime": 1787589559.8571064,
+    "ast_hash": "0a3cc1f0052b540ad96eaa6027f7bd58",
+    "semantic_hash": ""
+  },
+  "decentralized-chat-icon.svg": {
+    "mtime": 1787589502.7084892,
+    "ast_hash": "124e93706af664717d90db7782bd825f",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/drawable-xxhdpi/doodle_tile.png": {
+    "mtime": 1788033435.3364697,
+    "ast_hash": "3b05c97668b30a0fb2fd2a5e647cd9e9",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-hdpi/ic_launcher.png": {
+    "mtime": 1788033435.2916093,
+    "ast_hash": "1737136d75e0e173e809ed773ad5601b",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": {
+    "mtime": 1788033435.29124,
+    "ast_hash": "717768639e4397a8916ae570143d6b32",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-hdpi/ic_launcher_round.png": {
+    "mtime": 1788033435.2920084,
+    "ast_hash": "97f1e204014f30ece8915bca95d54546",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-mdpi/ic_launcher.png": {
+    "mtime": 1788033435.2899716,
+    "ast_hash": "bae09aad0aa540327eb58105f558a55f",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": {
+    "mtime": 1788033435.2895072,
+    "ast_hash": "3b987ad92b45d609ff2b6e859712a831",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-mdpi/ic_launcher_round.png": {
+    "mtime": 1788033435.290372,
+    "ast_hash": "4e09025db6b0fdab4cf0c63f3e6c0201",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xhdpi/ic_launcher.png": {
+    "mtime": 1788033435.339643,
+    "ast_hash": "127fc810900e7636cdb47cc754356c12",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": {
+    "mtime": 1788033435.33902,
+    "ast_hash": "28f44603748e7a401bd12afda797655b",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xhdpi/ic_launcher_round.png": {
+    "mtime": 1788033435.3400836,
+    "ast_hash": "63316f29e61f97869165b7b704c6e767",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
+    "mtime": 1788033435.3326,
+    "ast_hash": "b92215614fa33ef02b8092dd7b3f7ebd",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": {
+    "mtime": 1788033435.3320575,
+    "ast_hash": "a5a6c3f9d5dbcb9277a629b17c09cd0f",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xxhdpi/ic_launcher_round.png": {
+    "mtime": 1788033435.3333666,
+    "ast_hash": "fc6943cee4cb2babbf14f5133429024c",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
+    "mtime": 1788033435.3255088,
+    "ast_hash": "630e59939012025bf9ddf08933b588ba",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": {
+    "mtime": 1788033435.3249266,
+    "ast_hash": "c812394be3e3c57393d3f9a1d9f42fc5",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png": {
+    "mtime": 1788033435.3259706,
+    "ast_hash": "00a4331981cdf6730f1334542fccc79c",
+    "semantic_hash": ""
+  },
+  "portal/src/main/res/raw/pssst.wav": {
+    "mtime": 1788033435.3452203,
+    "ast_hash": "e43a80486182bac45b9d06ca7fa18862",
     "semantic_hash": ""
   }
 }

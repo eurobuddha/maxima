@@ -130,4 +130,36 @@ final class NodeAccountWallet implements AccountWallet {
     /** The node tracks its own coins and holds its own proofs: nothing to backfill. */
     @Override public void upkeep(Consumer<String> zLog) {
     }
+
+    @Override public boolean canResync() { return true; }
+
+    /**
+     * Re-point the NODE wallet at a new phrase: {@code megammrsync action:resync} against the
+     * archive host resets the wallet keys to the phrase and pulls its coins, then the node
+     * shuts its chain engine down — so we exit with code 3 and systemd restarts us
+     * ({@code RestartForceExitStatus=3} in the unit). The identity is NOT derived from the
+     * vault any more (ParlonsNodeMain pins it in identity.txt), so the same MAX#, paired
+     * devices and contacts come back. Runs on its own thread; the caller replies first.
+     */
+    @Override public void resyncTo(String zPhrase) {
+        final String host = System.getProperty("parlons.node.archive", "65.109.31.226:9001");
+        final String phrase = zPhrase.trim().replaceAll("\\s+", " ");
+        Thread t = new Thread(() -> {
+            try {
+                Thread.sleep(1500);   // let the RPC reply leave first
+                System.out.println("[parlons-node] wallet resync to a new phrase via " + host
+                        + " (identity pinned, node will restart)");
+                JSONObject r = NodeWallet.run("megammrsync action:resync host:" + host
+                        + " phrase:\"" + phrase + "\"");
+                boolean ok = Boolean.TRUE.equals(r.get("status"));
+                System.out.println("[parlons-node] wallet resync " + (ok ? "finished" : "FAILED: " + r.get("error"))
+                        + " - restarting");
+            } catch (Throwable e) {
+                System.out.println("[parlons-node] wallet resync error: " + e + " - restarting");
+            }
+            System.exit(3);
+        }, "parlons-wallet-resync");
+        t.setDaemon(false);
+        t.start();
+    }
 }

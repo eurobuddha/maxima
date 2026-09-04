@@ -280,6 +280,11 @@ public final class Client {
                 if ("set".equals(sub)) {
                     requireArg(rest.subList(1, rest.size()), "wallet set <Mx address>");
                     report(r.setWatch(rest.get(2)), "watch address set ✓ (funds stay on your device)");
+                } else if ("resync".equals(sub)) {
+                    requireArg(rest.subList(1, rest.size()), "wallet resync <file holding the new 24-word phrase>");
+                    String phrase = new String(java.nio.file.Files.readAllBytes(
+                            java.nio.file.Paths.get(rest.get(2))), java.nio.charset.StandardCharsets.UTF_8).trim();
+                    report(r.walletResync(phrase), "wallet resync started ✓ - same account, node restarting (~1 min); NEW wallet address");
                 } else if ("address".equals(sub)) {
                     JSONObject o = r.walletAddress();
                     System.out.println(isOk(o)
@@ -412,6 +417,7 @@ public final class Client {
         System.out.println("  pay <key> <amt> [memo] pay a contact from the ACCOUNT's wallet");
         System.out.println("  wallet address         the ACCOUNT's receive address (its keys live on the node)");
         System.out.println("  wallet set <Mx>        watch a DIFFERENT (cold) address instead");
+        System.out.println("  wallet resync <file>   re-point the wallet at a NEW 24-word phrase (identity kept; node accounts)");
         System.out.println("  wallet balance         balance of the shown address");
         System.out.println("  seed                   reveal the account's 24-word phrase");
         System.out.println("  backup <file.pbk>      write an encrypted backup (phone-compatible)");
