@@ -154,6 +154,12 @@ public final class NodeGateway {
                 }
                 // coins/balance must target a specific address — never let a client enumerate the
                 // operator's OWN wallet coins (a privacy leak; the phone always passes address:).
+                // A node WITHOUT the MegaMMR only knows its own coins: a megammr:true read here would
+                // answer "0" for any funded address — a wrong answer, not an error. Refuse with a
+                // 503 so a fleet client fails over to a MegaMMR node instead of trusting it.
+                if (seg.contains("megammr:true") && !org.minima.system.params.GeneralParams.IS_MEGAMMR) {
+                    fail(ex, 503, "this node has no MegaMMR - use a MegaMMR gateway node"); return;
+                }
                 if (("coins".equals(verb) || "balance".equals(verb)) && !seg.contains("address:")) {
                     fail(ex, 403, verb + " through the gateway requires an address: parameter");
                     return;
