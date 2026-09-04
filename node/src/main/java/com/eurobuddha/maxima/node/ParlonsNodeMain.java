@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.1.1";
+    public static final String  NODE_VERSION = "0.1.2";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -62,10 +62,11 @@ public final class ParlonsNodeMain {
         GeneralParams.RPC_PORT        = GeneralParams.MINIMA_PORT + 4;
         // Operator admin channel. The gateway is deliberately read+relay only, so without this the
         // running node has NO way to run `vault` (seed backup), `megammr action:import` (seed the
-        // MegaMMR — an IBD does NOT carry it) or any other admin command. Off by default; a VPS
-        // enables it and keeps the port off the host firewall (the node's RPC binds every interface).
+        // MegaMMR — an IBD does NOT carry it) or any other admin command. Off by default. It is OUR
+        // loopback-bound AdminRpc on p2p+4, NOT Minima's -rpcenable: the stock RPC binds every
+        // interface with no bind option and was internet-reachable on a firewall-less box (0.1.1).
         boolean rpc = Boolean.parseBoolean(System.getProperty("parlons.node.rpc", "false"));
-        GeneralParams.RPC_ENABLED     = rpc;
+        GeneralParams.RPC_ENABLED     = false;   // never the stock RPC — see AdminRpc
         minimaFolder.mkdirs();
 
         // Sync peer(s): this node fork ships an EMPTY DEFAULT_NODE_LIST, so give it a rootnode to
@@ -98,10 +99,17 @@ public final class ParlonsNodeMain {
 
         System.out.println("[parlons-node] Parlons Node " + NODE_VERSION + " — booting embedded Minima node "
                 + GlobalParams.getFullMicroVersion() + " at " + GeneralParams.DATA_FOLDER
-                + " (p2p " + GeneralParams.MINIMA_PORT + ", rpc " + (rpc ? "127.0.0.1-only-by-firewall:" + GeneralParams.RPC_PORT : "off") + ")");
+                + " (p2p " + GeneralParams.MINIMA_PORT + ", admin rpc " + (rpc ? "127.0.0.1:" + GeneralParams.RPC_PORT + " (loopback-bound)" : "off") + ")");
 
         // --- boot the full node in-process (Main is a MessageProcessor; spawns its own threads) ---
         final Main main = new Main();
+
+        // --- operator admin RPC: loopback-bound by construction (see AdminRpc) ---
+        if (rpc) {
+            AdminRpc admin = AdminRpc.start(GeneralParams.RPC_PORT);
+            System.out.println("[parlons-node] admin rpc up on 127.0.0.1:" + admin.port()
+                    + " (loopback only; every node command; never proxy this)");
+        }
 
         // --- the phone-facing wallet gateway (M3): hardened read+relay /cmd proxy over the node ---
         final AtomicReference<NodeGateway> gatewayHolder = new AtomicReference<>();
