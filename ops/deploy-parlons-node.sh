@@ -154,6 +154,10 @@ if [ -n "$NODE_ARGS" ]; then
     EXTRA_RW="$(printf '%s\n' "$NODE_ARGS" | sed -nE 's/.*(^|[[:space:]])-data[[:space:]]+([^[:space:]]+).*/\2/p')"
 fi
 case "$NODE_ARGS" in *'"'*) echo "--node-args must not contain double quotes (the unit line is double-quoted)" >&2; exit 2 ;; esac
+# The whole property is ONE argv token to the JVM, so it is double-quoted in the unit (systemd
+# honours quotes). Built here as a plain string: quotes inside a ${var:+…} expansion in the
+# heredoc would be treated as shell quoting (stripped) or written as literal backslashes.
+ARGS_OPT="\"-Dparlons.node.args=$NODE_ARGS\""
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
 
@@ -245,7 +249,7 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
     -Dparlons.node.rootnode=$ROOTNODE}${PASSFILE:+ \\
     -Dparlons.node.passphrase.file=$PASSFILE}${NODE_ARGS:+ \\
-    \"-Dparlons.node.args=$NODE_ARGS\"} \\
+    $ARGS_OPT} \\
     -jar /opt/maxima/parlons-node.jar
 Restart=on-failure
 RestartSec=10
