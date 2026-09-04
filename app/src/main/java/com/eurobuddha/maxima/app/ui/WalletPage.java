@@ -1061,8 +1061,9 @@ public final class WalletPage implements Page {
         body.setOrientation(LinearLayout.VERTICAL);
 
         TextView explain = sub("Your Minima MegaMMR node endpoint + token. Default is the "
-                + "hosted relay; point it at your own node to self-host. Your seed never "
-                + "leaves this phone.");
+                + "Parlons fleet (" + com.eurobuddha.maxima.app.wallet.WalletPublisher.fleetGatewayUrls().length
+                + " nodes, automatic failover); point it at your own Parlons Node to self-host. "
+                + "Your seed never leaves this phone.");
         explain.setPadding(0, 0, 0, dp(12));
         body.addView(explain);
 
@@ -1082,7 +1083,7 @@ public final class WalletPage implements Page {
 
         TextView save = primaryButton("Save node");
         body.addView(save, marginBottom(dp(8)));
-        TextView reset = ghostButton("Reset to hosted relay");
+        TextView reset = ghostButton("Reset to the Parlons fleet");
         body.addView(reset);
 
         BottomSheetDialog d = sheet("Wallet node", body);
@@ -1097,7 +1098,7 @@ public final class WalletPage implements Page {
             com.eurobuddha.maxima.app.wallet.WalletPublisher.saveGateway(mAct, "", "");
             rebuildPublisher();
             d.dismiss();
-            mAct.toast("Reset to hosted relay");
+            mAct.toast("Reset to the Parlons fleet");
         });
     }
 

@@ -27,11 +27,24 @@ public final class WalletPublisher {
         void onError(String msg);
     }
 
-    /** The shared-public gateway credential, deliberately shipped (read+relay only,
-     *  cannot move funds - see freezepeach-wallet-node/proxy.js allowlist). */
-    static final String DEFAULT_GATEWAY_URL = "https://relay.privateprivate.org/cmd";
-    static final String DEFAULT_GATEWAY_TOKEN =
-            "c9e6177419dc7e0f200390152c6296e2180fd317071c83f8db74ceab61286188";
+    /**
+     * The Parlons FLEET — MegaMMR Parlons Nodes, each serving a read+relay-only {@code /cmd}
+     * gateway behind TLS. Tried in order with automatic failover (see GatewayNode). The token is
+     * a shared-public credential, deliberately shipped: the gateway cannot move funds (allow-list
+     * of reads + relay of pre-signed txns), it only keeps anonymous scrapers off the nodes.
+     */
+    static final String[] FLEET_GATEWAY_URLS = {
+            "https://store.eurobuddha.com/parlons-node/cmd",   // sally      - Amsterdam, NL
+            "https://eurobuddha.com/parlons-node/cmd",         // eurobuddha - Helsinki, FI
+    };
+    static final String FLEET_GATEWAY_TOKEN =
+            "9cb300300968390a91c2b998720b1385f6851242e48ab3021e724536ac9d4468";
+    /** The first fleet node doubles as "the default" the Wallet-node sheet displays. */
+    static final String DEFAULT_GATEWAY_URL = FLEET_GATEWAY_URLS[0];
+    static final String DEFAULT_GATEWAY_TOKEN = FLEET_GATEWAY_TOKEN;
+    /** The pre-0.6.49 default (the hosted proxy on maxlite). A phone that once "reset" to it
+     *  stored this literal string; treat it as "the default" so such phones follow the fleet. */
+    static final String LEGACY_GATEWAY_URL = "https://relay.privateprivate.org/cmd";
 
     private static final String CORE_PKG = "org.minimarex.minimacore";
 
@@ -47,9 +60,28 @@ public final class WalletPublisher {
 
     public WalletPublisher(Context zCtx, NodeLink zNodeOrNull) {
         mCtx = zCtx.getApplicationContext();
-        mGateway = new GatewayNode(gatewayUrl(zCtx), gatewayToken(zCtx),
-                new Handler(Looper.getMainLooper()));
+        Handler main = new Handler(Looper.getMainLooper());
+        String url = gatewayUrl(zCtx);
+        if (usesDefaultGateway(zCtx)) {
+            // The fleet, with failover. A user-configured node is a single fixed endpoint.
+            java.util.List<GatewayNode.Endpoint> eps = new java.util.ArrayList<>();
+            for (String u : FLEET_GATEWAY_URLS) eps.add(new GatewayNode.Endpoint(u, FLEET_GATEWAY_TOKEN));
+            mGateway = new GatewayNode(eps, main);
+        } else {
+            mGateway = new GatewayNode(url, gatewayToken(zCtx), main);
+        }
         mNode = zNodeOrNull;
+    }
+
+    /** True when the wallet follows the shipped default (the fleet) rather than a user's own node. */
+    public static boolean usesDefaultGateway(Context zCtx) {
+        String url = gatewayUrl(zCtx);
+        return url.isEmpty() || DEFAULT_GATEWAY_URL.equals(url) || LEGACY_GATEWAY_URL.equals(url);
+    }
+
+    /** The gateway URL in use right now (the fleet node that last answered, or the user's node). */
+    public String activeGatewayUrl() {
+        return mGateway.currentUrl();
     }
 
     /** Is minimaCore installed on this phone at all? */
@@ -368,8 +400,11 @@ public final class WalletPublisher {
 
     public static String currentGatewayToken(Context zCtx) { return gatewayToken(zCtx); }
 
-    /** The shipped default hosted MegaMMR endpoint (shown as the reset target). */
+    /** The shipped default (the first Parlons fleet node; shown as the reset target). */
     public static String defaultGatewayUrl()   { return DEFAULT_GATEWAY_URL; }
+
+    /** Every fleet gateway, in failover order (full URLs, for display). */
+    public static String[] fleetGatewayUrls()  { return FLEET_GATEWAY_URLS.clone(); }
 
     public static String defaultGatewayToken() { return DEFAULT_GATEWAY_TOKEN; }
 

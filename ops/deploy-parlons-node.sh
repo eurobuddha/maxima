@@ -335,42 +335,11 @@ if (ss -ltn 2>/dev/null || netstat -ltn) | grep -q ":$GW_PORT "; then
 fi
 REMOTE
 
-# ---- 6b. seed the MegaMMR from a published snapshot (optional) -------------
-if [ -n "$MEGA_SEED" ]; then
-    echo "[6b]  MegaMMR seed"
-    if [ "$RPC" != true ] || [ "$MEGAMMR" != true ]; then
-        echo "      --megammr-seed needs --rpc (import runs over the node's loopback RPC) and MegaMMR on; skipping" >&2
-    else
-        $SSH "bash -s" <<REMOTE
-set -e
-RPC_PORT=$((P2P_PORT + 4))
-mmr=/var/lib/parlons-node/1.1/databases/megammr.mmr
-size=\$(stat -c %s "\$mmr" 2>/dev/null || echo 0)
-if [ "\$size" -gt 1048576 ]; then
-    echo "      MegaMMR already populated (\$size bytes) - nothing to do"
-    exit 0
-fi
-echo "      MegaMMR is empty (\$size bytes) - downloading $MEGA_SEED"
-cd /var/lib/parlons-node
-rm -f mega.mmr
-wget -q --timeout=60 -O mega.mmr "$MEGA_SEED"
-chown maxima:maxima mega.mmr
-echo "      downloaded \$(stat -c %s mega.mmr) bytes; importing over loopback RPC :\$RPC_PORT"
-for i in \$(seq 1 30); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
-out=\$(curl -s -m 3600 "http://127.0.0.1:\$RPC_PORT/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr")
-case "\$out" in *'"status":true'*) ;; *) echo "      IMPORT FAILED: \$out" >&2; exit 1 ;; esac
-echo "      import finished - restarting (import ends with a node shutdown)"
-systemctl restart parlons-node
-sleep 20
-size=\$(stat -c %s "\$mmr" 2>/dev/null || echo 0)
-if [ "\$size" -gt 1048576 ]; then echo "      MegaMMR populated: \$size bytes"; rm -f mega.mmr; else echo "      MegaMMR STILL EMPTY after import (\$size bytes)" >&2; exit 1; fi
-REMOTE
-    fi
-fi
-
-# ---- 6c. adopt an existing seed phrase (identity-preserving, one time) -----
+# ---- 6b. adopt an existing seed phrase (identity-preserving, one time) -----
+# MUST run BEFORE the MegaMMR seed: megammrsync resets the chain databases, which
+# throws away an imported MegaMMR (learned the hard way on sally + hetzner).
 if [ -n "$SEED_FROM" ]; then
-    echo "[6c]  seed adoption"
+    echo "[6b]  seed adoption"
     if [ "$RPC" != true ]; then
         echo "      --seed-from needs --rpc (resync runs over the node's loopback RPC); skipping" >&2
     else
@@ -412,6 +381,39 @@ else
     echo "      vault does NOT match $SEED_FROM after resync - investigate before trusting this node" >&2
     exit 1
 fi
+REMOTE
+    fi
+fi
+
+# ---- 6c. seed the MegaMMR from a published snapshot (optional) -------------
+if [ -n "$MEGA_SEED" ]; then
+    echo "[6c]  MegaMMR seed"
+    if [ "$RPC" != true ] || [ "$MEGAMMR" != true ]; then
+        echo "      --megammr-seed needs --rpc (import runs over the node's loopback RPC) and MegaMMR on; skipping" >&2
+    else
+        $SSH "bash -s" <<REMOTE
+set -e
+RPC_PORT=$((P2P_PORT + 4))
+mmr=/var/lib/parlons-node/1.1/databases/megammr.mmr
+size=\$(stat -c %s "\$mmr" 2>/dev/null || echo 0)
+if [ "\$size" -gt 1048576 ]; then
+    echo "      MegaMMR already populated (\$size bytes) - nothing to do"
+    exit 0
+fi
+echo "      MegaMMR is empty (\$size bytes) - downloading $MEGA_SEED"
+cd /var/lib/parlons-node
+rm -f mega.mmr
+wget -q --timeout=60 -O mega.mmr "$MEGA_SEED"
+chown maxima:maxima mega.mmr
+echo "      downloaded \$(stat -c %s mega.mmr) bytes; importing over loopback RPC :\$RPC_PORT"
+for i in \$(seq 1 30); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
+out=\$(curl -s -m 3600 "http://127.0.0.1:\$RPC_PORT/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr")
+case "\$out" in *'"status":true'*) ;; *) echo "      IMPORT FAILED: \$out" >&2; exit 1 ;; esac
+echo "      import finished - restarting (import ends with a node shutdown)"
+systemctl restart parlons-node
+sleep 20
+size=\$(stat -c %s "\$mmr" 2>/dev/null || echo 0)
+if [ "\$size" -gt 1048576 ]; then echo "      MegaMMR populated: \$size bytes"; rm -f mega.mmr; else echo "      MegaMMR STILL EMPTY after import (\$size bytes)" >&2; exit 1; fi
 REMOTE
     fi
 fi

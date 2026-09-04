@@ -87,6 +87,47 @@ then copy that file in and import it the same way.)
 read+relay only by design, so the admin RPC is the operator's only channel. It binds every
 interface but the deploy script never opens its port in the firewall — keep it that way.
 
+## 3c. Replace a box's relay with the node — keeping its identity
+
+Every fleet box already runs `maxima-server.jar` with a seed at `/var/lib/maxima/seed.txt`,
+and clients have that relay's identity pinned (`Mx…@host:port`). The node can TAKE OVER that
+role on the SAME identity — the deploy script does the whole thing:
+
+```bash
+ops/deploy-parlons-node.sh <box> --rpc --replace-relay --relay-port 9501 \
+    --peers "<the other six, host:port>" --blobstore 1024 \
+    --seed-from /var/lib/maxima/seed.txt --archive 65.109.31.226:9001 \
+    [--megammr-seed https://eurobuddha.com/mega.mmr] [--p2p-port 9101]
+```
+
+`--replace-relay` stops + disables `maxima-relay.service` (unit kept: rollback is
+`systemctl enable --now maxima-relay`). `--seed-from` makes the node adopt the relay's
+24-word phrase over the loopback admin RPC (`megammrsync action:resync host:<--archive>
+phrase:…` — resets the wallet keys to the phrase, pulls its coins from an archive/MegaMMR
+node, then the node shuts down and is restarted); the phrase never leaves the box and is
+never printed — the script only reports whether the vault matches the file. Because the
+Maxima identity is derived from the phrase the same way on both sides, the node's relay
+comes up as the SAME `Mx…` the old relay had. `--p2p-port 9101` where 9001 is already a
+stock node.
+
+The same flag migrates a **Parlons Cloud account** into the node: stop `parlons-cloud`,
+copy `node/ chat/ media/ devices.json cloud-settings.properties` from its data dir into
+`/var/lib/parlons-node/`, then deploy with `--seed-from <its seed.txt>`. Same permanent
+`MAX#`, same paired devices, same chats. The WALLET address changes (the node uses its
+default key, the cloud used key #1000 of the same phrase) — anything at the old address is
+still yours: the phrase derives it in any Parlons wallet.
+
+## 3d. The account (M5)
+
+Since node 0.2.0 every Parlons Node also runs the Parlons **account** — the exact
+`ParlonsCore` that `parlons-cloud.jar` runs — on the node's identity, with the node's own
+wallet behind it and the cape as its relay. So a Parlons Node is pairable from the Parlons
+Cloud app: the deploy summary prints the permanent account address and where the one-time
+pairing code lives (`/var/lib/parlons-node/pair-code.txt`). Knobs: `-Dparlons.account=false`
+(relay/gateway only), `-Dparlons.account.name`, `-Dparlons.account.relays`,
+`-Dparlons.account.direct`. Data layout matches the cloud's, which is what makes the
+migration above a plain copy.
+
 ## 4. Seed: fresh vs. migrated (fund-critical — do this by hand)
 
 On first boot the node **generates its own seed** at `/var/lib/parlons-node`. That
