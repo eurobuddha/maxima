@@ -13,7 +13,7 @@
 #
 #   ops/deploy-parlons-node.sh <ssh-target> [--jar FILE] [--heap 2g]
 #       [--relay-port N] [--gateway-port N] [--rootnode host:port]
-#       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]
+#       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps] [--memmax 2560M]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # What it does, in order:
@@ -35,7 +35,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -46,10 +46,15 @@ ROOTNODE=""
 GW_BIND="127.0.0.1"
 MEGAMMR="true"
 PASSFILE=""
+MEMMAX=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
         --heap)           HEAP="$2"; shift 2 ;;
+        # cgroup ceiling for the whole process (heap + metaspace + threads + direct buffers).
+        # Default = heap + 512M: a MemoryMax EQUAL to -Xmx OOM-kills the JVM as soon as its
+        # off-heap overhead shows up, which under MegaMMR is minutes, not days.
+        --memmax)         MEMMAX="$2"; shift 2 ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
@@ -75,12 +80,19 @@ VER="$(basename "$JAR" | sed -E 's/^parlons-node-?//; s/\.jar$//')"
 REMOTE_JAR="parlons-node-${VER}.jar"
 SUM="$(shasum -a 256 "$JAR" | cut -d' ' -f1)"
 # MegaMMR + chain DB is heavier than a plain relay: give the process room, and a
-# hard MemoryMax a little above the heap so a burst can't OOM the whole box.
-MEMMAX="$(printf '%s' "$HEAP" | sed -E 's/g$/G/; s/m$/M/')"
+# hard MemoryMax ABOVE the heap (heap + 512M unless --memmax) so the JVM's own
+# off-heap overhead can't trip the cgroup, while a runaway still can't take the box.
+if [ -z "$MEMMAX" ]; then
+    case "$HEAP" in
+        *g|*G) MEMMAX="$(( ${HEAP%[gG]} * 1024 + 512 ))M" ;;
+        *m|*M) MEMMAX="$(( ${HEAP%[mM]} + 512 ))M" ;;
+        *)     echo "--heap must end in m or g (got '$HEAP')" >&2; exit 2 ;;
+    esac
+fi
 
 echo "Deploying Parlons Node $VER -> $TARGET"
 echo "  jar     $JAR"
-echo "  heap    $HEAP   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   megammr=$MEGAMMR"
+echo "  heap    $HEAP (MemoryMax $MEMMAX)   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   megammr=$MEGAMMR"
 [ -n "$ROOTNODE" ] && echo "  peer    $ROOTNODE" || echo "  peer    (none set — node won't sync; pass --rootnode host:port)"
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
