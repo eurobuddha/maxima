@@ -55,21 +55,33 @@ If the box's 9001 is already a stock Minima node, move the layer-1 port with
 A fresh `-megammr` node syncs the chain from its peer but its MegaMMR starts **empty**
 (`databases/megammr.mmr` is 20 bytes) — it only tracks coins created from now on, so
 `balance`/`coins megammr:true address:<existing>` come back EMPTY and the node is useless
-as a wallet gateway. Seed it from any MegaMMR node you control (export takes a read lock,
-no downtime there; import shuts the receiving node down when it finishes):
+as a wallet gateway. Seed it once from the nightly snapshot published at
+`https://eurobuddha.com/mega.mmr` (~460 MB, rebuilt 02:00 UTC by the Hetzner node).
+The deploy script does the whole thing when you pass the URL:
 
 ```bash
-# on the DONOR MegaMMR node (its RPC, loopback):
-curl 'http://127.0.0.1:9005/megammr%20action:export%20file:/root/donor.megammr'
-# copy the file to the new node's data dir (the service can only read under /var/lib/parlons-node):
-scp donor:/root/donor.megammr ./ && scp donor.megammr newnode:/var/lib/parlons-node/
-ssh newnode 'chown maxima:maxima /var/lib/parlons-node/donor.megammr'
-# on the NEW node (deployed with --rpc; its RPC is p2p+4, loopback via the firewall):
-ssh newnode "curl 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/donor.megammr'"
-ssh newnode 'systemctl restart parlons-node'      # import ends with a clean node shutdown
-# prove it: a known funded address must now show its coins
-ssh newnode "curl 'http://127.0.0.1:9005/coins%20megammr:true%20address:<Mx…>'"
+ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode <peer:9001> --rpc \
+    --megammr-seed https://eurobuddha.com/mega.mmr
 ```
+
+It downloads into `/var/lib/parlons-node`, runs `megammr action:import file:…` over the
+node's loopback RPC (which is why `--rpc` is required), restarts the service (import ends
+with a clean node shutdown) and proves `megammr.mmr` is no longer empty. It is skipped
+when the MegaMMR is already populated, so leaving the flag on a re-run is harmless.
+
+By hand, on the box:
+
+```bash
+cd /var/lib/parlons-node && wget -q https://eurobuddha.com/mega.mmr && chown maxima:maxima mega.mmr
+curl 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
+systemctl restart parlons-node
+# prove it: a known funded address must now show its coins
+curl 'http://127.0.0.1:9005/coins%20megammr:true%20address:<Mx…>'
+```
+
+(No snapshot at hand? Any MegaMMR node you control can produce one:
+`megammr action:export file:/root/donor.megammr` over its RPC — a read lock, no downtime —
+then copy that file in and import it the same way.)
 
 `--rpc` is what makes this (and the seed backup below) possible: the wallet gateway is
 read+relay only by design, so the admin RPC is the operator's only channel. It binds every

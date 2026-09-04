@@ -14,7 +14,7 @@
 #   ops/deploy-parlons-node.sh <ssh-target> [--jar FILE] [--heap 2g]
 #       [--relay-port N] [--gateway-port N] [--rootnode host:port]
 #       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps] [--memmax 2560M]
-#       [--p2p-port 9001] [--rpc]
+#       [--p2p-port 9001] [--rpc] [--megammr-seed https://eurobuddha.com/mega.mmr]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # What it does, in order:
@@ -32,6 +32,8 @@
 # is the operator's ONLY channel for `vault` (seed backup) and `megammr action:import`
 # (an IBD does NOT carry the MegaMMR — see cloud/NODE-SETUP.md §3b). --p2p-port moves
 # the layer-1 port off 9001 for a box whose 9001 is already a stock Minima node.
+# --megammr-seed URL (needs --rpc) fills an EMPTY MegaMMR from a published snapshot:
+# download -> `megammr action:import` over loopback RPC -> restart -> prove non-empty.
 #
 # It never prints your seed. The seed at /var/lib/parlons-node/<ver>/... is your
 # wallet AND identity — read it once with `vault` over ssh and back it up. To run
@@ -42,7 +44,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--rpc] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -56,6 +58,7 @@ PASSFILE=""
 MEMMAX=""
 P2P_PORT=9001
 RPC="false"
+MEGA_SEED=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -66,6 +69,7 @@ while [ $# -gt 0 ]; do
         --memmax)         MEMMAX="$2"; shift 2 ;;
         --p2p-port)       P2P_PORT="$2"; shift 2 ;;
         --rpc)            RPC="true"; shift ;;
+        --megammr-seed)   MEGA_SEED="$2"; shift 2 ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
@@ -290,6 +294,39 @@ if (ss -ltn 2>/dev/null || netstat -ltn) | grep -q ":$GW_PORT "; then
     echo "      wallet gateway listening on ${GW_BIND}:$GW_PORT"
 fi
 REMOTE
+
+# ---- 6b. seed the MegaMMR from a published snapshot (optional) -------------
+if [ -n "$MEGA_SEED" ]; then
+    echo "[6b]  MegaMMR seed"
+    if [ "$RPC" != true ] || [ "$MEGAMMR" != true ]; then
+        echo "      --megammr-seed needs --rpc (import runs over the node's loopback RPC) and MegaMMR on; skipping" >&2
+    else
+        $SSH "bash -s" <<REMOTE
+set -e
+RPC_PORT=$((P2P_PORT + 4))
+mmr=/var/lib/parlons-node/1.1/databases/megammr.mmr
+size=\$(stat -c %s "\$mmr" 2>/dev/null || echo 0)
+if [ "\$size" -gt 1048576 ]; then
+    echo "      MegaMMR already populated (\$size bytes) - nothing to do"
+    exit 0
+fi
+echo "      MegaMMR is empty (\$size bytes) - downloading $MEGA_SEED"
+cd /var/lib/parlons-node
+rm -f mega.mmr
+wget -q --timeout=60 -O mega.mmr "$MEGA_SEED"
+chown maxima:maxima mega.mmr
+echo "      downloaded \$(stat -c %s mega.mmr) bytes; importing over loopback RPC :\$RPC_PORT"
+for i in \$(seq 1 30); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
+out=\$(curl -s -m 3600 "http://127.0.0.1:\$RPC_PORT/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr")
+case "\$out" in *'"status":true'*) ;; *) echo "      IMPORT FAILED: \$out" >&2; exit 1 ;; esac
+echo "      import finished - restarting (import ends with a node shutdown)"
+systemctl restart parlons-node
+sleep 20
+size=\$(stat -c %s "\$mmr" 2>/dev/null || echo 0)
+if [ "\$size" -gt 1048576 ]; then echo "      MegaMMR populated: \$size bytes"; rm -f mega.mmr; else echo "      MegaMMR STILL EMPTY after import (\$size bytes)" >&2; exit 1; fi
+REMOTE
+    fi
+fi
 
 # ---- 7. hand over the details --------------------------------------------
 echo "[7/7] node details"
