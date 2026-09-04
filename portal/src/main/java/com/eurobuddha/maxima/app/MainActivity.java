@@ -197,6 +197,14 @@ public final class MainActivity extends AppCompatActivity {
         if (mLock != null) {
             mLock.onResume();
         }
+        // The connection outlives this activity (PortalService holds it): start from the last
+        // known state so re-entering the app shows "online" at once, not "connecting…" for a
+        // round-trip. A reconnect or a stale reading falls back to the honest unknown.
+        int known = CloudSession.lastReach();
+        if (known >= 0) {
+            mReach = known;
+            if (CloudSession.lastHosts() >= 0) mHosts = CloudSession.lastHosts();
+        }
         // A reconnect (network change / dead heartbeat) flips the pill to "connecting…" at once
         // and re-polls immediately when it finishes, instead of waiting out the 4s cadence.
         CloudSession.setStateListener(() -> mHandler.post(() -> {
@@ -268,8 +276,10 @@ public final class MainActivity extends AppCompatActivity {
         if (!mPolling && now - mLastPoll > 4000) {
             mPolling = true;
             // node.status is one round-trip that gives BOTH reachability and the attached-host
-            // count for the pill (ping only told us up/down).
-            CloudSession.connect(this, new CloudSession.Cb() {
+            // count for the pill (ping only told us up/down). INTERACTIVE lane: the background
+            // lane carries the pages' bulk fetches, and a pill queued behind them read as
+            // "reconnecting" for 20-30s on every re-entry.
+            CloudSession.connectInteractive(this, new CloudSession.Cb() {
                 public void ok(ParlonsRemote r) {
                     int res, hosts = -1;
                     try {
@@ -284,6 +294,7 @@ public final class MainActivity extends AppCompatActivity {
                         res = 0;
                     }
                     final int fres = res, fhosts = hosts;
+                    CloudSession.noteReach(fres, fhosts);
                     runOnUiThread(() -> {
                         mReach = fres;
                         if (fhosts >= 0) {

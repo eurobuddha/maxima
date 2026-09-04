@@ -261,6 +261,27 @@ public final class CloudSession {
     /** Drop the connection AND everything cached from it (re-pair / unpair / account switch).
      *  Clearing the cache_* keys matters twice over: a stale warm address must never probe the
      *  old account, and a new account must never instant-paint the previous account's chats. */
+    // ---- last known account state: the pill shows it INSTANTLY on re-entry ----
+    // The connection lives in PortalService and survives the activity; only the activity's
+    // knowledge of it was lost every time it was recreated, so the pill sat on "connecting…"
+    // for one status round-trip (queued behind the Chats page's fetches — 25s seen).
+
+    private static volatile int sLastReach = -1, sLastHosts = -1;
+    private static volatile long sLastReachAt;
+
+    public static void noteReach(int zReach, int zHosts) {
+        sLastReach = zReach;
+        if (zHosts >= 0) sLastHosts = zHosts;
+        sLastReachAt = System.currentTimeMillis();
+    }
+
+    /** Last polled reachability if fresh (under 2 min) and the connection is still held. */
+    public static int lastReach() {
+        return (sRemote != null && System.currentTimeMillis() - sLastReachAt < 120_000) ? sLastReach : -1;
+    }
+
+    public static int lastHosts() { return sLastHosts; }
+
     // ---- network-change / dead-connection recovery ----
 
     /** UI hook: fired (on the calling thread) when a reconnect starts and when it finishes. */
@@ -286,6 +307,7 @@ public final class CloudSession {
             return;
         }
         android.util.Log.i("ParlonsCloud", "[portal] reconnect: " + zWhy);
+        sLastReach = -1;
         Runnable l = sStateListener;
         if (l != null) { try { l.run(); } catch (Exception ignored) { } }
         IO.execute(() -> {
