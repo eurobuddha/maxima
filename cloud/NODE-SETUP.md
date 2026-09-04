@@ -75,10 +75,20 @@ The node exposes a hardened `POST /cmd` proxy — the server side of the phone's
 relay of a phone's **pre-signed** txn pass; `send`/`vault`/`keys`/`sign`/`quit` are
 refused. It binds **loopback by default** — put TLS in front.
 
-**Caddy** (recommended), on the same box:
+**Caddy** (recommended), on the same box — **include the `rate_limit` block**: behind a
+loopback front every request looks like `127.0.0.1` to the node, so per-IP throttling
+there is moot; Caddy is where real per-client limiting happens (the node keeps a global
+backstop, below):
 
 ```
 wallet.example.com {
+    rate_limit {
+        zone phones {
+            key    {remote_host}
+            events 60
+            window 1m
+        }
+    }
     reverse_proxy 127.0.0.1:9585
 }
 ```
@@ -88,7 +98,25 @@ bearer token printed by the deploy script (`/var/lib/parlons-node/gateway-token.
 owner-only). The token is read+relay only — it cannot move the node's funds — but
 keep it off shared channels.
 
+The node ALSO rate-limits itself: a **global** token bucket (the backstop that works
+even when all traffic is loopback) plus a **per-IP** bucket (meaningful only with
+`--gateway-public`). Tune with `-Dparlons.gateway.rate.global=<req/sec>` (default 50)
+and `-Dparlons.gateway.rate.perip=<req/sec>` (default 10); `0` disables either.
+
 `--gateway-public` exposes the gateway port directly (no TLS) — only for testing.
+
+### Locked node → supply the passphrase
+
+The cape + wallet + gateway derive from the node's seed, so a **password-locked** node
+must be unlocked or they never start (the node itself keeps running; the journal says
+so). Supply the passphrase out-of-band — never on the command line (argv is world-
+readable via `ps`). Either:
+
+- a systemd `EnvironmentFile` (mode 600) setting `PARLONS_NODE_PASSPHRASE=…`, or
+- `-Dparlons.node.passphrase.file=/path/to/pass.txt` (mode 600).
+
+The node unlocks once on boot (`vault action:passwordunlock`). A node started unlocked
+needs none of this.
 
 ## 6. Make the fleet the phone default (last step, after ≥2 nodes are live + synced)
 

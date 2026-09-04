@@ -50,10 +50,11 @@ public final class NodeGateway {
     private final int mPort;
     private final String mBindHost;
     private final String mToken;
+    private final RateLimiter mLimiter;
     private HttpServer mServer;
 
-    private NodeGateway(String zBindHost, int zPort, String zToken) {
-        mBindHost = zBindHost; mPort = zPort; mToken = zToken;
+    private NodeGateway(String zBindHost, int zPort, String zToken, RateLimiter zLimiter) {
+        mBindHost = zBindHost; mPort = zPort; mToken = zToken; mLimiter = zLimiter;
     }
 
     /**
@@ -79,7 +80,20 @@ public final class NodeGateway {
                 } catch (UnsupportedOperationException ignored) { /* non-POSIX FS */ }
             }
         }
-        return new NodeGateway(bind, zPort, token);
+        // Rate limits (requests/sec; 0 disables). The GLOBAL bucket is the backstop that matters
+        // behind a loopback TLS front (all traffic looks like 127.0.0.1 there, so per-IP is moot —
+        // Caddy's own rate_limit does the per-client work; see NODE-SETUP.md). The PER-IP bucket
+        // protects --gateway-public / direct-exposure mode.
+        double globalRate = doubleProp("parlons.gateway.rate.global", 50);
+        double perIpRate  = doubleProp("parlons.gateway.rate.perip", 10);
+        return new NodeGateway(bind, zPort, token, new RateLimiter(globalRate, perIpRate));
+    }
+
+    private static double doubleProp(String zKey, double zDefault) {
+        try {
+            String v = System.getProperty(zKey);
+            return (v == null || v.trim().isEmpty()) ? zDefault : Double.parseDouble(v.trim());
+        } catch (NumberFormatException e) { return zDefault; }
     }
 
     public String token() { return mToken; }
@@ -101,6 +115,10 @@ public final class NodeGateway {
 
     private void handleCmd(HttpExchange ex) throws IOException {
         try {
+            // Throttle BEFORE auth so an unauthenticated flood is cheap to shed.
+            String clientIp = ex.getRemoteAddress() == null ? "?"
+                    : ex.getRemoteAddress().getAddress().getHostAddress();
+            if (!mLimiter.allow(clientIp)) { fail(ex, 429, "rate limit exceeded"); return; }
             if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) { fail(ex, 405, "POST only"); return; }
             // Bearer auth — constant-time compare so a wrong token leaks no timing.
             String auth = ex.getRequestHeaders().getFirst("Authorization");
@@ -190,5 +208,62 @@ public final class NodeGateway {
         int r = 0;
         for (int i = 0; i < ab.length; i++) r |= ab[i] ^ bb[i];
         return r == 0;
+    }
+
+    // ── rate limiting ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Token-bucket limiter: a GLOBAL bucket (a hard ceiling on total request rate, the backstop that
+     * works even when every request arrives from the loopback TLS front) plus an optional PER-IP
+     * bucket (meaningful only when the gateway is exposed directly). Also bounds the tracked-command
+     * DB-growth abuse (newscript/coinimport spam) by capping request rate. Thread-safe.
+     */
+    static final class RateLimiter {
+        private final double mPerIpRate;
+        private final Bucket mGlobal;
+        private final java.util.concurrent.ConcurrentHashMap<String, Bucket> mPerIp =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        private static final int MAX_IPS = 8192;
+
+        RateLimiter(double zGlobalRate, double zPerIpRate) {
+            mPerIpRate = zPerIpRate;
+            mGlobal = zGlobalRate > 0 ? new Bucket(zGlobalRate) : null;
+        }
+
+        boolean allow(String zIp) {
+            if (mGlobal != null && !mGlobal.tryAcquire()) return false;
+            if (mPerIpRate > 0) {
+                Bucket b = mPerIp.get(zIp);
+                if (b == null) {
+                    if (mPerIp.size() >= MAX_IPS) mPerIp.clear();   // bound memory; crude periodic reset
+                    b = mPerIp.computeIfAbsent(zIp, k -> new Bucket(mPerIpRate));
+                }
+                if (!b.tryAcquire()) return false;
+            }
+            return true;
+        }
+    }
+
+    /** A single token bucket: {@code rate} tokens/sec, burst capacity = 2s worth. Monotonic clock. */
+    static final class Bucket {
+        private final double mCapacity;
+        private final double mRefillPerNano;
+        private double mTokens;
+        private long mLastNanos;
+
+        Bucket(double zRatePerSec) {
+            mCapacity = Math.max(1.0, zRatePerSec * 2.0);
+            mRefillPerNano = zRatePerSec / 1_000_000_000.0;
+            mTokens = mCapacity;
+            mLastNanos = System.nanoTime();
+        }
+
+        synchronized boolean tryAcquire() {
+            long now = System.nanoTime();
+            mTokens = Math.min(mCapacity, mTokens + (now - mLastNanos) * mRefillPerNano);
+            mLastNanos = now;
+            if (mTokens >= 1.0) { mTokens -= 1.0; return true; }
+            return false;
+        }
     }
 }

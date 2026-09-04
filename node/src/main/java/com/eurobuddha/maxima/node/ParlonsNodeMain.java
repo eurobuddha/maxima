@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.minima.system.Main;
 import org.minima.system.commands.CommandRunner;
@@ -87,10 +88,10 @@ public final class ParlonsNodeMain {
         final Main main = new Main();
 
         // --- the phone-facing wallet gateway (M3): hardened read+relay /cmd proxy over the node ---
-        final NodeGateway[] gatewayHolder = new NodeGateway[1];
+        final AtomicReference<NodeGateway> gatewayHolder = new AtomicReference<>();
 
         // --- co-boot the Parlons Maxima relay + wallet gateway on the node's OWN seed, once ready ---
-        final RelayRuntime[] relayHolder = new RelayRuntime[1];
+        final AtomicReference<RelayRuntime> relayHolder = new AtomicReference<>();
         Thread capeThread = new Thread(() -> {
             try {
                 // deriveMaximaIdentityFromNode() only returns once the node wallet is initialised
@@ -101,7 +102,7 @@ public final class ParlonsNodeMain {
                         System.getProperty("parlons.relay.host", ""), relayDir);
                 relay.setPool(true);   // a VPS node is always-on + public => a permanent-anchor host
                 relay.start();
-                relayHolder[0] = relay;
+                relayHolder.set(relay);
                 System.out.println("[parlons-node] Maxima cape up on port " + RELAY_PORT
                         + " — identity " + identity.mxIdentity()
                         + " (derived from the node seed; one seed drives both)");
@@ -116,7 +117,7 @@ public final class ParlonsNodeMain {
                 try {
                     NodeGateway gw = NodeGateway.create(dataFolder.toPath(), gatewayPort);
                     gw.start();
-                    gatewayHolder[0] = gw;
+                    gatewayHolder.set(gw);
                     System.out.println("[parlons-node] wallet gateway up on " + gw.bindHost() + ":"
                             + gw.port() + "/cmd (megammr=" + GeneralParams.IS_MEGAMMR
                             + ", bearer token in " + dataFolder + "/gateway-token.txt)");
@@ -132,8 +133,10 @@ public final class ParlonsNodeMain {
 
         // --- single shutdown hook stops ALL halves cleanly ---
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try { if (gatewayHolder[0] != null) gatewayHolder[0].stop(); } catch (Throwable ignored) {}
-            try { if (relayHolder[0]   != null) relayHolder[0].stop();   } catch (Throwable ignored) {}
+            NodeGateway gw = gatewayHolder.get();
+            RelayRuntime rl = relayHolder.get();
+            try { if (gw != null) gw.stop(); } catch (Throwable ignored) {}
+            try { if (rl != null) rl.stop(); } catch (Throwable ignored) {}
             try { main.shutdown(); } catch (Throwable ignored) {}
         }));
 
@@ -149,8 +152,8 @@ public final class ParlonsNodeMain {
                     Object block  = (chain instanceof JSONObject) ? ((JSONObject) chain).get("block")  : "?";
                     System.out.println("[parlons-node] heartbeat: node block=" + block
                             + " chainlen=" + length
-                            + " | cape=" + (relayHolder[0]   == null ? "down" : "up:" + RELAY_PORT)
-                            + " | gateway=" + (gatewayHolder[0] == null ? "down" : "up:" + gatewayPort));
+                            + " | cape=" + (relayHolder.get()   == null ? "down" : "up:" + RELAY_PORT)
+                            + " | gateway=" + (gatewayHolder.get() == null ? "down" : "up:" + gatewayPort));
                 } catch (InterruptedException ie) {
                     return;
                 } catch (Throwable t) {
@@ -168,8 +171,14 @@ public final class ParlonsNodeMain {
      * Derive the Maxima comms identity from the node's own BIP39 seed. The node owns the seed
      * (wallet-grade); we read its 24-word phrase via the in-process {@code vault} command and feed
      * it to {@link MaximaIdentity#fromPhrase}. Blocks until the node's wallet is initialised.
+     *
+     * <p>A password-LOCKED node keeps the seed encrypted, so the cape/wallet/gateway can't come up
+     * until it is unlocked. Supply the passphrase out-of-band and this unlocks once: env
+     * {@code PARLONS_NODE_PASSPHRASE} or a file via {@code -Dparlons.node.passphrase.file} (both keep
+     * the secret out of argv/ps — a systemd {@code EnvironmentFile} mode 600 is the intended path).
      */
     private static MaximaIdentity deriveMaximaIdentityFromNode() throws Exception {
+        boolean unlockTried = false;
         for (int i = 0; i < 60; i++) {
             try {
                 JSONObject res = CommandRunner.getRunner().runSingleCommand("vault");
@@ -177,6 +186,11 @@ public final class ParlonsNodeMain {
                 if (resp instanceof JSONObject) {
                     Object phrase = ((JSONObject) resp).get("phrase");
                     Object locked = ((JSONObject) resp).get("locked");
+                    if (Boolean.TRUE.equals(locked) && !unlockTried) {
+                        unlockTried = true;               // one attempt — a wrong pass shouldn't loop
+                        tryUnlockNode();
+                        continue;                         // re-read the (now hopefully unlocked) vault
+                    }
                     if (phrase instanceof String && !((String) phrase).isEmpty()
                             && !Boolean.TRUE.equals(locked)) {
                         List<String> words = Arrays.asList(((String) phrase).trim().split("\\s+"));
@@ -188,7 +202,49 @@ public final class ParlonsNodeMain {
             }
             Thread.sleep(2000);
         }
-        throw new IllegalStateException("node seed (vault) not available after 120s — cannot derive Maxima identity");
+        throw new IllegalStateException("node seed (vault) not available after 120s — cannot derive "
+                + "Maxima identity (a password-locked node needs PARLONS_NODE_PASSPHRASE or "
+                + "-Dparlons.node.passphrase.file — see cloud/NODE-SETUP.md)");
+    }
+
+    /** Unlock a password-locked node once, using an out-of-band passphrase (env or file). */
+    private static void tryUnlockNode() {
+        String pass = readPassphrase();
+        if (pass == null || pass.isEmpty()) {
+            System.out.println("[parlons-node] node is password-locked but no passphrase provided "
+                    + "(PARLONS_NODE_PASSPHRASE / -Dparlons.node.passphrase.file) — cape/gateway will wait");
+            return;
+        }
+        // Operator-supplied, but still refuse a value that could break out of the command string.
+        if (pass.matches(".*[\";\\s].*")) {
+            System.out.println("[parlons-node] passphrase contains whitespace/quote/';' — unsupported "
+                    + "by the vault command; not attempting unlock");
+            return;
+        }
+        try {
+            JSONObject r = CommandRunner.getRunner()
+                    .runSingleCommand("vault action:passwordunlock password:" + pass);
+            System.out.println("[parlons-node] node unlock attempted — status="
+                    + (r == null ? "?" : r.get("status")));
+        } catch (Throwable t) {
+            System.out.println("[parlons-node] node unlock failed: " + t);
+        }
+    }
+
+    /** Passphrase from a file ({@code -Dparlons.node.passphrase.file}) or env {@code PARLONS_NODE_PASSPHRASE}. */
+    private static String readPassphrase() {
+        String file = System.getProperty("parlons.node.passphrase.file", "").trim();
+        if (!file.isEmpty()) {
+            try {
+                return new String(java.nio.file.Files.readAllBytes(new File(file).toPath()),
+                        java.nio.charset.StandardCharsets.UTF_8).trim();
+            } catch (Throwable t) {
+                System.out.println("[parlons-node] could not read passphrase file " + file + ": " + t);
+                return null;
+            }
+        }
+        String env = System.getenv("PARLONS_NODE_PASSPHRASE");
+        return env == null ? null : env.trim();
     }
 
     /**
