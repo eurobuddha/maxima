@@ -120,7 +120,10 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         final int barTop = appbar.getPaddingTop();
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(bars.left, 0, bars.right, bars.bottom);
+            // The keyboard is an inset too: pad by whichever is taller so a field near the
+            // bottom of a page (search, wallet) is never typed into blind.
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, 0, bars.right, Math.max(bars.bottom, ime.bottom));
             appbar.setPadding(appbar.getPaddingLeft(), barTop + bars.top,
                     appbar.getPaddingRight(), appbar.getPaddingBottom());
             return WindowInsetsCompat.CONSUMED;

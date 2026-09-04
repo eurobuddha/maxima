@@ -331,6 +331,16 @@ public final class Kit {
         if (bs != null) {
             bs.setBackgroundColor(Color.TRANSPARENT);
         }
+        // Keyboard: a sheet with a field must RISE above it, not sit under it (the
+        // "add a contact" / send / wallet-node sheets all suffered). ADJUST_RESIZE on the
+        // dialog window shrinks the sheet to the space above the keyboard; EXPANDED keeps
+        // the whole sheet (field AND its button) in that space instead of a half peek.
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+        d.getBehavior().setState(com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED);
+        d.getBehavior().setSkipCollapsed(true);
         d.show();
         return d;
     }
