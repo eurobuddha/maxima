@@ -223,7 +223,8 @@ order with automatic failover (`GatewayNode`): a transport failure or a 5xx move
 node; a publish pins ONE node for its whole txnimport → txnbasics → txnpost. All fleet
 gateways share one read+relay token (`/var/lib/parlons-node/gateway-token.txt`, identical on
 every gateway box — a new gateway node gets that file, not a fresh one). The old hosted proxy
-(`relay.privateprivate.org/cmd` on maxlite) is still up for pre-0.6.49 phones and other apps.
+(`relay.privateprivate.org/cmd` on maxlite) is still up for pre-0.6.49 phones. Parlons Desktop
+1.5.34 uses the same fleet list + failover (`DesktopWalletPublisher`); FreezePeach is deprecated.
 
 ### The fleet (2026-09-04)
 

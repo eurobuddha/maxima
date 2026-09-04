@@ -28,10 +28,21 @@ public final class DesktopWalletPublisher {
         void onError(String msg);
     }
 
-    // The shipped read+relay-only gateway (same as the phone; cannot move funds).
-    static final String DEFAULT_GATEWAY_URL = "https://relay.privateprivate.org/cmd";
-    static final String DEFAULT_GATEWAY_TOKEN =
-            "c9e6177419dc7e0f200390152c6296e2180fd317071c83f8db74ceab61286188";
+    // The Parlons FLEET — MegaMMR Parlons Nodes behind TLS, tried in order with failover
+    // (same list + shared read+relay token as the phone's WalletPublisher; cannot move funds).
+    static final String[] FLEET_GATEWAY_URLS = {
+            "https://store.eurobuddha.com/parlons-node/cmd",   // sally      - Amsterdam, NL
+            "https://eurobuddha.com/parlons-node/cmd",         // eurobuddha - Helsinki, FI
+    };
+    static final String FLEET_GATEWAY_TOKEN =
+            "9cb300300968390a91c2b998720b1385f6851242e48ab3021e724536ac9d4468";
+    static final String DEFAULT_GATEWAY_URL = FLEET_GATEWAY_URLS[0];
+    static final String DEFAULT_GATEWAY_TOKEN = FLEET_GATEWAY_TOKEN;
+    /** The pre-1.5.34 default (the hosted proxy on maxlite): a desktop that stored this literal
+     *  as its "own" URL follows the fleet too. */
+    static final String LEGACY_GATEWAY_URL = "https://relay.privateprivate.org/cmd";
+    /** Index of the fleet node that last answered — every new call tries it first. */
+    private volatile int mCurrent = 0;
 
     private static final Preferences PREFS =
             Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
@@ -55,6 +66,17 @@ public final class DesktopWalletPublisher {
 
     private String gatewayUrl() { return PREFS.get("gateway_url", DEFAULT_GATEWAY_URL); }
     private String gatewayToken() { return PREFS.get("gateway_token", DEFAULT_GATEWAY_TOKEN); }
+
+    /** True when the wallet follows the shipped default (the fleet), not the user's own node. */
+    private boolean usesFleet() {
+        String u = gatewayUrl();
+        return u.isEmpty() || DEFAULT_GATEWAY_URL.equals(u) || LEGACY_GATEWAY_URL.equals(u);
+    }
+
+    /** The gateway URL in use right now (fleet node that last answered, or the user's own). */
+    public String activeGatewayUrl() {
+        return usesFleet() ? FLEET_GATEWAY_URLS[Math.min(mCurrent, FLEET_GATEWAY_URLS.length - 1)] : gatewayUrl();
+    }
 
     // ---- the uniform surface (mirrors the phone's WalletPublisher) ----
 
@@ -87,42 +109,46 @@ public final class DesktopWalletPublisher {
     /** Publish a LOCALLY-SIGNED txn: txnimport → txnbasics → txnpost. All off-EDT. */
     public void publish(final String zImportCmd, final String zId, final String zPostCmd, final Cb zCb) {
         io.execute(() -> {
+            // ONE node for the whole sequence: the imported txn lives on that node, so a
+            // mid-way failover would leave it half-built there (and txndelete must reach it).
+            final int pin = mCurrent;
             try {
-                JSONObject r1 = one(zImportCmd);
+                JSONObject r1 = one(pin, zImportCmd);
                 if (!r1.optBoolean("status", false)) {
                     // import failed — no row to clean, but harmless to try.
-                    cleanupTxn(zId);
+                    cleanupTxn(pin, zId);
                     fail(zCb, "txnimport: " + r1.optString("error", r1.toString()));
                     return;
                 }
-                JSONObject r2 = one("txnbasics id:" + zId);
+                JSONObject r2 = one(pin, "txnbasics id:" + zId);
                 if (!r2.optBoolean("status", false)) {
-                    cleanupTxn(zId);
+                    cleanupTxn(pin, zId);
                     fail(zCb, "txnbasics: " + r2.optString("error", r2.toString()));
                     return;
                 }
-                JSONObject r3 = one(zPostCmd);
+                JSONObject r3 = one(pin, zPostCmd);
                 if (!r3.optBoolean("status", false)) {
-                    cleanupTxn(zId);
+                    cleanupTxn(pin, zId);
                     fail(zCb, "txnpost: " + r3.optString("error", r3.toString()));
                     return;
                 }
                 javax.swing.SwingUtilities.invokeLater(() -> zCb.onResult(r3));
             } catch (Exception e) {
-                cleanupTxn(zId);
+                cleanupTxn(pin, zId);
                 fail(zCb, e.getMessage() == null ? e.toString() : e.getMessage());
             }
         });
     }
 
     /** Family hard rule: every txn error path runs txndelete so a failed send
-     *  never leaves a dangling signed txn row on the node/relay. Best-effort. */
-    private void cleanupTxn(String zId) {
-        try { one("txndelete id:" + zId); } catch (Exception ignored) { }
+     *  never leaves a dangling signed txn row on the node/relay. Best-effort, SAME node. */
+    private void cleanupTxn(int zPin, String zId) {
+        try { one(zPin, "txndelete id:" + zId); } catch (Exception ignored) { }
     }
 
-    private JSONObject one(String cmd) throws Exception {
-        return mNodeOrNull != null ? nodeCmd(cmd) : gatewayCmd(cmd);
+    /** A pinned call: no failover (publish sequences). */
+    private JSONObject one(int zPin, String cmd) throws Exception {
+        return mNodeOrNull != null ? nodeCmd(cmd) : gatewayCmdAt(zPin, cmd);
     }
 
     private void fail(Cb cb, String m) {
@@ -138,12 +164,52 @@ public final class DesktopWalletPublisher {
 
     // ---- gateway backend (HTTPS POST /cmd, Bearer token) ----
 
+    /** A transport-level failure (unreachable, timeout, 5xx): try the next fleet node. */
+    private static final class Unreachable extends Exception {
+        Unreachable(String m) { super(m); }
+    }
+
+    /**
+     * Free call: starts at the fleet node that last answered and fails over on transport
+     * trouble / 5xx, sticking with whichever answered. A node-reported 4xx (auth, allow-list,
+     * bad command) is NOT a reason to fail over — every fleet node would say the same. A
+     * user-configured node is a single endpoint.
+     */
     private JSONObject gatewayCmd(String command) throws Exception {
+        if (!usesFleet()) {
+            return exchange(gatewayUrl(), gatewayToken(), command);
+        }
+        int n = FLEET_GATEWAY_URLS.length;
+        int start = Math.min(mCurrent, n - 1);
+        String lastErr = "";
+        for (int a = 0; a < n; a++) {
+            int idx = (start + a) % n;
+            try {
+                JSONObject r = exchange(FLEET_GATEWAY_URLS[idx], FLEET_GATEWAY_TOKEN, command);
+                mCurrent = idx;
+                return r;
+            } catch (Unreachable u) {
+                lastErr = u.getMessage();
+            }
+        }
+        throw new Exception("no wallet node reachable (" + n + " tried): " + lastErr);
+    }
+
+    /** Pinned call: exactly one fleet node (or the user's node), no failover. */
+    private JSONObject gatewayCmdAt(int zPin, String command) throws Exception {
+        if (!usesFleet()) {
+            return exchange(gatewayUrl(), gatewayToken(), command);
+        }
+        int idx = Math.min(Math.max(zPin, 0), FLEET_GATEWAY_URLS.length - 1);
+        return exchange(FLEET_GATEWAY_URLS[idx], FLEET_GATEWAY_TOKEN, command);
+    }
+
+    private JSONObject exchange(String url, String token, String command) throws Exception {
         HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(gatewayUrl()).openConnection();
+            c = (HttpURLConnection) new URL(url).openConnection();
             c.setRequestMethod("POST");
-            c.setRequestProperty("Authorization", "Bearer " + gatewayToken());
+            c.setRequestProperty("Authorization", "Bearer " + token);
             c.setRequestProperty("Content-Type", "application/json");
             c.setDoOutput(true);
             c.setConnectTimeout(15000);
@@ -156,6 +222,10 @@ public final class DesktopWalletPublisher {
             int code = c.getResponseCode();
             InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
             String resp = readAll(is);
+            if (code >= 500) {
+                // the TLS front answered but the node behind it did not — a dead node
+                throw new Unreachable("HTTP " + code + " from " + url);
+            }
             if (code >= 400) {
                 String err;
                 try { err = new JSONObject(resp).optString("error", "HTTP " + code); }
@@ -163,6 +233,8 @@ public final class DesktopWalletPublisher {
                 throw new Exception(err);
             }
             return new JSONObject(resp);
+        } catch (java.io.IOException io) {
+            throw new Unreachable((io.getMessage() == null ? io.toString() : io.getMessage()) + " (" + url + ")");
         } finally {
             if (c != null) c.disconnect();
         }
