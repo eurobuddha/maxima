@@ -92,7 +92,12 @@ public final class MainActivity extends AppCompatActivity {
         final int barTop = appbar.getPaddingTop();
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(bars.left, 0, bars.right, bars.bottom);
+            // The KEYBOARD is an inset too. Consuming only the system bars here left the
+            // content full-height under an open keyboard, so a field at the bottom of a page
+            // (Contacts → "Add a contact") was typed into blind. Pad by whichever is taller
+            // and the pages' ScrollViews shrink above the keyboard (same as CloudChatActivity).
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, 0, bars.right, Math.max(bars.bottom, ime.bottom));
             appbar.setPadding(appbar.getPaddingLeft(), barTop + bars.top,
                     appbar.getPaddingRight(), appbar.getPaddingBottom());
             return WindowInsetsCompat.CONSUMED;

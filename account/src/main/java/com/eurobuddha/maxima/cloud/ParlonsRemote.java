@@ -59,24 +59,43 @@ public final class ParlonsRemote {
      * skips the ladder entirely — this is most of the cold-start delay.
      */
     public void connect(String zCloudAddress, String zCachedLive) throws Exception {
-        mNode.start(new ArrayList<>(Bootstrap.RELAYS), 30_000);
+        long t0 = System.currentTimeMillis();
+        int attached = mNode.start(new ArrayList<>(Bootstrap.RELAYS), 30_000);
+        long tAttach = System.currentTimeMillis();
+        int waits = 0;
         for (int i = 0; i < 10 && mNode.rpc().myAddresses().isEmpty(); i++) {
             mNode.maintain(20_000);
             Thread.sleep(1000);
+            waits++;
         }
+        long tAddr = System.currentTimeMillis();
         if (zCachedLive != null && !zCachedLive.isEmpty() && zCloudAddress.startsWith("MAX#")) {
             mCloudMax = zCloudAddress;
             mCloudLive = zCachedLive;
             try {
                 callOnce(ParlonsControl.M_PING, new JSONObject(), 8_000);
                 startPump();
+                log("connected (warm) in " + (System.currentTimeMillis() - t0) + "ms: attach "
+                        + (tAttach - t0) + "ms/" + attached + " relays, addresses " + (tAddr - tAttach)
+                        + "ms/" + waits + " waits, probe " + (System.currentTimeMillis() - tAddr) + "ms");
                 return;                       // warm reconnect — ladder skipped
             } catch (Exception probeFailed) {
                 // stale address — fall through to the full resolve
             }
         }
+        long tProbe = System.currentTimeMillis();
         resolve(zCloudAddress);
         startPump();
+        log("connected (resolved) in " + (System.currentTimeMillis() - t0) + "ms: attach "
+                + (tAttach - t0) + "ms/" + attached + " relays, addresses " + (tAddr - tAttach)
+                + "ms/" + waits + " waits, probe " + (tProbe - tAddr) + "ms, resolve "
+                + (System.currentTimeMillis() - tProbe) + "ms");
+    }
+
+    /** Timing/diagnostic line — stdout on the CLI/cloud, logcat on Android (System.out is
+     *  redirected there); never carries a secret. */
+    private static void log(String zLine) {
+        System.out.println("[remote] " + zLine);
     }
 
     /** The account's currently resolved live address — cache it for the next warm reconnect. */
@@ -147,6 +166,7 @@ public final class ParlonsRemote {
         final CompletableFuture<String> fut = new CompletableFuture<>();
         byte[] payload = (zPayload == null ? new JSONObject() : zPayload)
                 .toString().getBytes(StandardCharsets.UTF_8);
+        final long tCall = System.currentTimeMillis();
         mNode.rpc().call(mCloudLive, zMethod, payload, new RpcPeer.ResponseHandler() {
             public void onResponse(byte[] p) {
                 fut.complete(new String(p, StandardCharsets.UTF_8));
@@ -155,7 +175,11 @@ public final class ParlonsRemote {
                 fut.completeExceptionally(new RuntimeException(m));
             }
         }, zTimeoutMs);
+        long tSent = System.currentTimeMillis();
         String resp = fut.get(zTimeoutMs + 5_000, TimeUnit.MILLISECONDS);
+        log("rpc " + zMethod + ": send leg " + (tSent - tCall) + "ms, reply wait "
+                + (System.currentTimeMillis() - tSent) + "ms; to " + mCloudLive
+                + "; my addresses " + mNode.rpc().myAddresses());
         Object o = new JSONParser().parse(resp);
         return o instanceof JSONObject ? (JSONObject) o : new JSONObject();
     }

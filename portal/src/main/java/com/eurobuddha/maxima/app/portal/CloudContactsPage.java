@@ -297,6 +297,15 @@ public final class CloudContactsPage implements Page {
         mAddField.setHintTextColor(c.getColor(R.color.ux_subtext));
         mAddField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         mAddField.setTextSize(13);
+        // When the keyboard opens the page shrinks (IME insets applied by MainActivity); make
+        // sure the field it opened for is scrolled into the visible strip, buttons included.
+        mAddField.setOnFocusChangeListener((v, has) -> {
+            if (has) v.postDelayed(() -> {
+                View card = (View) v.getParent();
+                android.graphics.Rect r = new android.graphics.Rect(0, 0, card.getWidth(), card.getHeight());
+                card.requestRectangleOnScreen(r, false);
+            }, 350);
+        });
         add.addView(mAddField);
         add.addView(PortalUi.gap(c, 8));
         LinearLayout addBtns = new LinearLayout(c);

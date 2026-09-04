@@ -137,14 +137,26 @@ public final class RpcPeer {
 
             RpcEnvelope reply = mServices.dispatch(env.getId(), req);
 
-            // Answer by dialling OUT. This is the whole trick.
-            for (String addr : env.getReplyTo()) {
-                try {
-                    sendTo(addr, reply);
-                    break;
-                } catch (Exception ignored) {
-                    // try the next address - multi-homing earns its keep here
-                }
+            // Answer by dialling OUT. This is the whole trick. To EVERY address the caller
+            // advertised, in PARALLEL, with a short leash, off this (reader) thread:
+            //  - sequentially trying addr[0] first cost a full 20s socket timeout whenever the
+            //    caller's best-scoring relay was slow (a phone behind the same NAT as the Pi
+            //    relay scores it first; the Pi is a busy 32-bit box) — every RPC took 20s;
+            //  - the caller removes its pending id on the first copy, so the second copy is
+            //    dropped as unsolicited (no duplicate delivery to the app);
+            //  - this ran on the inbound reader thread inside the node's synchronized handle():
+            //    a stalled reply deafened the whole node for the duration.
+            final List<String> targets = new ArrayList<>(env.getReplyTo());
+            for (final String addr : targets) {
+                Thread t = new Thread(() -> {
+                    try {
+                        sendTo(addr, reply, REPLY_CONNECT_TIMEOUT_MS, REPLY_READ_TIMEOUT_MS);
+                    } catch (Exception ignored) {
+                        // another address carries it; a lost reply times out at the caller
+                    }
+                }, "rpc-reply");
+                t.setDaemon(true);
+                t.start();
             }
             return true;
         }
@@ -178,8 +190,17 @@ public final class RpcPeer {
         return n;
     }
 
-    /** Send an envelope to an {@code Mx...@host:port} address. */
+    /** Reply leash: a relay that cannot take the bytes in this long is not the one carrying
+     *  this reply — the parallel copy to the caller's other relay is. */
+    static final int REPLY_CONNECT_TIMEOUT_MS = 6_000;
+    static final int REPLY_READ_TIMEOUT_MS = 8_000;
+
+    /** Send an envelope to an {@code Mx...@host:port} address (sender's default timeouts). */
     private void sendTo(String zAddress, RpcEnvelope zEnvelope) throws Exception {
+        sendTo(zAddress, zEnvelope, MaximaSender.CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+    }
+
+    private void sendTo(String zAddress, RpcEnvelope zEnvelope, int zConnectMs, int zReadMs) throws Exception {
         if (!MxAddress.isValidContactAddress(zAddress)) {
             throw new IllegalArgumentException("Bad peer address: " + zAddress);
         }
@@ -198,7 +219,7 @@ public final class RpcPeer {
                 zEnvelope.toBytes(),
                 System.currentTimeMillis());
 
-        MaximaSender.Result res = MaximaSender.send(host, port, built.unit, built.msgid);
+        MaximaSender.Result res = MaximaSender.send(host, port, built.unit, built.msgid, zConnectMs, zReadMs);
         if (!res.isOk()) {
             throw new IllegalStateException("send failed: " + res.statusName);
         }
