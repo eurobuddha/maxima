@@ -258,19 +258,22 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 | 0.2.0 | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
-| eurobuddha 65.109.31.226 | 0.2.0 | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
-| megammr 192.248.151.55 | 0.2.0 | 9101 | 9501 | loopback only (no TLS front yet) | fresh |
-| vigilance 45.77.57.24 | 0.2.0 | 9101 | 9501 | none (`--no-megammr`: 8 GB box shared with the WOTS MegaMMR node) | fresh |
-| the Pi 31.125.188.214 | 0.2.0 | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`: 32-bit JVM) | fresh |
+| sally 95.179.179.181 (8 GB) | 0.2.2, heap 3g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 (64 GB) | 0.2.2, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 (32 GB) | 0.2.1, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.2, heap 2560m | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.2, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
 | maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
 | openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
 
 Every node's relay kept its old relay identity (`--seed-from` the relay's seed.txt), so nothing
 pinned to the fleet changed. maxima-lite and openproject stay on the plain relay: both have
 under 800 MB free and maxima-lite hosts the legacy gateway that older phones still use.
-Note: 9101 on the two Vultr boxes (megammr, vigilance) still needs an INBOUND rule in the Vultr
-console — they sync fine outbound-only meanwhile.
+Sizing, learned the hard way: a MegaMMR Parlons Node needs a **3g heap on an 8 GB box at
+minimum** (sally at 2g and 2560m OOM-looped and stalled; hetzner at 3g OOM-crashed and systemd's
+start limit left it DOWN); relay-only nodes need ~2.5–3g of headroom to serve IBDs to peers. A
+node that crash-loops trips `StartLimitBurst` and stays down — check `systemctl is-active
+parlons-node` after any heap change. 9101 is open in the Vultr console on megammr + vigilance.
 
 ## Ports
 
