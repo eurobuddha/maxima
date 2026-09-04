@@ -117,11 +117,12 @@ public final class NodeWallet {
 
     // ── plumbing ──────────────────────────────────────────────────────────────────────────────────
 
-    private static Object run(String zCommand) {
+    /** Run one node command in-process (package-visible: the account wallet reuses it). */
+    static JSONObject run(String zCommand) {
         return CommandRunner.getRunner().runSingleCommand(zCommand);
     }
 
-    private static JSONObject response(Object zResult) {
+    static JSONObject response(Object zResult) {
         if (zResult instanceof JSONObject) {
             Object resp = ((JSONObject) zResult).get("response");
             if (resp instanceof JSONObject) return (JSONObject) resp;

@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.1.3";
+    public static final String  NODE_VERSION = "0.2.0";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -116,6 +116,8 @@ public final class ParlonsNodeMain {
 
         // --- co-boot the Parlons Maxima relay + wallet gateway on the node's OWN seed, once ready ---
         final AtomicReference<RelayRuntime> relayHolder = new AtomicReference<>();
+        // --- M5: the Parlons ACCOUNT (pairing, control RPC, chat, push) riding the same seed ---
+        final AtomicReference<com.eurobuddha.maxima.cloud.ParlonsCore> accountHolder = new AtomicReference<>();
         Thread capeThread = new Thread(() -> {
             try {
                 // deriveMaximaIdentityFromNode() only returns once the node wallet is initialised
@@ -163,6 +165,19 @@ public final class ParlonsNodeMain {
                 } catch (Throwable gt) {
                     System.out.println("[parlons-node] wallet gateway FAILED: " + gt);
                 }
+
+                // The ACCOUNT (M5): the same ParlonsCore parlons-cloud runs, on the node's identity,
+                // with the node's own wallet behind AccountWallet and the cape as its relay. This is
+                // what makes a Parlons Node pairable from the Parlons Cloud app — "one binary IS
+                // the account". -Dparlons.account=false runs a relay/gateway-only node.
+                if (Boolean.parseBoolean(System.getProperty("parlons.account", "true"))) {
+                    try {
+                        accountHolder.set(startAccount(identity, dataFolder, relay));
+                    } catch (Throwable at) {
+                        System.out.println("[parlons-node] account layer FAILED to start: " + at);
+                        at.printStackTrace();
+                    }
+                }
             } catch (Throwable t) {
                 System.out.println("[parlons-node] Maxima cape FAILED to start: " + t);
                 t.printStackTrace();
@@ -174,6 +189,8 @@ public final class ParlonsNodeMain {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             NodeGateway gw = gatewayHolder.get();
             RelayRuntime rl = relayHolder.get();
+            com.eurobuddha.maxima.cloud.ParlonsCore acct = accountHolder.get();
+            try { if (acct != null) acct.shutdown(); } catch (Throwable ignored) {}   // leaves the cape alone
             try { if (gw != null) gw.stop(); } catch (Throwable ignored) {}
             try { if (rl != null) rl.stop(); } catch (Throwable ignored) {}
             try { main.shutdown(); } catch (Throwable ignored) {}
@@ -192,7 +209,10 @@ public final class ParlonsNodeMain {
                     System.out.println("[parlons-node] heartbeat: node block=" + block
                             + " chainlen=" + length
                             + " | cape=" + (relayHolder.get()   == null ? "down" : "up:" + RELAY_PORT)
-                            + " | gateway=" + (gatewayHolder.get() == null ? "down" : "up:" + gatewayPort));
+                            + " | gateway=" + (gatewayHolder.get() == null ? "down" : "up:" + gatewayPort)
+                            + " | account=" + (accountHolder.get() == null ? "off"
+                                    : "up:" + accountHolder.get().connectedCount() + " hosts, "
+                                      + accountHolder.get().pairing().authorizedCount() + " devices"));
                 } catch (InterruptedException ie) {
                     return;
                 } catch (Throwable t) {
@@ -204,6 +224,67 @@ public final class ParlonsNodeMain {
         // Keep the JVM alive — both halves run on their own threads.
         Object lock = new Object();
         synchronized (lock) { lock.wait(); }
+    }
+
+    /**
+     * M5 — stand up the Parlons ACCOUNT on this node: the very same {@code ParlonsCore} that
+     * {@code parlons-cloud.jar} runs, given (a) the node's identity, (b) the node's own wallet
+     * behind {@code AccountWallet} (no gateway, no key-#1000 signer — the node IS the chain),
+     * (c) the phrase straight from the node's vault for backups, and (d) the cape as its relay
+     * (the account never starts a second one). Same data-dir layout as the cloud
+     * ({@code node/}, {@code chat/}, {@code media/}, {@code devices.json}, {@code pair-code.txt},
+     * {@code cloud-settings.properties}) so a cloud account's files migrate by plain copy.
+     *
+     * <p>Knobs: {@code -Dparlons.account.name} (display name, first boot only),
+     * {@code -Dparlons.account.relays} (extra fleet relays to attach to, csv),
+     * {@code -Dparlons.account.direct} (Tier-2 direct listener port, 0 = off).
+     */
+    private static com.eurobuddha.maxima.cloud.ParlonsCore startAccount(MaximaIdentity zIdentity,
+                                                                         File zDataFolder,
+                                                                         RelayRuntime zRelay) throws Exception {
+        com.eurobuddha.maxima.cloud.ParlonsCore.Config cfg = new com.eurobuddha.maxima.cloud.ParlonsCore.Config();
+        cfg.version = NODE_VERSION;
+        cfg.logTag = "parlons-node";
+        cfg.relayPort = 0;                                   // the cape is the relay
+        cfg.directPort = Integer.getInteger("parlons.account.direct", 0);
+        cfg.publicHost = System.getProperty("parlons.relay.host", "");
+        String name = System.getProperty("parlons.account.name", "").trim();
+        cfg.displayName = name.isEmpty() ? null : name;
+        String peers = System.getProperty("parlons.relay.peers", "").trim();
+        if (!peers.isEmpty()) {
+            for (String p : peers.split(",")) if (!p.trim().isEmpty()) cfg.meshPeers.add(p.trim());
+        }
+        String relays = System.getProperty("parlons.account.relays", "").trim();
+        if (!relays.isEmpty()) {
+            for (String r : relays.split(",")) if (!r.trim().isEmpty()) cfg.extraRelays.add(r.trim());
+        }
+        com.eurobuddha.maxima.cloud.AccountBackup.Source backup = new com.eurobuddha.maxima.cloud.AccountBackup.Source() {
+            public String phrase() throws Exception { return readVaultPhrase(); }
+            public java.util.Map<String, Integer> keyUses() { return new java.util.LinkedHashMap<>(); }   // node-owned
+        };
+        com.eurobuddha.maxima.cloud.ParlonsCore core = new com.eurobuddha.maxima.cloud.ParlonsCore(
+                zIdentity, zDataFolder.toPath(), cfg, new NodeAccountWallet(zDataFolder), backup);
+        core.useExternalRelay(zRelay);
+        int hosts = core.start();
+        System.out.println("[parlons-node] account up: attached to " + hosts + " relay(s), "
+                + core.pairing().authorizedCount() + " paired device(s)"
+                + (core.pairing().authorizedCount() == 0
+                    ? " — pair the first one with the code in " + core.pairing().codeFile() : ""));
+        return core;
+    }
+
+    /** The node's 24-word phrase, read through {@code vault} (never logged, never cached). */
+    private static String readVaultPhrase() throws Exception {
+        JSONObject res = CommandRunner.getRunner().runSingleCommand("vault");
+        Object resp = res.get("response");
+        if (resp instanceof JSONObject) {
+            Object phrase = ((JSONObject) resp).get("phrase");
+            Object locked = ((JSONObject) resp).get("locked");
+            if (phrase instanceof String && !((String) phrase).isEmpty() && !Boolean.TRUE.equals(locked)) {
+                return ((String) phrase).trim();
+            }
+        }
+        throw new IllegalStateException("node vault is locked or not ready");
     }
 
     /**

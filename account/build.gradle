@@ -1,0 +1,39 @@
+plugins {
+    id 'java-library'
+}
+
+/*
+ * :account — the Parlons ACCOUNT layer, shared by two hosts:
+ *
+ *   parlons-cloud.jar  (:cloud)  the headless account with its own key-#1000 signer and a
+ *                                remote MegaMMR gateway;
+ *   parlons-node.jar   (:node)   the merged full Minima node, where the account rides the
+ *                                node's own wallet (M5: "one binary IS the account").
+ *
+ * It holds ParlonsCore (the runtime), ParlonsControl (the owner RPC surface), DevicePairing,
+ * ParlonsRemote (the device-side SDK the portal app uses) and the .pbk backup format — with the
+ * wallet behind the AccountWallet interface so nothing here knows which host it is in.
+ *
+ * The org.minima types it touches (utils.json.*, objects.base.MiniNumber) are COMPILE-ONLY: each
+ * host supplies its own org.minima at runtime — :cloud the vendored :minima-common, :node the
+ * full node jar — and the two are API-identical for these classes. That is the whole trick that
+ * lets :node stay free of :minima-common (duplicate org.minima would collide with the node's).
+ * Same for BouncyCastle (BackupCrypto's scrypt): both hosts already ship bcprov 1.69.
+ */
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    api project(':core')
+    api project(':server')                       // RelayRuntime (the in-process pool relay + Stats)
+    compileOnly project(':minima-common')        // org.minima.utils.json + MiniNumber — host-supplied at runtime
+    compileOnly 'org.bouncycastle:bcprov-jdk15on:1.69'   // BackupCrypto scrypt — host-supplied at runtime
+    api 'org.json:json:20231013'                 // BackupBundle
+}

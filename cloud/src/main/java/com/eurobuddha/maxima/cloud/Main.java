@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.10.0";
+    public static final String VERSION = "0.11.0";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -239,7 +239,16 @@ public final class Main {
         System.out.println("  direct   : " + (cfg.directPort > 0
                 ? ("Tier-2 reachability on port " + cfg.directPort) : "off"));
 
-        ParlonsCore core = new ParlonsCore(id, dir, cfg);
+        // The cloud wallet: key-#1000 signer over the seed + the remote MegaMMR gateway; the
+        // .pbk backup reads the phrase from seed.txt and the file-backed Winternitz counters.
+        AccountWallet wallet = new CloudAccountWallet(id, dir);
+        AccountBackup.Source backup = new AccountBackup.Source() {
+            public String phrase() throws Exception { return CloudBackupManager.readPhrase(dir); }
+            public java.util.Map<String, Integer> keyUses() {
+                return CloudKeyUses.exportAll(new java.io.File(dir.toFile(), "wallet"));
+            }
+        };
+        ParlonsCore core = new ParlonsCore(id, dir, cfg, wallet, backup);
 
         Runtime.getRuntime().addShutdownHook(new Thread(core::shutdown, "parlons-cloud-shutdown"));
         core.start();

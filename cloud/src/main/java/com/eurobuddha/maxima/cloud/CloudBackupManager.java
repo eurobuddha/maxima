@@ -6,15 +6,12 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.Map;
 
 /**
- * The cloud account's portable encrypted backup — byte-identical .pbk format to the phone app
- * (PARLONSBK | scrypt | AES-GCM), same bundle fields (phrase, displayName, mls, contacts,
- * keyUses), so an account moves phone↔cloud with no translation. The keyUses map is the
- * fund-critical piece: it carries the Winternitz counter so a restored wallet can never re-sign
- * a used leaf — which is exactly why the encrypted backup, not bare words, is the migration path.
+ * The CLOUD host's backup plumbing: where its seed (seed.txt) and its file-backed Winternitz
+ * counters ({@link CloudKeyUses}) live. The .pbk format itself — byte-identical to the phone
+ * app's — is {@link AccountBackup} in the shared account layer; this class only supplies the
+ * host-specific halves.
  */
 public final class CloudBackupManager {
 
@@ -25,74 +22,25 @@ public final class CloudBackupManager {
      *  FileStore instance (a second instance over a running store risks stale reads). */
     public static byte[] export(Path zDataDir, FileStore zNodeStore, String zDisplayName,
                                 char[] zPassword) throws Exception {
-        BackupBundle b = new BackupBundle();
-        b.phrase = readPhrase(zDataDir);
-        b.displayName = zDisplayName == null ? "" : zDisplayName;
-        String mls = zNodeStore.get("settings", "staticmls");
-        b.mls = mls == null ? "" : mls;
-        b.contacts.putAll(zNodeStore.all("contacts"));
-        b.keyUses.putAll(CloudKeyUses.exportAll(new File(zDataDir.toFile(), "wallet")));
-        return BackupCrypto.encrypt(b.toJson().getBytes(StandardCharsets.UTF_8), zPassword);
+        AccountBackup.Source src = new AccountBackup.Source() {
+            public String phrase() throws Exception { return readPhrase(zDataDir); }
+            public java.util.Map<String, Integer> keyUses() {
+                return CloudKeyUses.exportAll(new File(zDataDir.toFile(), "wallet"));
+            }
+        };
+        return AccountBackup.export(src, zNodeStore, zDisplayName, zPassword);
     }
 
     /** Decrypt + parse + sanity-guard a .pbk blob. */
     public static BackupBundle read(byte[] zBlob, char[] zPassword) throws Exception {
-        byte[] plain = BackupCrypto.decrypt(zBlob, zPassword);
-        BackupBundle b = BackupBundle.fromJson(new String(plain, StandardCharsets.UTF_8));
-        if (b.version < 1 || b.version > BackupBundle.CURRENT_VERSION) {
-            throw new IllegalArgumentException("Backup from an unsupported version");
-        }
-        if (b.phrase == null || b.phrase.trim().isEmpty()) {
-            throw new IllegalArgumentException("Backup holds no seed phrase");
-        }
-        return b;
+        return AccountBackup.read(zBlob, zPassword);
     }
 
-    /**
-     * OFFLINE restore into a data dir (the node must NOT be running — operator CLI only).
-     * Refuses to overwrite an existing identity: move the old data dir away first. Writes
-     * seed.txt atomically 0600, contacts + name + mls into the node store, and the key-use
-     * counters RAISE-ONLY.
-     */
+    /** OFFLINE restore into a data dir (the node must NOT be running — operator CLI only).
+     *  Counters are applied RAISE-ONLY; seed.txt is written last. */
     public static void applyRestore(Path zDataDir, BackupBundle zBundle) throws Exception {
-        Path seedFile = zDataDir.resolve("seed.txt");
-        // seed.txt is the "identity exists" marker, so it is written LAST. Its ABSENCE means an
-        // incomplete restore is safe to retry; a half-written one that left seed.txt behind
-        // would look complete and (counters at 0) risk Winternitz reuse on first send.
-        if (Files.exists(seedFile)) {
-            throw new IllegalStateException("this data dir already holds an identity ("
-                    + seedFile + ") — move it away first; restore never overwrites");
-        }
-        Files.createDirectories(zDataDir);
-
-        // 1. Everything EXCEPT the seed first — contacts, name/mls, and the sacred counters.
-        FileStore node = new FileStore(new File(zDataDir.toFile(), "node"));
-        for (Map.Entry<String, String> e : zBundle.contacts.entrySet()) {
-            node.put("contacts", e.getKey(), e.getValue());
-        }
-        if (zBundle.displayName != null && !zBundle.displayName.isEmpty()) {
-            node.put("settings", "name", zBundle.displayName);
-        }
-        if (zBundle.mls != null && !zBundle.mls.isEmpty()) {
-            node.put("settings", "staticmls", zBundle.mls);
-        }
-        node.flush();
-        CloudKeyUses.importRaiseOnly(new File(zDataDir.toFile(), "wallet"), zBundle.keyUses);
-
-        // 2. The seed LAST, atomically 0600. Any failure removes it so the restore is retryable
-        //    and never leaves a "complete-looking" identity with zeroed counters.
-        try {
-            try {
-                Files.createFile(seedFile, PosixFilePermissions.asFileAttribute(
-                        PosixFilePermissions.fromString("rw-------")));
-            } catch (UnsupportedOperationException nonPosix) {
-                // non-POSIX FS — plain create below
-            }
-            Files.write(seedFile, zBundle.phrase.trim().getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            try { Files.deleteIfExists(seedFile); } catch (Exception ignored) { }
-            throw e;
-        }
+        AccountBackup.applyRestore(zDataDir, zBundle,
+                uses -> CloudKeyUses.importRaiseOnly(new File(zDataDir.toFile(), "wallet"), uses));
     }
 
     static String readPhrase(Path zDataDir) throws Exception {

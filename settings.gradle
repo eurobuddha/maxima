@@ -25,6 +25,7 @@ include ':server'
 
 // Parlons Node — full Minima node (org.minima, bundled jar) + :core Maxima in one binary.
 include ':node'
+include ':account'
 
 // Classic Maxima, extracted whole and chain-free -> maxima.jar. Vendored
 // org.minima.* sources stay diffable against core/Minima; seams in

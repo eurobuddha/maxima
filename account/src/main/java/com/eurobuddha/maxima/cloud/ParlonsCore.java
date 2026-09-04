@@ -52,8 +52,11 @@ public final class ParlonsCore {
     private final MediaService mMedia;
     private final ChatEngine mChat;
     private final DevicePairing mPairing;
-    private final WatchWallet mWallet;
+    private final AccountWallet mWallet;
+    private final AccountBackup.Source mBackup;
     private final ParlonsControl mControl;
+    /** True when the host handed us an already-running relay (a Parlons Node runs its own). */
+    private boolean mExternalRelay;
 
     private ScheduledExecutorService mMaint;
     private ReachabilityManager mReach;
@@ -81,12 +84,21 @@ public final class ParlonsCore {
         public List<String> meshPeers = new ArrayList<>();
         /** Media blob-shelf cap for the relay (MB, 0 = off). */
         public int relayBlobMb = 1024;
+        /** Operator-log prefix: "parlons-cloud" standalone, "parlons-node" inside a Parlons Node. */
+        public String logTag = "parlons-cloud";
     }
 
-    public ParlonsCore(MaximaIdentity zIdentity, Path zDataDir, Config zConfig) {
+    /**
+     * @param zWallet the host's wallet (cloud: key-#1000 signer + gateway; node: the node's own)
+     * @param zBackup where this host keeps the phrase + key-use counters for .pbk export
+     */
+    public ParlonsCore(MaximaIdentity zIdentity, Path zDataDir, Config zConfig,
+                       AccountWallet zWallet, AccountBackup.Source zBackup) {
         mIdentity = zIdentity;
         mDataDir = zDataDir;
         mCfg = zConfig;
+        mWallet = zWallet;
+        mBackup = zBackup;
         File base = zDataDir.toFile();
 
         BlobStore blobs = new BlobStore(new File(base, "media"), 512L * 1024 * 1024);
@@ -123,7 +135,6 @@ public final class ParlonsCore {
         // Maxima RPC substrate (no public port). RPC is dispatched before the chat engine
         // (MaximaNode routes RpcEnvelope.APPLICATION first), so control never hits chat.
         mPairing = new DevicePairing(zDataDir);
-        mWallet = new WatchWallet(zDataDir);
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
         mControl.setStatusSource(new ParlonsControl.StatusSource() {
             public long uptimeMillis() { return mStartedAt == 0 ? 0 : System.currentTimeMillis() - mStartedAt; }
@@ -150,29 +161,25 @@ public final class ParlonsCore {
             public String myWalletAddress() {
                 return mWalletMx;
             }
-            public CloudPaymentSender sender() {
-                return mPaymentSender;
+            public boolean ready() {
+                return mWalletOpen;
             }
             public String walletError() {
                 return mWalletError;
             }
             public int uses() {
-                CloudWallet w = mAccountWallet;
-                return w == null ? -1 : w.uses();
+                return mWalletOpen ? mWallet.uses() : -1;
             }
             public void raiseUsesTo(int zTo) {
-                CloudWallet w = mAccountWallet;
-                if (w != null) {
-                    w.raiseUsesTo(zTo);
+                if (mWalletOpen) {
+                    try { mWallet.raiseUsesTo(zTo); } catch (Exception e) { log("key-uses raise refused: " + e.getMessage()); }
                 }
             }
             public String walletScript() {
-                CloudWallet w = mAccountWallet;
-                return w == null ? "" : w.script();
+                return mWalletOpen ? mWallet.script() : "";
             }
             public String walletHex() {
-                CloudWallet w = mAccountWallet;
-                return w == null ? "" : w.hexAddress();
+                return mWalletOpen ? mWallet.hexAddress() : "";
             }
         });
         mControl.setNodeControl(new ParlonsControl.NodeControl() {
@@ -246,10 +253,10 @@ public final class ParlonsCore {
         });
         mControl.setBackupSource(new ParlonsControl.BackupSource() {
             public String revealPhrase() throws Exception {
-                return CloudBackupManager.readPhrase(mDataDir);
+                return mBackup.phrase();
             }
             public byte[] exportBackup(char[] zPassword) throws Exception {
-                return CloudBackupManager.export(mDataDir, mNodeStore, mNode.name(), zPassword);
+                return AccountBackup.export(mBackup, mNodeStore, mNode.name(), zPassword);
             }
         });
         mControl.registerOn(mNode.services());
@@ -264,6 +271,16 @@ public final class ParlonsCore {
     public MediaService media() { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
     public boolean relayRunning() { return mRelay != null; }
+
+    /**
+     * Ride a relay the HOST already runs (a Parlons Node's cape) instead of starting our own:
+     * its stats feed the Node tab and it is left alone on shutdown. Call before {@link #start}.
+     */
+    public void useExternalRelay(RelayRuntime zRelay) {
+        mRelay = zRelay;
+        mExternalRelay = true;
+        zRelay.setTickListener(s -> mLastRelayStats = s);
+    }
     // ---- event-log ring buffer (the node has no store; :cloud keeps the last 200 lines) ----
     private final java.util.ArrayDeque<String> mLog = new java.util.ArrayDeque<>();
     private static final int LOG_MAX = 200;
@@ -318,7 +335,8 @@ public final class ParlonsCore {
         startPump();
 
         // 3. The in-process POOL relay: always-on + public => a real federation host.
-        if (mCfg.relayPort > 0) {
+        //    (Not when the host runs its own — see useExternalRelay.)
+        if (!mExternalRelay && mCfg.relayPort > 0) {
             startRelay();
         }
 
@@ -448,11 +466,9 @@ public final class ParlonsCore {
     private FileStore mNodeStore;
 
     // ---- the account's own wallet (the Parlons pattern: the seed IS the wallet) ----
-    private volatile CloudWallet mAccountWallet;
-    private volatile CloudPaymentSender mPaymentSender;
+    private volatile boolean mWalletOpen;
     private volatile String mWalletMx = "";
     private volatile String mWalletError = "";
-    private volatile boolean mScriptTracked;
     /** Wallet upkeep runs on its OWN thread (blocking gateway HTTP), never the maint executor. */
     private final java.util.concurrent.ExecutorService mWalletExec =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
@@ -481,13 +497,11 @@ public final class ParlonsCore {
     private void openAccountWallet() {
         Thread t = new Thread(() -> {
             try {
-                CloudWallet w = CloudWallet.open(mIdentity, new File(mDataDir.toFile(), "wallet"));
-                w.ensureAddress();
-                mWalletMx = w.mxAddress();
-                mAccountWallet = w;
-                mPaymentSender = new CloudPaymentSender(w, mWallet);
+                mWallet.open();
+                mWalletMx = mWallet.mxAddress();
+                mWalletOpen = true;
                 log("account wallet ready: " + mWalletMx
-                        + " (key uses " + w.uses() + " / " + CloudWallet.MAX_USES + ")");
+                        + " (key uses " + mWallet.uses() + " / " + mWallet.maxUses() + ")");
                 // trackScript + address-share retry on the maintenance heartbeat: this first
                 // attempt runs pre-attach and a swallowed failure here used to break payments
                 // (no proofs) and receivability (address never shared) until a restart.
@@ -509,19 +523,12 @@ public final class ParlonsCore {
     /** Wallet upkeep, retried on the heartbeat: gateway script tracking (payments need the
      *  proofs) and receive-address shares to contacts. Cheap, idempotent, network-bound. */
     private void walletUpkeep() {
-        CloudWallet w = mAccountWallet;
-        if (w == null) {
+        if (!mWalletOpen) {
             return;
         }
-        if (!mScriptTracked) {
-            try {
-                mWallet.trackScript(w.script());
-                mScriptTracked = true;
-                log("wallet script tracked on the gateway");
-            } catch (Exception e) {
-                log("wallet script tracking failed (will retry): " + e.getMessage());
-            }
-        }
+        // Host-specific upkeep first (cloud: gateway script tracking + the coin backfill;
+        // node: nothing — it tracks its own coins).
+        try { mWallet.upkeep(this::log); } catch (Exception e) { log("wallet upkeep failed: " + e.getMessage()); }
         long now = System.currentTimeMillis();
         for (com.eurobuddha.maxima.core.contacts.Contact c : mNode.contacts()) {
             String key = c.publicKey == null ? "" : c.publicKey;
@@ -535,74 +542,6 @@ public final class ParlonsCore {
             } catch (Exception ignored) {
                 // offline peer — retried next heartbeat round
             }
-        }
-        syncCoinsIfLagging(w, now);
-    }
-
-    private volatile long mLastCoinSync;
-
-    /**
-     * Make funded-before-tracked coins spendable — the app's exact backfill (WalletPage
-     * syncCoins): a coin that arrived BEFORE the gateway tracked our script is confirmed
-     * on-chain (balance shows it) but not in the gateway node's tracked set, so txnbasics
-     * can't attach a proof and sendable stays 0. Fix: coinexport each of our coins from the
-     * global MegaMMR and coinimport track:true it back. NEVER signs, burns no key use —
-     * safe to auto-run. Rate-limited to one pass per 5 min.
-     */
-    private void syncCoinsIfLagging(CloudWallet w, long now) {
-        if (now - mLastCoinSync < 5 * 60_000L) {
-            return;
-        }
-        mLastCoinSync = now;
-        try {
-            org.minima.utils.json.JSONObject bal =
-                    mWallet.cmd("balance megammr:true address:" + w.mxAddress());
-            org.minima.utils.json.JSONArray arr =
-                    (org.minima.utils.json.JSONArray) bal.get("response");
-            boolean lagging = false;
-            if (arr != null) {
-                for (Object o : arr) {
-                    org.minima.utils.json.JSONObject t = (org.minima.utils.json.JSONObject) o;
-                    if ("0x00".equals(String.valueOf(t.get("tokenid")))
-                            && !String.valueOf(t.get("confirmed"))
-                                    .equals(String.valueOf(t.get("sendable")))) {
-                        lagging = true;
-                    }
-                }
-            }
-            if (!lagging) {
-                return;
-            }
-            org.minima.utils.json.JSONObject coinsResp = mWallet.coins(w.hexAddress());
-            org.minima.utils.json.JSONArray coins =
-                    (org.minima.utils.json.JSONArray) coinsResp.get("response");
-            int imported = 0, failed = 0;
-            if (coins != null) {
-                for (Object o : coins) {
-                    String coinid = String.valueOf(
-                            ((org.minima.utils.json.JSONObject) o).get("coinid"));
-                    if (coinid.isEmpty() || "null".equals(coinid)) {
-                        continue;
-                    }
-                    try {
-                        org.minima.utils.json.JSONObject ex = mWallet.coinExport(coinid);
-                        org.minima.utils.json.JSONObject resp =
-                                (org.minima.utils.json.JSONObject) ex.get("response");
-                        String data = resp == null ? "" : String.valueOf(resp.get("data"));
-                        if (data.isEmpty() || "null".equals(data)) {
-                            failed++;
-                            continue;
-                        }
-                        mWallet.coinImport(data);
-                        imported++;
-                    } catch (Exception coinErr) {
-                        failed++;
-                    }
-                }
-            }
-            log("wallet coin sync: imported=" + imported + " failed=" + failed);
-        } catch (Exception e) {
-            log("wallet coin sync failed: " + e.getMessage());
         }
     }
 
@@ -745,7 +684,7 @@ public final class ParlonsCore {
             mMaint.shutdownNow();
         }
         try { if (mReach != null) mReach.shutdown(); } catch (Exception ignored) { }
-        try { if (mRelay != null) mRelay.stop(); } catch (Exception ignored) { }
+        try { if (mRelay != null && !mExternalRelay) mRelay.stop(); } catch (Exception ignored) { }
         try { mChat.close(); } catch (Exception ignored) { }
         try { mNode.stop(); } catch (Exception ignored) { }
     }
@@ -754,7 +693,7 @@ public final class ParlonsCore {
      *  Never fed the seed — only public identity/addresses and event lines (see the ring's
      *  paired-device-only exposure). */
     private void log(String s) {
-        System.out.println("[parlons-cloud] " + s);
+        System.out.println("[" + mCfg.logTag + "] " + s);
         ring(s);
     }
 }

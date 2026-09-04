@@ -30,6 +30,9 @@ dependencies {
     // Parlons Maxima cape (clean-room) + relay.
     implementation project(':core')
     implementation project(':server')
+    // The Parlons ACCOUNT layer (M5): pairing, control RPC, chat, push — shared with :cloud. Its
+    // org.minima needs are compileOnly there and satisfied HERE by the node jar (identical API).
+    implementation project(':account')
 
     implementation 'org.json:json:20231013'
 }

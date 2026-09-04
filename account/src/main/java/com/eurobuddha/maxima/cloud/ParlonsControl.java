@@ -87,7 +87,7 @@ public final class ParlonsControl {
     private final MaximaNode mNode;
     private final ChatEngine mChat;
     private final DevicePairing mPairing;
-    private final WatchWallet mWallet;
+    private final AccountWallet mWallet;
     private volatile StatusSource mStatus;
 
     // ---- the push channel: cloud → device ----
@@ -180,7 +180,7 @@ public final class ParlonsControl {
         mRecentPays.entrySet().removeIf(e -> now - e.getValue() > 30 * 60_000L);
     }
 
-    public ParlonsControl(MaximaNode zNode, ChatEngine zChat, DevicePairing zPairing, WatchWallet zWallet) {
+    public ParlonsControl(MaximaNode zNode, ChatEngine zChat, DevicePairing zPairing, AccountWallet zWallet) {
         mNode = zNode;
         mChat = zChat;
         mPairing = zPairing;
@@ -208,7 +208,7 @@ public final class ParlonsControl {
      *  {@link ParlonsCore} once the heavy WOTS derivation has run off-thread. */
     public interface PaySource {
         String myWalletAddress();          // Mx… receive address ("" until derived)
-        CloudPaymentSender sender();       // null until the wallet is open
+        boolean ready();                   // false until the wallet is open (payments refused)
         String walletError();              // "" unless the wallet failed to open
         int uses();                        // key uses so far (-1 if wallet not open)
         void raiseUsesTo(int zTo);         // raise-only counter adjust
@@ -503,8 +503,8 @@ public final class ParlonsControl {
                 }
                 // Fund-critical ceiling: never fold the counter past the key's leaf maximum, or
                 // the wallet can never sign again (and tens of thousands of one-time keys burn).
-                if (to > CloudWallet.MAX_USES) {
-                    return bytes(err("above the key's maximum " + CloudWallet.MAX_USES));
+                if (to > mWallet.maxUses()) {
+                    return bytes(err("above the key's maximum " + mWallet.maxUses()));
                 }
                 // The write takes a cross-process FileLock + fsyncs BOTH mirrors — never on the
                 // pump. Defer to the send lane; the raise is validated and raise-only, so reply
@@ -516,7 +516,7 @@ public final class ParlonsControl {
             }
             JSONObject out = ok();
             out.put("uses", reported);
-            out.put("max", CloudWallet.MAX_USES);
+            out.put("max", mWallet.maxUses());
             return bytes(out);
         });
 
@@ -1095,7 +1095,7 @@ public final class ParlonsControl {
                 return bytes(err("payments are one-to-one for now"));
             }
             PaySource ps = mPaySource;
-            if (ps == null || ps.sender() == null) {
+            if (ps == null || !ps.ready()) {
                 String why = ps == null ? "" : ps.walletError();
                 return bytes(err(why == null || why.isEmpty()
                         ? "the account wallet is still opening — try again in a moment"
@@ -1126,28 +1126,27 @@ public final class ParlonsControl {
                 out.put("state", "building");
                 return bytes(out);
             }
-            final CloudPaymentSender sender = ps.sender();
             // Build+sign+publish are blocking network work — the send lane, never the pump.
             // States flow to devices as pushes: QUEUED bubble at sign time, SENT on publish,
-            // FAILED (or a payfail toast) if anything breaks.
+            // FAILED (or a payfail toast) if anything breaks. (On a Parlons Node build() has
+            // already broadcast, so the bubble appears once the money has moved.)
             mSendExec.execute(() -> {
                 ChatEngine.Entry e = null;
                 boolean published = false;
                 try {
-                    CloudPaymentSender.Built built = sender.build(to, amt);
+                    AccountWallet.Payment built = mWallet.build(to, amt);
                     e = mChat.beginPayment(c, amt.toString(), "Minima", memo, built.txid);
-                    sender.publish(built);
+                    mWallet.publish(built);
                     published = true;
                     boolean told = mChat.completePayment(c, e);
                     mNode.log("payment " + amt + " → " + safe(c.name) + " txid " + built.txid
                             + (told ? "" : " (peer not yet notified — resend loop owns it)"));
                 } catch (Exception ex) {
                     String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-                    boolean gatewaySaidNo = why.startsWith("txnimport:")
-                            || why.startsWith("txnbasics:") || why.startsWith("txnpost:");
+                    boolean gatewaySaidNo = ex instanceof AccountWallet.Rejected;
                     if (e != null && !published) {
                         if (gatewaySaidNo) {
-                            // The gateway REPORTED the failure — the txn did not post. Safe ✗.
+                            // The wallet REPORTED the failure — the txn did not post. Safe ✗.
                             mChat.failPayment(e);
                         } else {
                             // Transport failure at/after the post: the outcome is UNKNOWN — the
@@ -1226,7 +1225,7 @@ public final class ParlonsControl {
                 return bytes(err("that doesn't look like a full Minima address"));
             }
             PaySource ps = mPaySource;
-            if (ps == null || ps.sender() == null) {
+            if (ps == null || !ps.ready()) {
                 String why = ps == null ? "" : ps.walletError();
                 return bytes(err(why == null || why.isEmpty()
                         ? "the account wallet is still opening — try again in a moment"
@@ -1252,12 +1251,11 @@ public final class ParlonsControl {
             if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
                 return bytes(err("the amount must be more than zero"));
             }
-            final CloudPaymentSender sender = ps.sender();
             final String fto = to;
             mSendExec.execute(() -> {
                 try {
-                    CloudPaymentSender.Built built = sender.build(fto, amt);
-                    sender.publish(built);
+                    AccountWallet.Payment built = mWallet.build(fto, amt);
+                    mWallet.publish(built);
                     mNode.log("wallet send " + amt + " → " + fto + " txid " + built.txid);
                     JSONObject ev = new JSONObject();
                     ev.put("type", "walletsent");
@@ -1268,11 +1266,10 @@ public final class ParlonsControl {
                     push(ev);
                 } catch (Exception ex) {
                     String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-                    // Only a gateway-REPORTED rejection is a safe failure; ANYTHING else
+                    // Only a wallet-REPORTED rejection is a safe failure; ANYTHING else
                     // (transport error mid-publish) is outcome-unknown — the money may have
                     // moved, so never invite a re-send (same discipline as chat.pay).
-                    boolean gatewaySaidNo = why.startsWith("txnimport:")
-                            || why.startsWith("txnbasics:") || why.startsWith("txnpost:");
+                    boolean gatewaySaidNo = ex instanceof AccountWallet.Rejected;
                     if (!gatewaySaidNo) {
                         why = "outcome unknown (network trouble mid-broadcast) — check the "
                                 + "wallet balance before sending again";
@@ -1305,7 +1302,7 @@ public final class ParlonsControl {
                 return bytes(err("that doesn't look like a full Minima address"));
             }
             PaySource ps = mPaySource;
-            if (ps == null || ps.sender() == null) {
+            if (ps == null || !ps.ready()) {
                 String why = ps == null ? "" : ps.walletError();
                 return bytes(err(why == null || why.isEmpty()
                         ? "the account wallet is still opening — try again in a moment"
@@ -1313,6 +1310,9 @@ public final class ParlonsControl {
             }
             if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
                 return bytes(err("that amount doesn't look right"));
+            }
+            if (!mWallet.canBuildWithoutPublish()) {
+                return bytes(err("this node broadcasts its own transactions — use wallet.send"));
             }
             final String fpid = pid;
             if (!pid.isEmpty() && mRecentPays.putIfAbsent("wb:" + pid, System.currentTimeMillis()) != null) {
@@ -1329,19 +1329,18 @@ public final class ParlonsControl {
             if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
                 return bytes(err("the amount must be more than zero"));
             }
-            final CloudPaymentSender sender = ps.sender();
             final String fto = to;
             mSendExec.execute(() -> {
                 try {
-                    CloudPaymentSender.Built built = sender.build(fto, amt);   // reserve+sign; NO publish
+                    AccountWallet.Payment built = mWallet.build(fto, amt);   // reserve+sign; NO publish
                     mNode.log("wallet build " + amt + " → " + fto + " txid " + built.txid);
                     JSONObject ev = new JSONObject();
                     ev.put("type", "walletbuilt");
                     ev.put("to", fto);
                     ev.put("amount", amt.toString());
                     ev.put("txid", built.txid);
-                    ev.put("importcmd", built.importCmd());   // signed txnimport — the device broadcasts it
-                    ev.put("postcmd", built.postCmd());
+                    ev.put("importcmd", built.importCmd);   // signed txnimport — the device broadcasts it
+                    ev.put("postcmd", built.postCmd);
                     ev.put("pid", fpid);
                     push(ev);
                 } catch (Exception ex) {
