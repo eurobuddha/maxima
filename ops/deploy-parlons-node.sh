@@ -17,7 +17,15 @@
 #       [--p2p-port 9001] [--rpc] [--megammr-seed https://eurobuddha.com/mega.mmr]
 #       [--peers h:p,h:p] [--blobstore 1024] [--replace-relay]
 #       [--seed-from /path/on/vps/seed.txt --archive 65.109.31.226:8001]
+#       [--node-args "-host 1.2.3.4 -archive -port 9111"]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
+#
+# --node-args passes Minima's OWN startup flags to the embedded node (through Minima's own
+# parser) — everything a stock minima.jar takes, minus: -rpc* (use --rpc), -seed/-anyseed/
+# -dbpassword (use --seed-from/--passphrase-file), -clean/-genesis/-test/-solo, and
+# -daemon/-noshutdownhook/-jnlp/-help. The node refuses to start on those and says why.
+# Minima owns what it parses; this script's own --p2p-port/--no-megammr/--rootnode are applied
+# AFTER and win on conflict. A -data <dir> in --node-args is added to the unit's ReadWritePaths.
 #
 # What it does, in order:
 #   1. installs a headless JRE if java is missing
@@ -78,6 +86,7 @@ BLOB_MB=0
 REPLACE_RELAY="false"
 SEED_FROM=""
 ARCHIVE="65.109.31.226:8001"
+NODE_ARGS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -94,6 +103,7 @@ while [ $# -gt 0 ]; do
         --replace-relay)  REPLACE_RELAY="true"; shift ;;
         --seed-from)      SEED_FROM="$2"; shift 2 ;;
         --archive)        ARCHIVE="$2"; shift 2 ;;
+        --node-args)      NODE_ARGS="$2"; shift 2 ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
@@ -137,6 +147,13 @@ echo "  heap    $HEAP (MemoryMax $MEMMAX)   p2p :$P2P_PORT   relay :$RELAY_PORT 
 [ "$BLOB_MB" -gt 0 ] && echo "  blobs   $BLOB_MB MB shelf"
 [ "$REPLACE_RELAY" = true ] && echo "  relay   REPLACING maxima-relay.service on this box (its port becomes the node's)"
 [ -n "$SEED_FROM" ] && echo "  seed    adopting the phrase in $SEED_FROM (on the box) via archive $ARCHIVE — identity preserved"
+[ -n "$NODE_ARGS" ] && echo "  minima  $NODE_ARGS"
+# A -data <dir> passed to Minima must be writable under the hardened unit (ProtectSystem=strict).
+EXTRA_RW=""
+if [ -n "$NODE_ARGS" ]; then
+    EXTRA_RW="$(printf '%s\n' "$NODE_ARGS" | sed -nE 's/.*(^|[[:space:]])-data[[:space:]]+([^[:space:]]+).*/\2/p')"
+fi
+case "$NODE_ARGS" in *'"'*) echo "--node-args must not contain double quotes (the unit line is double-quoted)" >&2; exit 2 ;; esac
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
 
@@ -164,6 +181,9 @@ mkdir -p /opt/maxima /var/lib/parlons-node
 chown -R maxima:maxima /var/lib/parlons-node
 chmod 700 /var/lib/parlons-node
 REMOTE
+if [ -n "$EXTRA_RW" ]; then
+    $SSH "mkdir -p '$EXTRA_RW' && chown maxima:maxima '$EXTRA_RW' && chmod 700 '$EXTRA_RW' && echo '      minima -data dir ready: $EXTRA_RW'"
+fi
 # Passphrase file (locked-node only): must exist on the VPS, readable by maxima, mode 600.
 if [ -n "$PASSFILE" ]; then
     $SSH "bash -s" <<REMOTE
@@ -224,7 +244,8 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.gateway.bind=$GW_BIND \\
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
     -Dparlons.node.rootnode=$ROOTNODE}${PASSFILE:+ \\
-    -Dparlons.node.passphrase.file=$PASSFILE} \\
+    -Dparlons.node.passphrase.file=$PASSFILE}${NODE_ARGS:+ \\
+    "-Dparlons.node.args=$NODE_ARGS"} \\
     -jar /opt/maxima/parlons-node.jar
 Restart=on-failure
 RestartSec=10
@@ -234,7 +255,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/parlons-node
+ReadWritePaths=/var/lib/parlons-node${EXTRA_RW:+ $EXTRA_RW}
 UMask=0077
 PrivateDevices=true
 ProtectProc=invisible

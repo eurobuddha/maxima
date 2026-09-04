@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.0";
+    public static final String  NODE_VERSION = "0.2.1";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -50,13 +50,33 @@ public final class ParlonsNodeMain {
     public static void main(String[] zArgs) throws Exception {
         // --- configure the embedded node's global params (mirrors Minima.main, minus the CLI bits) ---
         GeneralParams.resetDefaults();
-        File dataFolder = new File(System.getProperty("parlons.node.data",
-                new File(System.getProperty("user.home"), ".parlons-node").getAbsolutePath()));
+
+        // 1. Minima's OWN startup flags first (-Dparlons.node.args / PARLONS_NODE_ARGS), through
+        //    Minima's own parser, minus a short exclusion list — see MinimaFlags. Minima owns what it
+        //    parses (-port, -data, -host, -megammr, -archive, the P2P role, …).
+        boolean flags = MinimaFlags.apply();
+
+        // 2. The node's own knobs, applied ONLY when set explicitly, so they win on conflict and
+        //    nothing else. Data dir: -Dparlons.node.data > Minima -data > ~/.parlons-node. The
+        //    Parlons state (relay/, gateway-token.txt, the account) lives BESIDE the node's
+        //    <version>/ folder, i.e. in the data dir itself.
+        String dataProp = System.getProperty("parlons.node.data");
+        File dataFolder;
+        if (dataProp != null && !dataProp.trim().isEmpty()) {
+            dataFolder = new File(dataProp.trim());
+        } else if (flags && MinimaFlags.has("data")) {
+            dataFolder = new File(GeneralParams.DATA_FOLDER).getParentFile();
+        } else {
+            dataFolder = new File(System.getProperty("user.home"), ".parlons-node");
+        }
         File minimaFolder = new File(dataFolder, GlobalParams.MINIMA_BASE_VERSION);
         GeneralParams.DATA_FOLDER     = minimaFolder.getAbsolutePath();
-        // Layer-1 P2P port. 9001 is Minima's default, but every big fleet box already runs a stock
-        // node on 9001 — a second Parlons Node needs its own port. Set BEFORE the derived offsets.
-        GeneralParams.MINIMA_PORT     = Integer.getInteger("parlons.node.port", 9001);
+        // Layer-1 P2P port: -Dparlons.node.port > Minima -port > 9001. Every big fleet box already
+        // runs a stock node on 9001, so a second node needs its own. The derived ports follow it.
+        String portProp = System.getProperty("parlons.node.port");
+        if (portProp != null && !portProp.trim().isEmpty()) {
+            GeneralParams.MINIMA_PORT = Integer.parseInt(portProp.trim());
+        }
         GeneralParams.MDSFILE_PORT    = GeneralParams.MINIMA_PORT + 2;
         GeneralParams.MDSCOMMAND_PORT = GeneralParams.MINIMA_PORT + 3;
         GeneralParams.RPC_PORT        = GeneralParams.MINIMA_PORT + 4;
@@ -66,12 +86,12 @@ public final class ParlonsNodeMain {
         // loopback-bound AdminRpc on p2p+4, NOT Minima's -rpcenable: the stock RPC binds every
         // interface with no bind option and was internet-reachable on a firewall-less box (0.1.1).
         boolean rpc = Boolean.parseBoolean(System.getProperty("parlons.node.rpc", "false"));
-        GeneralParams.RPC_ENABLED     = false;   // never the stock RPC — see AdminRpc
+        GeneralParams.RPC_ENABLED     = false;   // never the stock RPC — see AdminRpc (and MinimaFlags)
         minimaFolder.mkdirs();
 
         // Sync peer(s): this node fork ships an EMPTY DEFAULT_NODE_LIST, so give it a rootnode to
         // P2P-discover from (host:port), or a fixed CONNECT_LIST. Empty => boots but won't sync
-        // (fine locally; a VPS sets this).
+        // (fine locally; a VPS sets this). Minima's own -connect / -nop2p pass through as well.
         String rootnode = System.getProperty("parlons.node.rootnode", "").trim();
         if (!rootnode.isEmpty()) {
             GeneralParams.P2P_ROOTNODE = rootnode;
@@ -85,10 +105,18 @@ public final class ParlonsNodeMain {
         }
 
         // MegaMMR: keep the full MegaMMR so `coins/balance megammr:true address:<any>` proves coins
-        // for ANY address — this is what makes the node a wallet gateway for phones (M3). Default on
-        // for the gateway role; -Dparlons.node.megammr=false to run a plain full node.
-        boolean megammr = Boolean.parseBoolean(System.getProperty("parlons.node.megammr", "true"));
-        GeneralParams.IS_MEGAMMR = megammr;
+        // for ANY address — this is what makes the node a wallet gateway for phones (M3). Node
+        // default ON (Minima's default is off): -Dparlons.node.megammr > Minima -megammr > true.
+        String mmProp = System.getProperty("parlons.node.megammr");
+        if (mmProp != null && !mmProp.trim().isEmpty()) {
+            GeneralParams.IS_MEGAMMR = Boolean.parseBoolean(mmProp.trim());
+        } else if (!(flags && MinimaFlags.has("megammr"))) {
+            GeneralParams.IS_MEGAMMR = true;
+        }
+        boolean megammr = GeneralParams.IS_MEGAMMR;
+        if (flags) {
+            System.out.println("[parlons-node] minima flags: " + MinimaFlags.applied);
+        }
         // Fixed default 9585 to match ops/deploy-parlons-node.sh + cloud/NODE-SETUP.md (one value
         // everywhere beats a node-port-relative offset that the docs would then contradict).
         int gatewayPort = Integer.getInteger("parlons.gateway.port", 9585);
@@ -99,7 +127,8 @@ public final class ParlonsNodeMain {
 
         System.out.println("[parlons-node] Parlons Node " + NODE_VERSION + " — booting embedded Minima node "
                 + GlobalParams.getFullMicroVersion() + " at " + GeneralParams.DATA_FOLDER
-                + " (p2p " + GeneralParams.MINIMA_PORT + ", admin rpc " + (rpc ? "127.0.0.1:" + GeneralParams.RPC_PORT + " (loopback-bound)" : "off") + ")");
+                + " (p2p " + GeneralParams.MINIMA_PORT + ", megammr " + megammr + ", admin rpc "
+                + (rpc ? "127.0.0.1:" + GeneralParams.RPC_PORT + " (loopback-bound)" : "off") + ")");
 
         // --- boot the full node in-process (Main is a MessageProcessor; spawns its own threads) ---
         final Main main = new Main();

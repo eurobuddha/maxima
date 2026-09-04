@@ -128,6 +128,34 @@ pairing code lives (`/var/lib/parlons-node/pair-code.txt`). Knobs: `-Dparlons.ac
 `-Dparlons.account.direct`. Data layout matches the cloud's, which is what makes the
 migration above a plain copy.
 
+## 3e. Minima's own startup flags (node 0.2.1+)
+
+The node takes Minima's flags — the same ones a stock `minima.jar` takes — through Minima's own
+parser, via `--node-args` (deploy script) = `-Dparlons.node.args="…"` (or env `PARLONS_NODE_ARGS`):
+
+```bash
+ops/deploy-parlons-node.sh root@1.2.3.4 --rpc --node-args "-port 9111 -host 1.2.3.4 -archive"
+```
+
+Precedence: Minima owns what it parses (`-port`, `-data`, `-host`, `-megammr`, `-archive`,
+`-connect`, `-nop2p`, `-server`, …); the node's own knobs (`--p2p-port`, `--no-megammr`,
+`--rootnode`, `-Dparlons.node.*`) are applied afterwards and win only when set explicitly. The
+admin RPC port always follows the effective P2P port (+4). `-conf FILE` is expanded (its
+`key=value` lines become flags) and filtered the same way. A `-data <dir>` is added to the
+hardened unit's `ReadWritePaths` by the script.
+
+Refused at boot (the node prints why and exits 2):
+
+| flags | why |
+|---|---|
+| `-rpc -rpcenable -rpcpassword -rpccrlf` | the stock RPC binds every interface with full admin; use `--rpc` (loopback AdminRpc) |
+| `-seed -anyseed -dbpassword` | secrets in argv are readable by every process; use `--seed-from` / `--passphrase-file` |
+| `-clean -genesis -test -solo -testchainlength` | wipe the data dir or leave mainnet |
+| `-daemon -noshutdownhook -jnlp -help` | stdin / exit / shutdown-hook behaviour the merged JVM owns |
+
+The MDS flags (`-mdsenable` …) are accepted but do nothing: this fork has no MDS package. The
+node warns at boot.
+
 ## 4. Seed: fresh vs. migrated (fund-critical — do this by hand)
 
 On first boot the node **generates its own seed** at `/var/lib/parlons-node`. That
