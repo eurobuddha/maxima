@@ -216,15 +216,32 @@ The node unlocks once on boot (`vault action:passwordunlock`). A node started un
 needs none of this. (The passphrase can't contain spaces/quotes/`;` — the `vault`
 command can't parse those anyway.)
 
-## 6. Make the fleet the phone default (last step, after ≥2 nodes are live + synced)
+## 6. The fleet as the phone default — DONE (Parlons 0.6.49, 2026-09-04)
 
-Once two Parlons Nodes are synced and serving `/cmd` over TLS, point the phone
-default at them and retire `privateprivate.org`:
+`WalletPublisher.FLEET_GATEWAY_URLS` lists the MegaMMR Parlons Nodes behind TLS, tried in
+order with automatic failover (`GatewayNode`): a transport failure or a 5xx moves to the next
+node; a publish pins ONE node for its whole txnimport → txnbasics → txnpost. All fleet
+gateways share one read+relay token (`/var/lib/parlons-node/gateway-token.txt`, identical on
+every gateway box — a new gateway node gets that file, not a fresh one). The old hosted proxy
+(`relay.privateprivate.org/cmd` on maxlite) is still up for pre-0.6.49 phones and other apps.
 
-- add the nodes' gateway URLs to the phone wallet's default gateway list
-- rebuild + release the APK (versionCode + versionName bump — enforced)
-- verify a phone reads balance + sends through the fleet with `privateprivate.org`
-  blocked, then decommission the old gateway
+### The fleet (2026-09-04)
+
+| box | node | p2p | relay | MegaMMR gateway | account |
+|---|---|---|---|---|---|
+| sally 95.179.179.181 | 0.2.0 | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 | 0.2.0 | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 | 0.2.0 | 9101 | 9501 | loopback only (no TLS front yet) | fresh |
+| vigilance 45.77.57.24 | 0.2.0 | 9101 | 9501 | none (`--no-megammr`: 8 GB box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 | 0.2.0 | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`: 32-bit JVM) | fresh |
+| maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
+| openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
+
+Every node's relay kept its old relay identity (`--seed-from` the relay's seed.txt), so nothing
+pinned to the fleet changed. maxima-lite and openproject stay on the plain relay: both have
+under 800 MB free and maxima-lite hosts the legacy gateway that older phones still use.
+Note: 9101 on the two Vultr boxes (megammr, vigilance) still needs an INBOUND rule in the Vultr
+console — they sync fine outbound-only meanwhile.
 
 ## Ports
 

@@ -402,8 +402,9 @@ if [ "\$size" -gt 1048576 ]; then
 fi
 echo "      MegaMMR is empty (\$size bytes) - downloading $MEGA_SEED"
 cd /var/lib/parlons-node
-rm -f mega.mmr
-wget -q --timeout=60 -O mega.mmr "$MEGA_SEED"
+# -c resumes/reuses a previous download (a 460 MB file on a residential line is slow;
+# an earlier failed import must not force a second download).
+wget -q -c --timeout=60 -O mega.mmr "$MEGA_SEED"
 chown maxima:maxima mega.mmr
 echo "      downloaded \$(stat -c %s mega.mmr) bytes; importing over loopback RPC :\$RPC_PORT"
 for i in \$(seq 1 30); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
