@@ -167,7 +167,13 @@ should live on a fresh seed — and the identity, paired devices and contacts al
 - from a paired device: Parlons Cloud → Wallet → "Resync wallet to a new phrase…", or the CLI
   `parlons wallet resync <file-with-24-words>` (RPC `parlons.wallet.resync`);
 - the node runs `megammrsync action:resync host:<-Dparlons.node.archive, default
-  65.109.31.226:9001> phrase:…`, then exits 3 and systemd restarts it (`RestartForceExitStatus=3`).
+  65.109.31.226:9001> phrase:…`, then exits 3 and systemd restarts it (`RestartForceExitStatus=3`). Since 0.2.7 it exits 3 ONLY
+  when `megammrsync` reported success; on failure the node stays up, the wallet is untouched and
+  the reason is published as `resyncError` in `parlons.wallet.address` — a red line on the
+  portal wallet card, `wallet address` on the CLI. The resync button is only offered where
+  `canResync` is true (node accounts). Note `getaddress` rotates among the wallet's 64 default
+  addresses, so the "own address" a node account shows changes per boot — all 64 are the
+  wallet's.
   About a minute; devices reconnect on their own.
 - Funds at the OLD phrase's addresses stay with the old phrase (import it in any Parlons wallet).
 - To re-pin the identity to whatever the vault holds: delete `identity.txt` and restart.
@@ -186,7 +192,10 @@ Parlons Node instead of a phone-local Minima Core. Same on the Mac: `parlons cmd
   and the device polls with `{key}` until it finishes (so a long `send` / `megammrsync` cannot
   deafen the node). Output is paged out in 120 000-char pieces (`{key, offset}`) under the 256K
   Maxima package ceiling and stitched back by `ParlonsRemote.nodeCmd` — a 2 MB `printtree` comes
-  back complete, never truncated. `quit` is refused (restart from the box). Each command is
+  back complete, never truncated. One command may hold at most 16 MB of output in the node's
+  heap (`CMD_MAX_OUTPUT`; over it the job returns an error — a MegaMMR node's
+  `coins relevant:false` would otherwise OOM a 3g box); the text is released once the device
+  has fetched the last page, and a running job is never evicted. `quit` is refused (restart from the box). Each command is
   logged as `terminal: <command word> (paired device)` in the node log (the IDE's Logs tab).
 - parlons-cloud (no embedded node) answers `this account runs on parlons-cloud… the Terminal
   needs a Parlons Node`.
@@ -295,11 +304,11 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 (8 GB) | 0.2.6, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
-| eurobuddha 65.109.31.226 (64 GB) | 0.2.6, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
-| megammr 192.248.151.55 (32 GB) | 0.2.6, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
-| vigilance 45.77.57.24 (8 GB, shared) | 0.2.6, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
-| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.6, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
+| sally 95.179.179.181 (8 GB) | 0.2.7, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 (64 GB) | 0.2.7, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 (32 GB) | 0.2.7, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.7, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.7, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
 | maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
 | openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
 

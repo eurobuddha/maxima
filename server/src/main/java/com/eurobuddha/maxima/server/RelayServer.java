@@ -1338,8 +1338,9 @@ public final class RelayServer {
         if (zKey == null) {
             return "";
         }
-        String k = zKey.length() > 22 ? zKey.substring(0, 22) + "..." : zKey;
-        return k.replaceAll("[\\p{Cntrl}]", "?");
+        // The FULL key, always: a shortened identifier cannot be searched for or matched against a
+        // device list, and a log exists to be grepped. Only control characters are neutralised.
+        return zKey.replaceAll("[\\p{Cntrl}]", "?");
     }
 
     private void log(String zMsg) {

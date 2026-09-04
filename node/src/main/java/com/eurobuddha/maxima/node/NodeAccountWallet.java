@@ -133,6 +133,10 @@ final class NodeAccountWallet implements AccountWallet {
 
     @Override public boolean canResync() { return true; }
 
+    private volatile String mLastResyncError = "";
+
+    @Override public String lastResyncError() { return mLastResyncError; }
+
     /**
      * Re-point the NODE wallet at a new phrase: {@code megammrsync action:resync} against the
      * archive host resets the wallet keys to the phrase and pulls its coins, then the node
@@ -143,21 +147,34 @@ final class NodeAccountWallet implements AccountWallet {
      */
     @Override public void resyncTo(String zPhrase) {
         final String host = System.getProperty("parlons.node.archive", "65.109.31.226:9001");
-        final String phrase = zPhrase.trim().replaceAll("\\s+", " ");
+        final String phrase = zPhrase == null ? "" : zPhrase.trim().toLowerCase().replaceAll("\\s+", " ");
+        // The phrase is interpolated into a node command: only 24 plain words may pass, whatever
+        // the caller validated (a quote here would break out of the phrase:"…" argument).
+        if (!phrase.matches("[a-z]+( [a-z]+){23}")) {
+            throw new IllegalArgumentException("a phrase is 24 plain words");
+        }
+        mLastResyncError = "";
         Thread t = new Thread(() -> {
+            String failure;
             try {
                 Thread.sleep(1500);   // let the RPC reply leave first
                 System.out.println("[parlons-node] wallet resync to a new phrase via " + host
-                        + " (identity pinned, node will restart)");
+                        + " (identity pinned, node restarts on success)");
                 JSONObject r = NodeWallet.run("megammrsync action:resync host:" + host
                         + " phrase:\"" + phrase + "\"");
-                boolean ok = Boolean.TRUE.equals(r.get("status"));
-                System.out.println("[parlons-node] wallet resync " + (ok ? "finished" : "FAILED: " + r.get("error"))
-                        + " - restarting");
+                if (Boolean.TRUE.equals(r.get("status"))) {
+                    System.out.println("[parlons-node] wallet resync finished - restarting");
+                    System.exit(3);
+                    return;
+                }
+                failure = String.valueOf(r.getOrDefault("error", "megammrsync refused"));
             } catch (Throwable e) {
-                System.out.println("[parlons-node] wallet resync error: " + e + " - restarting");
+                failure = e.getMessage() == null ? e.toString() : e.getMessage();
             }
-            System.exit(3);
+            // FAILED: the wallet is unchanged, so the node stays up. The device learns of it from
+            // resyncError on the next wallet refresh (parlons.wallet.address).
+            mLastResyncError = "resync via " + host + " failed: " + failure;
+            System.out.println("[parlons-node] wallet resync FAILED (node kept running, wallet unchanged): " + failure);
         }, "parlons-wallet-resync");
         t.setDaemon(false);
         t.start();

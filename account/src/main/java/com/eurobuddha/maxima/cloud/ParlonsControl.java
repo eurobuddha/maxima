@@ -288,13 +288,20 @@ public final class ParlonsControl {
     private static final class ConsoleJob {
         final String command;
         final long started = System.currentTimeMillis();
-        volatile String output;       // the full JSON text once finished
+        volatile String output;       // the full JSON text once finished (null while running)
+        volatile boolean done;        // finished (output set, or freed after the last page)
         volatile long ms;
         ConsoleJob(String zCommand) { command = zCommand; }
     }
 
     /** Per reply: well under the 256K Maxima package ceiling even after JSON escaping + encryption. */
     static final int CMD_CHUNK = 120_000;
+    /** The most output one command may hold in the node's heap (chars). A MegaMMR node's
+     *  {@code coins relevant:false} is hundreds of MB - materialising that on a 3g box is an OOM
+     *  and then a StartLimit outage. Over the cap the job returns an error instead. */
+    static final int CMD_MAX_OUTPUT = 16_000_000;
+    /** How many finished jobs to keep for page fetches (a running job is never evicted). */
+    private static final int CMD_KEEP = 6;
     /** How long a single RPC waits for the command before replying "pending" (the node's inbound
      *  reader is blocked for this long at most). */
     private static final long CMD_LEASH_MS = 2_500;
@@ -305,12 +312,25 @@ public final class ParlonsControl {
                 t.setDaemon(true);
                 return t;
             });
-    private final java.util.LinkedHashMap<String, ConsoleJob> mConsoleJobs =
-            new java.util.LinkedHashMap<String, ConsoleJob>(8, 0.75f, true) {
-                @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ConsoleJob> e) {
-                    return size() > 6;
+    /** Insertion-ordered; pruned by {@link #pruneConsoleJobs} - only FINISHED jobs are evicted. */
+    private final java.util.LinkedHashMap<String, ConsoleJob> mConsoleJobs = new java.util.LinkedHashMap<>();
+
+    /** Drop the oldest finished jobs beyond CMD_KEEP; a job still running is always kept. */
+    private void pruneConsoleJobs() {
+        synchronized (mConsoleJobs) {
+            int finished = 0;
+            for (ConsoleJob j : mConsoleJobs.values()) {
+                if (j.done) finished++;
+            }
+            java.util.Iterator<java.util.Map.Entry<String, ConsoleJob>> it = mConsoleJobs.entrySet().iterator();
+            while (finished > CMD_KEEP && it.hasNext()) {
+                if (it.next().getValue().done) {
+                    it.remove();
+                    finished--;
                 }
-            };
+            }
+        }
+    }
 
     public void registerOn(ServiceRegistry zReg) {
         // --- pairing ---
@@ -1503,6 +1523,8 @@ public final class ParlonsControl {
             out.put("own", own);
             out.put("script", ps == null ? "" : safe(ps.walletScript()));  // for a device to track+relay
             out.put("hex", ps == null ? "" : safe(ps.walletHex()));
+            out.put("canResync", mWallet.canResync());
+            out.put("resyncError", safe(mWallet.lastResyncError()));
             return bytes(out);
         });
         zReg.register(M_WALLET_SET, req -> {
@@ -1576,12 +1598,23 @@ public final class ParlonsControl {
             final ConsoleJob job = new ConsoleJob(command);
             final String jobKey = Long.toHexString(System.nanoTime()) + Integer.toHexString(command.hashCode());
             synchronized (mConsoleJobs) { mConsoleJobs.put(jobKey, job); }
+            pruneConsoleJobs();
             mNode.log("terminal: " + head + " (paired device)");
             mConsoleExec.execute(() -> {
                 String out;
                 try {
                     JSONObject r = console.run(command);
                     out = r == null ? "{}" : r.toString();
+                    if (out.length() > CMD_MAX_OUTPUT) {
+                        int mb = out.length() / 1_000_000;
+                        out = null;   // let it go before building the reply
+                        JSONObject big = new JSONObject();
+                        big.put("command", command);
+                        big.put("status", false);
+                        big.put("error", "output too large for the paired channel (about " + mb
+                                + " MB, cap " + (CMD_MAX_OUTPUT / 1_000_000) + " MB) - narrow the command");
+                        out = big.toString();
+                    }
                 } catch (Throwable e) {
                     JSONObject r = new JSONObject();
                     r.put("command", command);
@@ -1591,6 +1624,7 @@ public final class ParlonsControl {
                 }
                 job.ms = System.currentTimeMillis() - job.started;
                 job.output = out;   // volatile write publishes ms + output
+                job.done = true;
             });
             return bytes(consoleReply(jobKey, job, 0));
         });
@@ -1856,18 +1890,25 @@ public final class ParlonsControl {
         out.put("command", zJob.command);
         String full = zJob.output;
         if (full == null) {
+            if (zJob.done) {
+                return err("that output has already been delivered - run the command again");
+            }
             out.put("pending", true);
             out.put("elapsed", System.currentTimeMillis() - zJob.started);
             return out;
         }
         int from = Math.max(0, Math.min(zOffset, full.length()));
         int to = Math.min(full.length(), from + CMD_CHUNK);
+        boolean more = to < full.length();
         out.put("pending", false);
         out.put("output", full.substring(from, to));
         out.put("offset", from);
         out.put("total", full.length());
-        out.put("more", to < full.length());
+        out.put("more", more);
         out.put("ms", zJob.ms);
+        if (!more) {
+            zJob.output = null;   // the device has the last page: release the text from the heap
+        }
         return out;
     }
 

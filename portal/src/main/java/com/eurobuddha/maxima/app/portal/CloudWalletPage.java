@@ -41,6 +41,9 @@ public final class CloudWalletPage implements Page {
     private boolean mBuilt;
 
     private String mAddress = "";
+    /** From parlons.wallet.address: node accounts can move the wallet to a new phrase. */
+    private boolean mCanResync;
+    private String mResyncError = "";
     private String mConfirmed = "";
     private String mSendable = "";
     private String mError = "";
@@ -98,11 +101,15 @@ public final class CloudWalletPage implements Page {
                 String confirmed = "";
                 String sendable = "";
                 String error = "";
+                boolean canResync = false;
+                String resyncError = "";
                 JSONArray tokens = null;
                 int uses = -1, maxUses = CloudWallet.MAX_USES;
                 try {
                     JSONObject a = r.walletAddress();
                     addr = str(a, "address");
+                    canResync = Boolean.TRUE.equals(a.get("canResync"));
+                    resyncError = str(a, "resyncError");
                     // Track the account's PUBLIC address on this device's minimaCore (script+hex
                     // from sally), so a signed txn from sally can be relayed here — txnbasics needs
                     // the coin proofs. Idempotent; back-fills historic coins the same way the app does.
@@ -143,13 +150,16 @@ public final class CloudWalletPage implements Page {
                     }
                 } catch (Exception ignored) {
                 }
-                final String fa = addr, fc = confirmed, fs = sendable, fe = error;
+                final String fa = addr, fc = confirmed, fs = sendable, fe = error, fre = resyncError;
+                final boolean fcr = canResync;
                 final JSONArray ft = tokens;
                 final int fu = uses, fm = maxUses;
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
                     mBusy = false;
                     mAddress = fa;
+                    mCanResync = fcr;
+                    mResyncError = fre;
                     mConfirmed = fc;
                     mSendable = fs;
                     mError = fe;
@@ -335,14 +345,23 @@ public final class CloudWalletPage implements Page {
         sendCard.addView(PortalUi.label(c, "Detach = move ALL funds to a wallet whose seed "
                 + "lives on this phone (Minima Core). Your cloud identity stays; the VPS "
                 + "goes cold and keeps a watch-only view."));
-        sendCard.addView(PortalUi.gap(c, 8));
-        TextView resync = PortalUi.ghost(c, "Resync wallet to a new phrase…");
-        resync.setOnClickListener(v -> resyncFlow());
-        sendCard.addView(resync);
-        sendCard.addView(PortalUi.gap(c, 6));
-        sendCard.addView(PortalUi.label(c, "Resync = the node's wallet moves to a NEW 24-word "
-                + "phrase (its signing keys used up, or you want a fresh seed). Your identity, "
-                + "devices and contacts stay; funds at the old phrase stay with the old phrase."));
+        if (mCanResync) {   // node accounts only: a cloud wallet IS the identity seed
+            sendCard.addView(PortalUi.gap(c, 8));
+            TextView resync = PortalUi.ghost(c, "Resync wallet to a new phrase…");
+            resync.setOnClickListener(v -> resyncFlow());
+            sendCard.addView(resync);
+            sendCard.addView(PortalUi.gap(c, 6));
+            sendCard.addView(PortalUi.label(c, "Resync = the node's wallet moves to a NEW 24-word "
+                    + "phrase (its signing keys used up, or you want a fresh seed). Your identity, "
+                    + "devices and contacts stay; funds at the old phrase stay with the old phrase."));
+            if (!mResyncError.isEmpty()) {
+                sendCard.addView(PortalUi.gap(c, 6));
+                TextView bad = PortalUi.label(c, "Last resync did NOT go through - the wallet is "
+                        + "unchanged. " + mResyncError);
+                bad.setTextColor(c.getColor(R.color.ux_error));
+                sendCard.addView(bad);
+            }
+        }
         mRoot.addView(sendCard);
 
         // --- history: this device's ledger (sends + received payments seen while paired) ---
@@ -588,8 +607,6 @@ public final class CloudWalletPage implements Page {
         });
     }
 
-    /** The resync flow (user decision: the new seed lives ON THE DEVICE): sweep everything to
-     *  a Minima Core wallet on this phone, then watch that address from the cloud. */
     /** Re-point the NODE wallet at a new phrase; identity untouched (node accounts only). */
     private void resyncFlow() {
         final android.widget.EditText field = new android.widget.EditText(mAct);
@@ -638,6 +655,8 @@ public final class CloudWalletPage implements Page {
                 .show();
     }
 
+    /** The detach flow (user decision: the new seed lives ON THE DEVICE): sweep everything to
+     *  a Minima Core wallet on this phone, then watch that address from the cloud. */
     private void detachFlow() {
         boolean coreInstalled;
         try {

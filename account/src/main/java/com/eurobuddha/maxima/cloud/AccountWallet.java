@@ -87,4 +87,8 @@ public interface AccountWallet {
      * stay with the old phrase.
      */
     void resyncTo(String zPhrase) throws Exception;
+
+    /** Why the last {@link #resyncTo} did NOT go through ("" = none / it succeeded). A node
+     *  reports the resync as started before it runs; this is how a device learns it failed. */
+    default String lastResyncError() { return ""; }
 }

@@ -284,13 +284,18 @@ public final class Client {
                     requireArg(rest.subList(1, rest.size()), "wallet resync <file holding the new 24-word phrase>");
                     String phrase = new String(java.nio.file.Files.readAllBytes(
                             java.nio.file.Paths.get(rest.get(2))), java.nio.charset.StandardCharsets.UTF_8).trim();
-                    report(r.walletResync(phrase), "wallet resync started ✓ - same account, node restarting (~1 min); NEW wallet address");
+                    report(r.walletResync(phrase), "wallet resync started ✓ - same account. On success the node restarts (~1 min) "
+                            + "with a NEW wallet address; if it fails the wallet stays as it is and `wallet address` shows why");
                 } else if ("address".equals(sub)) {
                     JSONObject o = r.walletAddress();
                     System.out.println(isOk(o)
                             ? "watch address: " + (String.valueOf(o.get("address")).isEmpty()
                                 ? "(none — wallet set <Mx>)" : o.get("address"))
                             : "error: " + o.getOrDefault("error", o));
+                    String re = String.valueOf(o.getOrDefault("resyncError", ""));
+                    if (!re.isEmpty()) {
+                        System.out.println("last resync FAILED (wallet unchanged): " + re);
+                    }
                 } else {   // balance
                     JSONObject o = r.balance();
                     if (!isOk(o)) { fail(o); break; }

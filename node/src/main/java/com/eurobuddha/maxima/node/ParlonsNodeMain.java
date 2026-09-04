@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.6";
+    public static final String  NODE_VERSION = "0.2.7";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -329,20 +329,36 @@ public final class ParlonsNodeMain {
         return "";
     }
 
-    /** True for a routable public IPv4/host: not empty, loopback, link-local or RFC1918. */
-    private static boolean isPublicHost(String zHost) {
-        if (zHost == null || zHost.isEmpty() || "null".equals(zHost)) return false;
-        if (zHost.startsWith("127.") || zHost.startsWith("10.") || zHost.startsWith("192.168.")
-                || zHost.startsWith("169.254.") || zHost.equals("0.0.0.0") || zHost.equals("localhost")) {
+    /**
+     * True for a host contacts can reach: a DNS name, or an IP literal (v4 or v6) that is not
+     * loopback, link-local, site-local (RFC 1918 / fc00::/7), any-local, or carrier-grade NAT
+     * (100.64.0.0/10). A literal is judged without a DNS lookup; a name is trusted as given.
+     */
+    static boolean isPublicHost(String zHost) {
+        if (zHost == null || zHost.isEmpty() || "null".equals(zHost) || "localhost".equalsIgnoreCase(zHost)) {
             return false;
         }
-        if (zHost.startsWith("172.")) {
-            try {
-                int b = Integer.parseInt(zHost.split("\\.")[1]);
-                if (b >= 16 && b <= 31) return false;
-            } catch (Exception ignored) { }
+        boolean literal = zHost.matches("[0-9.]+") || zHost.contains(":");
+        if (!literal) {
+            return true;   // a hostname the operator chose
         }
-        return true;
+        try {
+            java.net.InetAddress a = java.net.InetAddress.getByName(zHost);   // literal: no lookup
+            if (a.isLoopbackAddress() || a.isLinkLocalAddress() || a.isSiteLocalAddress()
+                    || a.isAnyLocalAddress() || a.isMulticastAddress()) {
+                return false;
+            }
+            byte[] b = a.getAddress();
+            if (b.length == 4 && (b[0] & 0xFF) == 100 && (b[1] & 0xC0) == 64) {
+                return false;   // 100.64.0.0/10 carrier-grade NAT
+            }
+            if (b.length == 16 && (b[0] & 0xFE) == 0xFC) {
+                return false;   // fc00::/7 unique-local (isSiteLocalAddress only covers fec0::/10)
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** The ACCOUNT identity phrase: identity.txt if pinned, else the vault. Never logged. */
@@ -394,14 +410,15 @@ public final class ParlonsNodeMain {
                 return MaximaIdentity.fromPhrase(Arrays.asList(phrase.split("\\s+")));
             }
         }
-        MaximaIdentity id = deriveMaximaIdentityFromVault();
+        String vaultPhrase = readVaultPhraseWhenReady();
+        MaximaIdentity id = MaximaIdentity.fromPhrase(Arrays.asList(vaultPhrase.split("\\s+")));
         try {
             java.nio.file.Path pp = pin.toPath();
             try {
                 java.nio.file.Files.createFile(pp, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
                         java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
             } catch (Exception nonPosix) { }
-            java.nio.file.Files.write(pp, sVaultPhrase.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            java.nio.file.Files.write(pp, vaultPhrase.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             System.out.println("[parlons-node] identity: pinned from the vault into identity.txt "
                     + "(wallet resyncs no longer change the identity)");
         } catch (Exception e) {
@@ -411,9 +428,10 @@ public final class ParlonsNodeMain {
     }
 
     private static File sDataFolder;
-    private static String sVaultPhrase = "";
 
-    private static MaximaIdentity deriveMaximaIdentityFromVault() throws Exception {
+    /** The vault phrase once the node's wallet is up (waits up to 120 s; unlocks a
+     *  password-locked node once). Returned to the caller, held nowhere else. */
+    private static String readVaultPhraseWhenReady() throws Exception {
         boolean unlockTried = false;
         for (int i = 0; i < 60; i++) {
             try {
@@ -429,9 +447,7 @@ public final class ParlonsNodeMain {
                     }
                     if (phrase instanceof String && !((String) phrase).isEmpty()
                             && !Boolean.TRUE.equals(locked)) {
-                        sVaultPhrase = ((String) phrase).trim();
-                        List<String> words = Arrays.asList(sVaultPhrase.split("\\s+"));
-                        return MaximaIdentity.fromPhrase(words);
+                        return ((String) phrase).trim();
                     }
                 }
             } catch (Throwable ignored) {

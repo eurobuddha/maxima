@@ -49,6 +49,19 @@ public class NodeApi {
     private final Context mContext;
     private volatile boolean mReleased;
 
+    /**
+     * The Terminal's OWN lane. A command can poll the node for up to three minutes; running that
+     * on CloudSession's shared interactive lane would freeze the status pill and every other
+     * page behind it (the lane-starvation that once showed as a 27 s "connecting…"). The session
+     * is only borrowed (connectInteractive, fast) to obtain the remote; the wait happens here.
+     */
+    private static final java.util.concurrent.ExecutorService CONSOLE =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "portal-terminal");
+                t.setDaemon(true);
+                return t;
+            });
+
     public NodeApi(Context ctx) {
         mContext = ctx;
     }
@@ -64,21 +77,23 @@ public class NodeApi {
         final long timeout = timeoutFor(command);
         CloudSession.connectInteractive(mContext, new CloudSession.Cb() {
             @Override public void ok(ParlonsRemote r) {
-                try {
-                    org.minima.utils.json.JSONObject o = r.nodeCmd(command, timeout);
-                    if (!Boolean.TRUE.equals(o.get("ok"))) {
-                        deliverError(cb, String.valueOf(o.getOrDefault("error", "the node refused the command")));
-                        return;
+                CONSOLE.execute(() -> {
+                    try {
+                        org.minima.utils.json.JSONObject o = r.nodeCmd(command, timeout);
+                        if (!Boolean.TRUE.equals(o.get("ok"))) {
+                            deliverError(cb, String.valueOf(o.getOrDefault("error", "the node refused the command")));
+                            return;
+                        }
+                        final JSONObject json = new JSONObject(String.valueOf(o.get("output")));
+                        mMain.post(() -> {
+                            if (dead()) return;
+                            if (cb != null) cb.onResult(json);
+                        });
+                    } catch (Exception e) {
+                        deliverError(cb, "Your node didn't answer: "
+                                + (e.getMessage() == null ? e.toString() : e.getMessage()));
                     }
-                    final JSONObject json = new JSONObject(String.valueOf(o.get("output")));
-                    mMain.post(() -> {
-                        if (dead()) return;
-                        if (cb != null) cb.onResult(json);
-                    });
-                } catch (Exception e) {
-                    deliverError(cb, "Your node didn't answer: "
-                            + (e.getMessage() == null ? e.toString() : e.getMessage()));
-                }
+                });
             }
             @Override public void err(String message) {
                 deliverError(cb, "Can't reach your node: " + message);
@@ -91,16 +106,18 @@ public class NodeApi {
         if (mReleased) return;
         CloudSession.connectInteractive(mContext, new CloudSession.Cb() {
             @Override public void ok(ParlonsRemote r) {
-                try {
-                    org.minima.utils.json.JSONObject o = r.nodeLog(false);
-                    final JSONObject json = new JSONObject(o.toString());
-                    mMain.post(() -> {
-                        if (dead()) return;
-                        if (cb != null) cb.onResult(json);
-                    });
-                } catch (Exception e) {
-                    deliverError(cb, e.getMessage() == null ? e.toString() : e.getMessage());
-                }
+                CONSOLE.execute(() -> {
+                    try {
+                        org.minima.utils.json.JSONObject o = r.nodeLog(false);
+                        final JSONObject json = new JSONObject(o.toString());
+                        mMain.post(() -> {
+                            if (dead()) return;
+                            if (cb != null) cb.onResult(json);
+                        });
+                    } catch (Exception e) {
+                        deliverError(cb, e.getMessage() == null ? e.toString() : e.getMessage());
+                    }
+                });
             }
             @Override public void err(String message) {
                 deliverError(cb, "Can't reach your node: " + message);

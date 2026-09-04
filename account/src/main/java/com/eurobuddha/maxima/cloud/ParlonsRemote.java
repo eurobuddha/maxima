@@ -612,7 +612,6 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_WALLET_ADDR, new JSONObject());
     }
 
-    /** Re-point the account wallet at a new 24-word phrase; the identity stays. Node accounts only. */
     /**
      * Run ONE node command on the account's embedded Minima node (Terminal IDE). The node runs
      * it on its own lane and pages the output out in pieces under the Maxima package ceiling;
@@ -660,6 +659,7 @@ public final class ParlonsRemote {
         return done;
     }
 
+    /** Re-point the account wallet at a new 24-word phrase; the identity stays. Node accounts only. */
     public JSONObject walletResync(String zPhrase) throws Exception {
         JSONObject p = new JSONObject();
         p.put("phrase", zPhrase);

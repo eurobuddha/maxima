@@ -334,6 +334,9 @@ public final class HostPool {
             if (mActive.size() >= mTarget) {
                 break;
             }
+            if (rec.hostPort.equals(pref)) {
+                continue;   // already tried above this tick - don't pay the connect wait twice
+            }
             if (!mActive.containsKey(rec.hostPort)) {
                 attachOne(rec.hostPort, zTimeoutMs);
             }
