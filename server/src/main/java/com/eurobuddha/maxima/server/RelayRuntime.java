@@ -60,15 +60,17 @@ public final class RelayRuntime {
         public final long writeStalls;
         /** Push tasks (drains, keep-alives) the pool could not even queue. */
         public final long pushDiscards;
+        /** Clients asked to move because this relay was over its soft client target. */
+        public final long sheds;
 
         Stats(int connections, int routes, long relayed, long stored, long dropped,
               int mail, int directory) {
-            this(connections, routes, relayed, stored, dropped, mail, directory, true, 0, 0, 0);
+            this(connections, routes, relayed, stored, dropped, mail, directory, true, 0, 0, 0, 0);
         }
 
         Stats(int connections, int routes, long relayed, long stored, long dropped,
               int mail, int directory, boolean acceptAlive, long acceptFailures,
-              long writeStalls, long pushDiscards) {
+              long writeStalls, long pushDiscards, long sheds) {
             this.connections = connections;
             this.routes = routes;
             this.relayed = relayed;
@@ -80,6 +82,7 @@ public final class RelayRuntime {
             this.acceptFailures = acceptFailures;
             this.writeStalls = writeStalls;
             this.pushDiscards = pushDiscards;
+            this.sheds = sheds;
         }
     }
 
@@ -298,7 +301,7 @@ public final class RelayRuntime {
         return new Stats(r.connectionCount(), r.routeCount(), r.relayedCount(),
                 r.storedCount(), r.droppedCount(), r.mailbox().totalItems(),
                 r.directory().size(), r.acceptAlive(), r.acceptFailures(),
-                r.writeStalls(), r.pushDiscards());
+                r.writeStalls(), r.pushDiscards(), r.shedsSent());
     }
 
     /** Stop the maintain loop, flush write-behind mail, and stop the relay. Idempotent. */

@@ -193,6 +193,15 @@ public final class HostConnection implements Closeable {
      *  with RelayServer.CTRL_MAILBOX_* and the jar client's SocketTransport. */
     private static final int CTRL_MAILBOX_INFO = 40;
     private static final int CTRL_MAILBOX_ACK = 41;
+    /** Relay->client: "please move to another relay" (no destination; we choose). */
+    private static final int CTRL_SHED = 42;
+
+    /** Told (on the reader thread) when this relay asks us to move. */
+    private volatile Runnable mOnShed;
+
+    public void setOnShed(Runnable zHook) {
+        mOnShed = zHook;
+    }
 
     /** Runs before a mailbox ack is signed (the node flushes its stores here). */
     private volatile Runnable mBeforeAck;
@@ -296,6 +305,16 @@ public final class HostConnection implements Closeable {
                 // the holder of the private key can answer, so a squatter who
                 // announced our public key can neither be served nor drain us.
                 answerMailboxChallenge(ctrl);
+            } else if (ctrl.getType().getAsInt() == CTRL_SHED) {
+                // Advisory: the relay is over its client target. Whether and where we move is
+                // OUR decision (HostPool.shed) - a relay never chooses our next relay.
+                Runnable r = mOnShed;
+                if (r != null) {
+                    try {
+                        r.run();
+                    } catch (Exception ignored) {
+                    }
+                }
             }
             return true;
         }

@@ -169,6 +169,17 @@ public final class HostPool {
     private volatile String mAdvertisedEndpoint;
     /** Runs before any attached connection signs a mailbox ack (see HostConnection). */
     private volatile Runnable mBeforeAck;
+    /** hostPort -> when we last honoured a shed from it (one per relay per SHED_ACCEPT_MS). */
+    private final Map<String, Long> mShedHonoured = new ConcurrentHashMap<>();
+    /** A relay's shed is honoured at most this often - a relay that keeps asking is ignored. */
+    public static final long SHED_ACCEPT_MS = 30 * 60_000L;
+    /** Sheds run off the reader thread (an attach blocks), one at a time. */
+    private final java.util.concurrent.ExecutorService mShedExec =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "maxima-shed");
+                t.setDaemon(true);
+                return t;
+            });
 
     public void setBeforeAck(Runnable zHook) {
         mBeforeAck = zHook;
@@ -326,6 +337,7 @@ public final class HostPool {
                 mVersion);
         conn.setAdvertisedEndpoint(mAdvertisedEndpoint);
         conn.setBeforeAck(mBeforeAck);
+        conn.setOnShed(() -> mShedExec.execute(() -> shed(zHostPort, zTimeoutMs)));
         try {
             conn.attach(zTimeoutMs);
             mActive.put(zHostPort, conn);
@@ -433,6 +445,50 @@ public final class HostPool {
         return mActive.size();
     }
 
+    /**
+     * A relay asked us to move ({@code CTRL_SHED}). WE choose the replacement: a random other
+     * verified candidate, never one the relay named - so a relay can spread its load but can
+     * never steer its clients. Honoured at most once per relay per {@link #SHED_ACCEPT_MS},
+     * never for the preferred cape, and only if the replacement attaches first: we never
+     * drop below target on a relay's say-so.
+     *
+     * @return true if we moved
+     */
+    public boolean shed(String zHostPort, int zTimeoutMs) {
+        if (zHostPort == null || zHostPort.equals(mPreferred) || !mActive.containsKey(zHostPort)) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        Long last = mShedHonoured.get(zHostPort);
+        if (last != null && now - last < SHED_ACCEPT_MS) {
+            return false;
+        }
+        mShedHonoured.put(zHostPort, now);
+        List<String> candidates = new ArrayList<>();
+        for (String h : mKnown.keySet()) {
+            if (h.equals(zHostPort) || mActive.containsKey(h)) {
+                continue;
+            }
+            Long until = mCooldown.get(h);
+            if (until != null && now < until) {
+                continue;
+            }
+            candidates.add(h);
+        }
+        Collections.shuffle(candidates, mRand);
+        int attempts = 0;
+        for (String h : candidates) {
+            if (attempts++ >= 3) {
+                break;
+            }
+            if (attachOne(h, zTimeoutMs)) {
+                detach(zHostPort);   // replacement is up: now let the asking relay go
+                return true;
+            }
+        }
+        return false;   // nowhere else to go: we stay, the relay can ask again later
+    }
+
     /** Drop one relay, banking its uptime so the score reflects reality. */
     public void detach(String zHostPort) {
         HostConnection conn = mActive.remove(zHostPort);
@@ -498,6 +554,7 @@ public final class HostPool {
         for (String h : new ArrayList<>(mActive.keySet())) {
             detach(h);
         }
+        mShedExec.shutdownNow();
     }
 
     /** The reference deletes a Maxima host not seen for 7 days. */

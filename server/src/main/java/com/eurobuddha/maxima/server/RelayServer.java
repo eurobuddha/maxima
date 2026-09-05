@@ -283,6 +283,19 @@ public final class RelayServer {
     private final AtomicLong mAcceptFailures = new AtomicLong();
     /** Times {@link #maintain} found the accept thread dead and restarted it. */
     private final AtomicLong mAcceptRestarts = new AtomicLong();
+    /** Shed requests sent (a client asked to move; whether it did is its choice). */
+    private final AtomicLong mSheds = new AtomicLong();
+    /**
+     * Soft client target: above this many registered routes the relay asks a few clients per
+     * maintenance tick to move elsewhere (classic {@code TGT_NUM_NONE_P2P_LINKS} = 100). 0
+     * disables shedding. Kept well under {@link #mMaxConnections} so a relay spreads load
+     * before it has to refuse anyone. Operators: --shed N / -Dmaxima.relay.shed.
+     */
+    private volatile int mShedTarget = Integer.getInteger("maxima.relay.shed", 384);
+    /** Per tick, at most this many clients are asked to move - a gentle drain, never a stampede. */
+    private static final int SHED_PER_TICK = 4;
+    /** A client asked to move is not asked again for this long (it may have declined). */
+    private static final long SHED_REPEAT_MS = 30 * 60_000L;
     private volatile Thread mAcceptThread;
     private final AtomicLong mRelayed = new AtomicLong();
 
@@ -375,6 +388,8 @@ public final class RelayServer {
         volatile long writeStartedAt;
         /** A keep-alive is queued on the push pool and not yet written: don't queue another. */
         volatile boolean keepalivePending;
+        /** When we last asked this client to move (0 = never). */
+        volatile long shedAt;
 
         Conn(Socket zSocket) throws Exception {
             socket = zSocket;
@@ -549,6 +564,15 @@ public final class RelayServer {
 
     public void setMaxPerSource(int zMax) {
         mMaxPerSource = Math.max(1, zMax);
+    }
+
+    /** Soft client target above which clients are asked to move; 0 disables. */
+    public void setShedTarget(int zTarget) {
+        mShedTarget = Math.max(0, zTarget);
+    }
+
+    public long shedsSent() {
+        return mSheds.get();
     }
 
     public void setMaxConnections(int zMaxConnections) {
@@ -1299,6 +1323,16 @@ public final class RelayServer {
      *  destructive delete safe (see the drain comment). */
     static final int CTRL_MAILBOX_INFO = 40;
     static final int CTRL_MAILBOX_ACK = 41;
+    /**
+     * SHED (relay->client): "I am over my client target, please move to another relay". The
+     * client CHOOSES its replacement itself, at random from relays it verified - the payload
+     * carries no target. Classic's DoSwap names the relay to move to, which lets a relay
+     * steer its clients anywhere (to an accomplice, say); an advisory shed with the choice
+     * left to the client keeps load balancing without that control. The client also never
+     * leaves its preferred cape, accepts at most one shed per relay per 30 min, and only moves
+     * once the replacement attach has succeeded.
+     */
+    static final int CTRL_SHED = 42;
 
     /** The exact bytes both sides sign/verify for a mailbox ack. */
     static byte[] mailboxAckCanonical(byte[] zKeyDer, long zSeq) throws Exception {
@@ -1488,6 +1522,49 @@ public final class RelayServer {
         considerBootstrapPeers();
         ensureAccepting();
         sweepConnections(now);
+        shedIfOverloaded(now);
+    }
+
+    /**
+     * Load shedding: over the soft target, ask a few registered clients to move - the ones
+     * asked longest ago first, never the same one twice within {@link #SHED_REPEAT_MS}. The
+     * message names no destination (see {@link #CTRL_SHED}); the client draws its own.
+     */
+    void shedIfOverloaded(long zNow) {
+        int target = mShedTarget;
+        if (target <= 0) {
+            return;
+        }
+        int over = mRoutes.size() - target;
+        if (over <= 0) {
+            return;
+        }
+        java.util.List<Conn> candidates = new java.util.ArrayList<>();
+        for (Conn c : mConns.values()) {
+            if (c.routingKey != null && zNow - c.shedAt > SHED_REPEAT_MS) {
+                candidates.add(c);
+            }
+        }
+        java.util.Collections.shuffle(candidates);
+        int n = Math.min(SHED_PER_TICK, Math.min(over, candidates.size()));
+        for (int i = 0; i < n; i++) {
+            Conn c = candidates.get(i);
+            c.shedAt = zNow;
+            mDrainExec.execute(() -> {
+                try {
+                    MaximaCTRLMessage shed = new MaximaCTRLMessage(CTRL_SHED);
+                    shed.setData(new MiniData(new byte[] {0}));
+                    c.write(Frame.body(Frame.MSG_MAXIMA_CTRL, shed));
+                    mSheds.incrementAndGet();
+                } catch (Exception e) {
+                    cleanup(c);
+                }
+            });
+        }
+        if (n > 0) {
+            log("over client target (" + mRoutes.size() + " > " + target + "): asked " + n
+                    + " client(s) to move");
+        }
     }
 
     /** Belt and braces for {@link #acceptLoop}: if the accept thread is dead while we are
