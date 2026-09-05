@@ -64,14 +64,19 @@ public final class WalletPublisher {
         sDiscovered = zSource;
     }
 
-    /** The remembered gateway this install starts on (see GatewayOrder), "" if none yet. */
-    static String stickyGateway(Context zCtx) {
-        return zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE).getString("gateway_sticky", "");
+    /** The remembered gateway this install starts on (see GatewayOrder): url + key, or null. */
+    static com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway stickyGateway(Context zCtx) {
+        android.content.SharedPreferences p = zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE);
+        String url = p.getString("gateway_sticky", "");
+        String key = p.getString("gateway_sticky_key", "");
+        return url.isEmpty() || key.isEmpty() ? null
+                : new com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway("", url, key);
     }
 
-    static void rememberGateway(Context zCtx, String zUrl) {
+    static void rememberGateway(Context zCtx, String zUrl, String zKey) {
         zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE).edit()
-                .putString("gateway_sticky", zUrl == null ? "" : zUrl).apply();
+                .putString("gateway_sticky", zUrl == null ? "" : zUrl)
+                .putString("gateway_sticky_key", zKey == null ? "" : zKey).apply();
     }
 
     /**
@@ -96,15 +101,16 @@ public final class WalletPublisher {
         for (String u : FLEET_GATEWAY_URLS) {
             floor.add(new com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway("", u, FLEET_GATEWAY_TOKEN));
         }
+        com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway sticky = stickyGateway(zCtx);
         java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway> ordered =
-                com.eurobuddha.maxima.core.session.GatewayOrder.order(discovered, floor,
-                        stickyGateway(zCtx), new java.util.Random());
+                com.eurobuddha.maxima.core.session.GatewayOrder.order(discovered, floor, sticky,
+                        new java.util.Random());
         java.util.List<GatewayNode.Endpoint> eps = new java.util.ArrayList<>();
         for (com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway g : ordered) {
             eps.add(new GatewayNode.Endpoint(g.url, g.key));
         }
-        if (!eps.isEmpty() && !eps.get(0).url.equals(stickyGateway(zCtx))) {
-            rememberGateway(zCtx, eps.get(0).url);   // first choice, or the old one is gone
+        if (!eps.isEmpty() && (sticky == null || !eps.get(0).url.equals(sticky.url))) {
+            rememberGateway(zCtx, eps.get(0).url, eps.get(0).token);   // the install's first choice
         }
         return eps;
     }
@@ -126,9 +132,17 @@ public final class WalletPublisher {
         if (usesDefaultGateway(zCtx)) {
             // The fleet, with failover: discovered gateways + the compiled-in floor, random start.
             // A user-configured node is a single fixed endpoint.
-            mGateway = new GatewayNode(fleetEndpoints(zCtx), main);
+            final java.util.List<GatewayNode.Endpoint> eps = fleetEndpoints(zCtx);
+            mGateway = new GatewayNode(eps, main);
             final Context app = mCtx;
-            mGateway.setOnSwitch(moved -> rememberGateway(app, moved));   // failover moved: follow it
+            mGateway.setOnSwitch(moved -> {                                // failover moved: follow it
+                for (GatewayNode.Endpoint e : eps) {
+                    if (e.url.equals(moved)) {
+                        rememberGateway(app, e.url, e.token);
+                        return;
+                    }
+                }
+            });
         } else {
             mGateway = new GatewayNode(url, gatewayToken(zCtx), main);
         }

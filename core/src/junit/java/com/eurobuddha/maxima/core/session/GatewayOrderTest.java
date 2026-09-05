@@ -27,7 +27,7 @@ public class GatewayOrderTest {
         List<PeerDiscovery.Gateway> discovered = Arrays.asList(
                 g("https://n1.example/cmd"), g("https://n2.example/cmd"), g("https://n3.example/cmd"));
         for (int seed = 0; seed < 20; seed++) {
-            List<PeerDiscovery.Gateway> o = GatewayOrder.order(discovered, FLOOR, "https://n2.example/cmd", new Random(seed));
+            List<PeerDiscovery.Gateway> o = GatewayOrder.order(discovered, FLOOR, g("https://n2.example/cmd"), new Random(seed));
             assertEquals("https://n2.example/cmd", o.get(0).url);
             assertEquals(5, o.size());
         }
@@ -39,14 +39,32 @@ public class GatewayOrderTest {
                 g("https://n1.example/cmd"), g("https://n2.example/cmd"), g("https://n3.example/cmd"));
         Set<String> leads = new HashSet<>();
         for (int seed = 0; seed < 40; seed++) {
-            leads.add(GatewayOrder.order(discovered, FLOOR, "", new Random(seed)).get(0).url);
+            leads.add(GatewayOrder.order(discovered, FLOOR, null, new Random(seed)).get(0).url);
         }
         assertTrue("40 installs spread over " + leads.size() + " gateways", leads.size() >= 4);
     }
 
     @Test
-    public void aRememberedGatewayThatVanishedIsReplacedNotKept() {
-        List<PeerDiscovery.Gateway> o = GatewayOrder.order(new ArrayList<>(), FLOOR, "https://gone.example/cmd", new Random(1));
+    public void aRememberedGatewayStillLeadsWhenDiscoveryHasNotReportedIt() {
+        // App start: the wallet is built before the relays have reported, so the remembered
+        // (discovered) gateway is not in the offered set - it must still lead, with its own key.
+        PeerDiscovery.Gateway remembered = new PeerDiscovery.Gateway("", "https://n7.example/cmd", "remembered_key_1");
+        List<PeerDiscovery.Gateway> o = GatewayOrder.order(new ArrayList<>(), FLOOR, remembered, new Random(1));
+        assertEquals(3, o.size());
+        assertEquals("https://n7.example/cmd", o.get(0).url);
+        assertEquals("remembered_key_1", o.get(0).key);
+        // ...and when discovery DOES list it, the live entry (fresher key) leads instead
+        List<PeerDiscovery.Gateway> live = Arrays.asList(
+                new PeerDiscovery.Gateway("r", "https://n7.example/cmd", "fresh_key_000001"));
+        o = GatewayOrder.order(live, FLOOR, remembered, new Random(1));
+        assertEquals(3, o.size());
+        assertEquals("fresh_key_000001", o.get(0).key);
+    }
+
+    @Test
+    public void aRememberedGatewayWithNoKeyIsIgnored() {
+        List<PeerDiscovery.Gateway> o = GatewayOrder.order(new ArrayList<>(), FLOOR,
+                new PeerDiscovery.Gateway("", "https://n7.example/cmd", ""), new Random(1));
         assertEquals(2, o.size());
         assertTrue(o.get(0).url.startsWith("https://floor-"));
     }
@@ -57,7 +75,7 @@ public class GatewayOrderTest {
                 new PeerDiscovery.Gateway("r", "https://floor-a.example/cmd", "fresh_key_12345"),
                 new PeerDiscovery.Gateway("r", "http://plain.example/cmd", "key_0123456789"),
                 new PeerDiscovery.Gateway("r", "https://nokey.example/cmd", ""));
-        List<PeerDiscovery.Gateway> o = GatewayOrder.order(discovered, FLOOR, "", new Random(2));
+        List<PeerDiscovery.Gateway> o = GatewayOrder.order(discovered, FLOOR, null, new Random(2));
         assertEquals(2, o.size());
         for (PeerDiscovery.Gateway g : o) {
             if (g.url.equals("https://floor-a.example/cmd")) {

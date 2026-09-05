@@ -23,17 +23,22 @@ public final class GatewayOrder {
     }
 
     /**
-     * The failover list: the remembered gateway first when it is still offered, the rest
-     * shuffled; when nothing is remembered (or it is gone), a random gateway leads and the
-     * caller should remember it. Discovered entries win over a floor entry with the same URL.
+     * The failover list: the REMEMBERED gateway first, always - the wallet's imported coins live
+     * there - then the rest shuffled; when nothing is remembered, a random gateway leads and the
+     * caller remembers it (URL and key). The remembered gateway is tried even when discovery
+     * does not currently list it: at app start the wallet is often built before the relays
+     * have reported, and treating the remembered gateway as "gone" then swapped every install
+     * between a discovered gateway and the floor across restarts, re-running the coin import
+     * each time. It drops out only by FAILING, when failover moves the remembered choice.
+     * Discovered entries win over a floor entry with the same URL.
      *
      * @param zDiscovered gateways learned from verified relays (may be empty)
      * @param zFloor      the compiled-in gateways, never empty
-     * @param zSticky     the remembered URL, or null / ""
+     * @param zSticky     the remembered gateway (url + key), or null
      */
     public static List<PeerDiscovery.Gateway> order(List<PeerDiscovery.Gateway> zDiscovered,
                                                     List<PeerDiscovery.Gateway> zFloor,
-                                                    String zSticky, Random zRandom) {
+                                                    PeerDiscovery.Gateway zSticky, Random zRandom) {
         LinkedHashMap<String, PeerDiscovery.Gateway> all = new LinkedHashMap<>();
         for (PeerDiscovery.Gateway g : zDiscovered) {
             if (usable(g)) {
@@ -47,14 +52,15 @@ public final class GatewayOrder {
         }
         List<PeerDiscovery.Gateway> out = new ArrayList<>(all.values());
         Collections.shuffle(out, zRandom);
-        if (zSticky != null && !zSticky.isEmpty()) {
+        if (usable(zSticky)) {
+            PeerDiscovery.Gateway lead = zSticky;
             for (int i = 0; i < out.size(); i++) {
-                if (out.get(i).url.equals(zSticky)) {
-                    PeerDiscovery.Gateway keep = out.remove(i);
-                    out.add(0, keep);
+                if (out.get(i).url.equals(zSticky.url)) {
+                    lead = out.remove(i);   // the live entry (a fresher key, if any) leads
                     break;
                 }
             }
+            out.add(0, lead);
         }
         return out;
     }

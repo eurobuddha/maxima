@@ -69,14 +69,19 @@ public final class DesktopWalletPublisher {
         for (String u : FLEET_GATEWAY_URLS) {
             floor.add(new com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway("", u, FLEET_GATEWAY_TOKEN));
         }
-        String sticky = PREFS.get("gateway_sticky", "");
+        String stickyUrl = PREFS.get("gateway_sticky", "");
+        String stickyKey = PREFS.get("gateway_sticky_key", "");
+        com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway sticky =
+                stickyUrl.isEmpty() || stickyKey.isEmpty() ? null
+                : new com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway("", stickyUrl, stickyKey);
         java.util.List<String[]> eps = new java.util.ArrayList<>();
         for (com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway g
                 : com.eurobuddha.maxima.core.session.GatewayOrder.order(discovered, floor, sticky, new java.util.Random())) {
             eps.add(new String[] {g.url, g.key});
         }
-        if (!eps.isEmpty() && !eps.get(0)[0].equals(sticky)) {
+        if (!eps.isEmpty() && !eps.get(0)[0].equals(stickyUrl)) {
             PREFS.put("gateway_sticky", eps.get(0)[0]);
+            PREFS.put("gateway_sticky_key", eps.get(0)[1]);
         }
         return eps;
     }
@@ -231,6 +236,7 @@ public final class DesktopWalletPublisher {
                 if (mCurrent != idx) {
                     mCurrent = idx;
                     PREFS.put("gateway_sticky", mFleet.get(idx)[0]);   // failover moved: follow it
+                    PREFS.put("gateway_sticky_key", mFleet.get(idx)[1]);
                 }
                 return r;
             } catch (Unreachable u) {
