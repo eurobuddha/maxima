@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.35";
+    public static final String VERSION = "0.4.36";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -69,6 +69,11 @@ public final class Main {
                     if (blobBytes < 0) {
                         fail("--blobstore must be >= 0 (MB)");
                     }
+                    break;
+                case "--maxpersource":
+                    // Concurrent connections per source IP (a whole household behind one NAT).
+                    System.setProperty("maxima.relay.maxpersource",
+                            Integer.toString(intArg(args, ++i, "--maxpersource")));
                     break;
                 case "--rate":
                     rate = intArg(args, ++i, "--rate");
@@ -231,6 +236,7 @@ public final class Main {
         out.println("  --blobstore <MB> media shelf size in MB, 0=off (default 4096)");
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
         out.println("  --peers <list>   comma-separated fleet host:ports to forward resolve");
+        out.println("  --maxpersource N concurrent connections per source IP (default 32)");
         out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");
         out.println("  -v, --version    print the version and exit");

@@ -304,13 +304,13 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 (8 GB) | 0.2.9, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
-| eurobuddha 65.109.31.226 (64 GB) | 0.2.9, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
-| megammr 192.248.151.55 (32 GB) | 0.2.9, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
-| vigilance 45.77.57.24 (8 GB, shared) | 0.2.9, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
-| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.9, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
-| maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
-| openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
+| sally 95.179.179.181 (8 GB) | 0.2.11, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 (64 GB) | 0.2.11, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 (32 GB) | 0.2.11, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.11, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.11, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
+| maxima-lite 45.77.246.226 | maxima-relay 0.4.36 | — | 9501 | hosts the legacy proxy | — |
+| openproject 78.141.237.9 | maxima-relay 0.4.36 | — | 9501 | — | — |
 
 Every node's relay kept its old relay identity (`--seed-from` the relay's seed.txt), so nothing
 pinned to the fleet changed. maxima-lite and openproject stay on the plain relay: both have
@@ -374,6 +374,15 @@ front, so a marketplace or explorer links straight to your box:
   atelier-level tooling; State NFTs are still viewed, sent and received in the Gallery. The
   collection upload path `newcollection` + `c/<id>/<n>.<ext>` stays in the node and the CLI.)
   Every upload is audited in the node log.
+
+### Relay per-source cap (server 0.4.36)
+A relay counts concurrent connections per SOURCE IP: a Parlons Node + phones + a desktop behind
+one home NAT are one source. The cap is now 32 (was 16; `--maxpersource N` /
+`-Dmaxima.relay.maxpersource`). An UNREGISTERED connection (never registered a route) is reaped
+after 10 min even if it keeps sending frames - a classic node's P2P socket to a relay only pings
+and never registers, and minimaDesk used to open one per 15-min heal (`connect host:` without
+checking it was already attached; fixed in minimaDesk 0.7.13) until the cap refused the whole
+household ("refused (per-source cap)"). Registered clients are still never reaped on idle.
 
 ## Ports
 

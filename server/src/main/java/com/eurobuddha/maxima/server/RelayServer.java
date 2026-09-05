@@ -78,7 +78,14 @@ public final class RelayServer {
      */
     private volatile int mMaxConnections = 512;
     /** Concurrent connections from one source IP (a CGNAT still fits many users). */
-    private volatile int mMaxPerSource = 16;
+    /** Concurrent connections per source IP. 32: a Parlons Node + several phones + a desktop
+     *  behind one home NAT all count as ONE source; 16 was refusing a normal household once a
+     *  single leaky client filled it. Operators: --maxpersource N / -Dmaxima.relay.maxpersource. */
+    private volatile int mMaxPerSource = Integer.getInteger("maxima.relay.maxpersource", 32);
+    /** An UNREGISTERED connection (no routing key) older than this is reaped even if it keeps
+     *  sending frames: a real client registers within seconds, a classic P2P socket that only
+     *  pings never does - and such sockets used to live forever, one per client reconnect. */
+    static final long UNREGISTERED_MAX_MS = 10 * 60_000L;
     /** Idle ms before an UNREGISTERED connection (never became a client) is reaped. */
     private static final int IDLE_TIMEOUT_MS = 120_000;
     /** Cap on every rate-limit / bookkeeping map, so none can grow unbounded. */
@@ -263,6 +270,7 @@ public final class RelayServer {
         final DataInputStream in;
         final DataOutputStream out;
         volatile String routingKey;
+        final long opened = System.currentTimeMillis();
         volatile long lastSeen = System.currentTimeMillis();
         /** When we last WROTE anything down this socket. The reference drops a
          *  peer it has not READ from in 10 min, and a peer reads from us only
@@ -400,6 +408,25 @@ public final class RelayServer {
      * host selection by it (merit, never node type). A phone and a jar run this
      * same code; only the number differs.
      */
+    /** A connection that has never registered a route and is older than UNREGISTERED_MAX_MS is
+     *  not a client, whatever it keeps sending. */
+    private boolean unregisteredTooOld(Conn zConn) {
+        if (zConn.routingKey != null) {
+            return false;
+        }
+        long age = System.currentTimeMillis() - zConn.opened;
+        if (age <= UNREGISTERED_MAX_MS) {
+            return false;
+        }
+        log("reaping unregistered connection from " + zConn.sourceIp + " (" + (age / 1000)
+                + "s, no route registered)");
+        return true;
+    }
+
+    public void setMaxPerSource(int zMax) {
+        mMaxPerSource = Math.max(1, zMax);
+    }
+
     public void setMaxConnections(int zMaxConnections) {
         if (zMaxConnections > 0) {
             mMaxConnections = zMaxConnections;
@@ -501,12 +528,21 @@ public final class RelayServer {
                         log("reaping idle non-client from " + zConn.sourceIp);
                         break;
                     }
+                    if (unregisteredTooOld(zConn)) {
+                        break;
+                    }
                     continue;
                 }
                 if (body == null || body.length < 1) {
+                    if (unregisteredTooOld(zConn)) {
+                        break;
+                    }
                     continue;
                 }
                 zConn.lastSeen = System.currentTimeMillis();
+                if (unregisteredTooOld(zConn)) {
+                    break;
+                }
                 // Master flood cap: bound inbound frames per source IP before any
                 // expensive work. The source IP of an established TCP connection
                 // cannot be rotated, which is exactly why it is the right key.
