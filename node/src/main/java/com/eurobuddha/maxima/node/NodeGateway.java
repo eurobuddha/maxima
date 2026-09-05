@@ -53,6 +53,10 @@ public final class NodeGateway {
     private final RateLimiter mLimiter;
     private HttpServer mServer;
     private java.util.concurrent.ExecutorService mExecutor;
+    private volatile NftStore mNft;   // hosted NFT art, served read-only at /nft/<path>
+
+    /** Plug in the NFT store before {@link #start()}; without it /nft answers 404. */
+    public void setNftStore(NftStore zStore) { mNft = zStore; }
 
     private NodeGateway(String zBindHost, int zPort, String zToken, RateLimiter zLimiter) {
         mBindHost = zBindHost; mPort = zPort; mToken = zToken; mLimiter = zLimiter;
@@ -104,6 +108,7 @@ public final class NodeGateway {
     public void start() throws IOException {
         mServer = HttpServer.create(new InetSocketAddress(mBindHost, mPort), 0);
         mServer.createContext("/cmd", this::handleCmd);
+        mServer.createContext("/nft", this::handleNft);
         mExecutor = java.util.concurrent.Executors.newFixedThreadPool(4);
         mServer.setExecutor(mExecutor);
         mServer.start();
@@ -177,6 +182,44 @@ public final class NodeGateway {
         } catch (Throwable t) {
             // Don't echo internal exception detail to the client — log it, return a generic message.
             System.out.println("[parlons-node] gateway request error: " + t);
+            try { fail(ex, 500, "gateway error"); } catch (IOException ignored) {}
+        }
+    }
+
+    /**
+     * Public, read-only NFT art: {@code GET /nft/<sha256>.<ext>} or
+     * {@code GET /nft/c/<collection>/<index>.<ext>}. No token (the files are what the on-chain
+     * metadata links to, meant for anyone), strict path shapes (nothing else on disk is
+     * addressable), immutable caching (content-addressed), nosniff.
+     */
+    private void handleNft(HttpExchange ex) throws IOException {
+        try {
+            String clientIp = ex.getRemoteAddress() == null ? "?"
+                    : ex.getRemoteAddress().getAddress().getHostAddress();
+            if (!mLimiter.allow(clientIp)) { fail(ex, 429, "rate limit exceeded"); return; }
+            String method = ex.getRequestMethod();
+            boolean head = "HEAD".equalsIgnoreCase(method);
+            if (!head && !"GET".equalsIgnoreCase(method)) { fail(ex, 405, "GET only"); return; }
+            NftStore store = mNft;
+            String path = ex.getRequestURI().getPath();
+            String rel = path.startsWith("/nft/") ? path.substring(5) : "";
+            java.nio.file.Path file = store == null ? null : store.resolve(rel);
+            if (file == null || !java.nio.file.Files.isRegularFile(file)) { fail(ex, 404, "not hosted here"); return; }
+            long len = java.nio.file.Files.size(file);
+            ex.getResponseHeaders().set("Content-Type", NftStore.contentType(rel));
+            ex.getResponseHeaders().set("Cache-Control", "public, max-age=31536000, immutable");
+            ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+            ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            if (head) { ex.sendResponseHeaders(200, -1); ex.close(); return; }
+            ex.sendResponseHeaders(200, len);
+            try (OutputStream os = ex.getResponseBody();
+                 java.io.InputStream in = java.nio.file.Files.newInputStream(file)) {
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            }
+        } catch (Throwable t) {
+            System.out.println("[parlons-node] nft request error: " + t);
             try { fail(ex, 500, "gateway error"); } catch (IOException ignored) {}
         }
     }

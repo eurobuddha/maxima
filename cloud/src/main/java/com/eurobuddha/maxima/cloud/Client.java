@@ -341,6 +341,40 @@ public final class Client {
                 }
                 break;
             }
+            case "nft": {
+                String sub = rest.size() > 1 ? rest.get(1).toLowerCase() : "list";
+                if ("put".equals(sub)) {
+                    requireArg(rest.subList(1, rest.size()), "nft put <file> [collection-id index]");
+                    java.nio.file.Path f = java.nio.file.Paths.get(rest.get(2));
+                    byte[] bytes = java.nio.file.Files.readAllBytes(f);
+                    String name = f.getFileName().toString();
+                    String ext = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1) : "bin";
+                    String col = rest.size() > 4 ? rest.get(3) : "";
+                    int idx = rest.size() > 4 ? Integer.parseInt(rest.get(4)) : 0;
+                    JSONObject o = r.nftPut(bytes, ext, col, idx, (sent, total) ->
+                            System.out.println("  " + sent + " / " + total + " bytes"));
+                    if (!isOk(o)) { fail(o); break; }
+                    System.out.println("hosted ✓  path: " + o.get("path"));
+                    System.out.println("  url   : " + (String.valueOf(o.get("url")).isEmpty() ? "(no public base set on the node)" : o.get("url")));
+                    System.out.println("  sha256: " + o.get("sha256") + "  size: " + o.get("size"));
+                } else if ("newcollection".equals(sub)) {
+                    JSONObject o = r.nftNewCollection();
+                    if (!isOk(o)) { fail(o); break; }
+                    System.out.println("collection: " + o.get("collection") + "\n  base: " + o.get("base"));
+                } else if ("delete".equals(sub)) {
+                    requireArg(rest.subList(1, rest.size()), "nft delete <path>");
+                    report(r.nftDelete(rest.get(2)), "deleted ✓");
+                } else {
+                    JSONObject o = r.nftList();
+                    if (!isOk(o)) { fail(o); break; }
+                    System.out.println("public base: " + (String.valueOf(o.get("base")).isEmpty() ? "(not set)" : o.get("base")));
+                    for (Object f : arr(o, "files")) {
+                        JSONObject fo = (JSONObject) f;
+                        System.out.println("  " + fo.get("path") + "  " + fo.get("size") + " bytes  " + fo.get("url"));
+                    }
+                }
+                break;
+            }
             case "cmd": {
                 if (rest.size() < 2) {
                     System.err.println("usage: cmd <node command…>   e.g. cmd status  |  cmd balance megammr:true address:Mx…");
@@ -444,6 +478,7 @@ public final class Client {
         System.out.println("  wallet resync <file>   re-point the wallet at a NEW 24-word phrase (identity kept; node accounts)");
         System.out.println("  wallet balance         balance of the shown address");
         System.out.println("  cmd <node command…>    run ANY Minima command on the account's node (Terminal); full output, never cut");
+        System.out.println("  nft put <file> [col idx] host NFT art on the node (public URL, content-addressed); nft list | newcollection | delete <path>");
         System.out.println("  seed                   reveal the account's 24-word phrase");
         System.out.println("  backup <file.pbk>      write an encrypted backup (phone-compatible)");
     }

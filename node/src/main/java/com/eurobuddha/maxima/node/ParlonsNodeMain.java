@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.7";
+    public static final String  NODE_VERSION = "0.2.8";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -187,6 +187,13 @@ public final class ParlonsNodeMain {
                 // Wallet is live => open the phone-facing gateway (M3).
                 try {
                     NodeGateway gw = NodeGateway.create(dataFolder.toPath(), gatewayPort);
+                    // NFT art hosting: files the node's tokens point at, public at <public>/nft/…
+                    String publicBase = System.getProperty("parlons.node.public", "").trim();
+                    sNft = new NftStore(dataFolder, publicBase);
+                    gw.setNftStore(sNft);
+                    System.out.println("[parlons-node] nft hosting: " + dataFolder + "/nft served at "
+                            + (publicBase.isEmpty() ? "(no public base - set -Dparlons.node.public=https://host/parlons-node)"
+                               : publicBase + "/nft/<file>"));
                     gw.start();
                     gatewayHolder.set(gw);
                     System.out.println("[parlons-node] wallet gateway up on " + gw.bindHost() + ":"
@@ -308,6 +315,20 @@ public final class ParlonsNodeMain {
         core.useExternalRelay(zRelay);
         // The Terminal IDE on a paired device: any node command, run on the console lane.
         core.control().setNodeConsole(NodeWallet::run);
+        // NFT hosting from the wallet on a paired device (upload over the paired channel).
+        final NftStore nft = sNft;
+        if (nft != null) {
+            core.control().setNftHost(new com.eurobuddha.maxima.cloud.ParlonsControl.NftHost() {
+                public org.minima.utils.json.JSONObject put(String uid, String ext, long size, String sha256,
+                        long off, byte[] chunk, String collection, int index) throws Exception {
+                    return nft.put(uid, ext, size, sha256, off, chunk, collection, index);
+                }
+                public org.minima.utils.json.JSONObject newCollection() throws Exception { return nft.newCollection(); }
+                public org.minima.utils.json.JSONObject list() throws Exception { return nft.list(); }
+                public boolean delete(String path) throws Exception { return nft.delete(path); }
+                public String publicBase() { return nft.publicBase(); }
+            });
+        }
         int hosts = core.start();
         System.out.println("[parlons-node] account up: attached to " + hosts + " relay(s), "
                 + core.pairing().authorizedCount() + " paired device(s)"
@@ -428,6 +449,7 @@ public final class ParlonsNodeMain {
     }
 
     private static File sDataFolder;
+    private static NftStore sNft;
 
     /** The vault phrase once the node's wallet is up (waits up to 120 s; unlocks a
      *  password-locked node once). Returned to the caller, held nowhere else. */

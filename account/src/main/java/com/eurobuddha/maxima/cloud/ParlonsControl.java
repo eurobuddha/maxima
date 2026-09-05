@@ -73,6 +73,10 @@ public final class ParlonsControl {
     /** Re-point the account WALLET at a new phrase; the identity stays (node accounts only). */
     public static final String M_WALLET_RESYNC = "parlons.wallet.resync";
     public static final String M_NODE_CMD     = "parlons.node.cmd";      // Terminal IDE: any node command
+    public static final String M_NFT_PUT      = "parlons.nft.put";       // host NFT art on the node (chunked)
+    public static final String M_NFT_NEWCOL   = "parlons.nft.newcollection";
+    public static final String M_NFT_LIST     = "parlons.nft.list";
+    public static final String M_NFT_DELETE   = "parlons.nft.delete";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -284,6 +288,27 @@ public final class ParlonsControl {
         mConsole = zConsole;
     }
 
+    /**
+     * NFT art hosting on a Parlons Node: the files a token's metadata links to, uploaded from a
+     * paired device over this channel and served by the node's public TLS front. Null on the
+     * cloud (nothing to serve from).
+     */
+    public interface NftHost {
+        org.minima.utils.json.JSONObject put(String uid, String ext, long size, String sha256, long off,
+                                             byte[] chunk, String collection, int index) throws Exception;
+        org.minima.utils.json.JSONObject newCollection() throws Exception;
+        org.minima.utils.json.JSONObject list() throws Exception;
+        boolean delete(String path) throws Exception;
+        /** e.g. https://store.eurobuddha.com/parlons-node ("" when the operator has not set it). */
+        String publicBase();
+    }
+
+    private volatile NftHost mNft;
+
+    public void setNftHost(NftHost zHost) {
+        mNft = zHost;
+    }
+
     /** One Terminal command in flight or finished; its output is paged out in CMD_CHUNK pieces. */
     private static final class ConsoleJob {
         final String command;
@@ -451,6 +476,8 @@ public final class ParlonsControl {
                 out.put("outbox", nc.outboxDepth());
                 out.put("directlyReachable", nc.directlyReachable());
                 out.put("directAddress", safe(nc.directAddress()));
+                NftHost nh = mNft;
+                out.put("nftBase", nh == null ? "" : safe(nh.publicBase()));
                 out.put("ownRelay", safe(nc.ownRelay()));
                 out.put("ownRelayAttached", nc.ownRelayAttached());
                 out.put("ownRelayVerified", nc.ownRelayVerified());
@@ -1627,6 +1654,76 @@ public final class ParlonsControl {
                 job.done = true;
             });
             return bytes(consoleReply(jobKey, job, 0));
+        });
+        zReg.register(M_NFT_PUT, req -> {
+            requireAuth(req);
+            NftHost host = mNft;
+            if (host == null) {
+                return bytes(err("this account runs on parlons-cloud, which hosts nothing - NFT hosting needs a Parlons Node"));
+            }
+            JSONObject in = parse(req);
+            byte[] chunk;
+            try {
+                chunk = java.util.Base64.getDecoder().decode(str(in, "data"));
+            } catch (Exception e) {
+                return bytes(err("bad chunk encoding"));
+            }
+            int index = 0;
+            try { index = Integer.parseInt(str(in, "index").isEmpty() ? "0" : str(in, "index")); }
+            catch (NumberFormatException ignored) { }
+            try {
+                JSONObject r = host.put(str(in, "uid"), str(in, "ext"), lngOf(in, "size"), str(in, "sha256"),
+                        lngOf(in, "off"), chunk, str(in, "collection"), index);
+                JSONObject out = ok();
+                out.putAll(r);
+                if (Boolean.TRUE.equals(r.get("done"))) {
+                    mNode.log("nft hosted: " + r.get("path") + " (" + r.get("size") + " bytes, paired device)");
+                }
+                return bytes(out);
+            } catch (IllegalArgumentException bad) {
+                return bytes(err(bad.getMessage()));
+            } catch (Exception e) {
+                return bytes(err("hosting failed: " + (e.getMessage() == null ? e.toString() : e.getMessage())));
+            }
+        });
+        zReg.register(M_NFT_NEWCOL, req -> {
+            requireAuth(req);
+            NftHost host = mNft;
+            if (host == null) return bytes(err("NFT hosting needs a Parlons Node"));
+            try {
+                JSONObject out = ok();
+                out.putAll(host.newCollection());
+                return bytes(out);
+            } catch (Exception e) {
+                return bytes(err("could not create the collection folder: " + e.getMessage()));
+            }
+        });
+        zReg.register(M_NFT_LIST, req -> {
+            requireAuth(req);
+            NftHost host = mNft;
+            if (host == null) return bytes(err("NFT hosting needs a Parlons Node"));
+            try {
+                JSONObject out = ok();
+                out.putAll(host.list());
+                return bytes(out);
+            } catch (Exception e) {
+                return bytes(err("could not list: " + e.getMessage()));
+            }
+        });
+        zReg.register(M_NFT_DELETE, req -> {
+            requireAuth(req);
+            NftHost host = mNft;
+            if (host == null) return bytes(err("NFT hosting needs a Parlons Node"));
+            JSONObject in = parse(req);
+            try {
+                boolean gone = host.delete(str(in, "path"));
+                if (gone) mNode.log("nft unhosted: " + str(in, "path") + " (paired device)");
+                JSONObject out = ok();
+                out.put("deleted", gone);
+                return bytes(out);
+            } catch (Exception e) {
+                return bytes(err("could not delete: " + e.getMessage()));
+            }
         });
         zReg.register(M_WALLET_BAL, req -> {
             requireAuth(req);

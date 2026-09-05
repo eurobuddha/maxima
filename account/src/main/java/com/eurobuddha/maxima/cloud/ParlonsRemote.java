@@ -659,6 +659,67 @@ public final class ParlonsRemote {
         return done;
     }
 
+
+    /** Progress of a hosted-file upload: bytes sent so far of the total. */
+    public interface UploadProgress {
+        void onProgress(long zSent, long zTotal);
+    }
+
+    /**
+     * Host a file on the account's Parlons Node (NFT art): chunked over the channel,
+     * offset-idempotent, verified by sha256 on the node before it is placed. Single files are
+     * content-addressed ({@code <sha256>.<ext>}); pass a collection id + index for a State-NFT
+     * collection folder ({@code c/<id>/<index>.<ext>}). Returns the node's final reply:
+     * {@code {ok, done:true, path, url, sha256, size}} — {@code url} is "" when the operator has
+     * not set the node's public base.
+     */
+    public JSONObject nftPut(byte[] zBytes, String zExt, String zCollection, int zIndex,
+                             UploadProgress zProgress) throws Exception {
+        if (zBytes == null || zBytes.length == 0) throw new IllegalArgumentException("empty file");
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        StringBuilder sha = new StringBuilder();
+        for (byte b : md.digest(zBytes)) sha.append(String.format("%02x", b));
+        String uid = java.util.UUID.randomUUID().toString().replace("-", "");
+        int off = 0;
+        JSONObject last = null;
+        while (off < zBytes.length) {
+            int n = Math.min(MEDIA_CHUNK, zBytes.length - off);
+            JSONObject p = new JSONObject();
+            p.put("uid", uid);
+            p.put("ext", zExt);
+            p.put("size", zBytes.length);
+            p.put("sha256", sha.toString());
+            p.put("off", off);
+            p.put("data", java.util.Base64.getEncoder().encodeToString(java.util.Arrays.copyOfRange(zBytes, off, off + n)));
+            if (zCollection != null && !zCollection.isEmpty()) {
+                p.put("collection", zCollection);
+                p.put("index", zIndex);
+            }
+            last = rpc(ParlonsControl.M_NFT_PUT, p, 60_000);
+            if (!Boolean.TRUE.equals(last.get("ok"))) {
+                return last;
+            }
+            off += n;
+            if (zProgress != null) zProgress.onProgress(off, zBytes.length);
+        }
+        return last;
+    }
+
+    /** A fresh collection folder on the node: {@code {ok, collection, base}}. */
+    public JSONObject nftNewCollection() throws Exception {
+        return rpc(ParlonsControl.M_NFT_NEWCOL, new JSONObject());
+    }
+
+    public JSONObject nftList() throws Exception {
+        return rpc(ParlonsControl.M_NFT_LIST, new JSONObject());
+    }
+
+    public JSONObject nftDelete(String zPath) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("path", zPath);
+        return rpc(ParlonsControl.M_NFT_DELETE, p);
+    }
+
     /** Re-point the account wallet at a new 24-word phrase; the identity stays. Node accounts only. */
     public JSONObject walletResync(String zPhrase) throws Exception {
         JSONObject p = new JSONObject();

@@ -66,7 +66,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--peers h:p,..] [--blobstore MB] [--replace-relay] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--public https://host/parlons-node] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--peers h:p,..] [--blobstore MB] [--replace-relay] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -106,6 +106,7 @@ while [ $# -gt 0 ]; do
         --node-args)      NODE_ARGS="$2"; shift 2 ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
+        --public)         PUBLIC_BASE="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
         --gateway-public) GW_BIND="0.0.0.0"; shift ;;
         --no-megammr)     MEGAMMR="false"; shift ;;
@@ -158,6 +159,7 @@ case "$NODE_ARGS" in *'"'*) echo "--node-args must not contain double quotes (th
 # honours quotes). Built here as a plain string: quotes inside a ${var:+…} expansion in the
 # heredoc would be treated as shell quoting (stripped) or written as literal backslashes.
 ARGS_OPT="\"-Dparlons.node.args=$NODE_ARGS\""
+PUBLIC_OPT=""; [ -n "$PUBLIC_BASE" ] && PUBLIC_OPT="-Dparlons.node.public=$PUBLIC_BASE"
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
 
@@ -246,6 +248,7 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.relay.blob=$BLOB_MB \\
     -Dparlons.gateway.port=$GW_PORT \\
     -Dparlons.gateway.bind=$GW_BIND \\
+    $PUBLIC_OPT \\
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
     -Dparlons.node.rootnode=$ROOTNODE}${PASSFILE:+ \\
     -Dparlons.node.passphrase.file=$PASSFILE}${NODE_ARGS:+ \\
