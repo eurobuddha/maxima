@@ -43,8 +43,20 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class RelayServer {
 
-    /** Anything larger than this on an inbound socket is not something we want. */
-    private static final int MAX_KEEP = 1024 * 1024;
+    /** Anything larger than this on an inbound socket is not something we want. The largest
+     *  legitimate frame is a relayed unit: a MaximaPackage at its wire ceiling plus a small
+     *  TxPoW carrier. The buffer is allocated the moment the length header arrives, so this
+     *  is also the per-connection memory an attacker can pin with a slow-drip frame: 1 MiB
+     *  here across a few dozen sockets was a dead 96 MB heap. */
+    private static final int MAX_KEEP = MaximaPackage.MAX_SIZE + 64 * 1024;
+
+    /** A write blocked on a socket longer than this is a stalled peer (a full kernel buffer
+     *  nobody reads: a phone that vanished behind NAT, a client that stopped reading).
+     *  Sockets have no write timeout, so the sweep CLOSES the socket, which makes the blocked
+     *  write throw and frees its thread. Long enough for a 256 KB frame over a slow mobile
+     *  link; short enough that a few stalled peers cannot hold the push pool - and every
+     *  sender routed to them - hostage. */
+    static final long WRITE_STALL_MS = 60_000;
 
     private final MaximaIdentity mIdentity;
     private final int mPort;
@@ -238,13 +250,28 @@ public final class RelayServer {
     }
 
     private final AtomicLong mConnSeq = new AtomicLong();
-    /** Bounded worker pool for mailbox drains - keeps blocking writes / any
-     *  legacy re-mine off the single maintain thread. */
-    private final java.util.concurrent.ExecutorService mDrainExec =
-            new java.util.concurrent.ThreadPoolExecutor(0, 4, 30,
-                    java.util.concurrent.TimeUnit.SECONDS,
-                    new java.util.concurrent.LinkedBlockingQueue<>(256),
-                    new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy());
+    /**
+     * The push pool: every write the relay initiates on its own (mailbox drains, keep-alives)
+     * runs here, never on the single maintain thread. A socket write has no timeout, so a
+     * stalled peer blocks whichever thread writes to it; the maintain thread must never be
+     * that thread, or one dead phone stops expiry, sweeps, flushes and every other keep-alive.
+     *
+     * Core 4 (not 0: a ThreadPoolExecutor with core 0 runs ONE worker until its queue is full,
+     * which serialised every drain behind the slowest peer), max 8, a deep queue, and a task
+     * that still cannot be queued is COUNTED, not silently dropped. The write-stall reaper in
+     * {@link #sweepConnections} bounds how long any worker can be held.
+     */
+    private final java.util.concurrent.ThreadPoolExecutor mDrainExec;
+    /** Push tasks refused because the pool and its queue were both full. */
+    private final AtomicLong mPushDiscards = new AtomicLong();
+    /** Connections the sweep closed because a write to them had stalled. */
+    private final AtomicLong mWriteStalls = new AtomicLong();
+    /** Connections we could not admit because no thread could be spawned (the unit's
+     *  TasksMax / ulimit ceiling). Non-zero here means the BOX is the limit, not the code. */
+    private final AtomicLong mAcceptFailures = new AtomicLong();
+    /** Times {@link #maintain} found the accept thread dead and restarted it. */
+    private final AtomicLong mAcceptRestarts = new AtomicLong();
+    private volatile Thread mAcceptThread;
     private final AtomicLong mRelayed = new AtomicLong();
 
     /** Units that arrived WITHOUT the protocol's minimum proof-of-work. */
@@ -309,6 +336,11 @@ public final class RelayServer {
         /** cleanup() runs its body once even if two threads reach it. */
         final java.util.concurrent.atomic.AtomicBoolean cleaned =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
+        /** When the write in progress started; 0 when none is. The sweep reads this to find
+         *  a write blocked past {@link #WRITE_STALL_MS}. */
+        volatile long writeStartedAt;
+        /** A keep-alive is queued on the push pool and not yet written: don't queue another. */
+        volatile boolean keepalivePending;
 
         Conn(Socket zSocket) throws Exception {
             socket = zSocket;
@@ -319,8 +351,13 @@ public final class RelayServer {
         }
 
         synchronized void write(byte[] zBody) throws Exception {
-            Frame.write(out, zBody);
-            lastWrite = System.currentTimeMillis();
+            writeStartedAt = System.currentTimeMillis();
+            try {
+                Frame.write(out, zBody);
+                lastWrite = System.currentTimeMillis();
+            } finally {
+                writeStartedAt = 0;
+            }
         }
 
         void close() {
@@ -343,6 +380,16 @@ public final class RelayServer {
         mPort = zPort;
         mVersion = zVersion;
         mPool = zPool;
+        mDrainExec = new java.util.concurrent.ThreadPoolExecutor(4, 8, 30,
+                java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(2048),
+                r -> {
+                    Thread t = new Thread(r, "relay-push");
+                    t.setDaemon(true);
+                    return t;
+                },
+                (r, ex) -> mPushDiscards.incrementAndGet());
+        mDrainExec.allowCoreThreadTimeOut(true);
         if (mPool) {
             mDirectory.setOpenResolve(true);
             System.out.println("MLS OPEN-RESOLVE: this relay is a public staticMLS pool server");
@@ -477,44 +524,114 @@ public final class RelayServer {
         mServer.setReuseAddress(true);
         mServer.bind(new InetSocketAddress("0.0.0.0", mPort));
         mRunning = true;
+        startAcceptThread();
+    }
 
-        Thread accept = new Thread(() -> {
-            while (mRunning) {
+    private void startAcceptThread() {
+        Thread accept = new Thread(this::acceptLoop, "relay-accept");
+        accept.setDaemon(true);
+        mAcceptThread = accept;
+        accept.start();
+    }
+
+    /** True while the accept loop is alive. A relay whose accept thread has died is still
+     *  "active" to systemd and still serving its existing clients - it just admits nobody. */
+    public boolean acceptAlive() {
+        Thread a = mAcceptThread;
+        return a != null && a.isAlive();
+    }
+
+    public long acceptFailures() {
+        return mAcceptFailures.get();
+    }
+
+    public long pushDiscards() {
+        return mPushDiscards.get();
+    }
+
+    public long writeStalls() {
+        return mWriteStalls.get();
+    }
+
+    /**
+     * The accept loop. NOTHING thrown inside may end it: the old loop caught {@code Exception},
+     * and the one thing that actually happens under load - {@code Thread.start()} throwing
+     * {@code OutOfMemoryError: unable to create native thread} when the unit's TasksMax /
+     * ulimit is reached - is an Error, which escaped, killed the loop, and left a relay that
+     * looked healthy and admitted no one. Admission is in its own guarded step, and
+     * {@link #maintain} restarts this thread if it ever does die.
+     */
+    private void acceptLoop() {
+        while (mRunning) {
+            Socket s;
+            try {
+                s = mServer.accept();
+            } catch (Throwable e) {
+                if (!mRunning || mServer == null || mServer.isClosed()) {
+                    return;
+                }
+                log("accept error: " + e);
+                // EMFILE and friends repeat immediately; don't spin a core on them.
                 try {
-                    Socket s = mServer.accept();
-                    s.setTcpNoDelay(true);
-                    s.setKeepAlive(true);
-                    Conn c = new Conn(s);
+                    Thread.sleep(100);
+                } catch (InterruptedException ie) {
+                    return;
+                }
+                continue;
+            }
+            admit(s);
+        }
+    }
 
-                    // Admission control BEFORE we spend a thread. Relaying is
-                    // free and PoW is never verified, so an unbounded accept
-                    // loop is a slow-loris / FD-exhaustion invitation.
-                    if (mConns.size() >= mMaxConnections) {
-                        log("refused (global cap " + mMaxConnections + ") from " + c.sourceIp);
-                        c.close();
-                        continue;
-                    }
-                    int fromSource = mPerSource.merge(c.sourceIp, 1, Integer::sum);
-                    if (fromSource > mMaxPerSource) {
-                        mPerSource.merge(c.sourceIp, -1, Integer::sum);
-                        log("refused (per-source cap) from " + c.sourceIp);
-                        c.close();
-                        continue;
-                    }
+    private void admit(Socket zSocket) {
+        Conn c = null;
+        boolean counted = false;
+        try {
+            zSocket.setTcpNoDelay(true);
+            zSocket.setKeepAlive(true);
+            c = new Conn(zSocket);
 
-                    mConns.put(c.id, c);
-                    Thread t = new Thread(() -> serve(c), "relay-conn-" + c.id);
-                    t.setDaemon(true);
-                    t.start();
-                } catch (Exception e) {
-                    if (mRunning) {
-                        log("accept error: " + e);
-                    }
+            // Admission control BEFORE we spend a thread. Relaying is
+            // free and PoW is never verified, so an unbounded accept
+            // loop is a slow-loris / FD-exhaustion invitation.
+            if (mConns.size() >= mMaxConnections) {
+                log("refused (global cap " + mMaxConnections + ") from " + c.sourceIp);
+                c.close();
+                return;
+            }
+            int fromSource = mPerSource.merge(c.sourceIp, 1, Integer::sum);
+            counted = true;
+            if (fromSource > mMaxPerSource) {
+                mPerSource.merge(c.sourceIp, -1, Integer::sum);
+                counted = false;
+                log("refused (per-source cap) from " + c.sourceIp);
+                c.close();
+                return;
+            }
+
+            final Conn fc = c;
+            Thread t = new Thread(() -> serve(fc), "relay-conn-" + c.id);
+            t.setDaemon(true);
+            mConns.put(c.id, c);   // before start(), so serve()'s cleanup always finds it
+            t.start();
+        } catch (Throwable e) {
+            long n = mAcceptFailures.incrementAndGet();
+            log("could not admit connection: " + e + " (admission failures " + n
+                    + " - if this is 'unable to create native thread', the box's TasksMax /"
+                    + " ulimit is the ceiling)");
+            if (c != null) {
+                mConns.remove(c.id);
+                if (counted) {
+                    mPerSource.computeIfPresent(c.sourceIp, (k, v) -> v <= 1 ? null : v - 1);
+                }
+                c.close();
+            } else {
+                try {
+                    zSocket.close();
+                } catch (Exception ignored) {
                 }
             }
-        }, "relay-accept");
-        accept.setDaemon(true);
-        accept.start();
+        }
     }
 
     public void stop() {
@@ -530,6 +647,7 @@ public final class RelayServer {
         }
         mConns.clear();
         mRoutes.clear();
+        mDrainExec.shutdownNow();
     }
 
     // ---------------------------------------------------------------
@@ -752,8 +870,11 @@ public final class RelayServer {
         }
 
         MaximaPackage pkg = unit.mMaxima;
-        int size = Codec.serialise(pkg).length;
-        if (size > MaximaPackage.MAX_SIZE) {
+        // The frame carries the package plus a small carrier, so a frame under the ceiling
+        // holds a package under it too: the full re-serialise (a 256 KB copy per message, on
+        // every hop) is only paid for a frame that could actually be over.
+        if (zPayload.length > MaximaPackage.MAX_SIZE
+                && Codec.serialise(pkg).length > MaximaPackage.MAX_SIZE) {
             zConn.write(Frame.ack(Frame.RESPONSE_TOOBIG));
             return;
         }
@@ -1320,7 +1441,23 @@ public final class RelayServer {
         }
         mPeers.expire();
         considerBootstrapPeers();
+        ensureAccepting();
         sweepConnections(now);
+    }
+
+    /** Belt and braces for {@link #acceptLoop}: if the accept thread is dead while we are
+     *  running and the listener is open, start a new one - a silent relay is the worst
+     *  failure, and the fleet monitor only sees "active". */
+    private void ensureAccepting() {
+        if (!mRunning || mServer == null || mServer.isClosed()) {
+            return;
+        }
+        Thread a = mAcceptThread;
+        if (a == null || !a.isAlive()) {
+            long n = mAcceptRestarts.incrementAndGet();
+            log("ACCEPT THREAD DEAD - restarting it (restart " + n + ")");
+            startAcceptThread();
+        }
     }
 
     /**
@@ -1348,6 +1485,18 @@ public final class RelayServer {
      *  waiting minutes; production always uses the {@link Frame} constants. */
     void sweepConnections(long zNow, long zKeepaliveMs, long zSilenceMs) {
         for (Conn c : mConns.values()) {
+            // A write stuck past the stall window means nobody is reading at the far end.
+            // Closing the socket is the only way to unblock the writer (a socket has no write
+            // timeout); the writer's own catch then runs cleanup. Applies to unregistered
+            // connections too - a stalled greeting reply holds a thread just the same.
+            long ws = c.writeStartedAt;
+            if (ws > 0 && zNow - ws > WRITE_STALL_MS) {
+                mWriteStalls.incrementAndGet();
+                log("reaping stalled writer conn=" + c.id + " from " + c.sourceIp
+                        + " (write blocked " + (zNow - ws) / 1000 + "s)");
+                cleanup(c);
+                continue;
+            }
             if (c.routingKey == null) {
                 continue;   // unregistered: serve() already reaps it on idle
             }
@@ -1357,15 +1506,22 @@ public final class RelayServer {
                 cleanup(c);
                 continue;
             }
-            if (zNow - c.lastWrite > zKeepaliveMs) {
-                try {
-                    c.write(Frame.singlePing());
-                    mKeepalives.incrementAndGet();
-                } catch (Exception e) {
-                    log("keep-alive write failed conn=" + c.id + " -> reap");
-                    cleanup(c);
-                    continue;
-                }
+            if (zNow - c.lastWrite > zKeepaliveMs && !c.keepalivePending) {
+                // Off the maintain thread (see mDrainExec): a keep-alive to a stalled peer
+                // must never stall expiry, sweeps and every OTHER client's keep-alive.
+                c.keepalivePending = true;
+                final Conn kc = c;
+                mDrainExec.execute(() -> {
+                    try {
+                        kc.write(Frame.singlePing());
+                        mKeepalives.incrementAndGet();
+                    } catch (Exception e) {
+                        log("keep-alive write failed conn=" + kc.id + " -> reap");
+                        cleanup(kc);
+                    } finally {
+                        kc.keepalivePending = false;
+                    }
+                });
             }
             // Periodically re-deliver held mail to a still-attached client.
             // drainMailbox only fired on a FRESH route registration, so mail

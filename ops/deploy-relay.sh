@@ -176,7 +176,10 @@ IPAddressDeny=169.254.0.0/16 fe80::/10
 
 # ---- resource ceilings ----
 MemoryMax=512M
-TasksMax=256
+# 512 connection threads + push pool + JVM threads: 256 here made Thread.start() throw an
+# OutOfMemoryError at ~230 clients and silently killed the accept loop (server < 0.4.39).
+TasksMax=1024
+LimitNOFILE=65536
 
 # Journal, not a flat file: auto-rotated, access-controlled, rate-limited -
 # closes the old world-readable + unbounded-growth /var/log file.

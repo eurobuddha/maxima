@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.38";
+    public static final String VERSION = "0.4.39";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -192,8 +192,11 @@ public final class Main {
                     + " bootstrap peer(s)");
         }
         runtime.setTickListener(s -> System.out.printf(
-                "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d%n",
-                s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory));
+                "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d"
+                        + "%s acceptfail=%d stalls=%d pushdrop=%d%n",
+                s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory,
+                s.acceptAlive ? "" : " ACCEPT=DEAD", s.acceptFailures, s.writeStalls,
+                s.pushDiscards));
         runtime.start();
 
         // STUN on the same port number, UDP side: phones discover their public

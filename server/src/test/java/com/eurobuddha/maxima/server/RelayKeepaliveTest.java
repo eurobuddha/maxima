@@ -119,7 +119,8 @@ public final class RelayKeepaliveTest {
             // keepalive threshold 0 => every registered conn is "overdue"; silence
             // threshold huge => nothing is a black hole. So: keep-alive, no reap.
             relay.sweepConnections(System.currentTimeMillis(), 0L, Long.MAX_VALUE);
-            if (relay.keepalivesSent() >= before + 1) {
+            // keep-alives are written on the push pool now, not on the sweep thread
+            if (waitFor(() -> relay.keepalivesSent() >= before + 1, 5)) {
                 ok("sweep sent a keep-alive to the quiet registered client");
             } else {
                 bad("sweep sent no keep-alive (" + before + " -> " + relay.keepalivesSent() + ")");

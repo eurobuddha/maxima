@@ -301,6 +301,7 @@ IPAddressDeny=169.254.0.0/16 fe80::/10
 # ---- resource ceilings ----
 MemoryMax=$MEMMAX
 TasksMax=1024
+LimitNOFILE=65536
 
 # Journal, not a flat file - and NEVER let the seed reach it: the node prints the
 # seed only via the vault command, never to stdout.

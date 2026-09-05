@@ -52,9 +52,23 @@ public final class RelayRuntime {
         public final long dropped;
         public final int mail;
         public final int directory;
+        /** False = the accept loop is dead (maintain restarts it; a repeat is a box problem). */
+        public final boolean acceptAlive;
+        /** Connections refused because a thread could not be spawned (TasksMax / ulimit). */
+        public final long acceptFailures;
+        /** Connections the sweep closed because a write to them stalled. */
+        public final long writeStalls;
+        /** Push tasks (drains, keep-alives) the pool could not even queue. */
+        public final long pushDiscards;
 
         Stats(int connections, int routes, long relayed, long stored, long dropped,
               int mail, int directory) {
+            this(connections, routes, relayed, stored, dropped, mail, directory, true, 0, 0, 0);
+        }
+
+        Stats(int connections, int routes, long relayed, long stored, long dropped,
+              int mail, int directory, boolean acceptAlive, long acceptFailures,
+              long writeStalls, long pushDiscards) {
             this.connections = connections;
             this.routes = routes;
             this.relayed = relayed;
@@ -62,6 +76,10 @@ public final class RelayRuntime {
             this.dropped = dropped;
             this.mail = mail;
             this.directory = directory;
+            this.acceptAlive = acceptAlive;
+            this.acceptFailures = acceptFailures;
+            this.writeStalls = writeStalls;
+            this.pushDiscards = pushDiscards;
         }
     }
 
@@ -279,7 +297,8 @@ public final class RelayRuntime {
         }
         return new Stats(r.connectionCount(), r.routeCount(), r.relayedCount(),
                 r.storedCount(), r.droppedCount(), r.mailbox().totalItems(),
-                r.directory().size());
+                r.directory().size(), r.acceptAlive(), r.acceptFailures(),
+                r.writeStalls(), r.pushDiscards());
     }
 
     /** Stop the maintain loop, flush write-behind mail, and stop the relay. Idempotent. */
