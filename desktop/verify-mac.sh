@@ -25,7 +25,8 @@ echo "$INFO" | grep -E 'Authority=Developer ID Application|flags=' || true
 echo "$INFO" | grep -q 'Authority=Developer ID Application' || { echo "FAIL: app not signed with Developer ID Application"; exit 1; }
 echo "$INFO" | grep -q 'flags=.*runtime' || { echo "FAIL: hardened runtime not enabled"; exit 1; }
 codesign --verify --deep --strict --verbose=1 "$APP" && echo "ok: codesign strict deep verify"
-xcrun stapler validate "$APP" > /dev/null && echo "ok: notarization ticket stapled to the app"
+xcrun stapler validate "$APP" > /dev/null && echo "ok: notarization ticket stapled to the app" \
+  || { echo "FAIL: no ticket stapled to the app inside the dmg — build with desktop/release-mac.sh (two-stage)"; exit 1; }
 ASSESS=$(spctl --assess --type execute --verbose=2 "$APP" 2>&1 || true)
 echo "$ASSESS" | grep -q 'Notarized Developer ID' || { echo "FAIL: Gatekeeper does not see a notarized Developer ID app: $ASSESS"; exit 1; }
 echo "ok: spctl accepts the app (Notarized Developer ID)"
