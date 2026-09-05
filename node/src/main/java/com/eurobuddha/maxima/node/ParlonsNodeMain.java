@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.11";
+    public static final String  NODE_VERSION = "0.2.12";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -161,12 +161,17 @@ public final class ParlonsNodeMain {
                 // the media blob shelf (--blobstore MB). Without peers a resolve MISS on this relay
                 // is unanswerable fleet-wide; without the shelf store users' photos have nowhere to go.
                 String peers = System.getProperty("parlons.relay.peers", "").trim();
-                if (!peers.isEmpty()) {
-                    java.util.List<String> list = new java.util.ArrayList<>();
-                    for (String p : peers.split(",")) if (!p.trim().isEmpty()) list.add(p.trim());
-                    relay.setPeers(list);
-                    System.out.println("[parlons-node] mesh: " + list.size() + " bootstrap peer(s)");
+                java.util.List<String> list = new java.util.ArrayList<>();
+                for (String p : peers.split(",")) if (!p.trim().isEmpty()) list.add(p.trim());
+                if (list.isEmpty()) {
+                    // No --peers given: join the mesh through the same bootstrap list every
+                    // client starts from. A node that stood outside the mesh could not answer
+                    // a resolve miss fleet-wide and was never gossiped to anyone.
+                    list.addAll(com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
                 }
+                relay.setPeers(list);
+                System.out.println("[parlons-node] mesh: " + list.size() + " bootstrap peer(s)"
+                        + (peers.isEmpty() ? " (default fleet list)" : ""));
                 long blobMb = Long.getLong("parlons.relay.blob", 0L);
                 if (blobMb > 0) {
                     relay.setBlobBytes(blobMb * 1024L * 1024L);

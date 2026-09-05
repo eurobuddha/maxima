@@ -384,6 +384,30 @@ and never registers, and minimaDesk used to open one per 15-min heal (`connect h
 checking it was already attached; fixed in minimaDesk 0.7.13) until the cap refused the whole
 household ("refused (per-source cap)"). Registered clients are still never reaped on idle.
 
+### Relay discovery, classic Minima's way (core; app 0.6.57, portal 0.2.2, node 0.2.12, server 0.4.37)
+Phones, accounts and desktops now find relays the way a classic node finds peers "out in the wild"
+(`P2PPeersChecker` + `P2PManager`, ported as `core/.../session/PeerDiscovery.java`):
+
+- **verify before adopt** - a peer listed in any greeting is dialled on a fresh socket and only a
+  live `"welcome":"Maxima"` greeting promotes it to the verified list;
+- **250-peer list, kept turning over** - once full, one newcomer in ten is considered and a random
+  verified peer makes room (classic's admission rule), never a small "learned" cap (the old cap of 8
+  pinned every phone to the 7 bootstrap relays);
+- **a failed verified peer is rechecked in 30 min, then dropped**; the whole list is rechecked every
+  6 h; a check with no network is deferred 60 s;
+- **saved every 10 min and on shutdown** (store collection `peers`), but never when the list has
+  shrunk below half its loaded size (an outage cannot overwrite a good list);
+- **connect at RANDOM** - `HostPool.fill()` draws candidates at random like classic
+  `P2P_RANDOM_CONNECT`; merit score still orders the ATTACHED hosts for the MLS anchor. Random draw
+  is what spreads a growing population over a growing fleet (1 node per 20 phones);
+- **three strikes** - a peer that fails three connects running is forgotten (`P2P_NOCONNECT`);
+  the bootstrap floor and a node's own cape are never forgotten.
+
+Relays share a SHUFFLED list of up to 50 verified peers PLUS THEMSELVES in every greeting
+(classic `P2PGreeting`), hold up to 250, and learn peers from the greetings of relays they dial.
+The greeting also carries `conns` (current clients) next to `cap`. A Parlons Node's cape joins the
+mesh through the bootstrap list when `--peers` is not given.
+
 ## Ports
 
 | port | what | exposure |

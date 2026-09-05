@@ -2,14 +2,9 @@ package com.eurobuddha.maxima.core.session;
 
 import com.eurobuddha.maxima.core.MaximaNode;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
-import com.eurobuddha.maxima.core.msg.Greeting;
 import com.eurobuddha.maxima.core.net.HostConnection;
-import com.eurobuddha.maxima.core.net.Probe;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The client half of relay-gossip discovery, with the anti-Sybil adoption gate.
@@ -43,27 +38,43 @@ public final class RelayGossipClient {
 
     private final MaximaIdentity mSelf;
     private final String mProtocol;
-    private final int mMaxLearned;
 
-    /** Endpoints we have already adopted via gossip. */
-    private final Set<String> mLearned = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    /** The discovery of the last node ticked — where learned relays actually live now. */
+    private volatile PeerDiscovery mDiscovery;
 
     /** Our proven endpoint, when we are a reachable relay; null otherwise. */
     private volatile String mSelfEndpoint;
 
+    /** @param zMaxLearned ignored since the classic port: the verified list is bounded by
+     *  {@link PeerDiscovery#MAX_VERIFIED_PEERS} (250) with classic's admission rule, not by a
+     *  small per-client cap — a cap of 8 was measured to pin every phone to the bootstrap set. */
     public RelayGossipClient(MaximaIdentity zSelf, String zProtocol, int zMaxLearned) {
         mSelf = zSelf;
         mProtocol = zProtocol;
-        mMaxLearned = zMaxLearned;
     }
 
     /** Set (or clear, with null) our proven endpoint — wired to reachability. */
     public void setSelfEndpoint(String zHostPort) {
         mSelfEndpoint = (zHostPort == null || zHostPort.isEmpty()) ? null : zHostPort;
+        PeerDiscovery d = mDiscovery;
+        if (d != null && mSelfEndpoint != null) {
+            d.addSelf(mSelfEndpoint);
+        }
     }
 
+    /** Verified relays learned from the network (classic's known peers), floor excluded. */
     public int learnedCount() {
-        return mLearned.size();
+        PeerDiscovery d = mDiscovery;
+        if (d == null) {
+            return 0;
+        }
+        int n = 0;
+        for (String hp : d.verified()) {
+            if (!Bootstrap.RELAYS.contains(hp)) {
+                n++;
+            }
+        }
+        return n;
     }
 
     /**
@@ -97,50 +108,23 @@ public final class RelayGossipClient {
         return done;
     }
 
-    /** One discovery round over the node's live connections. Cheap; heartbeat-driven. */
+    /**
+     * One discovery round: the node's {@link PeerDiscovery} owns the work now (classic's
+     * peers checker — every attached relay's greeting was already fed to it on attach; this
+     * runs the deferred rechecks and the periodic save). Kept so callers stay unchanged.
+     */
     public void tick(MaximaNode zNode) {
+        PeerDiscovery d = zNode.discovery();
+        mDiscovery = d;
+        if (mSelfEndpoint != null) {
+            d.addSelf(mSelfEndpoint);
+        }
         for (String hp : zNode.pool().activeHosts()) {
-            if (mLearned.size() >= mMaxLearned) {
-                return;
-            }
             HostConnection c = zNode.pool().connection(hp);
-            if (c == null || c.getTheirGreeting() == null) {
-                continue;
-            }
-            List<String> active = zNode.pool().activeHosts();
-            for (String peer : Greeting.peersOf(c.getTheirGreeting().getExtraData())) {
-                if (mLearned.size() >= mMaxLearned) {
-                    return;
-                }
-                consider(zNode, peer, active);
+            if (c != null && c.getTheirGreeting() != null) {
+                d.onGreeting(hp, c.getTheirGreeting());
             }
         }
-    }
-
-    private void consider(MaximaNode zNode, String zHostPort, List<String> zActive) {
-        // already ours / known / self?
-        if (Bootstrap.RELAYS.contains(zHostPort) || mLearned.contains(zHostPort)
-                || zActive.contains(zHostPort) || zHostPort.equals(mSelfEndpoint)) {
-            return;
-        }
-        int c = zHostPort.lastIndexOf(':');
-        if (c <= 0 || c == zHostPort.length() - 1) {
-            return;
-        }
-        int port;
-        try {
-            port = Integer.parseInt(zHostPort.substring(c + 1));
-        } catch (NumberFormatException e) {
-            return;
-        }
-        if (port < 1 || port > 65535) {
-            return;
-        }
-        // PROVE it is a live relay before adopting — the crux of the defence.
-        if (!Probe.dial(zHostPort.substring(0, c), port, 4000, 2000, mProtocol)) {
-            return;
-        }
-        zNode.pool().addCandidate(zHostPort);
-        mLearned.add(zHostPort);
+        d.tick();
     }
 }

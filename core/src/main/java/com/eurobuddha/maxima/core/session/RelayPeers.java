@@ -26,11 +26,11 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 public final class RelayPeers {
 
-    /** At most this many verified peers are held and shared. */
-    public static final int MAX_PEERS = 128;
+    /** At most this many verified peers are held (classic {@code MAX_VERIFIED_PEERS}). */
+    public static final int MAX_PEERS = 250;
 
-    /** How many peers we include in a greeting. */
-    public static final int SHARE_LIMIT = 32;
+    /** How many peers we include in a greeting (classic {@code P2PParams.PEERS_LIST_SIZE}). */
+    public static final int SHARE_LIMIT = 50;
 
     /** A verified peer must re-claim within this window or it expires. */
     public static final long TTL_MS = 2 * 60 * 60 * 1000;
@@ -53,6 +53,12 @@ public final class RelayPeers {
     private final LinkedBlockingQueue<String> mPending = new LinkedBlockingQueue<>(64);
 
     private volatile boolean mRunning = true;
+    /** Our own host:port, so the fleet's lists never make us dial ourselves. */
+    private volatile String mSelfHostPort = "";
+
+    public void setSelf(String zHostPort) {
+        mSelfHostPort = zHostPort == null ? "" : zHostPort;
+    }
 
     public RelayPeers() {
         this("1.0.48");
@@ -96,18 +102,41 @@ public final class RelayPeers {
         return mPending.offer(hp);
     }
 
-    /** Verified peers, freshest first, capped at {@link #SHARE_LIMIT}. */
+    /**
+     * Verified peers to hand a client, SHUFFLED and capped at {@link #SHARE_LIMIT} — exactly
+     * classic's {@code P2PGreeting} ({@code Collections.shuffle(knownPeers)}). Freshest-first
+     * handed every client the same head of the list; a shuffle hands each one a different
+     * slice, which is what lets a population spread over the whole fleet.
+     */
     public List<String> share() {
-        List<Map.Entry<String, Long>> all = new ArrayList<>(mVerified.entrySet());
-        all.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
-        List<String> out = new ArrayList<>();
-        for (Map.Entry<String, Long> e : all) {
-            out.add(e.getKey());
-            if (out.size() >= SHARE_LIMIT) {
-                break;
-            }
+        List<String> all = new ArrayList<>(mVerified.keySet());
+        java.util.Collections.shuffle(all);
+        return all.size() > SHARE_LIMIT ? new ArrayList<>(all.subList(0, SHARE_LIMIT)) : all;
+    }
+
+    /** Learn a peer some OTHER relay vouched for (its greeting's peer list, seen when we
+     *  dialled it): unverified until our own dial-back succeeds, like any claim. */
+    public void consider(String zHostPort, String zSelfHostPort) {
+        if (zHostPort == null || zHostPort.equals(zSelfHostPort)
+                || mVerified.containsKey(zHostPort) || mVerified.size() >= MAX_PEERS) {
+            return;
         }
-        return out;
+        int c = zHostPort.lastIndexOf(':');
+        if (c <= 0 || zHostPort.indexOf(':') != c) {
+            return;
+        }
+        try {
+            int port = Integer.parseInt(zHostPort.substring(c + 1));
+            if (port < 1 || port > 65535) {
+                return;
+            }
+        } catch (NumberFormatException e) {
+            return;
+        }
+        if (!com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(zHostPort.substring(0, c))) {
+            return;
+        }
+        mPending.offer(zHostPort);
     }
 
     public int size() {
@@ -163,6 +192,10 @@ public final class RelayPeers {
             if (g != null) {
                 mVerified.put(hp, System.currentTimeMillis());
                 mPool.put(hp, com.eurobuddha.maxima.core.msg.Greeting.poolOf(g.getExtraData()));
+                // Its greeting lists the peers IT verified: the fleet learns itself.
+                for (String peer : com.eurobuddha.maxima.core.msg.Greeting.peersOf(g.getExtraData())) {
+                    consider(peer, mSelfHostPort);
+                }
             }
         }
     }

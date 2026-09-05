@@ -65,6 +65,8 @@ public final class HostPool {
          * can you carry", so a reachable phone and a jar are ranked the same way.
          */
         public volatile int advertisedCapacity;
+        /** Failed connects IN A ROW; reset on success. Three running = classic NOCONNECT. */
+        public volatile int consecutiveFailures;
 
         HostRecord(String zHostPort) {
             hostPort = zHostPort;
@@ -127,6 +129,24 @@ public final class HostPool {
     private final Map<String, HostConnection> mActive = new ConcurrentHashMap<>();
     /** hostPort -> epoch-ms until which a proven-dead host is barred from re-adoption. */
     private final Map<String, Long> mCooldown = new ConcurrentHashMap<>();
+    /** The trusted floor (bootstrap list / user edits): candidates discovery may never drop. */
+    private final java.util.Set<String> mFloor =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final java.util.Random mRand = new java.util.Random();
+
+    /** Told when a host attaches (with its greeting — discovery reads the peers it lists)
+     *  and when a host has failed {@link PeerDiscovery#NOCONNECT_ATTEMPTS} connects running
+     *  (classic {@code P2P_NOCONNECT}). */
+    public interface Listener {
+        void onAttached(String zHostPort, com.eurobuddha.maxima.core.msg.Greeting zTheirs);
+        void onNoConnect(String zHostPort);
+    }
+
+    private volatile Listener mListener;
+
+    public void setListener(Listener zListener) {
+        mListener = zListener;
+    }
 
     /**
      * A host this node ALWAYS wants attached and advertised first: a Parlons Node's own
@@ -171,6 +191,23 @@ public final class HostPool {
     /** Tell the pool a relay exists. Does not connect. */
     public void addCandidate(String zHostPort) {
         mKnown.computeIfAbsent(zHostPort, HostRecord::new);
+    }
+
+    /** Candidates that form the trusted floor: never forgotten on discovery's say-so. */
+    public void addFloor(List<String> zHostPorts) {
+        for (String h : zHostPorts) {
+            mFloor.add(h);
+            addCandidate(h);
+        }
+    }
+
+    /** Discovery dropped a peer: forget it unless it is attached, preferred, or floor. */
+    public void removeCandidate(String zHostPort) {
+        if (zHostPort == null || mActive.containsKey(zHostPort)
+                || zHostPort.equals(mPreferred) || mFloor.contains(zHostPort)) {
+            return;
+        }
+        mKnown.remove(zHostPort);
     }
 
     public void setPreferred(String zHostPort) {
@@ -289,22 +326,51 @@ public final class HostPool {
             // capacity (0 for a classic host) is known - fold it into the record
             // so score() can weight future selection by merit.
             rec.advertisedCapacity = conn.getTheirCapacity();
+            rec.consecutiveFailures = 0;
             // Push receive: the reader owns this socket from here - inbound is
             // handled the instant the relay pushes it, and the 25s NAT
             // keep-alive stops the mapping being reaped.
             if (mSink != null) {
                 conn.startReader(mSink);
             }
+            // The relay's greeting lists the peers IT has verified: discovery's intake.
+            Listener l = mListener;
+            if (l != null) {
+                try {
+                    l.onAttached(zHostPort, conn.getTheirGreeting());
+                } catch (Exception ignored) {
+                }
+            }
             return true;
         } catch (Exception e) {
             rec.failures++;
+            rec.consecutiveFailures++;
             conn.close();
+            if (rec.consecutiveFailures >= PeerDiscovery.NOCONNECT_ATTEMPTS) {
+                // Classic P2P_NOCONNECT: three failed connects running and the peer is
+                // forgotten (discovery drops it; the floor and the preferred host stay).
+                rec.consecutiveFailures = 0;
+                mCooldown.put(zHostPort, System.currentTimeMillis() + COOLDOWN_MS);
+                Listener l = mListener;
+                if (l != null) {
+                    try {
+                        l.onNoConnect(zHostPort);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
             return false;
         }
     }
 
     /**
-     * Bring the pool up to its target, best-scoring candidates first.
+     * Bring the pool up to its target. Candidates are tried in RANDOM order — classic
+     * Minima's {@code P2P_RANDOM_CONNECT}: it never ranks peers, and that is precisely what
+     * spreads a growing population over a growing fleet. (Merit-ordered by score was
+     * measured to herd every phone onto the same few bootstrap relays: a phone's own uptime
+     * history with a relay only ever grows, so whoever it met first won forever.) The
+     * preferred host (a node's own cape) is still attached first, and {@link #score} still
+     * orders the ATTACHED hosts for anchor/directory choice.
      *
      * @return how many are attached afterwards
      */
@@ -330,16 +396,29 @@ public final class HostPool {
                 detach(worst);
             }
         }
-        for (HostRecord rec : knownByScore()) {
-            if (mActive.size() >= mTarget) {
+        List<String> candidates = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        for (String h : mKnown.keySet()) {
+            if (h.equals(pref) || mActive.containsKey(h)) {
+                continue;   // the preferred host was tried above; attached ones need nothing
+            }
+            Long until = mCooldown.get(h);
+            if (until != null && now < until) {
+                continue;
+            }
+            candidates.add(h);
+        }
+        Collections.shuffle(candidates, mRand);
+        // Bounded: each failed connect costs up to the timeout, so one fill never grinds
+        // through a long dead list — the next heartbeat draws again.
+        int attempts = 0;
+        int maxAttempts = mTarget + 3;
+        for (String h : candidates) {
+            if (mActive.size() >= mTarget || attempts >= maxAttempts) {
                 break;
             }
-            if (rec.hostPort.equals(pref)) {
-                continue;   // already tried above this tick - don't pay the connect wait twice
-            }
-            if (!mActive.containsKey(rec.hostPort)) {
-                attachOne(rec.hostPort, zTimeoutMs);
-            }
+            attempts++;
+            attachOne(h, zTimeoutMs);
         }
         return mActive.size();
     }

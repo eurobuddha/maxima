@@ -121,6 +121,20 @@ public final class Greeting implements Streamable {
      */
     public static Greeting commsOnly(String zVersion, String zHost, int zPort,
                                      List<String> zPeers, int zCapacity, boolean zPool) {
+        return commsOnly(zVersion, zHost, zPort, zPeers, zCapacity, zPool, -1);
+    }
+
+    /**
+     * As above, plus the relay's CURRENT client count as {@code "conns"} — classic's ping
+     * greeting carries its connection count the same way ({@code "connections"}), and the
+     * P2P greeting its client count against its maximum, which is what its load balancing
+     * reads. Together with {@code cap} a peer relay can see this relay's spare room.
+     *
+     * @param zConns current registered clients; negative omits the claim
+     */
+    public static Greeting commsOnly(String zVersion, String zHost, int zPort,
+                                     List<String> zPeers, int zCapacity, boolean zPool,
+                                     int zConns) {
         boolean known = zHost != null && !zHost.isEmpty()
                 && !zHost.equals("0.0.0.0") && !zHost.equals("::");
         StringBuilder peers = new StringBuilder("[");
@@ -136,6 +150,7 @@ public final class Greeting implements Streamable {
                 + ",\"port\":\"" + zPort + "\""
                 + (zCapacity > 0 ? ",\"cap\":\"" + zCapacity + "\"" : "")
                 + (zPool ? ",\"pool\":\"true\"" : "")
+                + (zConns >= 0 ? ",\"conns\":\"" + zConns + "\"" : "")
                 + ",\"peers\":" + peers + "}";
         return new Greeting(zVersion, json, -1);
     }
@@ -196,6 +211,15 @@ public final class Greeting implements Streamable {
             return Math.max(0, c);
         } catch (NumberFormatException e) {
             return 0;
+        }
+    }
+
+    /** The "conns" (current clients) claim from a greeting's extra data, or -1 if absent. */
+    public static int connsOf(String zExtraDataJson) {
+        try {
+            return Integer.parseInt(flatValue(zExtraDataJson, "conns"));
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 

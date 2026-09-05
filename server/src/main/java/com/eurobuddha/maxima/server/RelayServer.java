@@ -346,6 +346,26 @@ public final class RelayServer {
 
     public void setPublicHost(String zHost) {
         mPublicHost = zHost == null ? "" : zHost.trim();
+        mPeers.setSelf(mPublicHost.isEmpty() ? "" : mPublicHost + ":" + mPort);
+    }
+
+    /**
+     * Our greeting: the verified peers we share (shuffled, classic style) PLUS OURSELVES when
+     * we have a public address — classic's {@code P2PGreeting} appends its own address to the
+     * list it hands out when it accepts in-links, so a client that reached us through a
+     * peer's list learns us by name too. Carries our current client count ({@code conns})
+     * next to our capacity ({@code cap}) so peers can see our spare room.
+     */
+    private Greeting greeting() {
+        java.util.List<String> peers = mPeers.share();
+        if (!mPublicHost.isEmpty()) {
+            String self = mPublicHost + ":" + mPort;
+            if (!peers.contains(self)) {
+                peers.add(self);
+            }
+        }
+        return Greeting.commsOnly(mVersion, mPublicHost, mPort, peers, mMaxConnections, mPool,
+                mRoutes.size());
     }
 
     /**
@@ -607,9 +627,7 @@ public final class RelayServer {
                 // Reply with ours — now carrying the relays we have VERIFIED, so
                 // every client that attaches learns the wider fleet — then offer
                 // ourselves as a directory, exactly as a classic node does.
-                zConn.write(Frame.body(Frame.MSG_GREETING,
-                        Greeting.commsOnly(mVersion, mPublicHost, mPort, mPeers.share(),
-                                mMaxConnections, mPool)));
+                zConn.write(Frame.body(Frame.MSG_GREETING, greeting()));
                 zConn.write(Frame.body(Frame.MSG_MAXIMA_CTRL,
                         MaximaCTRLMessage.mls(mIdentity.mxIdentity())));
                 return;
@@ -679,8 +697,7 @@ public final class RelayServer {
                 // keep-alive. Answer with a SINGLE_PONG greeting exactly as a
                 // classic node does; an unanswered probe makes the prober mark
                 // us unreachable. lastSeen was already stamped by serve().
-                zConn.write(Frame.singlePong(Greeting.commsOnly(
-                        mVersion, mPublicHost, mPort, mPeers.share(), mMaxConnections, mPool)));
+                zConn.write(Frame.singlePong(greeting()));
                 return;
             }
             default:

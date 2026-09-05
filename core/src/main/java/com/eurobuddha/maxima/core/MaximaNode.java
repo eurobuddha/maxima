@@ -16,6 +16,7 @@ import com.eurobuddha.maxima.core.rpc.RpcPeer;
 import com.eurobuddha.maxima.core.rpc.ServiceRegistry;
 import com.eurobuddha.maxima.core.services.Tier1Services;
 import com.eurobuddha.maxima.core.session.HostPool;
+import com.eurobuddha.maxima.core.session.PeerDiscovery;
 import com.eurobuddha.maxima.core.store.Store;
 import com.eurobuddha.maxima.core.util.Json;
 
@@ -40,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MaximaNode implements ChatPort {
 
     private final MaximaIdentity mIdentity;
+    private final PeerDiscovery mDiscovery;
     private final String mVersion;
     private final HostPool mPool;
     private final ServiceRegistry mServices = new ServiceRegistry();
@@ -195,6 +197,34 @@ public final class MaximaNode implements ChatPort {
         mIdentity = zIdentity;
         mVersion = zVersion;
         mPool = new HostPool(zIdentity, zVersion, zRelayTarget);
+        // Relay discovery, classic Minima's way (see PeerDiscovery): every greeting's peer
+        // list is verified before adoption, the verified list is what fill() draws from at
+        // random, and a peer that fails three connects running is forgotten.
+        mDiscovery = new PeerDiscovery(zVersion);
+        mDiscovery.setConnectedSupplier(() -> mPool.activeCount() > 0);
+        mDiscovery.setListener(new PeerDiscovery.Listener() {
+            @Override
+            public void onVerified(String zHostPort) {
+                mPool.addCandidate(zHostPort);
+            }
+
+            @Override
+            public void onRemoved(String zHostPort) {
+                mPool.removeCandidate(zHostPort);
+            }
+        });
+        mPool.setListener(new HostPool.Listener() {
+            @Override
+            public void onAttached(String zHostPort,
+                                   com.eurobuddha.maxima.core.msg.Greeting zTheirs) {
+                mDiscovery.onGreeting(zHostPort, zTheirs);
+            }
+
+            @Override
+            public void onNoConnect(String zHostPort) {
+                mDiscovery.noConnect(zHostPort);
+            }
+        });
         // Push receive: every attached host gets a dedicated reader that hands
         // inbound straight to handle() the instant the relay pushes it. handle()
         // is synchronized, so inbound stays effectively single-threaded exactly
@@ -230,6 +260,11 @@ public final class MaximaNode implements ChatPort {
 
     public HostPool pool() {
         return mPool;
+    }
+
+    /** The relay discovery (classic peers checker) this node runs. */
+    public PeerDiscovery discovery() {
+        return mDiscovery;
     }
 
     public ServiceRegistry services() {
@@ -292,6 +327,7 @@ public final class MaximaNode implements ChatPort {
     public void setStore(Store zStore) {
         mStore = zStore == null ? Store.MEMORY_ONLY : zStore;
         loadFromStore();
+        mDiscovery.setStore(mStore);   // the saved peer list, classic P2PDB style
     }
 
     public Store store() {
@@ -948,7 +984,7 @@ public final class MaximaNode implements ChatPort {
 
     /** Attach to relays and start publishing our addresses. */
     public int start(List<String> zRelays, int zTimeoutMs) {
-        mPool.addCandidates(zRelays);
+        mPool.addFloor(zRelays);   // the bootstrap list: candidates discovery never drops
         int n = mPool.fill(zTimeoutMs);
         mRpc.setMyAddresses(mPool.contactAddresses());
         return n;
@@ -957,6 +993,7 @@ public final class MaximaNode implements ChatPort {
     public void stop() {
         stopDirect();
         mPool.closeAll();
+        mDiscovery.stop();   // saves the peer list (classic P2P shutdown)
         mStore.flush();
     }
 
@@ -1693,6 +1730,7 @@ public final class MaximaNode implements ChatPort {
             refreshContacts();
         }
         auditHosts();
+        mDiscovery.tick();    // deferred rechecks, the 6-hour full recheck, the 10-min save
         updateMlsServers();   // adopt/rotate our Location Service on schedule
         flushOutbox();
         mRpc.expire();
