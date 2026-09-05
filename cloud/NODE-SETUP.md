@@ -424,6 +424,18 @@ From the scalability survey (P0 items). All rolled fleet-wide the same night.
   before any mailbox ack is signed; the account flushes chat state every 60 s.
 - **Own published media is pinned** on the local shelf (`media/pinned/`), never evicted.
 
+### Wallet gateways are discovered with the relays (node 0.2.21, app 0.6.64, desktop 1.5.44)
+A MegaMMR Parlons Node with a public base (`--public https://host/parlons-node`) advertises its
+gateway in its cape's greeting (`"gw"`: the `/cmd` URL, `"gwkey"`: its bearer). Phones and desktops
+keep one gateway per VERIFIED relay (persisted with the peer list) and build their fleet as
+discovered gateways + the two compiled-in URLs, shuffled once per wallet session, so a population
+spreads over every gateway instead of all starting on sally. A user-configured node is unchanged.
+Boot log line: `[parlons-node] wallet gateway advertised to phones: <url>`. Not advertised by
+`--no-megammr` nodes (vigilance, the Pi) or plain relays. Verify from outside with the greeting probe
+(scratchpad `Gw.java` pattern: `Greeting.gatewayOf/gatewayKeyOf`) and a `block` POST with the key.
+Trust model: a discovered gateway is a fleet node's, like a relay; signing never leaves the device,
+so the worst a bad one can do is a wrong read or a dropped relay, which failover corrects.
+
 ## Ports
 
 | port | what | exposure |
