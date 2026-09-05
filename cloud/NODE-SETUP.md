@@ -363,9 +363,11 @@ front, so a marketplace or explorer links straight to your box:
   offset-idempotent, sha256-verified before the file is placed), `parlons.nft.newcollection`,
   `parlons.nft.list`, `parlons.nft.delete`; `nftBase` rides `parlons.node.figures`. CLI:
   `parlons nft put <file> [collection idx] | list | newcollection | delete <path>`.
-- **Wallet (portal 0.34.0)**: Mint → NFT in URL mode: "Upload the image to my node instead…";
-  State-NFT collection in URL mode: "Upload the item images to my node (in order)…" (fills base +
-  ext, items numbered 1..n); collection icon likewise. Every upload is audited in the node log.
+- **Wallet (portal 0.34.0+)**: Mint → NFT in URL mode: "Upload the image to my node instead…".
+  (Since 0.35.0 the wallet does NOT offer State-NFT collection minting — user's call, it needs
+  atelier-level tooling; State NFTs are still viewed, sent and received in the Gallery. The
+  collection upload path `newcollection` + `c/<id>/<n>.<ext>` stays in the node and the CLI.)
+  Every upload is audited in the node log.
 
 ## Ports
 

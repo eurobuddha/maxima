@@ -360,8 +360,8 @@ public class WalletActivity extends AppCompatActivity {
         // reload. scripts (~27 KB) lists the wallet's addresses, which barely change — fetched rarely.
         maybeRefreshScripts();
 
-        // Advance any in-flight StateNFT collection mint — block cadence is the phase-machine clock.
-        mintEngineTick();
+        // State-NFT collection minting is not offered here; a mint left in flight elsewhere only
+        // advances when its card is tapped on the Mint tab (no automatic engine tick).
     }
 
     /**

@@ -127,11 +127,9 @@ public class MintView extends BaseView {
         container.addView(hubCard("NFT",
                 "1-of-1 or edition, decimals 0. Embed an image on-chain or point at a URL / IPFS.",
                 false, v -> { screen = Screen.NFT; refresh(); }));
-        container.addView(hubCard("State NFT collection",
-                "One tokenid, 2–20 unique items. Per-item identity sealed in coin state — immutable even to you.",
-                true, v -> { screen = Screen.COLLECTION; refresh(); }));
-
-        // resumable collections list
+        // State-NFT collection MINTING is deliberately not offered in this wallet (it needs
+        // atelier-level tooling); State NFTs are still viewed, sent and received in the Gallery.
+        // Any collection mint that was in flight elsewhere is listed so it can be resumed/inspected.
         org.json.JSONArray rows = LocalStore.load(act);
         if (rows.length() > 0) {
             TextView lbl = new TextView(act);
