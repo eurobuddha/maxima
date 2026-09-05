@@ -281,10 +281,10 @@ public final class PeerDiscovery {
         public final String url;
         public final String key;
 
-        Gateway(String zRelay, String zUrl, String zKey) {
-            relay = zRelay;
-            url = zUrl;
-            key = zKey;
+        public Gateway(String zRelay, String zUrl, String zKey) {
+            relay = zRelay == null ? "" : zRelay;
+            url = zUrl == null ? "" : zUrl;
+            key = zKey == null ? "" : zKey;
         }
     }
 

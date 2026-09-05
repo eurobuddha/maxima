@@ -263,6 +263,9 @@ public class PeerDiscoveryTest {
     @Test
     public void onlyHttpsGatewaysWithAKeyAreAccepted() {
         assertEquals("", Greeting.gatewayOf("{\"gw\":\"http://plain.example/cmd\",\"gwkey\":\"abcdefghij\"}"));
+        assertEquals("", Greeting.gatewayOf("{\"gw\":\"https://x.example/cmd with space\"}"));
+        assertEquals("", Greeting.gatewayOf("{\"gw\":\"https://x.example/cmd\\\\evil\"}"));
+        assertEquals("", Greeting.gatewayOf("{\"gw\":\"https://x.example/cmd?a=1\"}"));   // no query strings
         assertEquals("https://x.example/parlons-node/cmd",
                 Greeting.gatewayOf("{\"gw\":\"https://x.example/parlons-node/cmd\",\"gwkey\":\"abcdefghij\"}"));
         assertEquals("", Greeting.gatewayKeyOf("{\"gwkey\":\"short\"}"));

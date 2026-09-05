@@ -56,36 +56,56 @@ public final class WalletPublisher {
      * signing never leaves the phone, so the worst a bad one can do is a wrong read or a dropped
      * relay, which the next gateway corrects.
      */
-    private static volatile java.util.concurrent.Callable<java.util.List<GatewayNode.Endpoint>> sDiscovered;
+    private static volatile java.util.concurrent.Callable<
+            java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway>> sDiscovered;
 
-    public static void setDiscoveredGateways(
-            java.util.concurrent.Callable<java.util.List<GatewayNode.Endpoint>> zSource) {
+    public static void setDiscoveredGateways(java.util.concurrent.Callable<
+            java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway>> zSource) {
         sDiscovered = zSource;
     }
 
+    /** The remembered gateway this install starts on (see GatewayOrder), "" if none yet. */
+    static String stickyGateway(Context zCtx) {
+        return zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE).getString("gateway_sticky", "");
+    }
+
+    static void rememberGateway(Context zCtx, String zUrl) {
+        zCtx.getSharedPreferences("maxima_wallet", Context.MODE_PRIVATE).edit()
+                .putString("gateway_sticky", zUrl == null ? "" : zUrl).apply();
+    }
+
     /**
-     * The fleet as this wallet sees it: discovered gateways plus the compiled-in floor, in a
-     * RANDOM order that the transport then sticks with - so a population of phones spreads over
-     * every gateway instead of all starting on the first compiled-in one. (Coins imported and
-     * transactions built on a gateway live on THAT gateway, which is why the order is fixed per
-     * publisher and only failover moves it.)
+     * The fleet as this wallet sees it - discovered gateways plus the compiled-in floor - ordered
+     * by {@link com.eurobuddha.maxima.core.session.GatewayOrder}: the gateway this install
+     * remembered leads (chosen at random ONCE, so the population spreads but a wallet keeps the
+     * node that holds its imported coins), the rest are failover candidates.
      */
-    static java.util.List<GatewayNode.Endpoint> fleetEndpoints() {
-        java.util.LinkedHashMap<String, GatewayNode.Endpoint> all = new java.util.LinkedHashMap<>();
-        java.util.concurrent.Callable<java.util.List<GatewayNode.Endpoint>> src = sDiscovered;
+    static java.util.List<GatewayNode.Endpoint> fleetEndpoints(Context zCtx) {
+        java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway> discovered =
+                new java.util.ArrayList<>();
+        java.util.concurrent.Callable<
+                java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway>> src = sDiscovered;
         if (src != null) {
             try {
-                for (GatewayNode.Endpoint e : src.call()) {
-                    if (e != null && e.usable()) all.put(e.url, e);
-                }
+                discovered.addAll(src.call());
             } catch (Exception ignored) {
             }
         }
+        java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway> floor =
+                new java.util.ArrayList<>();
         for (String u : FLEET_GATEWAY_URLS) {
-            all.putIfAbsent(u, new GatewayNode.Endpoint(u, FLEET_GATEWAY_TOKEN));
+            floor.add(new com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway("", u, FLEET_GATEWAY_TOKEN));
         }
-        java.util.List<GatewayNode.Endpoint> eps = new java.util.ArrayList<>(all.values());
-        java.util.Collections.shuffle(eps);
+        java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway> ordered =
+                com.eurobuddha.maxima.core.session.GatewayOrder.order(discovered, floor,
+                        stickyGateway(zCtx), new java.util.Random());
+        java.util.List<GatewayNode.Endpoint> eps = new java.util.ArrayList<>();
+        for (com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway g : ordered) {
+            eps.add(new GatewayNode.Endpoint(g.url, g.key));
+        }
+        if (!eps.isEmpty() && !eps.get(0).url.equals(stickyGateway(zCtx))) {
+            rememberGateway(zCtx, eps.get(0).url);   // first choice, or the old one is gone
+        }
         return eps;
     }
 
@@ -106,7 +126,9 @@ public final class WalletPublisher {
         if (usesDefaultGateway(zCtx)) {
             // The fleet, with failover: discovered gateways + the compiled-in floor, random start.
             // A user-configured node is a single fixed endpoint.
-            mGateway = new GatewayNode(fleetEndpoints(), main);
+            mGateway = new GatewayNode(fleetEndpoints(zCtx), main);
+            final Context app = mCtx;
+            mGateway.setOnSwitch(moved -> rememberGateway(app, moved));   // failover moved: follow it
         } else {
             mGateway = new GatewayNode(url, gatewayToken(zCtx), main);
         }

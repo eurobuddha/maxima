@@ -280,7 +280,7 @@ public final class FileStore implements Store {
     }
 
     @Override
-    public synchronized void putBytes(String zCollection, String zKey, byte[] zValue) {
+    public synchronized boolean putBytes(String zCollection, String zKey, byte[] zValue) {
         File target = binFile(zCollection, zKey);
         File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
         byte[] key = zKey.getBytes(StandardCharsets.UTF_8);
@@ -296,13 +296,15 @@ public final class FileStore implements Store {
             System.err.println("[store] write failed on " + tmp + ": " + e);
             //noinspection ResultOfMethodCallIgnored
             tmp.delete();
-            return;
+            return false;
         }
         if (!tmp.renameTo(target)) {
             if (!target.delete() || !tmp.renameTo(target)) {
                 System.err.println("[store] could not replace " + target);
+                return false;
             }
         }
+        return true;
     }
 
     @Override
@@ -314,10 +316,10 @@ public final class FileStore implements Store {
         try (java.io.DataInputStream d = new java.io.DataInputStream(
                 new java.io.BufferedInputStream(new FileInputStream(f), 65536))) {
             int klen = d.readInt();
-            if (klen < 0 || klen > f.length()) {
+            if (klen < 0 || klen > f.length() - 4) {
                 return null;
             }
-            d.skipBytes(klen);
+            d.readFully(new byte[klen]);   // skipBytes may skip fewer; the key must be consumed whole
             byte[] v = new byte[(int) (f.length() - 4 - klen)];
             d.readFully(v);
             return v;

@@ -53,9 +53,10 @@ public interface Store {
     // relay's heap scaled with its mail. The defaults below ride on the keyed API (hex in a
     // string) so any Store keeps working; FileStore overrides them with real files.
 
-    /** Store (or replace) a binary record. */
-    default void putBytes(String zCollection, String zKey, byte[] zValue) {
+    /** Store (or replace) a binary record. @return false if it could not be written. */
+    default boolean putBytes(String zCollection, String zKey, byte[] zValue) {
         put(zCollection, zKey, new com.eurobuddha.maxima.core.codec.MiniData(zValue).to0xString());
+        return true;
     }
 
     /** The record's bytes, or null if absent. */

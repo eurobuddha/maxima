@@ -177,8 +177,13 @@ public final class Mailbox {
                 if (k.length == 2 && v.length == 2) {
                     byte[] ct = new MiniData(v[1]).getBytes();
                     String id = new MiniData(Hashes.sha3(ct)).to0xString();
-                    mStore.putBytes(C_ITEMS,
-                            recKey(norm(k[0]), Long.parseLong(k[1]), Long.parseLong(v[0]), id), ct);
+                    if (!mStore.putBytes(C_ITEMS,
+                            recKey(norm(k[0]), Long.parseLong(k[1]), Long.parseLong(v[0]), id), ct)) {
+                        // Could not be written (disk full, permissions): keep the legacy record
+                        // for the next boot rather than lose held mail.
+                        System.err.println("[mailbox] legacy record " + e.getKey() + " not migrated yet");
+                        continue;
+                    }
                     n++;
                 }
             } catch (Exception ex) {

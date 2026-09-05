@@ -40,35 +40,44 @@ public final class DesktopWalletPublisher {
     static final String DEFAULT_GATEWAY_TOKEN = FLEET_GATEWAY_TOKEN;
 
     /** Gateways discovered with the relays (the node's cape advertises its gateway); see the
-     *  phone's WalletPublisher for the trust model. {url, key} pairs; null = none. */
-    private static volatile java.util.concurrent.Callable<java.util.List<String[]>> sDiscovered;
+     *  phone's WalletPublisher for the trust model. null = none. */
+    private static volatile java.util.concurrent.Callable<
+            java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway>> sDiscovered;
 
-    public static void setDiscoveredGateways(java.util.concurrent.Callable<java.util.List<String[]>> zSource) {
+    public static void setDiscoveredGateways(java.util.concurrent.Callable<
+            java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway>> zSource) {
         sDiscovered = zSource;
     }
 
-    /** This publisher's fleet: discovered + the compiled-in floor, shuffled once so the sticky
-     *  index below lands each desktop on a random gateway. {url, key} pairs. */
+    /** This publisher's fleet ({url, key} pairs), ordered by GatewayOrder: the gateway this
+     *  install remembered leads, the rest fail over; the remembered one follows failover. */
     private final java.util.List<String[]> mFleet = fleetEndpoints();
 
     static java.util.List<String[]> fleetEndpoints() {
-        java.util.LinkedHashMap<String, String[]> all = new java.util.LinkedHashMap<>();
-        java.util.concurrent.Callable<java.util.List<String[]>> src = sDiscovered;
+        java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway> discovered =
+                new java.util.ArrayList<>();
+        java.util.concurrent.Callable<
+                java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway>> src = sDiscovered;
         if (src != null) {
             try {
-                for (String[] e : src.call()) {
-                    if (e != null && e.length == 2 && e[0].startsWith("https://") && !e[1].isEmpty()) {
-                        all.put(e[0], e);
-                    }
-                }
+                discovered.addAll(src.call());
             } catch (Exception ignored) {
             }
         }
+        java.util.List<com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway> floor =
+                new java.util.ArrayList<>();
         for (String u : FLEET_GATEWAY_URLS) {
-            all.putIfAbsent(u, new String[] {u, FLEET_GATEWAY_TOKEN});
+            floor.add(new com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway("", u, FLEET_GATEWAY_TOKEN));
         }
-        java.util.List<String[]> eps = new java.util.ArrayList<>(all.values());
-        java.util.Collections.shuffle(eps);
+        String sticky = PREFS.get("gateway_sticky", "");
+        java.util.List<String[]> eps = new java.util.ArrayList<>();
+        for (com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway g
+                : com.eurobuddha.maxima.core.session.GatewayOrder.order(discovered, floor, sticky, new java.util.Random())) {
+            eps.add(new String[] {g.url, g.key});
+        }
+        if (!eps.isEmpty() && !eps.get(0)[0].equals(sticky)) {
+            PREFS.put("gateway_sticky", eps.get(0)[0]);
+        }
         return eps;
     }
     /** The pre-1.5.34 default (the hosted proxy on maxlite): a desktop that stored this literal
@@ -219,7 +228,10 @@ public final class DesktopWalletPublisher {
             int idx = (start + a) % n;
             try {
                 JSONObject r = exchange(mFleet.get(idx)[0], mFleet.get(idx)[1], command);
-                mCurrent = idx;
+                if (mCurrent != idx) {
+                    mCurrent = idx;
+                    PREFS.put("gateway_sticky", mFleet.get(idx)[0]);   // failover moved: follow it
+                }
                 return r;
             } catch (Unreachable u) {
                 lastErr = u.getMessage();

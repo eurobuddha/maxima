@@ -238,8 +238,13 @@ public final class Greeting implements Streamable {
      *  https URL is accepted: a gateway carries wallet reads and pre-signed transactions. */
     public static String gatewayOf(String zExtraDataJson) {
         String u = flatValue(zExtraDataJson, "gw");
-        return u.startsWith("https://") && u.length() <= 256 ? u : "";
+        return u.length() <= 256 && GATEWAY_URL.matcher(u).matches() ? u : "";
     }
+
+    /** https, a host name or IPv4, an optional port, a plain path: nothing else gets through a
+     *  greeting a hostile relay controls into the wallet's HTTP client. */
+    private static final java.util.regex.Pattern GATEWAY_URL = java.util.regex.Pattern.compile(
+            "https://[A-Za-z0-9.\\-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~\\-/%]*)?");
 
     /** The advertised gateway's bearer ({@code "gwkey"}), or "" if none. */
     public static String gatewayKeyOf(String zExtraDataJson) {

@@ -52,6 +52,12 @@ public class GatewayNode {
     private volatile int mCurrent = 0;
     private final Handler mMain;
     private final ExecutorService mIo = Executors.newSingleThreadExecutor();
+    /** Told (on the I/O thread) with the URL that answered whenever failover moved to it. */
+    private volatile java.util.function.Consumer<String> mOnSwitch;
+
+    public void setOnSwitch(java.util.function.Consumer<String> zListener) {
+        mOnSwitch = zListener;
+    }
 
     /** A single fixed endpoint (the user's own node, or the legacy hosted proxy). */
     public GatewayNode(String zUrl, String zToken, Handler zMain) {
@@ -101,7 +107,13 @@ public class GatewayNode {
                     lastErr = x.error;
                     continue;                       // this node is down/unreachable — try the next
                 }
-                if (zPin < 0) mCurrent = idx;      // it answered: stick with it
+                if (zPin < 0 && mCurrent != idx) {
+                    mCurrent = idx;                 // it answered: stick with it
+                    java.util.function.Consumer<String> l = mOnSwitch;
+                    if (l != null) {
+                        try { l.accept(ep.url); } catch (Exception ignored) { }
+                    }
+                }
                 if (x.code >= 400) {
                     final String fe = x.error;
                     mMain.post(() -> zCb.onError(fe));
