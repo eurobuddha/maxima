@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.14";
+    public static final String  NODE_VERSION = "0.2.15";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -154,8 +154,19 @@ public final class ParlonsNodeMain {
                 // (vault succeeded) — so past this line the wallet is provably up.
                 MaximaIdentity identity = deriveMaximaIdentityFromNode();
                 Path relayDir = new File(dataFolder, "relay").toPath();
+                // The cape's public host: -Dparlons.relay.host, else what the Minima node detected
+                // for itself (its peers see our NAT'd address too - the Pi has no public interface
+                // but IS reachable on its forwarded port). A cape that knows its address names
+                // itself in the peer list it shares and never forwards a resolve miss to itself.
+                String capeHost = System.getProperty("parlons.relay.host", "").trim();
+                if (capeHost.isEmpty()) {
+                    String det = detectedPublicHost();
+                    if (isPublicHost(det)) {
+                        capeHost = det;
+                    }
+                }
                 RelayRuntime relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
-                        System.getProperty("parlons.relay.host", ""), relayDir);
+                        capeHost, relayDir);
                 relay.setPool(true);   // a VPS node is always-on + public => a permanent-anchor host
                 // Fleet parity with maxima-server.jar: the Phase-B mesh bootstrap list (--peers) and
                 // the media blob shelf (--blobstore MB). Without peers a resolve MISS on this relay

@@ -55,6 +55,12 @@ public final class RelayPeers {
     private volatile boolean mRunning = true;
     /** Our own host:port, so the fleet's lists never make us dial ourselves. */
     private volatile String mSelfHostPort = "";
+    /** Classic {@code -allowallip}: consider private/loopback peers too (tests, LAN fleets). */
+    private volatile boolean mAllowAllIp;
+
+    public void setAllowAllIp(boolean zAllow) {
+        mAllowAllIp = zAllow;
+    }
 
     public void setSelf(String zHostPort) {
         mSelfHostPort = zHostPort == null ? "" : zHostPort;
@@ -133,7 +139,8 @@ public final class RelayPeers {
         } catch (NumberFormatException e) {
             return;
         }
-        if (!com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(zHostPort.substring(0, c))) {
+        if (!mAllowAllIp
+                && !com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(zHostPort.substring(0, c))) {
             return;
         }
         mPending.offer(zHostPort);
@@ -187,8 +194,22 @@ public final class RelayPeers {
             int port = Integer.parseInt(hp.substring(c + 1));
             // The dial-back IS the admission test: a greeting must come home. We keep
             // the greeting to record whether the peer is an open staticMLS pool host.
+            // Our greeting CLAIMS our own endpoint when we know it, so the peer we are
+            // verifying learns us by the same dial (it checks the claim against our
+            // source IP and dials us back) - a relay with no account announces itself
+            // exactly like a client does, and ends up in the peer's shared list.
+            String self = mSelfHostPort;
+            int sc = self.lastIndexOf(':');
+            String selfHost = sc > 0 ? self.substring(0, sc) : null;
+            int selfPort = 0;
+            if (sc > 0) {
+                try {
+                    selfPort = Integer.parseInt(self.substring(sc + 1));
+                } catch (NumberFormatException ignored) {
+                }
+            }
             com.eurobuddha.maxima.core.msg.Greeting g =
-                    Probe.dialGreeting(host, port, CONNECT_MS, READ_MS, mProtocol);
+                    Probe.dialGreeting(host, port, CONNECT_MS, READ_MS, mProtocol, selfHost, selfPort);
             if (g != null) {
                 mVerified.put(hp, System.currentTimeMillis());
                 mPool.put(hp, com.eurobuddha.maxima.core.msg.Greeting.poolOf(g.getExtraData()));

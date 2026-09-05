@@ -256,9 +256,11 @@ public final class RelayServer {
      * stalled peer blocks whichever thread writes to it; the maintain thread must never be
      * that thread, or one dead phone stops expiry, sweeps, flushes and every other keep-alive.
      *
-     * Core 4 (not 0: a ThreadPoolExecutor with core 0 runs ONE worker until its queue is full,
-     * which serialised every drain behind the slowest peer), max 8, a deep queue, and a task
-     * that still cannot be queued is COUNTED, not silently dropped. The write-stall reaper in
+     * Eight core threads that time out when idle (a ThreadPoolExecutor only grows past its core
+     * size once its queue is FULL, so "core 4, max 8" would have been four workers in practice,
+     * and core 0 - the old setting - ran ONE worker, serialising every drain behind the slowest
+     * peer), a deep queue, and a task that still cannot be queued is COUNTED and, for a
+     * keep-alive, un-flagged so the next sweep tries again. The write-stall reaper in
      * {@link #sweepConnections} bounds how long any worker can be held.
      */
     private final java.util.concurrent.ThreadPoolExecutor mDrainExec;
@@ -303,6 +305,28 @@ public final class RelayServer {
     private static final class RateLimit {
         long windowStart = System.currentTimeMillis();
         int count;
+    }
+
+    /** One keep-alive write, as a named task so a rejection can un-flag its connection. */
+    private final class KeepaliveTask implements Runnable {
+        final Conn conn;
+
+        KeepaliveTask(Conn zConn) {
+            conn = zConn;
+        }
+
+        @Override
+        public void run() {
+            try {
+                conn.write(Frame.singlePing());
+                mKeepalives.incrementAndGet();
+            } catch (Exception e) {
+                log("keep-alive write failed conn=" + conn.id + " -> reap");
+                cleanup(conn);
+            } finally {
+                conn.keepalivePending = false;
+            }
+        }
     }
 
     private final class Conn {
@@ -380,7 +404,7 @@ public final class RelayServer {
         mPort = zPort;
         mVersion = zVersion;
         mPool = zPool;
-        mDrainExec = new java.util.concurrent.ThreadPoolExecutor(4, 8, 30,
+        mDrainExec = new java.util.concurrent.ThreadPoolExecutor(8, 8, 30,
                 java.util.concurrent.TimeUnit.SECONDS,
                 new java.util.concurrent.LinkedBlockingQueue<>(2048),
                 r -> {
@@ -388,7 +412,15 @@ public final class RelayServer {
                     t.setDaemon(true);
                     return t;
                 },
-                (r, ex) -> mPushDiscards.incrementAndGet());
+                (r, ex) -> {
+                    mPushDiscards.incrementAndGet();
+                    if (r instanceof KeepaliveTask) {
+                        // Never leave a client flagged for a keep-alive that will not happen:
+                        // it would be skipped by every later sweep and dropped by the classic
+                        // 10-minute read-silence rule this keep-alive exists to prevent.
+                        ((KeepaliveTask) r).conn.keepalivePending = false;
+                    }
+                });
         mDrainExec.allowCoreThreadTimeOut(true);
         if (mPool) {
             mDirectory.setOpenResolve(true);
@@ -1510,18 +1542,7 @@ public final class RelayServer {
                 // Off the maintain thread (see mDrainExec): a keep-alive to a stalled peer
                 // must never stall expiry, sweeps and every OTHER client's keep-alive.
                 c.keepalivePending = true;
-                final Conn kc = c;
-                mDrainExec.execute(() -> {
-                    try {
-                        kc.write(Frame.singlePing());
-                        mKeepalives.incrementAndGet();
-                    } catch (Exception e) {
-                        log("keep-alive write failed conn=" + kc.id + " -> reap");
-                        cleanup(kc);
-                    } finally {
-                        kc.keepalivePending = false;
-                    }
-                });
+                mDrainExec.execute(new KeepaliveTask(c));
             }
             // Periodically re-deliver held mail to a still-attached client.
             // drainMailbox only fired on a FRESH route registration, so mail
@@ -1547,6 +1568,30 @@ public final class RelayServer {
     /** How often to re-push held mail to an attached client (slow: mail that is
      *  already delivered is deduped, so this only matters when mail is waiting). */
     private static final long DRAIN_INTERVAL_MS = 90_000;
+
+    /** Test hook: the verified peers we would share (unshuffled view is fine for a contains). */
+    java.util.List<String> peersForTest() {
+        return mPeers.share();
+    }
+
+    /** Test hook (classic {@code -allowallip}): loopback peers are considered, so two relays
+     *  on one machine can verify each other. Never set in production. */
+    void setAllowAllIpForTest(boolean zAllow) {
+        mPeers.setAllowAllIp(zAllow);
+    }
+
+    /** Test hook: the oldest in-progress write start across all connections, 0 if none. A
+     *  value that stays put for longer than any loopback write could take IS a blocked writer. */
+    long oldestWriteStartedAt() {
+        long oldest = 0;
+        for (Conn c : mConns.values()) {
+            long ws = c.writeStartedAt;
+            if (ws > 0 && (oldest == 0 || ws < oldest)) {
+                oldest = ws;
+            }
+        }
+        return oldest;
+    }
 
     /** How many keep-alive SINGLE_PINGs we have sent (diagnostics / stats). */
     public long keepalivesSent() {

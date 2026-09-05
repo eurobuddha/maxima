@@ -78,8 +78,29 @@ public final class PeerDiscovery {
     private final Map<String, Boolean> mUnverified = new ConcurrentHashMap<>();
     /** host:port -> epoch ms a deferred recheck falls due (the 30-min / 60-s timers). */
     private final Map<String, Long> mDue = new ConcurrentHashMap<>();
+    /** One queued check. */
+    private static final class Check {
+        final String hostPort;
+        final boolean force;
+
+        Check(String zHostPort, boolean zForce) {
+            hostPort = zHostPort;
+            force = zForce;
+        }
+    }
+
     /** Checks waiting for the single checker thread (classic's PEERS_CHECKER processor). */
-    private final LinkedBlockingQueue<String> mQueue = new LinkedBlockingQueue<>(1024);
+    private final LinkedBlockingQueue<Check> mQueue = new LinkedBlockingQueue<>(1024);
+    /**
+     * Negative cache: a never-verified peer that failed its check -> epoch ms before which it
+     * is not considered again. Without it, one relay listing fifty dead addresses would make
+     * every attached phone dial all fifty again on every heartbeat (the greeting is re-read
+     * each tick and a failed unverified peer is otherwise simply forgotten) - about five
+     * minutes of socket work per minute, on a phone, for as long as it stays attached.
+     * Held for classic's own recheck interval. Bounded; swept on the tick.
+     */
+    private final Map<String, Long> mFailedUntil = new ConcurrentHashMap<>();
+    private static final int MAX_FAILED = 4096;
 
     private volatile Store mStore = Store.MEMORY_ONLY;
     private volatile int mLoadedCount;
@@ -132,8 +153,14 @@ public final class PeerDiscovery {
     // persistence (classic P2PDB)
     // ---------------------------------------------------------------
 
-    /** Attach durable storage and reload the saved list; every saved peer is re-queued
-     *  for a FORCED check, exactly as classic re-checks its saved peers at startup. */
+    /**
+     * Attach durable storage and reload the saved list; every saved peer is re-queued for a
+     * check, as classic re-checks its saved peers at startup. NOT forced, unlike classic: a
+     * forced check runs with no network, so a phone booting in airplane mode would fail all
+     * 250 saved peers, demote every one to a 30-minute recheck and - still offline then -
+     * forget the lot, leaving only the bootstrap floor until the next process start. Unforced,
+     * the checks defer 60 s at a time until the first relay attaches, then run as before.
+     */
     public void setStore(Store zStore) {
         mStore = zStore == null ? Store.MEMORY_ONLY : zStore;
         int n = 0;
@@ -154,13 +181,18 @@ public final class PeerDiscovery {
             if (l != null) {
                 l.onVerified(hp);
             }
-            queue(hp, true);
+            queue(hp, false);
         }
         mLoadedCount = n;
     }
 
     /** Classic {@code updateP2PPeersList}: save only when the list is still at least half
      *  the size it was loaded at — a transient outage must not persist an emptied list. */
+    /** Stored timestamps are coarse (hours), so a re-verification does not rewrite the file:
+     *  a keyed FileStore put rewrites and fsyncs the whole collection, and 250 of them after
+     *  the 6-hour recheck was 250 rewrites for no new information. */
+    private static final long SAVE_GRAIN_MS = 3_600_000L;
+
     public void save() {
         int size = mVerified.size();
         if (size > 0 && size >= mLoadedCount / 2) {
@@ -171,7 +203,10 @@ public final class PeerDiscovery {
                 }
             }
             for (Map.Entry<String, Long> e : mVerified.entrySet()) {
-                mStore.put(C_PEERS, e.getKey(), Long.toString(e.getValue()));
+                String v = Long.toString((e.getValue() / SAVE_GRAIN_MS) * SAVE_GRAIN_MS);
+                if (!v.equals(old.get(e.getKey()))) {
+                    mStore.put(C_PEERS, e.getKey(), v);   // only what actually changed
+                }
             }
             mStore.flush();
         }
@@ -224,6 +259,13 @@ public final class PeerDiscovery {
         if (mVerified.containsKey(zHostPort) || mUnverified.containsKey(zHostPort)) {
             return;
         }
+        Long until = mFailedUntil.get(zHostPort);
+        if (until != null) {
+            if (System.currentTimeMillis() < until) {
+                return;   // failed recently: not again until classic's recheck interval passes
+            }
+            mFailedUntil.remove(zHostPort);
+        }
         if (mUnverified.size() >= MAX_VERIFIED_PEERS) {
             return;   // classic: MAX reached
         }
@@ -256,6 +298,12 @@ public final class PeerDiscovery {
     /** Drive from the node's maintenance heartbeat. Cheap: it only schedules. */
     public void tick() {
         long now = System.currentTimeMillis();
+        if (mFailedUntil.size() > MAX_FAILED) {
+            mFailedUntil.entrySet().removeIf(e -> now >= e.getValue());
+            if (mFailedUntil.size() > MAX_FAILED) {
+                mFailedUntil.clear();   // still flooded: forgetting is cheaper than growing
+            }
+        }
         if (!mDue.isEmpty()) {
             for (Map.Entry<String, Long> e : new ArrayList<>(mDue.entrySet())) {
                 if (now >= e.getValue()) {
@@ -315,8 +363,7 @@ public final class PeerDiscovery {
 
     private void queue(String zHostPort, boolean zForce) {
         ensureChecker();
-        // The force flag rides in the string so the queue stays a plain string queue.
-        mQueue.offer((zForce ? "!" : "") + zHostPort);
+        mQueue.offer(new Check(zHostPort, zForce));
     }
 
     private synchronized void ensureChecker() {
@@ -331,16 +378,14 @@ public final class PeerDiscovery {
 
     private void checkLoop() {
         while (mRunning) {
-            String item;
+            Check item;
             try {
                 item = mQueue.take();
             } catch (InterruptedException e) {
                 return;
             }
-            boolean force = item.startsWith("!");
-            String hp = force ? item.substring(1) : item;
             try {
-                check(hp, force);
+                check(item.hostPort, item.force);
             } catch (Exception e) {
                 // one bad peer must never stop the checker
             }
@@ -400,8 +445,11 @@ public final class PeerDiscovery {
                     l.onRemoved(zHostPort);
                 }
             } else {
-                mUnverified.remove(zHostPort);   // never verified, does not answer: forgotten
+                // Never verified and does not answer: forgotten - and not re-tried for the
+                // recheck interval however many greetings keep listing it (negative cache).
+                mUnverified.remove(zHostPort);
                 mDue.remove(zHostPort);
+                mFailedUntil.put(zHostPort, System.currentTimeMillis() + RECHECK_FAILED_MS);
             }
         }
     }

@@ -177,6 +177,37 @@ public class PeerDiscoveryTest {
         assertEquals(0, d.unverifiedCount());   // still dead: gone
     }
 
+    @Test
+    public void aFailedUnverifiedPeerIsNotDialledAgainForTheRecheckInterval() throws Exception {
+        PeerDiscovery d = discovery();
+        String dead = "127.0.0.1:" + deadPort();
+        d.addPeer(dead);
+        assertEquals(1, d.unverifiedCount());
+        d.check(dead, true);
+        assertEquals(0, d.unverifiedCount());
+        // the same relay lists it again next heartbeat: ignored, no second dial queued
+        d.addPeer(dead);
+        assertEquals(0, d.unverifiedCount());
+    }
+
+    @Test
+    public void savedPeersAreNotDemotedWhileOffline() throws Exception {
+        File dir = new File(System.getProperty("java.io.tmpdir"), "maxima-peers-offline-" + System.nanoTime());
+        FileStore store = new FileStore(dir);
+        store.put("peers", "10.2.0.1:9501", Long.toString(System.currentTimeMillis()));
+        store.put("peers", "10.2.0.2:9501", Long.toString(System.currentTimeMillis()));
+        PeerDiscovery d = discovery();
+        d.setConnectedSupplier(() -> false);   // booted in airplane mode
+        d.setStore(store);
+        assertEquals(2, d.verifiedCount());
+        // the startup checks are deferred, not forced: nothing is dialled, nothing demoted
+        d.check("10.2.0.1:9501", false);
+        d.check("10.2.0.2:9501", false);
+        assertEquals(2, d.verifiedCount());
+        assertEquals(0, d.unverifiedCount());
+        d.stop();
+    }
+
     // ---- classic full list: 10% admission, random eviction keeps the size ----
 
     @Test

@@ -75,6 +75,19 @@ public final class Probe {
      */
     public static Greeting dialGreeting(String zHost, int zPort, int zConnectMs, int zReadMs,
                                         String zVersion) {
+        return dialGreeting(zHost, zPort, zConnectMs, zReadMs, zVersion, null, 0);
+    }
+
+    /**
+     * As above, but the greeting we send CLAIMS our own public endpoint ({@code zSelfHost}:
+     * {@code zSelfPort}) - the way a relay introduces itself to a peer it dials. The far
+     * relay accepts the claim only if the host equals our source IP (self-nomination), then
+     * dials us back to verify before ever sharing us: so a relay that verifies its mesh peers
+     * with this call becomes known to them by the same act. Pass null / 0 to claim nothing.
+     */
+    public static Greeting dialGreeting(String zHost, int zPort, int zConnectMs, int zReadMs,
+                                        String zVersion, String zSelfHost, int zSelfPort) {
+        boolean claim = zSelfHost != null && !zSelfHost.isEmpty() && zSelfPort > 0;
         try (Socket s = new Socket()) {
             // Separate connect and read budgets, so a target that completes the
             // TCP handshake and then goes silent blocks for connect+read, not
@@ -85,8 +98,9 @@ public final class Probe {
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
 
-            out.write(intFrame(Frame.body(Frame.MSG_GREETING,
-                    Greeting.commsOnly(zVersion, "", 0))));
+            out.write(intFrame(Frame.body(Frame.MSG_GREETING, claim
+                    ? Greeting.commsOnly(zVersion, zSelfHost, zSelfPort)
+                    : Greeting.commsOnly(zVersion, "", 0))));
             out.flush();
 
             // Read one frame; a real endpoint greets back. Bounded read - we do
