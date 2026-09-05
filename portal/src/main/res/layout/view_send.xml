@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ux_bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Mode: quick token send vs expert coin control -->
+        <LinearLayout
+            android:id="@+id/sendModeRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="14dp">
+            <TextView
+                android:id="@+id/modeQuickBtn"
+                android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="QUICK SEND" android:gravity="center" android:padding="9dp"
+                android:textSize="11sp" android:letterSpacing="0.1" android:textStyle="bold" />
+            <TextView
+                android:id="@+id/modeCoinsBtn"
+                android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="COIN CONTROL" android:gravity="center" android:padding="9dp"
+                android:textSize="11sp" android:letterSpacing="0.1" android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- QUICK: token picker -->
+        <LinearLayout
+            android:id="@+id/sendTokenBlock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Token"
+                android:textColor="@color/ux_subtext" android:textSize="13sp"
+                android:layout_marginBottom="5dp" />
+            <LinearLayout
+                android:id="@+id/sendTokenRow"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:background="@color/ux_input" android:padding="12dp">
+                <TextView
+                    android:id="@+id/sendTokenLabel"
+                    android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                    android:text="Minima" android:textColor="@color/ux_text"
+                    android:textSize="14sp" android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/sendTokenBal"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textColor="@color/ux_subtext" android:textSize="12sp"
+                    android:fontFamily="monospace" android:layout_marginEnd="8dp" />
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="▾" android:textColor="@color/ux_subtext" android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- EXPERT: selected input coins -->
+        <LinearLayout
+            android:id="@+id/sendFromBlock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="FROM — SELECTED COINS"
+                android:textColor="@color/ux_subtext" android:textSize="11sp"
+                android:letterSpacing="0.1" android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:id="@+id/sendFromList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@color/ux_card"
+                android:padding="12dp" />
+        </LinearLayout>
+
+        <!-- Recipient -->
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginTop="18dp" android:layout_marginBottom="5dp">
+            <TextView
+                android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Recipient address"
+                android:textColor="@color/ux_subtext" android:textSize="13sp" />
+            <TextView
+                android:id="@+id/scanBtn"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="⌗ SCAN" android:textColor="@color/ux_accent" android:textSize="11sp"
+                android:letterSpacing="0.1" android:padding="4dp" />
+        </LinearLayout>
+        <EditText
+            android:id="@+id/sendAddress"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="Mx… or 0x…" android:textColorHint="@color/ux_subtext"
+            android:textColor="@color/ux_text" android:background="@color/ux_input"
+            android:padding="12dp" android:inputType="text" android:maxLines="2"
+            android:fontFamily="monospace" android:textSize="13sp" />
+        <TextView
+            android:id="@+id/sendAddrNote"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:textSize="11sp" android:visibility="gone" />
+
+        <!-- Amount + max -->
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginTop="14dp" android:layout_marginBottom="5dp">
+            <TextView
+                android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Amount" android:textColor="@color/ux_subtext" android:textSize="13sp" />
+            <TextView
+                android:id="@+id/maxBtn"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="MAX" android:textColor="@color/ux_accent" android:textSize="11sp"
+                android:letterSpacing="0.1" android:padding="4dp" />
+        </LinearLayout>
+        <EditText
+            android:id="@+id/sendAmount"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="0.0" android:textColorHint="@color/ux_subtext"
+            android:textColor="@color/ux_text" android:background="@color/ux_input"
+            android:padding="12dp" android:inputType="numberDecimal"
+            android:fontFamily="monospace" android:textSize="13sp" />
+        <TextView
+            android:id="@+id/sendAmountNote"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:textSize="11sp" android:visibility="gone" />
+
+        <!-- QUICK: split into N coins -->
+        <LinearLayout
+            android:id="@+id/sendSplitBlock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Split into coins (1–20, optional)"
+                android:textColor="@color/ux_subtext" android:textSize="13sp"
+                android:layout_marginTop="14dp" android:layout_marginBottom="5dp" />
+            <EditText
+                android:id="@+id/sendSplit"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:hint="1" android:textColorHint="@color/ux_subtext"
+                android:textColor="@color/ux_text" android:background="@color/ux_input"
+                android:padding="12dp" android:inputType="number"
+                android:fontFamily="monospace" android:textSize="13sp" />
+            <TextView
+                android:id="@+id/sendSplitNote"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:textSize="11sp" android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- EXPERT: change + next -->
+        <LinearLayout
+            android:id="@+id/sendChangeBlock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginTop="14dp" android:layout_marginBottom="5dp">
+                <TextView
+                    android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                    android:text="Change goes to" android:textColor="@color/ux_subtext" android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/nextBtn"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="NEXT" android:textColor="@color/ux_accent" android:textSize="11sp"
+                    android:letterSpacing="0.1" android:padding="4dp" />
+            </LinearLayout>
+            <EditText
+                android:id="@+id/sendChange"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:hint="Mx…" android:textColorHint="@color/ux_subtext"
+                android:textColor="@color/ux_text" android:background="@color/ux_input"
+                android:padding="12dp" android:inputType="text" android:maxLines="2"
+                android:fontFamily="monospace" android:textSize="13sp" />
+            <TextView
+                android:id="@+id/sendChangeNote"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:textSize="11sp" android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Burn -->
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Burn (Minima only — optional)"
+            android:textColor="@color/ux_subtext" android:textSize="13sp"
+            android:layout_marginTop="14dp" android:layout_marginBottom="5dp" />
+        <EditText
+            android:id="@+id/sendBurn"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="0" android:textColorHint="@color/ux_subtext"
+            android:textColor="@color/ux_text" android:background="@color/ux_input"
+            android:padding="12dp" android:inputType="numberDecimal"
+            android:fontFamily="monospace" android:textSize="13sp" />
+        <TextView
+            android:id="@+id/sendBurnNote"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:textSize="11sp" android:visibility="gone" />
+
+        <Button
+            android:id="@+id/previewBtn"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" android:text="Preview →"
+            android:backgroundTint="@color/ux_accent" android:textColor="@color/black" />
+
+        <TextView
+            android:id="@+id/sendStatus"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="14dp" android:padding="10dp"
+            android:textSize="13sp" android:gravity="center" android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

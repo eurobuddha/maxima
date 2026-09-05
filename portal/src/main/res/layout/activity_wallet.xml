@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ux_bg"
+    tools:context=".portal.wallet.WalletActivity">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:id="@+id/designToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="‹"
+            android:textColor="@color/ux_text"
+            android:textSize="26sp"
+            android:paddingEnd="14dp"
+            android:paddingStart="0dp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/brandTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Wallet"
+                android:textColor="@color/ux_accent"
+                android:textStyle="bold"
+                android:textSize="17sp" />
+            <TextView
+                android:id="@+id/brandSub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="YOUR NODE'S WALLET"
+                android:textColor="@color/ux_subtext"
+                android:textSize="9sp"
+                android:letterSpacing="0.15" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/settingsBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙"
+            android:textColor="@color/ux_accent"
+            android:textSize="15sp"
+            android:padding="6dp"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/blockNo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="#—"
+            android:textColor="@color/ux_subtext"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Pairing banner: shown until the user enables this app in Minima Core -->
+    <LinearLayout
+        android:id="@+id/pairingBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/ux_banner"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/pairingTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="This wallet is not enabled yet"
+            android:textColor="@color/ux_accent"
+            android:textStyle="bold"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/pairingBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Open Minima Core → Apps and enable &quot;NFT Wallet&quot;, then come back."
+            android:textColor="@color/ux_subtext"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/openNodeBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Open Minima Core" />
+    </LinearLayout>
+
+    <!-- Tab strip with scroll affordances: seven tabs overflow a narrow/cover display and there
+         was nothing to show more existed off-screen. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tabScrollLeft"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="‹"
+            android:textSize="22sp"
+            android:gravity="center"
+            android:minWidth="34dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:visibility="gone" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            app:tabMode="scrollable"
+            app:tabGravity="fill"
+            app:tabIndicatorColor="@color/ux_accent"
+            app:tabSelectedTextColor="@color/ux_accent"
+            app:tabTextColor="@color/ux_subtext" />
+
+        <TextView
+            android:id="@+id/tabScrollRight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="›"
+            android:textSize="22sp"
+            android:gravity="center"
+            android:minWidth="34dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <androidx.viewpager.widget.ViewPager
+        android:id="@+id/pager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

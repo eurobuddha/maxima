@@ -55,6 +55,10 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".portal.wallet.WalletActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".portal.ide.IdeActivity"
             android:exported="false"
             android:theme="@style/Theme.Maxima.Ide"

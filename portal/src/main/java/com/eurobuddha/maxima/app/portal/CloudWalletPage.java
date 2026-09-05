@@ -332,19 +332,32 @@ public final class CloudWalletPage implements Page {
         }
 
         // --- send from the account wallet (also powers the wallet-detach sweep) ---
-        mRoot.addView(PortalUi.section(c, "Send"));
+        mRoot.addView(PortalUi.section(c, mCanResync ? "Wallet" : "Send"));
         LinearLayout sendCard = PortalUi.card(c);
-        TextView send = PortalUi.button(c, "Send MINIMA");
-        send.setOnClickListener(v -> sendSheet());
-        sendCard.addView(send);
-        sendCard.addView(PortalUi.gap(c, 8));
-        TextView detach = PortalUi.ghost(c, "Detach wallet to this phone…");
-        detach.setOnClickListener(v -> detachFlow());
-        sendCard.addView(detach);
-        sendCard.addView(PortalUi.gap(c, 6));
-        sendCard.addView(PortalUi.label(c, "Detach = move ALL funds to a wallet whose seed "
-                + "lives on this phone (Minima Core). Your cloud identity stays; the VPS "
-                + "goes cold and keeps a watch-only view."));
+        if (mCanResync) {
+            // A Parlons Node account: the full wallet (tokens, NFTs, send, receive, coins,
+            // history, mint) runs on the node over the paired channel.
+            TextView open = PortalUi.button(c, "Open wallet");
+            open.setOnClickListener(v -> mAct.startActivity(new android.content.Intent(mAct,
+                    com.eurobuddha.maxima.app.portal.wallet.WalletActivity.class)));
+            sendCard.addView(open);
+            sendCard.addView(PortalUi.gap(c, 6));
+            sendCard.addView(PortalUi.label(c, "Balances with token icons, NFT gallery, send "
+                    + "(quick or coin control), receive with QR, every coin, on-chain history "
+                    + "and minting - all on your node, signed there, nothing leaves the box."));
+        } else {
+            TextView send = PortalUi.button(c, "Send MINIMA");
+            send.setOnClickListener(v -> sendSheet());
+            sendCard.addView(send);
+            sendCard.addView(PortalUi.gap(c, 8));
+            TextView detach = PortalUi.ghost(c, "Detach wallet to this phone…");
+            detach.setOnClickListener(v -> detachFlow());
+            sendCard.addView(detach);
+            sendCard.addView(PortalUi.gap(c, 6));
+            sendCard.addView(PortalUi.label(c, "Detach = move ALL funds to a wallet whose seed "
+                    + "lives on this phone (Minima Core). Your cloud identity stays; the VPS "
+                    + "goes cold and keeps a watch-only view."));
+        }
         if (mCanResync) {   // node accounts only: a cloud wallet IS the identity seed
             sendCard.addView(PortalUi.gap(c, 8));
             TextView resync = PortalUi.ghost(c, "Resync wallet to a new phrase…");

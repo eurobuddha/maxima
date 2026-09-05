@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status-bar icon: the Minima "M" mark, same geometry as the launcher icon (official Wallet
+  MiniDapp icon.svg, wallet-3.1.3, viewBox 542x527).
+
+  Android masks notification small-icons to a single colour and uses only the alpha channel, so the
+  fill is plain white and the shape must read as a silhouette at 24dp. Sized to 20 of the 24dp
+  canvas, which is the usual optical weight for a status-bar glyph.
+    scale     20 / 542 = 0.0369
+    translate (24 - 20) / 2 = 2  ·  (24 - 527*0.0369) / 2 = 2.27
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <group
+        android:scaleX="0.0369"
+        android:scaleY="0.0369"
+        android:translateX="2"
+        android:translateY="2.27">
+
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M208.495,209.087 L299.726,244.914 L355.593,222.966 L375.123,139.006 L299.726,168.62 L156.405,112.337 L104.316,336.272 L186.406,304.033 Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M355.594,222.966 L333.505,317.913 L242.271,282.086 L186.406,304.036 L166.876,387.996 L242.271,358.38 L385.593,414.663 L437.681,190.729 Z" />
+    </group>
+</vector>
