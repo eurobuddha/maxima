@@ -45,6 +45,38 @@ public interface Store {
     /** Flush anything buffered. Called before shutdown. */
     void flush();
 
+    // ---- binary records ----
+    //
+    // One record = one unit of storage, written and deleted on its own, NEVER by rewriting
+    // the whole collection. This is what a mailbox of held ciphertext needs: a keyed record
+    // costs a whole-file rewrite per put and held everything hex-doubled in memory, so a
+    // relay's heap scaled with its mail. The defaults below ride on the keyed API (hex in a
+    // string) so any Store keeps working; FileStore overrides them with real files.
+
+    /** Store (or replace) a binary record. */
+    default void putBytes(String zCollection, String zKey, byte[] zValue) {
+        put(zCollection, zKey, new com.eurobuddha.maxima.core.codec.MiniData(zValue).to0xString());
+    }
+
+    /** The record's bytes, or null if absent. */
+    default byte[] getBytes(String zCollection, String zKey) {
+        String v = get(zCollection, zKey);
+        return v == null ? null : new com.eurobuddha.maxima.core.codec.MiniData(v).getBytes();
+    }
+
+    default void removeBytes(String zCollection, String zKey) {
+        remove(zCollection, zKey);
+    }
+
+    /** Every binary record's key -> value length, WITHOUT loading the values. */
+    default Map<String, Integer> listBytes(String zCollection) {
+        Map<String, Integer> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> e : all(zCollection).entrySet()) {
+            out.put(e.getKey(), Math.max(0, (e.getValue().length() - 2) / 2));
+        }
+        return out;
+    }
+
     /**
      * A no-op store, so :core and its tests run with no filesystem at all and
      * a host can opt out of persistence deliberately rather than by accident.

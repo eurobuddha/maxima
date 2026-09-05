@@ -97,9 +97,13 @@ public class PeerDiscoveryTest {
         }
     }
 
+    /** A discovery whose background checker never dials: tests drive {@link PeerDiscovery#check}
+     *  themselves. (Left running, checkers from earlier tests kept dialling unroutable 10.x
+     *  peers with 4 s timeouts for the rest of the JVM, which made later loopback tests flaky.) */
     static PeerDiscovery discovery() {
         PeerDiscovery d = new PeerDiscovery(PROTO);
         d.setAllowAllIp(true);   // classic -allowallip: loopback peers for the test
+        d.setConnectedSupplier(() -> false);   // queued checks defer instead of dialling
         return d;
     }
 
@@ -312,7 +316,7 @@ public class PeerDiscoveryTest {
                 for (FakeRelay r : relays) {
                     pool.addCandidate(r.hostPort());
                 }
-                pool.fill(3000);
+                pool.fill(10000);
                 chosen.addAll(pool.activeHosts());
                 pool.closeAll();
             }
@@ -338,7 +342,7 @@ public class PeerDiscoveryTest {
                 @Override public void onNoConnect(String hp) { d.noConnect(hp); }
             });
             pool.addCandidate(a.hostPort());
-            assertEquals(1, pool.fill(3000));
+            assertEquals(1, pool.fill(10000));
             // the relay itself (its host claim) and the peer it listed are both owed a check
             assertTrue(d.unverifiedCount() >= 1);
             pool.closeAll();

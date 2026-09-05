@@ -470,8 +470,8 @@ public final class RelayServer {
      * persisting it would only risk serving a stale address after downtime.
      */
     public void setStore(com.eurobuddha.maxima.core.store.Store zStore) {
-        // Write-behind: the mailbox is the hot path and must not fsync the whole
-        // file per stored item. Flushed on the maintenance tick + shutdown.
+        // Held items are one binary record each (never a whole-file rewrite); write-behind
+        // only still matters for the legacy keyed collection while it is migrated away.
         if (zStore instanceof com.eurobuddha.maxima.core.store.FileStore) {
             ((com.eurobuddha.maxima.core.store.FileStore) zStore).setWriteBehind(true);
         }
@@ -1375,8 +1375,11 @@ public final class RelayServer {
             int sent = 0;
             for (Mailbox.Item item : held) {
                 try {
-                    MaxTxPoW unit = MaxTxPoW.fromBytes(
-                            reWrapForDelivery(item.ciphertext));
+                    byte[] ct = item.ciphertext();   // read from disk now, not held in heap
+                    if (ct == null) {
+                        continue;
+                    }
+                    MaxTxPoW unit = MaxTxPoW.fromBytes(reWrapForDelivery(ct));
                     zConn.write(Frame.body(Frame.MSG_MAXIMA_TXPOW, unit));
                     maxSeq = Math.max(maxSeq, item.sequence);
                     sent++;

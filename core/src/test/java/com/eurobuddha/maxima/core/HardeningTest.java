@@ -107,7 +107,7 @@ public class HardeningTest {
         Mailbox m2 = new Mailbox();
         m2.setStore(new FileStore(dir));
         java.util.List<Mailbox.Item> after = m2.fetch("0xPERSIST", 0, 10);
-        if (after.size() == 1 && new String(after.get(0).ciphertext).equals("held ciphertext")) {
+        if (after.size() == 1 && new String(after.get(0).ciphertext()).equals("held ciphertext")) {
             ok("held ciphertext survives a relay restart");
         } else {
             bad("mailbox did not persist: " + after.size());

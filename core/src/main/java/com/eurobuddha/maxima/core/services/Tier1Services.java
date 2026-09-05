@@ -168,10 +168,14 @@ public final class Tier1Services {
             List<Mailbox.Item> items = mMailbox.fetch(me, after, 16);
             StringBuilder sb = new StringBuilder();
             for (Mailbox.Item i : items) {
+                byte[] ct = i.ciphertext();
+                if (ct == null) {
+                    continue;   // gone from the store underneath us: nothing to hand over
+                }
                 if (sb.length() > 0) {
                     sb.append('\n');
                 }
-                sb.append(i.sequence).append('|').append(new MiniData(i.ciphertext).to0xString());
+                sb.append(i.sequence).append('|').append(new MiniData(ct).to0xString());
             }
             return sb.toString().getBytes(StandardCharsets.UTF_8);
         });

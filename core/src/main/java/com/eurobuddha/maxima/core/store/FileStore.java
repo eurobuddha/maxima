@@ -207,6 +207,110 @@ public final class FileStore implements Store {
     }
 
     // ---------------------------------------------------------------
+    // binary records: <dir>/<collection>.d/<sha256(key)>, content = [keyLen][key][value]
+    // ---------------------------------------------------------------
+
+    private File binDir(String zCollection) {
+        File d = new File(mDir, zCollection.replaceAll("[^A-Za-z0-9._-]", "_") + ".d");
+        if (!d.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            d.mkdirs();
+        }
+        return d;
+    }
+
+    private File binFile(String zCollection, String zKey) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] h = md.digest(zKey.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : h) {
+                sb.append(String.format("%02x", b));
+            }
+            return new File(binDir(zCollection), sb.toString());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Override
+    public synchronized void putBytes(String zCollection, String zKey, byte[] zValue) {
+        File target = binFile(zCollection, zKey);
+        File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
+        byte[] key = zKey.getBytes(StandardCharsets.UTF_8);
+        try (FileOutputStream fos = new FileOutputStream(tmp)) {
+            java.io.DataOutputStream d = new java.io.DataOutputStream(
+                    new java.io.BufferedOutputStream(fos, 65536));
+            d.writeInt(key.length);
+            d.write(key);
+            d.write(zValue);
+            d.flush();
+            fos.getFD().sync();   // durable before it becomes visible (see writeAtomic)
+        } catch (IOException e) {
+            System.err.println("[store] write failed on " + tmp + ": " + e);
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            return;
+        }
+        if (!tmp.renameTo(target)) {
+            if (!target.delete() || !tmp.renameTo(target)) {
+                System.err.println("[store] could not replace " + target);
+            }
+        }
+    }
+
+    @Override
+    public synchronized byte[] getBytes(String zCollection, String zKey) {
+        File f = binFile(zCollection, zKey);
+        if (!f.exists()) {
+            return null;
+        }
+        try (java.io.DataInputStream d = new java.io.DataInputStream(
+                new java.io.BufferedInputStream(new FileInputStream(f), 65536))) {
+            int klen = d.readInt();
+            if (klen < 0 || klen > f.length()) {
+                return null;
+            }
+            d.skipBytes(klen);
+            byte[] v = new byte[(int) (f.length() - 4 - klen)];
+            d.readFully(v);
+            return v;
+        } catch (IOException e) {
+            System.err.println("[store] could not read " + f + ": " + e);
+            return null;
+        }
+    }
+
+    @Override
+    public synchronized void removeBytes(String zCollection, String zKey) {
+        //noinspection ResultOfMethodCallIgnored
+        binFile(zCollection, zKey).delete();
+    }
+
+    @Override
+    public synchronized Map<String, Integer> listBytes(String zCollection) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        File[] files = binDir(zCollection).listFiles((d, n) -> !n.endsWith(".tmp"));
+        if (files == null) {
+            return out;
+        }
+        for (File f : files) {
+            try (java.io.DataInputStream d = new java.io.DataInputStream(new FileInputStream(f))) {
+                int klen = d.readInt();
+                if (klen <= 0 || klen > 4096 || klen > f.length() - 4) {
+                    continue;   // not one of ours
+                }
+                byte[] key = new byte[klen];
+                d.readFully(key);
+                out.put(new String(key, StandardCharsets.UTF_8), (int) (f.length() - 4 - klen));
+            } catch (IOException e) {
+                System.err.println("[store] could not read " + f + ": " + e);
+            }
+        }
+        return out;
+    }
+
+    // ---------------------------------------------------------------
 
     private File file(String zName) {
         // Never let a collection name escape the data directory.

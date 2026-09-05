@@ -23,6 +23,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * Quotas are mandatory, not optional. Relaying and storage are free, and
  * Maxima's nominal proof-of-work anti-spam is never verified by anyone, so
  * admission control has to be real.
+ *
+ * MEMORY: only METADATA lives in the heap (key, sequence, size, a content id); the
+ * ciphertext itself is one binary record per item in the store and is read back only
+ * when it is delivered. Before this, every held item sat in the heap three times over
+ * (raw, hex in the store cache, and again in each whole-file rewrite), so a 96 MB relay
+ * fell over at a few thousand held messages while its configured cap said 256 MB.
  */
 public final class Mailbox {
 
@@ -39,21 +45,40 @@ public final class Mailbox {
      */
     public static final int DEFAULT_MAX_BOXES = 10000;
     public static final long DEFAULT_MAX_TOTAL_BYTES = 256L * 1024 * 1024;
+    /** Items across all boxes: bytes bound the DISK, this bounds the HEAP (an item's
+     *  metadata is a few hundred bytes; 50 000 of them is ~15 MB on a 96 MB relay). */
+    public static final int DEFAULT_MAX_TOTAL_ITEMS = 50_000;
 
     public static final class Item {
         public final String id;
         public final String recipientKey;
-        public final byte[] ciphertext;
         public final long storedAt;
         /** Monotonic within a recipient, so a client can resume from a cursor. */
         public final long sequence;
+        /** Ciphertext length; the bytes themselves live in the store. */
+        public final int size;
+        private final Mailbox mOwner;
+        /** In memory only until the item is persisted (memory-only stores keep it). */
+        private volatile byte[] mCipher;
 
-        Item(String zId, String zRecipient, byte[] zCiphertext, long zSeq) {
+        Item(Mailbox zOwner, String zId, String zRecipient, long zSeq, long zStoredAt, int zSize,
+             byte[] zCipher) {
+            mOwner = zOwner;
             id = zId;
             recipientKey = zRecipient;
-            ciphertext = zCiphertext;
-            storedAt = System.currentTimeMillis();
             sequence = zSeq;
+            storedAt = zStoredAt;
+            size = zSize;
+            mCipher = zCipher;
+        }
+
+        /** The held ciphertext, read from the store on demand; null if it is gone. */
+        public byte[] ciphertext() {
+            byte[] c = mCipher;
+            if (c != null) {
+                return c;
+            }
+            return mOwner.mStore.getBytes(C_ITEMS, mOwner.recKey(this));
         }
     }
 
@@ -76,19 +101,26 @@ public final class Mailbox {
      *
      * A relay runs under {@code Restart=always}; without this, every held
      * ciphertext is lost on the next restart, which is precisely the failure
-     * this class exists to fix. One record per item, keyed recipient|sequence,
-     * value = storedAt|hex(ciphertext). Deletes on acknowledge/expire.
+     * this class exists to fix. One BINARY record per item under {@link #C_ITEMS},
+     * keyed {@code recipient|seq|storedAt|id} so a reload learns every item's
+     * metadata from the keys alone and never reads a ciphertext until delivery.
+     * Deletes on acknowledge/expire/evict.
      */
     private com.eurobuddha.maxima.core.store.Store mStore =
             com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY;
-    private static final String C_MAIL = "mailbox";
+    /** Binary records, one per item. */
+    static final String C_ITEMS = "mailitems";
+    /** The pre-0.4.42 keyed collection (value = storedAt|hex): migrated on load. */
+    private static final String C_LEGACY = "mailbox";
 
     private final long mTtlMs;
     private final int mMaxPerPeer;
     private final long mMaxBytesPerPeer;
     private final int mMaxBoxes;
     private final long mMaxTotalBytes;
+    private final int mMaxTotalItems;
     private long mTotalBytes;
+    private int mTotalItems;
 
     public Mailbox() {
         this(DEFAULT_TTL_MS, DEFAULT_MAX_PER_PEER, DEFAULT_MAX_BYTES_PER_PEER);
@@ -101,17 +133,27 @@ public final class Mailbox {
 
     public Mailbox(long zTtlMs, int zMaxPerPeer, long zMaxBytesPerPeer,
                    int zMaxBoxes, long zMaxTotalBytes) {
+        this(zTtlMs, zMaxPerPeer, zMaxBytesPerPeer, zMaxBoxes, zMaxTotalBytes,
+                DEFAULT_MAX_TOTAL_ITEMS);
+    }
+
+    public Mailbox(long zTtlMs, int zMaxPerPeer, long zMaxBytesPerPeer,
+                   int zMaxBoxes, long zMaxTotalBytes, int zMaxTotalItems) {
         mTtlMs = zTtlMs;
         mMaxPerPeer = zMaxPerPeer;
         mMaxBytesPerPeer = zMaxBytesPerPeer;
         mMaxBoxes = zMaxBoxes;
         mMaxTotalBytes = zMaxTotalBytes;
+        mMaxTotalItems = zMaxTotalItems;
     }
 
     /** Attach durable storage and reload whatever is held. Call before use. */
     public synchronized void setStore(com.eurobuddha.maxima.core.store.Store zStore) {
         mStore = zStore == null
                 ? com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY : zStore;
+        // Items stored before the store was attached stay in memory only; from here on a
+        // stored item's bytes are the store's.
+        migrateLegacy();
         load();
     }
 
@@ -120,43 +162,94 @@ public final class Mailbox {
         mStore.flush();
     }
 
-    private void load() {
-        for (Map.Entry<String, String> e : mStore.all(C_MAIL).entrySet()) {
+    /** Pre-0.4.42 records ({@code recipient|seq} -> {@code storedAt|hex}) become binary
+     *  records once, then the old collection is emptied. */
+    private void migrateLegacy() {
+        Map<String, String> legacy = mStore.all(C_LEGACY);
+        if (legacy.isEmpty()) {
+            return;
+        }
+        int n = 0;
+        for (Map.Entry<String, String> e : legacy.entrySet()) {
             try {
-                // key = RECIPIENT|SEQ ; value = storedAt|hex(ciphertext)
                 String[] k = e.getKey().split("\\|", 2);
                 String[] v = e.getValue().split("\\|", 2);
-                if (k.length != 2 || v.length != 2) {
+                if (k.length == 2 && v.length == 2) {
+                    byte[] ct = new MiniData(v[1]).getBytes();
+                    String id = new MiniData(Hashes.sha3(ct)).to0xString();
+                    mStore.putBytes(C_ITEMS,
+                            recKey(norm(k[0]), Long.parseLong(k[1]), Long.parseLong(v[0]), id), ct);
+                    n++;
+                }
+            } catch (Exception ex) {
+                System.err.println("[mailbox] legacy record " + e.getKey() + " skipped: " + ex);
+            }
+            mStore.remove(C_LEGACY, e.getKey());
+        }
+        mStore.flush();
+        System.out.println("[mailbox] migrated " + n + " held item(s) to one-file-per-item storage");
+    }
+
+    private void load() {
+        // Keys carry everything: no ciphertext is read here, however much is held.
+        List<Map.Entry<String, Integer>> all = new ArrayList<>(mStore.listBytes(C_ITEMS).entrySet());
+        // Oldest first, so the caps below keep the earliest mail and drop the newest overflow.
+        all.sort(Comparator.comparingLong(e -> storedAtOf(e.getKey())));
+        long now = System.currentTimeMillis();
+        for (Map.Entry<String, Integer> e : all) {
+            String key = e.getKey();
+            try {
+                String[] k = key.split("\\|", 4);
+                if (k.length != 4) {
                     continue;
                 }
-                String recipient = k[0];
+                String recipient = norm(k[0]);   // boxes are keyed normalised, always
                 long seq = Long.parseLong(k[1]);
-                long storedAt = Long.parseLong(v[0]);
-                if (System.currentTimeMillis() - storedAt > mTtlMs) {
-                    mStore.remove(C_MAIL, e.getKey());
+                long storedAt = Long.parseLong(k[2]);
+                String id = k[3];
+                int size = e.getValue();
+                if (now - storedAt > mTtlMs) {
+                    mStore.removeBytes(C_ITEMS, key);
                     continue;
                 }
-                byte[] ct = new com.eurobuddha.maxima.core.codec.MiniData(v[1]).getBytes();
                 // Re-enforce the global caps on reload: a persisted set that was
                 // tampered with locally must not let us blow past them in memory.
-                if (mBoxes.size() >= mMaxBoxes || mTotalBytes + ct.length > mMaxTotalBytes) {
-                    mStore.remove(C_MAIL, e.getKey());
+                boolean newBox = !mBoxes.containsKey(recipient);
+                if ((newBox && mBoxes.size() >= mMaxBoxes) || mTotalBytes + size > mMaxTotalBytes
+                        || mTotalItems + 1 > mMaxTotalItems) {
+                    mStore.removeBytes(C_ITEMS, key);
                     continue;
                 }
                 Box box = mBoxes.computeIfAbsent(recipient, x -> new Box());
-                box.items.add(new Item(
-                        new MiniData(Hashes.sha3(ct)).to0xString(), recipient, ct, seq));
-                box.bytes += ct.length;
+                box.items.add(new Item(this, id, recipient, seq, storedAt, size, null));
+                box.bytes += size;
                 box.nextSeq = Math.max(box.nextSeq, seq + 1);
-                mTotalBytes += ct.length;
+                mTotalBytes += size;
+                mTotalItems++;
             } catch (Exception ex) {
-                System.err.println("[mailbox] bad record " + e.getKey() + ": " + ex);
+                System.err.println("[mailbox] bad record " + key + ": " + ex);
             }
+        }
+        for (Box b : mBoxes.values()) {
+            b.items.sort(Comparator.comparingLong(i -> i.sequence));
         }
     }
 
-    private String recKey(String zRecipient, long zSeq) {
-        return zRecipient + "|" + zSeq;
+    private static long storedAtOf(String zKey) {
+        String[] k = zKey.split("\\|", 4);
+        try {
+            return k.length == 4 ? Long.parseLong(k[2]) : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static String recKey(String zRecipient, long zSeq, long zStoredAt, String zId) {
+        return zRecipient + "|" + zSeq + "|" + zStoredAt + "|" + zId;
+    }
+
+    String recKey(Item zItem) {
+        return recKey(zItem.recipientKey, zItem.sequence, zItem.storedAt, zItem.id);
     }
 
     /**
@@ -184,6 +277,14 @@ public final class Mailbox {
                 return Result.QUOTA_BYTES;
             }
         }
+        if (mTotalItems + 1 > mMaxTotalItems) {
+            while (mTotalItems + 1 > mMaxTotalItems && evictLruUnless(key)) {
+                // make room by whole boxes, least recently active first
+            }
+            if (mTotalItems + 1 > mMaxTotalItems) {
+                return Result.QUOTA_COUNT;
+            }
+        }
 
         Box box = mBoxes.computeIfAbsent(key, k -> new Box());
         expire(box);
@@ -201,12 +302,19 @@ public final class Mailbox {
         if (box.bytes + zCiphertext.length > mMaxBytesPerPeer) {
             return Result.QUOTA_BYTES;
         }
-        Item item = new Item(id, key, zCiphertext, box.nextSeq++);
+        long now = System.currentTimeMillis();
+        boolean durable = mStore != com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY;
+        // A durable store owns the bytes from here (one file); a memory-only store keeps
+        // them on the item so a test / the in-app mailbox needs no second copy.
+        Item item = new Item(this, id, key, box.nextSeq++, now, zCiphertext.length,
+                durable ? null : zCiphertext);
+        if (durable) {
+            mStore.putBytes(C_ITEMS, recKey(item), zCiphertext);
+        }
         box.items.add(item);
         box.bytes += zCiphertext.length;
         mTotalBytes += zCiphertext.length;
-        mStore.put(C_MAIL, recKey(key, item.sequence),
-                item.storedAt + "|" + new MiniData(zCiphertext).to0xString());
+        mTotalItems++;
         return Result.STORED;
     }
 
@@ -229,10 +337,11 @@ public final class Mailbox {
         Box b = mBoxes.remove(victim);
         if (b != null) {
             mTotalBytes -= b.bytes;
+            mTotalItems -= b.items.size();
             // Purge the durable copy too, or an evicted box reloads on restart
             // and re-inflates past the cap.
             for (Item i : b.items) {
-                mStore.remove(C_MAIL, recKey(victim, i.sequence));
+                mStore.removeBytes(C_ITEMS, recKey(i));
             }
         }
         return true;
@@ -279,12 +388,9 @@ public final class Mailbox {
             return 0;
         }
         int before = box.items.size();
-        String rk = norm(zRecipientKey);
         box.items.removeIf(i -> {
             if (i.sequence <= zUpToSequence) {
-                box.bytes -= i.ciphertext.length;
-                mTotalBytes -= i.ciphertext.length;
-                mStore.remove(C_MAIL, recKey(rk, i.sequence));
+                drop(box, i);
                 return true;
             }
             return false;
@@ -315,20 +421,22 @@ public final class Mailbox {
     }
 
     public synchronized int totalItems() {
-        int n = 0;
-        for (Box b : mBoxes.values()) {
-            n += b.items.size();
-        }
-        return n;
+        return mTotalItems;
+    }
+
+    /** Book-keeping for one item leaving its box (caller removes it from the list). */
+    private void drop(Box zBox, Item zItem) {
+        zBox.bytes -= zItem.size;
+        mTotalBytes -= zItem.size;
+        mTotalItems--;
+        mStore.removeBytes(C_ITEMS, recKey(zItem));
     }
 
     private void expire(Box zBox) {
         long now = System.currentTimeMillis();
         zBox.items.removeIf(i -> {
             if (now - i.storedAt > mTtlMs) {
-                zBox.bytes -= i.ciphertext.length;
-                mTotalBytes -= i.ciphertext.length;
-                mStore.remove(C_MAIL, recKey(i.recipientKey, i.sequence));
+                drop(zBox, i);
                 return true;
             }
             return false;
