@@ -196,7 +196,13 @@ public final class RelayRuntime {
         if (mMaxConnections > 0) {
             relay.setMaxConnections(mMaxConnections);
         }
-        relay.setPublicHost(mHost);
+        // Our public address: the operator's --host, else the box's own global IPv4 (a VPS has
+        // it on its interface). A relay that knows its address names ITSELF in the peer list
+        // it hands out (classic P2PGreeting), so a client that reached us through another
+        // relay's list learns us; a NAT'd box (the Pi) stays nameless here and is still shared
+        // by whoever dial-back-verified it.
+        String host = mHost.isEmpty() ? detectPublicIPv4() : mHost;
+        relay.setPublicHost(host);
         relay.setPeers(mPeers);   // bootstrap the Phase-B mesh forwarding targets
         // Durable mailbox under <data>/relaystore, so a restart does not lose the
         // ciphertext we hold for offline peers.
@@ -239,6 +245,30 @@ public final class RelayRuntime {
                 }
             }
         }
+    }
+
+    /** The first globally-routable IPv4 on a local interface, or "" (behind NAT / none). */
+    public static String detectPublicIPv4() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> nets =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (nets != null && nets.hasMoreElements()) {
+                java.net.NetworkInterface nif = nets.nextElement();
+                if (!nif.isUp() || nif.isLoopback()) {
+                    continue;
+                }
+                java.util.Enumeration<java.net.InetAddress> addrs = nif.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress a = addrs.nextElement();
+                    if (a instanceof java.net.Inet4Address
+                            && com.eurobuddha.maxima.core.portmap.PortMapper.isPublic(a.getHostAddress())) {
+                        return a.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     /** A current counters snapshot (also emitted on every tick). */

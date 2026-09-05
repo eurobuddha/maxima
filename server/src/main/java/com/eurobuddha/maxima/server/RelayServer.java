@@ -202,6 +202,21 @@ public final class RelayServer {
     public void setPeers(java.util.List<String> zHostPorts) {
         mBootstrapPeers = zHostPorts == null ? java.util.Collections.emptyList()
                 : new java.util.ArrayList<>(zHostPorts);
+        considerBootstrapPeers();
+    }
+
+    /**
+     * The mesh peers we were given are peers like any other: dial-back verify them so they
+     * ride in the peer list we hand clients (classic shares every known peer, its
+     * {@code -p2pnodes} included). Re-run each maintenance tick — a verified peer expires
+     * after {@link com.eurobuddha.maxima.core.session.RelayPeers#TTL_MS} unless re-claimed,
+     * and a bootstrap peer claims nothing; this is its re-claim. No-op when already verified.
+     */
+    private void considerBootstrapPeers() {
+        String self = mPublicHost.isEmpty() ? "" : mPublicHost + ":" + mPort;
+        for (String p : mBootstrapPeers) {
+            mPeers.consider(p, self);
+        }
     }
 
     /**
@@ -1304,6 +1319,7 @@ public final class RelayServer {
             m.entrySet().removeIf(e -> now - e.getValue().windowStart > 120_000);
         }
         mPeers.expire();
+        considerBootstrapPeers();
         sweepConnections(now);
     }
 
