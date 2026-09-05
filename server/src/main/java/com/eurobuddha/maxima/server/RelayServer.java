@@ -1569,15 +1569,9 @@ public final class RelayServer {
      *  already delivered is deduped, so this only matters when mail is waiting). */
     private static final long DRAIN_INTERVAL_MS = 90_000;
 
-    /** Test hook: the verified peers we would share (unshuffled view is fine for a contains). */
-    java.util.List<String> peersForTest() {
-        return mPeers.share();
-    }
-
-    /** Test hook (classic {@code -allowallip}): loopback peers are considered, so two relays
-     *  on one machine can verify each other. Never set in production. */
-    void setAllowAllIpForTest(boolean zAllow) {
-        mPeers.setAllowAllIp(zAllow);
+    /** The relay's peer list (package-private: tests shape and read it through here). */
+    com.eurobuddha.maxima.core.session.RelayPeers peers() {
+        return mPeers;
     }
 
     /** Test hook: the oldest in-progress write start across all connections, 0 if none. A

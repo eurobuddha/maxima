@@ -186,13 +186,13 @@ public final class PeerDiscovery {
         mLoadedCount = n;
     }
 
-    /** Classic {@code updateP2PPeersList}: save only when the list is still at least half
-     *  the size it was loaded at — a transient outage must not persist an emptied list. */
     /** Stored timestamps are coarse (hours), so a re-verification does not rewrite the file:
      *  a keyed FileStore put rewrites and fsyncs the whole collection, and 250 of them after
      *  the 6-hour recheck was 250 rewrites for no new information. */
     private static final long SAVE_GRAIN_MS = 3_600_000L;
 
+    /** Classic {@code updateP2PPeersList}: save only when the list is still at least half
+     *  the size it was loaded at — a transient outage must not persist an emptied list. */
     public void save() {
         int size = mVerified.size();
         if (size > 0 && size >= mLoadedCount / 2) {
@@ -282,6 +282,10 @@ public final class PeerDiscovery {
         boolean was = mVerified.remove(zHostPort) != null;
         mUnverified.remove(zHostPort);
         mDue.remove(zHostPort);
+        // Left alone for the recheck interval, like a dead peer: a relay that greets but will
+        // not take our attach would otherwise be re-listed by the next greeting, re-verified,
+        // re-adopted and re-struck three times over, every cooldown.
+        mFailedUntil.put(zHostPort, System.currentTimeMillis() + RECHECK_FAILED_MS);
         if (was) {
             mDirty = true;
             Listener l = mListener;

@@ -191,6 +191,19 @@ public class PeerDiscoveryTest {
     }
 
     @Test
+    public void aPeerDroppedByThreeStrikesIsNotReadoptedFromTheNextGreeting() throws Exception {
+        try (FakeRelay a = new FakeRelay(new ArrayList<>())) {
+            PeerDiscovery d = discovery();
+            d.check(a.hostPort(), true);
+            assertEquals(1, d.verifiedCount());
+            d.noConnect(a.hostPort());          // greets, but three attaches failed
+            assertEquals(0, d.verifiedCount());
+            d.addPeer(a.hostPort());            // the next greeting lists it again
+            assertEquals("not re-queued within the recheck interval", 0, d.unverifiedCount());
+        }
+    }
+
+    @Test
     public void savedPeersAreNotDemotedWhileOffline() throws Exception {
         File dir = new File(System.getProperty("java.io.tmpdir"), "maxima-peers-offline-" + System.nanoTime());
         FileStore store = new FileStore(dir);

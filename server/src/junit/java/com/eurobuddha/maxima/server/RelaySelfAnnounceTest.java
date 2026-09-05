@@ -42,17 +42,17 @@ public class RelaySelfAnnounceTest {
         RelayServer b = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), pb, PROTO);
         a.setPublicHost("127.0.0.1");
         b.setPublicHost("127.0.0.1");
-        a.setAllowAllIpForTest(true);   // loopback peers, like classic -allowallip
-        b.setAllowAllIpForTest(true);
+        a.peers().setAllowAllIp(true);   // loopback peers, like classic -allowallip
+        b.peers().setAllowAllIp(true);
         try {
             b.start();
             a.start();
             a.setPeers(Collections.singletonList("127.0.0.1:" + pb));   // A's mesh list = B
             // A dials B to verify it (claiming 127.0.0.1:pa); B dials A back; B now lists A.
             assertTrue("B learned A from A's own verification dial",
-                    waitFor(() -> b.peersForTest().contains("127.0.0.1:" + pa), 15));
+                    waitFor(() -> b.peers().share().contains("127.0.0.1:" + pa), 15));
             // ...and A lists B, the peer it verified.
-            assertTrue("A lists B", waitFor(() -> a.peersForTest().contains("127.0.0.1:" + pb), 15));
+            assertTrue("A lists B", waitFor(() -> a.peers().share().contains("127.0.0.1:" + pb), 15));
         } finally {
             a.stop();
             b.stop();
