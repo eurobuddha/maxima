@@ -74,6 +74,23 @@ public final class MlsStore {
      * flush keep it bounded.
      */
     public static final int DEFAULT_MAX_ENTRIES = 200_000;
+    /** The smallest cap {@link #sizedForHeap} will pick: a fleet of a few thousand identities
+     *  always fits, whatever the heap. */
+    public static final int MIN_ENTRIES = 2_000;
+    /** What one entry costs in practice: the key string, a few addresses, the signed proof
+     *  (publisher key + payload + signature, ~1-2 KB) and its map slot. */
+    static final int ENTRY_ESTIMATE_BYTES = 4096;
+
+    /**
+     * An entry cap this JVM can actually hold: a quarter of the max heap at
+     * {@link #ENTRY_ESTIMATE_BYTES} per entry, clamped to [{@link #MIN_ENTRIES},
+     * {@link #DEFAULT_MAX_ENTRIES}]. The flat 200 000 default was ~800 MB of proofs on a
+     * relay whose heap is 96 MB - the cap would never have bitten before the OOM did.
+     */
+    public static int sizedForHeap(long zMaxHeapBytes) {
+        long n = zMaxHeapBytes / 4 / ENTRY_ESTIMATE_BYTES;
+        return (int) Math.max(MIN_ENTRIES, Math.min(DEFAULT_MAX_ENTRIES, n));
+    }
     /** Cap on addresses per entry, so one SET cannot carry tens of thousands. */
     public static final int MAX_ADDRESSES = 8;
     /** Allowed READERS are a different thing from addresses: one per contact. Capping them at
@@ -85,6 +102,16 @@ public final class MlsStore {
     private final Map<String, Entry> mEntries = java.util.Collections.synchronizedMap(
             new java.util.LinkedHashMap<>(1024, 0.75f, true));
     private final long mTtlMs;
+    /** Entry cap, sized for this JVM's heap by default (see {@link #sizedForHeap}). */
+    private volatile int mMaxEntries = sizedForHeap(Runtime.getRuntime().maxMemory());
+
+    public void setMaxEntries(int zMax) {
+        mMaxEntries = Math.max(1, zMax);
+    }
+
+    public int maxEntries() {
+        return mMaxEntries;
+    }
     /** Identities allowed to be resolved by anyone (the "permanent" list). */
     private final List<String> mPermanent = new ArrayList<>();
 
@@ -117,7 +144,11 @@ public final class MlsStore {
         List<String> addrs = zAddresses.size() > MAX_ADDRESSES
                 ? new ArrayList<>(zAddresses.subList(0, MAX_ADDRESSES))
                 : new ArrayList<>(zAddresses);
-        List<String> readers = zAllowedReaders.size() > MAX_READERS
+        // In OPEN-RESOLVE mode (a public pool relay) every stored identity resolves for anyone,
+        // so the reader list is never consulted: retaining it (up to 2048 keys of ~330 chars,
+        // ~700 KB per entry) was the single largest memory item on a pool relay.
+        List<String> readers = mOpenResolve ? java.util.Collections.emptyList()
+                : zAllowedReaders.size() > MAX_READERS
                 ? new ArrayList<>(zAllowedReaders.subList(0, MAX_READERS))
                 : new ArrayList<>(zAllowedReaders);
         long now = System.currentTimeMillis();
@@ -127,7 +158,7 @@ public final class MlsStore {
                     zProofFrom, zProofPayload, zProofSig));
             // LRU cap: evict the least-recently-accessed while over the limit.
             java.util.Iterator<String> it = mEntries.keySet().iterator();
-            while (mEntries.size() > DEFAULT_MAX_ENTRIES && it.hasNext()) {
+            while (mEntries.size() > mMaxEntries && it.hasNext()) {
                 it.next();
                 it.remove();
             }
