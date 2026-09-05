@@ -63,6 +63,10 @@ public final class ServiceRegistry {
      * Dispatch. Never throws - a handler failure becomes an ERROR envelope so
      * the caller is not left waiting for a reply that will never come.
      */
+    /** Reply payload ceiling: the Maxima package limit less envelope/crypto/signature overhead. */
+    public static final int MAX_REPLY_BYTES =
+            com.eurobuddha.maxima.core.msg.MaximaPackage.MAX_SIZE - 8192;
+
     public RpcEnvelope dispatch(String zId, Request zRequest) {
         Handler h = mHandlers.get(zRequest.method);
         if (h == null) {
@@ -70,6 +74,12 @@ public final class ServiceRegistry {
         }
         try {
             byte[] out = h.handle(zRequest);
+            if (out != null && out.length > MAX_REPLY_BYTES) {
+                // The reply could never leave the node (one Maxima package, 256K). Say so in a
+                // reply that CAN, instead of building an unsendable one that vanishes.
+                return RpcEnvelope.error(zId, "reply too large (" + out.length
+                        + " bytes) - use paging");
+            }
             return RpcEnvelope.response(zId, out == null ? new byte[0] : out);
         } catch (Exception e) {
             String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();

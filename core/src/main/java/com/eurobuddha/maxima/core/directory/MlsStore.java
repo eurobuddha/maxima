@@ -76,6 +76,10 @@ public final class MlsStore {
     public static final int DEFAULT_MAX_ENTRIES = 200_000;
     /** Cap on addresses per entry, so one SET cannot carry tens of thousands. */
     public static final int MAX_ADDRESSES = 8;
+    /** Allowed READERS are a different thing from addresses: one per contact. Capping them at
+     *  MAX_ADDRESSES (as before) meant only the first 8 contacts could ever resolve you on a
+     *  directory that is not in open-resolve mode. */
+    public static final int MAX_READERS = 2048;
 
     /** Access-order for LRU; eviction is manual in {@link #put} (see the cap). */
     private final Map<String, Entry> mEntries = java.util.Collections.synchronizedMap(
@@ -113,8 +117,8 @@ public final class MlsStore {
         List<String> addrs = zAddresses.size() > MAX_ADDRESSES
                 ? new ArrayList<>(zAddresses.subList(0, MAX_ADDRESSES))
                 : new ArrayList<>(zAddresses);
-        List<String> readers = zAllowedReaders.size() > MAX_ADDRESSES
-                ? new ArrayList<>(zAllowedReaders.subList(0, MAX_ADDRESSES))
+        List<String> readers = zAllowedReaders.size() > MAX_READERS
+                ? new ArrayList<>(zAllowedReaders.subList(0, MAX_READERS))
                 : new ArrayList<>(zAllowedReaders);
         long now = System.currentTimeMillis();
         synchronized (mEntries) {

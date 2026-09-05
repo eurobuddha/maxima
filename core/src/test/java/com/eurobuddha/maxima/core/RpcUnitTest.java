@@ -69,6 +69,16 @@ public class RpcUnitTest {
         } else {
             bad("dispatch response: " + ok1.getPayloadAsString());
         }
+        // A reply that could never fit one Maxima package comes back as a STRUCTURED error
+        // (it used to be built anyway and vanish in the reply thread).
+        reg.register("huge", r -> new byte[ServiceRegistry.MAX_REPLY_BYTES + 1]);
+        RpcEnvelope big = reg.dispatch("c9",
+                new ServiceRegistry.Request("huge", new byte[0], new byte[]{1}, null));
+        if (big.isError() && big.getPayloadAsString().contains("too large")) {
+            ok("an oversize reply is refused with a sendable error, not silently dropped");
+        } else {
+            bad("oversize reply: " + big.getPayloadAsString());
+        }
         RpcEnvelope ok2 = reg.dispatch("c2",
                 new ServiceRegistry.Request("upper", "abc".getBytes(), new byte[]{1}, null));
         if (ok2.getPayloadAsString().equals("ABC")) {

@@ -57,6 +57,14 @@ public final class ChatEngine {
          *  NOT a delivery confirmation, kept out of deliveredBy). */
         final java.util.Set<String> classicSent =
                 java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+        /** Group resend bookkeeping (in-memory): member -> resend attempts so far, and the
+         *  earliest time the next attempt may run. Bounded at GROUP_RESEND_MAX with backoff,
+         *  so one permanently-offline member cannot keep a whole group in the ladder for 24 h. */
+        final java.util.Map<String, Integer> resendAttempts = new java.util.concurrent.ConcurrentHashMap<>();
+        final java.util.Map<String, Long> resendNotBefore = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Members given up on after GROUP_RESEND_MAX attempts (a grey tick, not a red cross). */
+        public final java.util.Set<String> undeliveredBy =
+                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
 
         Entry(String zId, String zPeer, String zGroupId, String zSender,
               String zBody, long zTime, boolean zMine, String zState) {
@@ -104,6 +112,29 @@ public final class ChatEngine {
      * spawned 128 threads, each opening a socket; markRead() could spawn one
      * per message in the conversation. Both are an ANR or OOM on a phone.
      */
+    /** Group fan-out: members in PARALLEL (bounded), each on the first relay that accepts.
+     *  A dead member costs one leash in parallel with the others, not a serial 15-60 s. */
+    private static final int GROUP_FANOUT_THREADS = 8;
+    private final ExecutorService mGroupPool = Executors.newFixedThreadPool(GROUP_FANOUT_THREADS, r -> {
+        Thread t = new Thread(r, "parlons-group-fanout");
+        t.setDaemon(true);
+        return t;
+    });
+    /** Bounded group resend: attempts per member, with backoff between them. */
+    static final int GROUP_RESEND_MAX = 3;
+    private static final long[] GROUP_RESEND_BACKOFF_MS = { 45_000L, 5 * 60_000L, 30 * 60_000L };
+    /** Coalesced group receipts: per sender, the newest message received in the window; one
+     *  receipt (upto) per sender per window instead of one full send per message. */
+    private static final long GROUP_RECEIPT_WINDOW_MS = 10_000L;
+    private final java.util.Map<String, Entry> mPendingGroupReceipts = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicBoolean mReceiptFlushArmed = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.ScheduledExecutorService mReceiptFlusher =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "parlons-group-receipts");
+                t.setDaemon(true);
+                return t;
+            });
+
     private final ExecutorService mReceiptPool = Executors.newFixedThreadPool(2,
             new ThreadFactory() {
                 public Thread newThread(Runnable r) {
@@ -335,6 +366,9 @@ public final class ChatEngine {
     /** Flush and release the receipt pool. */
     public void close() {
         flushState();
+        flushGroupReceipts();
+        mReceiptFlusher.shutdown();
+        mGroupPool.shutdown();
         mReceiptPool.shutdown();
     }
 
@@ -732,9 +766,11 @@ public final class ChatEngine {
                 return false;
             }
             ChatMessage cm = ChatMessage.groupText(e.id, e.groupId, e.body, e.time);
-            boolean any = false;
+            long now = System.currentTimeMillis();
+            java.util.List<String> due = new ArrayList<>();
             for (String m : g.others(mNode.publicKeyHex())) {
-                if (e.deliveredBy.contains(Keys.norm(m))) {
+                String k = Keys.norm(m);
+                if (e.deliveredBy.contains(k)) {
                     continue;   // this member already confirmed
                 }
                 Contact c = mNode.contact(m);
@@ -746,17 +782,36 @@ public final class ChatEngine {
                 // 1:1 classic guard in resendUndelivered). Track that in a
                 // SEPARATE set: deliveredBy must hold only real confirmations,
                 // or a reader (e.g. desktop ticks) shows a false delivered.
-                if (c.isClassic() && e.classicSent.contains(Keys.norm(m))) {
+                if (c.isClassic() && e.classicSent.contains(k)) {
                     continue;
                 }
-                if (deliver(c, cm)) {
-                    any = true;
-                    if (c.isClassic()) {
-                        e.classicSent.add(Keys.norm(m));
+                // Bounded: GROUP_RESEND_MAX attempts per member with backoff, then that
+                // member is undelivered (grey tick) and costs nothing more - one dead member
+                // must not keep the whole group's full body in the ladder for 24 h.
+                int attempts = e.resendAttempts.getOrDefault(k, 0);
+                if (attempts >= GROUP_RESEND_MAX) {
+                    if (e.undeliveredBy.add(k)) {
+                        fireState(e);
                     }
+                    continue;
                 }
+                if (now < e.resendNotBefore.getOrDefault(k, 0L)) {
+                    continue;
+                }
+                e.resendAttempts.put(k, attempts + 1);
+                e.resendNotBefore.put(k, now + GROUP_RESEND_BACKOFF_MS[Math.min(attempts, GROUP_RESEND_BACKOFF_MS.length - 1)]);
+                due.add(m);
             }
-            return any;
+            if (due.isEmpty()) {
+                return false;
+            }
+            int n = fanOutGroup(due, cm, ok -> {
+                Contact c = mNode.contact(ok);
+                if (c != null && c.isClassic()) {
+                    e.classicSent.add(Keys.norm(ok));
+                }
+            });
+            return n > 0;
         }
         Contact c = mNode.contact(e.peer);
         if (c == null) {
@@ -873,15 +928,48 @@ public final class ChatEngine {
         record(e);
 
         ChatMessage cm = ChatMessage.groupText(id, zGroupId, zBody, e.time);
-        int sent = 0;
-        for (String member : g.others(me)) {
-            Contact c = mNode.contact(member);
-            if (c != null && deliver(c, cm)) {
-                sent++;
-            }
-        }
+        int sent = fanOutGroup(g.others(me), cm, null);
         setState(e, sent > 0 ? Receipt.SENT : Receipt.FAILED);
         return e;
+    }
+
+    /**
+     * Deliver one message to a set of members in parallel (bounded pool), first accepting relay
+     * per member. Returns how many members took it; {@code zOk}, if given, receives each member
+     * that did. Waits for every attempt (a member on a dead relay costs one leash, overlapped).
+     */
+    private int fanOutGroup(java.util.List<String> zMembers, ChatMessage zMsg,
+                            java.util.function.Consumer<String> zOk) {
+        final java.util.concurrent.atomic.AtomicInteger sent = new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(zMembers.size());
+        for (final String member : zMembers) {
+            final Contact c = mNode.contact(member);
+            if (c == null) {
+                done.countDown();
+                continue;
+            }
+            Runnable one = () -> {
+                try {
+                    if (deliver(c, zMsg, true)) {
+                        sent.incrementAndGet();
+                        if (zOk != null) zOk.accept(member);
+                    }
+                } finally {
+                    done.countDown();
+                }
+            };
+            try {
+                mGroupPool.execute(one);
+            } catch (java.util.concurrent.RejectedExecutionException shuttingDown) {
+                one.run();
+            }
+        }
+        try {
+            done.await(3, java.util.concurrent.TimeUnit.MINUTES);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+        return sent.get();
     }
 
     /** Create a group and push the roster to every member. */
@@ -892,6 +980,10 @@ public final class ChatEngine {
         g.addAdmin(me);
         for (String k : zMemberKeys) {
             g.addMember(k);
+        }
+        if (g.size() > Group.MAX_MEMBERS) {
+            throw new IllegalArgumentException("a group holds at most " + Group.MAX_MEMBERS
+                    + " members (" + g.size() + " asked)");
         }
         mGroups.put(g.id, g);
         persist(g);
@@ -906,6 +998,10 @@ public final class ChatEngine {
         if (!zGroup.isAdmin(me)) {
             throw new IllegalStateException("only an admin can change the roster");
         }
+        if (zGroup.size() > Group.MAX_MEMBERS) {
+            throw new IllegalArgumentException("a group holds at most " + Group.MAX_MEMBERS
+                    + " members (" + zGroup.size() + " asked)");
+        }
         mGroups.put(zGroup.id, zGroup);
         persist(zGroup);
         pushRoster(zGroup);
@@ -916,15 +1012,28 @@ public final class ChatEngine {
         String me = mNode.publicKeyHex();
         ChatMessage roster = ChatMessage.roster(zGroup.id, zGroup.name,
                 new ArrayList<>(zGroup.members()), zGroup.adminsCsv());
-        for (String member : zGroup.others(me)) {
-            Contact c = mNode.contact(member);
-            if (c != null) {
-                deliver(c, roster);
-            }
+        // Pre-flight: a roster carries every member key; past the wire ceiling it could never
+        // be sent and used to fail silently. Trivially true under MAX_MEMBERS - kept as the guard.
+        int bytes = roster.encode().getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > com.eurobuddha.maxima.core.rpc.ServiceRegistry.MAX_REPLY_BYTES) {
+            mNode.log("roster for group " + zGroup.id + " NOT sent: " + bytes
+                    + " bytes exceeds the wire ceiling (" + zGroup.size() + " members)");
+            return;
+        }
+        int n = fanOutGroup(zGroup.others(me), roster, null);
+        if (n < zGroup.others(me).size()) {
+            mNode.log("roster for group " + zGroup.id + ": " + n + "/" + zGroup.others(me).size()
+                    + " members reached (the rest get it on the next resend)");
         }
     }
 
     private boolean deliver(Contact zTo, ChatMessage zMsg) {
+        return deliver(zTo, zMsg, false);
+    }
+
+    /** {@code zGroup}: first accepting relay wins (see MaximaNode.sendToContact); 1:1 keeps
+     *  the every-mailbox redundancy. */
+    private boolean deliver(Contact zTo, ChatMessage zMsg, boolean zGroup) {
         try {
             // THE BRIDGE: a classic peer (MaxSolo on a stock node) speaks the
             // maxsolo wire, not ours. Only human-visible content crosses -
@@ -961,7 +1070,7 @@ public final class ChatEngine {
                 return cr.isOk();
             }
             MaximaSender.Result r = mNode.sendToContact(zTo, ChatMessage.APPLICATION,
-                    zMsg.encode().getBytes(StandardCharsets.UTF_8));
+                    zMsg.encode().getBytes(StandardCharsets.UTF_8), !zGroup);
             return r.isOk();
         } catch (Exception e) {
             return false;
@@ -1216,9 +1325,44 @@ public final class ChatEngine {
         e.arrived = System.currentTimeMillis();
         if (record(e)) {
             fire(e);
-            sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);
-        } else {
-            sendReceipt(zFrom, zMsg.id, Receipt.DELIVERED);   // re-ack (see handleText)
+        }
+        // Coalesced: one receipt per sender per window, covering this and everything older
+        // (a duplicate re-queues it, so a lost receipt still self-heals - see handleText).
+        queueGroupReceipt(zFrom, e);
+    }
+
+    /** Remember the newest group message received from a sender; flush ONE upto-receipt per
+     *  sender after the window. N messages in a burst = one receipt, not N full sends. */
+    private void queueGroupReceipt(String zFrom, Entry zNewest) {
+        String k = Keys.norm(zFrom);
+        mPendingGroupReceipts.merge(k, zNewest, (old, cur) -> cur.time >= old.time ? cur : old);
+        if (mReceiptFlushArmed.compareAndSet(false, true)) {
+            try {
+                mReceiptFlusher.schedule(this::flushGroupReceipts, GROUP_RECEIPT_WINDOW_MS,
+                        java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.RejectedExecutionException shuttingDown) {
+                mReceiptFlushArmed.set(false);
+                flushGroupReceipts();
+            }
+        }
+    }
+
+    private void flushGroupReceipts() {
+        mReceiptFlushArmed.set(false);
+        java.util.List<java.util.Map.Entry<String, Entry>> batch =
+                new ArrayList<>(mPendingGroupReceipts.entrySet());
+        mPendingGroupReceipts.clear();
+        for (java.util.Map.Entry<String, Entry> pe : batch) {
+            Contact c = mNode.contact(pe.getKey());
+            if (c == null) {
+                continue;
+            }
+            final ChatMessage r = ChatMessage.receiptUpto(pe.getValue().id, Receipt.DELIVERED);
+            try {
+                mReceiptPool.submit(() -> deliver(c, r, true));
+            } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                // shutting down; a missed receipt costs a tick, not a message
+            }
         }
     }
 
@@ -1242,6 +1386,11 @@ public final class ChatEngine {
             if (!g.isAdmin(zFrom)) {
                 return;
             }
+            if (g.size() > Group.MAX_MEMBERS) {
+                mNode.log("roster for group " + g.id + " refused: " + g.size() + " members > "
+                        + Group.MAX_MEMBERS + " (from " + zFrom + ")");
+                return;
+            }
             mGroups.put(g.id, g);
             persist(g);
             fireGroup(g);
@@ -1253,12 +1402,20 @@ public final class ChatEngine {
         if (!existing.isAdmin(zFrom)) {
             return;
         }
-        existing.name = zMsg.groupName.isEmpty() ? existing.name : zMsg.groupName;
-        existing.setMembers(zMsg.members);
-        existing.setAdmins(Group.parseCsv(zMsg.admin));
+        Group edit = new Group(existing.id);
+        edit.setMembers(zMsg.members);
+        edit.setAdmins(Group.parseCsv(zMsg.admin));
         for (String a : Group.parseCsv(zMsg.admin)) {
-            existing.addMember(a);
+            edit.addMember(a);
         }
+        if (edit.size() > Group.MAX_MEMBERS) {
+            mNode.log("roster update for group " + existing.id + " refused: " + edit.size()
+                    + " members > " + Group.MAX_MEMBERS + " (from " + zFrom + ")");
+            return;
+        }
+        existing.name = zMsg.groupName.isEmpty() ? existing.name : zMsg.groupName;
+        existing.setMembers(edit.members());
+        existing.setAdmins(edit.admins());
         persist(existing);
         fireGroup(existing);
     }
@@ -1274,6 +1431,19 @@ public final class ChatEngine {
                 return;
             }
             e.deliveredBy.add(Keys.norm(zFrom));
+            e.undeliveredBy.remove(Keys.norm(zFrom));
+            if (zMsg.upto) {
+                // Coalesced receipt: this member has everything of ours in this group up to
+                // and including the referenced message (ids are random; ORDER is by time).
+                for (Entry older : new ArrayList<>(mMessages.values())) {
+                    if (older != e && older.mine && older.groupId.equals(e.groupId)
+                            && older.time <= e.time
+                            && older.deliveredBy.add(Keys.norm(zFrom))) {
+                        older.undeliveredBy.remove(Keys.norm(zFrom));
+                        settleGroupState(older, g);
+                    }
+                }
+            }
 
             // Count only confirmations from members who are STILL in the group.
             // Comparing sizes alone let a stale confirmation from a removed
@@ -1284,25 +1454,7 @@ public final class ChatEngine {
             // never confirm - exclude them from the denominator, or a group
             // with any classic member never reaches DELIVERED and redeliver
             // re-sends the full body to everyone every beat for 24h.
-            List<String> current = new java.util.ArrayList<>();
-            for (String m : g.others(mNode.publicKeyHex())) {
-                Contact mc = mNode.contact(m);
-                if (mc == null || !mc.isClassic()) {
-                    current.add(m);
-                }
-            }
-            int confirmed = 0;
-            for (String m : current) {
-                if (e.deliveredBy.contains(Keys.norm(m))) {
-                    confirmed++;
-                }
-            }
-            if (!current.isEmpty() && confirmed >= current.size()) {
-                setState(e, Receipt.DELIVERED);
-            } else {
-                persistLater(e);
-                fireState(e);
-            }
+            settleGroupState(e, g);
             return;
         }
         if (zFrom.equalsIgnoreCase(e.peer)) {
@@ -1312,6 +1464,29 @@ public final class ChatEngine {
             if (!Receipt.FAILED.equals(zMsg.state)) {
                 setState(e, zMsg.state);
             }
+        }
+    }
+
+    /** DELIVERED once every CURRENT non-classic member has confirmed; else persist + notify. */
+    private void settleGroupState(Entry e, Group g) {
+        List<String> current = new java.util.ArrayList<>();
+        for (String m : g.others(mNode.publicKeyHex())) {
+            Contact mc = mNode.contact(m);
+            if (mc == null || !mc.isClassic()) {
+                current.add(m);
+            }
+        }
+        int confirmed = 0;
+        for (String m : current) {
+            if (e.deliveredBy.contains(Keys.norm(m))) {
+                confirmed++;
+            }
+        }
+        if (!current.isEmpty() && confirmed >= current.size()) {
+            setState(e, Receipt.DELIVERED);
+        } else {
+            persistLater(e);
+            fireState(e);
         }
     }
 
@@ -1360,6 +1535,11 @@ public final class ChatEngine {
             mStore.put(C_READ, k, Long.toString(mark));
         }
         if (!mSendReadReceipts) {
+            return;
+        }
+        if (mGroups.containsKey(zPeerOrGroup)) {
+            // No READ receipts in groups: one tap would fan a full send to every sender in the
+            // thread (up to N-1 x their addresses). Read state stays local in groups.
             return;
         }
         Map<String, Entry> newestBySender = new LinkedHashMap<>();

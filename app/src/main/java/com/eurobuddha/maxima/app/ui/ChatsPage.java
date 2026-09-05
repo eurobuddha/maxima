@@ -272,6 +272,11 @@ public final class ChatsPage implements Page {
                         mAct.toast("Pick at least one person");
                         return;
                     }
+                    if (members.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
+                        mAct.toast("A group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
+                                + " people including you - pick fewer");
+                        return;
+                    }
                     nameGroup(members);
                 })
                 .show();

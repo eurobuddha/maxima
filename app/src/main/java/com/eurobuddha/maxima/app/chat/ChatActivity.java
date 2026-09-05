@@ -1790,6 +1790,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         checked[which] = isChecked)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Save", (d, w) -> {
+                    int picked = 0;
+                    for (boolean b : checked) if (b) picked++;
+                    if (picked + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
+                        toast("A group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
+                                + " people including you - nothing changed");
+                        return;
+                    }
                     for (int i = 0; i < contacts.size(); i++) {
                         if (checked[i]) {
                             zGroup.addMember(contacts.get(i).publicKey);

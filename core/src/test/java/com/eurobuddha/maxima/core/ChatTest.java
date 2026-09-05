@@ -140,6 +140,21 @@ public class ChatTest {
             ok("the member set cannot be mutated behind the accessors");
         }
 
+        // The member cap: a group is fan-out, so it is capped where posting stays instant.
+        if (Group.MAX_MEMBERS == 12) {
+            ok("MAX_MEMBERS is 12");
+        } else {
+            bad("MAX_MEMBERS drifted: " + Group.MAX_MEMBERS);
+        }
+        // A coalesced (upto) receipt round-trips, and an old-style one reads as not-upto.
+        ChatMessage up = ChatMessage.decode(ChatMessage.receiptUpto("0xREF", Receipt.DELIVERED).encode());
+        ChatMessage plain = ChatMessage.decode(ChatMessage.receipt("0xREF", Receipt.DELIVERED).encode());
+        if (up.type == ChatMessage.TYPE_RECEIPT && up.upto && up.ref.equals("0xREF") && !plain.upto) {
+            ok("upto receipts round-trip and plain receipts stay plain");
+        } else {
+            bad("receipt upto flag broken");
+        }
+
         // Mixed-case keys must resolve to the same member.
         Group cg = new Group("0xG2");
         cg.addMember("0xabcdef");
@@ -167,6 +182,16 @@ public class ChatTest {
         com.eurobuddha.maxima.core.chat.ChatEngine c1 =
                 new com.eurobuddha.maxima.core.chat.ChatEngine(node);
         c1.setStore(new com.eurobuddha.maxima.core.store.FileStore(dir));
+
+        // 13 members (12 others + me) must be refused BEFORE anything is persisted or pushed.
+        try {
+            java.util.List<String> many = new java.util.ArrayList<>();
+            for (int i = 0; i < 12; i++) many.add("0x" + String.format("%040d", i + 1));
+            c1.createGroup("Too big", many);
+            bad("a 13-member group was created");
+        } catch (IllegalArgumentException expected) {
+            ok("a 13th member is refused: " + expected.getMessage());
+        }
 
         Group saved = new Group("0xGSAVE");
         saved.name = "Persisted";

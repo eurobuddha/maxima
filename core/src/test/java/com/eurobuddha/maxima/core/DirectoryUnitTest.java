@@ -113,6 +113,21 @@ public class DirectoryUnitTest {
         MlsStore store = new MlsStore();
         store.put(target, Collections.singletonList("Mxtarget@1.2.3.4:9501"),
                 Collections.singletonList(reader));
+
+        // 100 allowed readers must ALL be retained (they used to be cut to MAX_ADDRESSES = 8,
+        // so only 8 arbitrary contacts could resolve you on a closed directory).
+        java.util.List<String> hundred = new java.util.ArrayList<>();
+        for (int i = 0; i < 100; i++) hundred.add("0x" + String.format("%040d", i + 1));
+        store.put("0xMANYREADERS", Collections.singletonList("Mxmany@1.2.3.4:9501"), hundred);
+        int kept = 0;
+        for (String rd : hundred) {
+            if (store.get("0xMANYREADERS", rd) != null) kept++;
+        }
+        if (kept == 100) {
+            ok("all 100 allowed readers retained on publish");
+        } else {
+            bad("readers truncated: " + kept + "/100 retained");
+        }
         if (store.get(target, reader) != null) {
             ok("an authorised reader can resolve the entry");
         } else {

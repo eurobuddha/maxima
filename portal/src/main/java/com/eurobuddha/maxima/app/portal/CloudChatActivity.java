@@ -1089,6 +1089,11 @@ public final class CloudChatActivity extends AppCompatActivity {
     }
 
     private void saveMembers(List<String> zMembers) {
+        if (zMembers.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
+            toast("A group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
+                    + " people including you - nothing changed");
+            return;
+        }
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;

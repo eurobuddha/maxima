@@ -766,8 +766,12 @@ public final class MaximaNode implements ChatPort {
                 any |= new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
                         .publish(mls, myAddresses(), readers,
                                 SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
-            } catch (Exception ignored) {
-                // best effort per server - a slow relay must not hold up the rest
+            } catch (Exception e) {
+                // best effort per server - a slow relay must not hold up the rest - but NEVER
+                // silent: an oversize SET (too many contacts) would otherwise stop every
+                // directory publish with no trace.
+                log("MLS publish to " + mls + " failed: "
+                        + (e.getMessage() == null ? e.toString() : e.getMessage()));
             }
         }
         return any;
@@ -1333,6 +1337,17 @@ public final class MaximaNode implements ChatPort {
      */
     public MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData)
             throws Exception {
+        return sendToContact(zContact, zApplication, zData, true);
+    }
+
+    /**
+     * As {@link #sendToContact(Contact, String, byte[])}; {@code zAllAddresses=false} stops at
+     * the FIRST relay that accepts (group fan-out: N members x every address is the cost that
+     * made groups slow; one accepted copy per member is enough, the MLS heal still runs if none
+     * accepts). 1:1 keeps the every-mailbox redundancy.
+     */
+    public MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData,
+                                             boolean zAllAddresses) throws Exception {
         // 1. LAN FIRST. A same-network hit is a REAL delivery straight to the peer's
         //    endpoint (not a mailbox), so on success we are done - instant, no relay.
         //    A short connect leash means a stale LAN entry fails in a few seconds and
@@ -1361,7 +1376,7 @@ public final class MaximaNode implements ChatPort {
         //    the peer is actually listening, a copy lands. The peer dedups by message id
         //    (ChatMessage.id), so the extra copies are harmless. This is the reliability
         //    guarantee: as long as the peer is reachable via ANY of its relays, it wins.
-        MaximaSender.Result okResult = fanOut(zContact, zApplication, zData);
+        MaximaSender.Result okResult = fanOut(zContact, zApplication, zData, zAllAddresses);
         if (okResult != null) {
             return okResult;
         }
@@ -1373,7 +1388,7 @@ public final class MaximaNode implements ChatPort {
         //    (k=2, not the whole fleet) stay reliable: staleness is healed on
         //    demand instead of being papered over with redundancy.
         if (mlsLookup(zContact)) {
-            okResult = fanOut(zContact, zApplication, zData);
+            okResult = fanOut(zContact, zApplication, zData, zAllAddresses);
             if (okResult != null) {
                 return okResult;
             }
@@ -1385,6 +1400,11 @@ public final class MaximaNode implements ChatPort {
      *  return but every address still gets a copy (mailbox redundancy). Null
      *  if nothing accepted. */
     private MaximaSender.Result fanOut(Contact zContact, String zApplication, byte[] zData) {
+        return fanOut(zContact, zApplication, zData, true);
+    }
+
+    private MaximaSender.Result fanOut(Contact zContact, String zApplication, byte[] zData,
+                                       boolean zAllAddresses) {
         MaximaSender.Result okResult = null;
         // Per-address outcome, reported ONLY on total failure. A silent
         // all-addresses-dead fan-out is how an outbound path stays invisibly
@@ -1403,6 +1423,9 @@ public final class MaximaNode implements ChatPort {
                         SEND_CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
                 if (r.isOk() && okResult == null) {
                     okResult = r;
+                    if (!zAllAddresses) {
+                        break;   // group send: one accepted copy is the whole job
+                    }
                 }
                 if (!r.isOk()) {
                     fails.append(fails.length() == 0 ? "" : " | ")

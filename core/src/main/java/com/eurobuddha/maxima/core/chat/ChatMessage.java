@@ -69,6 +69,10 @@ public final class ChatMessage {
     public String admin = "";
     /** For a receipt: which message it refers to. */
     public String ref = "";
+    /** RECEIPT only: this receipt covers {@link #ref} AND every earlier message from the same
+     *  sender in the same group (coalesced group receipts, one per sender per window). Old
+     *  clients ignore the flag and treat it as a receipt for {@code ref} alone. */
+    public boolean upto;
     /** For a receipt: {@link Receipt}. */
     public String state = "";
     /** For TYPE_ADDRESS: the sender's Mx wallet receive address. */
@@ -118,6 +122,13 @@ public final class ChatMessage {
         return m;
     }
 
+    /** A coalesced group receipt: {@code zRef} and everything older from that sender. */
+    public static ChatMessage receiptUpto(String zRef, String zState) {
+        ChatMessage m = receipt(zRef, zState);
+        m.upto = true;
+        return m;
+    }
+
     public static ChatMessage address(String zAddress) {
         ChatMessage m = new ChatMessage();
         m.type = TYPE_ADDRESS;
@@ -162,6 +173,7 @@ public final class ChatMessage {
         if (!admin.isEmpty()) w.put("admin", admin);
         if (!ref.isEmpty()) w.put("ref", ref);
         if (!state.isEmpty()) w.put("state", state);
+        if (upto) w.putRaw("upto", "1");
         if (!address.isEmpty()) w.put("addr", address);
         if (!amount.isEmpty()) w.put("amt", amount);
         if (!tokenId.isEmpty()) w.put("tok", tokenId);
@@ -191,6 +203,7 @@ public final class ChatMessage {
         c.admin = m.getOrDefault("admin", "");
         c.ref = m.getOrDefault("ref", "");
         c.state = m.getOrDefault("state", "");
+        c.upto = "1".equals(m.getOrDefault("upto", "").trim());
         c.address = m.getOrDefault("addr", "");
         c.amount = m.getOrDefault("amt", "");
         c.tokenId = m.getOrDefault("tok", "");

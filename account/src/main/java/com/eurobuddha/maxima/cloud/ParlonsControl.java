@@ -992,6 +992,10 @@ public final class ParlonsControl {
                     keep.add(com.eurobuddha.maxima.core.identity.Keys.norm(String.valueOf(o)));
                 }
                 keep.add(com.eurobuddha.maxima.core.identity.Keys.norm(me));   // never drop myself
+                if (keep.size() > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
+                    return bytes(err("a group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
+                            + " members (" + keep.size() + " asked)"));
+                }
                 edit.setMembers(keep);
                 // A removed member must lose admin too, or pushRoster re-adds them everywhere
                 // (handleRoster addMember's every admin) and they stay authorized.
@@ -1516,6 +1520,10 @@ public final class ParlonsControl {
             final java.util.List<String> keys = new java.util.ArrayList<>();
             for (Object o : mems) {
                 keys.add(String.valueOf(o));
+            }
+            if (keys.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
+                return bytes(err("a group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
+                        + " members including you (" + (keys.size() + 1) + " asked)"));
             }
             // createGroup pushes the roster to every member SYNCHRONOUSLY (20s+ per offline
             // member) — on the pump thread that deafens the whole node and the client's 35s

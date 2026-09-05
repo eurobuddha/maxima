@@ -312,6 +312,13 @@ public final class CloudChatsPage implements Page {
                                             android.widget.Toast.LENGTH_LONG).show();
                                     return;
                                 }
+                                if (members.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
+                                    android.widget.Toast.makeText(mAct, "A group holds at most "
+                                            + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
+                                            + " people including you - pick fewer",
+                                            android.widget.Toast.LENGTH_LONG).show();
+                                    return;
+                                }
                                 createGroup(gname, members);
                             })
                             .show();

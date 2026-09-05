@@ -29,6 +29,14 @@ public final class Group {
     private final Set<String> mAdmins = new LinkedHashSet<>();
     public long lastActivity;
 
+    /**
+     * The most members a group may have (admins included, ourselves included). Every post is
+     * one sealed message per member on the sender's device, so this is the number at which a
+     * group is still instant to post to and cheap to resend into; a "wall" (post once, read by
+     * many) is the design that lifts it, not a bigger number here.
+     */
+    public static final int MAX_MEMBERS = 12;
+
     /** Delegates to the one shared normaliser. */
     public static String norm(String zKey) {
         return com.eurobuddha.maxima.core.identity.Keys.norm(zKey);

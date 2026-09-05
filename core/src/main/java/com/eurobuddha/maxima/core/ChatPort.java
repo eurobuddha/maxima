@@ -31,6 +31,13 @@ public interface ChatPort {
 	/** Send to a contact, trying every route the engine knows. */
 	MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData)
 			throws Exception;
+	/** As sendToContact; {@code zAllAddresses=false} = first accepting relay wins (group fan-out).
+	 *  Default keeps the every-address behaviour for ports that do not distinguish. */
+	default MaximaSender.Result sendToContact(Contact zContact, String zApplication, byte[] zData,
+	                                          boolean zAllAddresses) throws Exception {
+	    return sendToContact(zContact, zApplication, zData);
+	}
+
 
 	/** Send a contact-ctrl introduction (or update) to an address. */
 	void introduce(String zPeerAddress, boolean zIntro) throws Exception;

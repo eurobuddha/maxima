@@ -151,8 +151,12 @@ public final class RpcPeer {
                 Thread t = new Thread(() -> {
                     try {
                         sendTo(addr, reply, REPLY_CONNECT_TIMEOUT_MS, REPLY_READ_TIMEOUT_MS);
-                    } catch (Exception ignored) {
-                        // another address carries it; a lost reply times out at the caller
+                    } catch (Exception e) {
+                        // another address may carry it; a lost reply times out at the caller.
+                        // Logged (stdout = the node journal): an oversize reply that can never
+                        // be sent used to vanish here with no trace at either end.
+                        System.out.println("[rpc] reply to " + addr + " failed: "
+                                + (e.getMessage() == null ? e.toString() : e.getMessage()));
                     }
                 }, "rpc-reply");
                 t.setDaemon(true);
