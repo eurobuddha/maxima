@@ -88,10 +88,11 @@ public final class MediaService {
         }
         MediaCodec.Encoded enc = MediaCodec.encrypt(zPlain, zMime);
 
-        // 1. keep everything ourselves — we are the source of truth.
+        // 1. keep everything ourselves — we are the source of truth, so PINNED: the shelf's
+        //    least-recently-fetched eviction (viewed media) must never take our own.
         if (mLocal != null) {
             for (byte[] chunk : enc.chunks) {
-                mLocal.put(chunk);
+                mLocal.put(chunk, true);
             }
         }
 

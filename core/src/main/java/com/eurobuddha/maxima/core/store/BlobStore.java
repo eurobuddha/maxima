@@ -23,6 +23,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * mtime), so a relay's shelf self-cleans: media someone still watches stays,
  * media nobody asks for ages out. The OWNER's own node keeps the source of
  * truth for its published media — a relay copy is redundancy, never custody.
+ *
+ * PINNED chunks (the owner's own published media, {@link #put(byte[], boolean)}) live in
+ * a {@code pinned/} subfolder that eviction never touches: before this, a phone's own
+ * photos shared the LRU with everything it had merely viewed, and at ~50 views a day a
+ * published photo silently vanished from its own source of truth within weeks.
  */
 public final class BlobStore {
 
@@ -33,8 +38,11 @@ public final class BlobStore {
     public static final int MAX_CHUNK_BYTES = 256 * 1024;
 
     private final File mDir;
+    private final File mPinned;
     private final long mMaxBytes;
+    /** Every chunk, pinned included. */
     private final AtomicLong mBytes = new AtomicLong();
+    private final AtomicLong mPinnedBytes = new AtomicLong();
 
     public BlobStore(File zDir) {
         this(zDir, DEFAULT_MAX_BYTES);
@@ -42,17 +50,26 @@ public final class BlobStore {
 
     public BlobStore(File zDir, long zMaxBytes) {
         mDir = zDir;
+        mPinned = new File(zDir, "pinned");
         mMaxBytes = zMaxBytes;
         //noinspection ResultOfMethodCallIgnored
-        mDir.mkdirs();
+        mPinned.mkdirs();
         long total = 0;
-        File[] files = mDir.listFiles();
+        long pinned = 0;
+        File[] files = mDir.listFiles(File::isFile);
         if (files != null) {
             for (File f : files) {
                 total += f.length();
             }
         }
-        mBytes.set(total);
+        File[] pins = mPinned.listFiles(File::isFile);
+        if (pins != null) {
+            for (File f : pins) {
+                pinned += f.length();
+            }
+        }
+        mBytes.set(total + pinned);
+        mPinnedBytes.set(pinned);
     }
 
     /**
@@ -60,6 +77,16 @@ public final class BlobStore {
      * Idempotent. Evicts least-recently-fetched chunks when over the cap.
      */
     public synchronized String put(byte[] zContent) throws IOException {
+        return put(zContent, false);
+    }
+
+    /**
+     * Store a chunk, PINNED when {@code zPin}: the owner's own published media, which
+     * eviction never removes. A pinned chunk may use the whole cap (evicting every unpinned
+     * one first); if even that is not enough the put fails loudly rather than dropping
+     * someone's photo. Re-putting an unpinned chunk as pinned moves it under the pin.
+     */
+    public synchronized String put(byte[] zContent, boolean zPin) throws IOException {
         if (zContent == null || zContent.length == 0) {
             throw new IllegalArgumentException("empty chunk");
         }
@@ -67,23 +94,53 @@ public final class BlobStore {
             throw new IllegalArgumentException("chunk too large: " + zContent.length);
         }
         String id = idOf(zContent);
-        File f = fileFor(id);
-        if (f.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            f.setLastModified(System.currentTimeMillis());   // re-put refreshes
+        File pinned = new File(mPinned, id.substring(2));
+        if (pinned.exists()) {
+            return id;   // already pinned: nothing to do, whichever way it was asked for
+        }
+        File loose = new File(mDir, id.substring(2));
+        if (loose.exists()) {
+            if (zPin) {
+                if (!loose.renameTo(pinned)) {
+                    throw new IOException("could not pin chunk");
+                }
+                mPinnedBytes.addAndGet(zContent.length);
+            } else {
+                //noinspection ResultOfMethodCallIgnored
+                loose.setLastModified(System.currentTimeMillis());   // re-put refreshes
+            }
             return id;
         }
         // Make room BEFORE writing, so the cap is never exceeded on disk.
         evictUntilRoomFor(zContent.length);
-        File tmp = new File(mDir, id.substring(2) + ".tmp");
+        if (mBytes.get() + zContent.length > mMaxBytes) {
+            // Only pinned chunks are left and they fill the shelf.
+            throw new IOException("media shelf full: " + (mPinnedBytes.get() >> 20)
+                    + " MB of your own published media already fills its " + (mMaxBytes >> 20) + " MB");
+        }
+        File target = zPin ? pinned : loose;
+        File tmp = new File(target.getParentFile(), id.substring(2) + ".tmp");
         Files.write(tmp.toPath(), zContent);
-        if (!tmp.renameTo(f)) {
+        if (!tmp.renameTo(target)) {
             //noinspection ResultOfMethodCallIgnored
             tmp.delete();
             throw new IOException("could not persist chunk");
         }
         mBytes.addAndGet(zContent.length);
+        if (zPin) {
+            mPinnedBytes.addAndGet(zContent.length);
+        }
         return id;
+    }
+
+    /** Bytes held for the owner's own published media (never evicted). */
+    public long pinnedBytes() {
+        return mPinnedBytes.get();
+    }
+
+    /** True if this chunk is held pinned. */
+    public synchronized boolean isPinned(String zId) {
+        return new File(mPinned, norm(zId).substring(2)).exists();
     }
 
     /** The chunk, or null. A hit refreshes its LRU standing. */
@@ -111,8 +168,9 @@ public final class BlobStore {
     }
 
     public synchronized int count() {
-        String[] l = mDir.list((d, n) -> !n.endsWith(".tmp"));
-        return l == null ? 0 : l.length;
+        File[] l = mDir.listFiles(f -> f.isFile() && !f.getName().endsWith(".tmp"));
+        File[] p = mPinned.listFiles(f -> f.isFile() && !f.getName().endsWith(".tmp"));
+        return (l == null ? 0 : l.length) + (p == null ? 0 : p.length);
     }
 
     public long maxBytes() {
@@ -130,7 +188,8 @@ public final class BlobStore {
         if (mBytes.get() + zIncoming <= mMaxBytes) {
             return;
         }
-        File[] files = mDir.listFiles((d, n) -> !n.endsWith(".tmp"));
+        // Only LOOSE chunks are candidates: the pinned/ folder is never evicted.
+        File[] files = mDir.listFiles(f -> f.isFile() && !f.getName().endsWith(".tmp"));
         if (files == null) {
             return;
         }
@@ -148,7 +207,8 @@ public final class BlobStore {
 
     private File fileFor(String zId) {
         // id is validated hex, so the filename cannot traverse anywhere.
-        return new File(mDir, zId.substring(2));
+        File pinned = new File(mPinned, zId.substring(2));
+        return pinned.exists() ? pinned : new File(mDir, zId.substring(2));
     }
 
     private static String norm(String zId) {
