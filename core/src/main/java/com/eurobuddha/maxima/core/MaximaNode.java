@@ -12,6 +12,7 @@ import com.eurobuddha.maxima.core.net.HostConnection;
 import com.eurobuddha.maxima.core.reliability.DedupCache;
 import com.eurobuddha.maxima.core.reliability.Outbox;
 import com.eurobuddha.maxima.core.rpc.Capabilities;
+import com.eurobuddha.maxima.core.rpc.RpcEnvelope;
 import com.eurobuddha.maxima.core.rpc.RpcPeer;
 import com.eurobuddha.maxima.core.rpc.ServiceRegistry;
 import com.eurobuddha.maxima.core.services.Tier1Services;
@@ -280,6 +281,9 @@ public final class MaximaNode implements ChatPort {
     }
 
     private void runFlushHooks() {
+        // Everything delivered on this connection is queued on the inbound lane; let it land
+        // before anything is flushed and acknowledged.
+        drainInbound(10_000);
         try {
             mStore.flush();
         } catch (Exception ignored) {
@@ -1019,7 +1023,11 @@ public final class MaximaNode implements ChatPort {
         stopDirect();
         mPool.closeAll();
         mDiscovery.stop();   // saves the peer list (classic P2P shutdown)
+        drainInbound(5_000); // let queued inbound persist before the store is flushed
         mStore.flush();
+        mInboundExec.shutdown();
+        mRpcExec.shutdown();
+        mSideExec.shutdown();
     }
 
     /**
@@ -1206,32 +1214,101 @@ public final class MaximaNode implements ChatPort {
         return true;
     }
 
-    /** Route one inbound message. Synchronized: with one reader thread per
-     *  attached host, inbound arrives concurrently; the chat engine and dedup
-     *  were written for the old single pump thread, so serialise here. */
-    public synchronized void handle(HostConnection.Inbound zInbound) {
-        MaximaMessage msg = zInbound.message;
+    /**
+     * The inbound lanes. Every attached relay has its own reader thread; the chat engine and
+     * the contact table were written for ONE pump thread, so inbound is serialised - but on a
+     * lane of its own, not under a node-wide lock held across disk and network. Before this,
+     * handle() was one synchronized block covering dedup, contact fsync, the reciprocal
+     * introduce (a network send), every RPC handler (a contacts.resolve did an MLS lookup,
+     * a node.cmd slept up to 2.5 s) and the chat persist: one slow thing deafened the node.
+     * Now: dedup + last-seen under the lock (microseconds); chat + contact-ctrl on the
+     * inbound lane (ordered, single thread); RPC on its own lane (ordered among RPCs, as its
+     * handlers assume; never in chat's way). Bounded queues fall back to running on the
+     * reader thread - natural backpressure, never an unbounded heap.
+     */
+    private final java.util.concurrent.ThreadPoolExecutor mInboundExec = lane("maxima-inbound", 4096);
+    private final java.util.concurrent.ThreadPoolExecutor mRpcExec = lane("maxima-rpc", 1024);
+    /** Side work an inbound message triggers that must not hold the inbound lane (the
+     *  reciprocal introduce is a network send). */
+    private final java.util.concurrent.ThreadPoolExecutor mSideExec = lane("maxima-side", 256);
 
-        // Replay and duplicate protection - neither exists in classic.
-        DedupCache.Verdict v = mDedup.check(
-                zInbound.msgid.to0xString(), msg.mTimeMilli.getAsLong());
-        if (v != DedupCache.Verdict.ACCEPT) {
+    private static java.util.concurrent.ThreadPoolExecutor lane(String zName, int zQueue) {
+        java.util.concurrent.ThreadPoolExecutor e = new java.util.concurrent.ThreadPoolExecutor(
+                1, 1, 30, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(zQueue),
+                r -> {
+                    Thread t = new Thread(r, zName);
+                    t.setDaemon(true);
+                    return t;
+                },
+                new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        e.allowCoreThreadTimeOut(true);
+        return e;
+    }
+
+    /**
+     * Wait until everything queued on the inbound lane so far has run (bounded). The
+     * before-ack hook needs this: a mailbox ack must not be signed while a delivered message
+     * is still waiting on the lane, or it would be acknowledged before it was persisted.
+     */
+    void drainInbound(long zTimeoutMs) {
+        if (Thread.currentThread().getName().equals("maxima-inbound")) {
+            return;   // already on the lane: everything before us has run
+        }
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        try {
+            mInboundExec.execute(done::countDown);
+            done.await(zTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Route one inbound message: dedup and last-seen under the lock, the rest on lanes. */
+    public void handle(HostConnection.Inbound zInbound) {
+        MaximaMessage msg = zInbound.message;
+        String app = msg.mApplication.toString();
+        synchronized (this) {
+            // Replay and duplicate protection - neither exists in classic.
+            DedupCache.Verdict v = mDedup.check(
+                    zInbound.msgid.to0xString(), msg.mTimeMilli.getAsLong());
+            if (v != DedupCache.Verdict.ACCEPT) {
+                return;
+            }
+            // Mark the sender seen NOW - any accepted inbound message is proof of
+            // life, which is what the contact list's connectivity indicator reads.
+            // Classic bumps a contact's lastseen only on a contact-ctrl refresh
+            // (~20-min loop); we also count chat/RPC so the dot tracks a live
+            // conversation, not just the last handshake. In-memory only: the UI
+            // polls these Contact objects directly, and the periodic contact-ctrl
+            // refresh persists lastSeen. (Self-addressed check-connect probes carry
+            // our own key as the sender, so they match no contact and are ignored.)
+            Contact seen = mContacts.get(Keys.norm(msg.mFrom.to0xString()));
+            if (seen != null) {
+                seen.lastSeen = System.currentTimeMillis();
+            }
+        }
+        if (RpcEnvelope.APPLICATION.equals(app)) {
+            mRpcExec.execute(() -> {
+                try {
+                    mRpc.onInbound(msg);
+                } catch (Exception e) {
+                    log("rpc inbound: " + e);
+                }
+            });
             return;
         }
+        mInboundExec.execute(() -> {
+            try {
+                handleOnLane(zInbound);
+            } catch (Exception e) {
+                log("inbound: " + e);
+            }
+        });
+    }
 
-        // Mark the sender seen NOW - any accepted inbound message is proof of
-        // life, which is what the contact list's connectivity indicator reads.
-        // Classic bumps a contact's lastseen only on a contact-ctrl refresh
-        // (~20-min loop); we also count chat/RPC so the dot tracks a live
-        // conversation, not just the last handshake. In-memory only: the UI
-        // polls these Contact objects directly, and the periodic contact-ctrl
-        // refresh persists lastSeen. (Self-addressed check-connect probes carry
-        // our own key as the sender, so they match no contact and are ignored.)
-        Contact seen = mContacts.get(Keys.norm(msg.mFrom.to0xString()));
-        if (seen != null) {
-            seen.lastSeen = System.currentTimeMillis();
-        }
-
+    /** The ordered part: check-connect, contact-ctrl and the app listener, one at a time. */
+    private void handleOnLane(HostConnection.Inbound zInbound) {
+        MaximaMessage msg = zInbound.message;
         String app = msg.mApplication.toString();
 
         // Check-connect reply: our own self-addressed probe came back down a
@@ -1251,9 +1328,6 @@ public final class MaximaNode implements ChatPort {
         }
         if (ContactCtrl.APPLICATION.equals(app)) {
             handleContactCtrl(msg);
-            return;
-        }
-        if (mRpc.onInbound(msg)) {
             return;
         }
         MessageListener l = mListener;
@@ -1293,13 +1367,17 @@ public final class MaximaNode implements ChatPort {
             saveContact(p.contact);
             fireContacts(p.contact, false);
 
-            // Reciprocate an introduction, as the reference does.
+            // Reciprocate an introduction, as the reference does - a network send, so off
+            // the inbound lane (it would hold every message behind one slow peer).
             if (p.intro) {
-                try {
-                    introduce(p.contact.primaryAddress(), false);
-                } catch (Exception ignored) {
-                    // Best effort; the refresh cycle will retry.
-                }
+                final String addr = p.contact.primaryAddress();
+                mSideExec.execute(() -> {
+                    try {
+                        introduce(addr, false);
+                    } catch (Exception ignored) {
+                        // Best effort; the refresh cycle will retry.
+                    }
+                });
             }
         } catch (IllegalArgumentException e) {
             // Bad JSON, or the publickey did not match the signer. Drop it.

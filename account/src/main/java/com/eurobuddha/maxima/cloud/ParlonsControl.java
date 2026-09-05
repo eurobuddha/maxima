@@ -130,13 +130,12 @@ public final class ParlonsControl {
                 t.setDaemon(true);
                 return t;
             });
-    /** Chat sends, group roster fan-out, read receipts — sequential, may block on a dead peer. */
-    private final java.util.concurrent.ExecutorService mSendExec =
-            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "parlons-chat-send");
-                t.setDaemon(true);
-                return t;
-            });
+    /** Chat sends, group roster fan-out, read receipts, wallet ops — KEYED lanes: work for one
+     *  peer (or "wallet" / "mls" / "group:<name>") stays in order, different keys run in
+     *  parallel (4 threads). One thread for all of it meant a send to an offline peer, blocking
+     *  on its socket timeouts, held every payment, receipt and balance refresh behind it. */
+    private final com.eurobuddha.maxima.core.util.SerialLanes mSendExec =
+            new com.eurobuddha.maxima.core.util.SerialLanes("parlons-send", 4);
     /** Media publish+replicate (up to ~55s each) — its own lane. */
     private final java.util.concurrent.ExecutorService mMediaExec =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
@@ -329,7 +328,7 @@ public final class ParlonsControl {
     private static final int CMD_KEEP = 6;
     /** How long a single RPC waits for the command before replying "pending" (the node's inbound
      *  reader is blocked for this long at most). */
-    private static final long CMD_LEASH_MS = 2_500;
+    private static final long CMD_LEASH_MS = 300;   // the device polls; a long leash only held the RPC lane
 
     private final java.util.concurrent.ExecutorService mConsoleExec =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
@@ -548,7 +547,7 @@ public final class ParlonsControl {
                     mNode.setStaticMls("");
                 } else if ("republish".equals(action)) {
                     final MaximaNode n = mNode;
-                    mSendExec.execute(() -> {
+                    mSendExec.execute("mls", () -> {
                         try { n.publishToMls(); } catch (Exception ignored) { }
                     });
                 }
@@ -573,7 +572,7 @@ public final class ParlonsControl {
             Object[] cached = mBalanceCache.get(addr);
             if (cached == null) {
                 // warm it on the send lane; the device retries
-                mSendExec.execute(() -> {
+                mSendExec.execute("wallet", () -> {
                     try {
                         JSONObject bal = mWallet.cmd("balance megammr:true address:" + addr);
                         mBalanceCache.put(addr, new Object[]{bal, System.currentTimeMillis()});
@@ -611,7 +610,7 @@ public final class ParlonsControl {
                 // The write takes a cross-process FileLock + fsyncs BOTH mirrors — never on the
                 // pump. Defer to the send lane; the raise is validated and raise-only, so reply
                 // optimistically and the device re-reads the persisted value on its next refresh.
-                mSendExec.execute(() -> {
+                mSendExec.execute("wallet", () -> {
                     try { ps.raiseUsesTo(to); } catch (Exception ignored) { }
                 });
                 reported = to;
@@ -824,7 +823,7 @@ public final class ParlonsControl {
             final String fpeer = peer;
             final String fbody = body;
             final Contact fc = isGroup ? null : mNode.contact(peer);   // pre-checked: never null here
-            mSendExec.execute(() -> {
+            mSendExec.execute(fpeer, () -> {
                 try {
                     if (isGroup) {
                         mChat.sendGroup(fpeer, fbody);
@@ -845,7 +844,7 @@ public final class ParlonsControl {
                 return bytes(err("peer required"));
             }
             // markRead SENDS the read receipt — off the pump, on the send lane.
-            mSendExec.execute(() -> {
+            mSendExec.execute(peer, () -> {
                 try { mChat.markRead(peer); } catch (Exception ignored) { }
             });
             return bytes(ok());
@@ -861,7 +860,7 @@ public final class ParlonsControl {
             // clearConversation does a whole-file rewrite per removed message (the chat store
             // isn't write-behind) — off the pump so a big thread can't hold the node lock.
             final String fpeer = peer;
-            mSendExec.execute(() -> {
+            mSendExec.execute(fpeer, () -> {
                 try { mChat.clearConversation(fpeer); } catch (Exception ignored) { }
             });
             return bytes(ok());
@@ -1007,7 +1006,7 @@ public final class ParlonsControl {
                 edit.addAdmin(me);
             }
             final com.eurobuddha.maxima.core.chat.Group fg = edit;
-            mSendExec.execute(() -> {
+            mSendExec.execute("group", () -> {
                 try { mChat.updateGroup(fg); } catch (Exception ignored) { }
             });
             JSONObject out = ok();
@@ -1236,7 +1235,7 @@ public final class ParlonsControl {
             // States flow to devices as pushes: QUEUED bubble at sign time, SENT on publish,
             // FAILED (or a payfail toast) if anything breaks. (On a Parlons Node build() has
             // already broadcast, so the bubble appears once the money has moved.)
-            mSendExec.execute(() -> {
+            mSendExec.execute("wallet", () -> {
                 ChatEngine.Entry e = null;
                 boolean published = false;
                 try {
@@ -1358,7 +1357,7 @@ public final class ParlonsControl {
                 return bytes(err("the amount must be more than zero"));
             }
             final String fto = to;
-            mSendExec.execute(() -> {
+            mSendExec.execute("wallet", () -> {
                 try {
                     AccountWallet.Payment built = mWallet.build(fto, amt);
                     mWallet.publish(built);
@@ -1436,7 +1435,7 @@ public final class ParlonsControl {
                 return bytes(err("the amount must be more than zero"));
             }
             final String fto = to;
-            mSendExec.execute(() -> {
+            mSendExec.execute("wallet", () -> {
                 try {
                     AccountWallet.Payment built = mWallet.build(fto, amt);   // reserve+sign; NO publish
                     mNode.log("wallet build " + amt + " → " + fto + " txid " + built.txid);
@@ -1486,7 +1485,7 @@ public final class ParlonsControl {
                 applied = (Boolean) rr;
                 final boolean v = applied;
                 // The sink persists to disk — off the pump thread.
-                mSendExec.execute(() -> {
+                mSendExec.execute("misc", () -> {
                     try { s.setReadReceipts(v); } catch (Exception ignored) { }
                 });
             }
@@ -1502,7 +1501,7 @@ public final class ParlonsControl {
             if (key.isEmpty() || mNode.contact(key) == null) {
                 return bytes(err("no such contact"));
             }
-            mSendExec.execute(() -> {
+            mSendExec.execute(key, () -> {
                 try { mNode.removeContact(key); } catch (Exception ignored) { }
             });
             return bytes(ok());
@@ -1537,7 +1536,7 @@ public final class ParlonsControl {
                 return bytes(out);
             }
             mRecentGroups.put(name, System.currentTimeMillis());   // fresh window each real create
-            mSendExec.execute(() -> {
+            mSendExec.execute("group", () -> {
                 try { mChat.createGroup(name, keys); } catch (Exception ignored) { }
             });
             JSONObject out = ok();
@@ -1749,7 +1748,7 @@ public final class ParlonsControl {
             long now = System.currentTimeMillis();
             if (cached == null || now - (Long) cached[1] > 15_000) {
                 if (mBalanceFetching.add(addr)) {
-                    mSendExec.execute(() -> {
+                    mSendExec.execute("wallet", () -> {
                         try {
                             JSONObject bal = mWallet.cmd("balance megammr:true address:" + addr);
                             mBalanceCache.put(addr, new Object[]{bal, System.currentTimeMillis()});
