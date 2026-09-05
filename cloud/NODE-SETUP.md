@@ -408,6 +408,22 @@ Relays share a SHUFFLED list of up to 50 verified peers PLUS THEMSELVES in every
 The greeting also carries `conns` (current clients) next to `cap`. A Parlons Node's cape joins the
 mesh through the bootstrap list when `--peers` is not given.
 
+### Stage-1 scalability hardening (2026-09-05: server 0.4.39→0.4.45, node 0.2.14→0.2.20, app 0.6.63)
+From the scalability survey (P0 items). All rolled fleet-wide the same night.
+- **Relay accept loop cannot die**: admission is guarded (`catch Throwable`, counted as
+  `acceptfail=` in the stats line), a dead accept thread is restarted by maintain() and shows as
+  `ACCEPT=DEAD`. Units: `TasksMax=1024`, `LimitNOFILE=65536` (node: `parlons-node.service.d/limits.conf`).
+- **Stalled writers reaped**: a socket write blocked > 60 s (`stalls=`) is closed; keep-alives and
+  drains run on an 8-thread push pool (`pushdrop=` counts refusals), never on the maintain thread.
+- **Mailbox is one file per held item** (`<data>/relaystore/mailitems.d/`), ciphertext read only on
+  delivery, global cap 50 000 items; the old `mailbox.tsv` records are migrated once at boot
+  (`[mailbox] migrated N held item(s)` in the journal - check it equals `mail=`).
+- **Directory cap sized for the heap** (6 144 entries on a 96 MB relay; 2 000..200 000); pool
+  relays no longer retain reader lists.
+- **Chat stores coalesce writes** (2 s) on the app/account/desktop built-in engine and are flushed
+  before any mailbox ack is signed; the account flushes chat state every 60 s.
+- **Own published media is pinned** on the local shelf (`media/pinned/`), never evicted.
+
 ## Ports
 
 | port | what | exposure |
