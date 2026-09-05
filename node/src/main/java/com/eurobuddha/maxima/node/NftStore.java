@@ -94,6 +94,7 @@ final class NftStore {
             if (zIndex < 0 || zIndex > 9999) throw new IllegalArgumentException("index must be 0..9999");
             if (!Files.isDirectory(mRoot.resolve("c").resolve(zCollection))) throw new IllegalArgumentException("unknown collection");
         }
+        pruneStaleParts();
         Path part = mTmp.resolve(zUid + ".part");
         long have = Files.exists(part) ? Files.size(part) : 0;
         if (zOff > have) throw new IllegalArgumentException("gap: have " + have + " bytes, chunk at " + zOff);
@@ -143,6 +144,19 @@ final class NftStore {
         done.put("sha256", actual);
         done.put("size", zSize);
         return done;
+    }
+
+    /** An upload abandoned mid-way (client died, chunk failed and the retry used a new id) must
+     *  not sit in tmp/ forever on a disk-tight box: parts untouched for a day are dropped. */
+    private void pruneStaleParts() {
+        long cutoff = System.currentTimeMillis() - 24L * 3600 * 1000;
+        try (java.util.stream.Stream<Path> s = Files.list(mTmp)) {
+            s.filter(p -> p.getFileName().toString().endsWith(".part")).forEach(p -> {
+                try {
+                    if (Files.getLastModifiedTime(p).toMillis() < cutoff) Files.deleteIfExists(p);
+                } catch (IOException ignored) { }
+            });
+        } catch (IOException ignored) { }
     }
 
     /** Every hosted file (never the tmp parts), with its size and public URL. */

@@ -93,7 +93,7 @@ public final class SettingsDialog {
         boolean paired = node != null && node.isEnabled();
         long ok = node == null ? 0 : node.lastOkMs();
         String last = ok <= 0 ? "never" : ((System.currentTimeMillis() - ok) / 1000) + "s ago";
-        n.setText((paired ? "✓ Paired with your Parlons Node" : "◦ Not paired — enable this app in Minima Core → Apps")
+        n.setText((paired ? "✓ This device is paired to the account (its Parlons Node signs)" : "◦ Not paired — pair this device on the Node tab")
                 + "\nLast node reply: " + last
                 + "\nIPC: broadcast Intent · bounded paging · large replies via file hand-off");
         n.setTextColor(paired ? Design.success() : Design.amber());
@@ -106,7 +106,7 @@ public final class SettingsDialog {
         String ver;
         try { ver = act.getPackageManager().getPackageInfo(act.getPackageName(), 0).versionName; }
         catch (Exception e) { ver = "?"; }
-        a.setText("Parlons Cloud wallet v" + ver + " — the full-suite Minima companion.\n"
+        a.setText("Parlons Cloud wallet v" + ver + " — your node's wallet, on your phone.\n"
                 + "Tokens · NFTs · State NFT locked editions.\n"
                 + "Java + classic Views · node access only via minimaapi broadcast IPC.");
         a.setTextColor(Design.dim());

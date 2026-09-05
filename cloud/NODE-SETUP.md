@@ -304,11 +304,11 @@ every gateway box — a new gateway node gets that file, not a fresh one). The o
 
 | box | node | p2p | relay | MegaMMR gateway | account |
 |---|---|---|---|---|---|
-| sally 95.179.179.181 (8 GB) | 0.2.8, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
-| eurobuddha 65.109.31.226 (64 GB) | 0.2.8, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
-| megammr 192.248.151.55 (32 GB) | 0.2.8, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
-| vigilance 45.77.57.24 (8 GB, shared) | 0.2.8, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
-| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.8, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
+| sally 95.179.179.181 (8 GB) | 0.2.9, heap 4g | 9001 | 9501 | `https://store.eurobuddha.com/parlons-node/cmd` | the eurobuddhaCloud account (migrated from parlons-cloud, same MAX#) |
+| eurobuddha 65.109.31.226 (64 GB) | 0.2.9, heap 6g | 9101 | 9501 | `https://eurobuddha.com/parlons-node/cmd` | fresh (pairable) |
+| megammr 192.248.151.55 (32 GB) | 0.2.9, heap 3g | 9101 | 9501 | `https://minimammr.com/parlons-node/cmd` | fresh |
+| vigilance 45.77.57.24 (8 GB, shared) | 0.2.9, heap 2560m, `-isclient` (no inbound peers) | 9101 | 9501 | none (`--no-megammr`: box shared with the WOTS MegaMMR node) | fresh |
+| the Pi 31.125.188.214 (16 GB, 32-bit JVM) | 0.2.9, heap 3g | 9001 (not port-forwarded; outbound sync only) | 8001 | none (`--no-megammr`) | fresh |
 | maxima-lite 45.77.246.226 | maxima-relay 0.4.33 (unchanged) | — | 9501 | hosts the legacy proxy | — |
 | openproject 78.141.237.9 | maxima-relay 0.4.33 (unchanged) | — | 9501 | — | — |
 
@@ -352,7 +352,13 @@ front, so a marketplace or explorer links straight to your box:
   collections as `c/<16-hex id>/<index>.<ext>` (1-based, the stamp index) + a `manifest.json`
   of per-item sha256s. 32 MB per file max.
 - **Serve**: gateway `GET|HEAD /nft/<path>` — public, no token, strict path shapes (nothing else
-  on disk is addressable), `Cache-Control: immutable`, nosniff, CORS `*`. The TLS front needs a
+  on disk is addressable), `Cache-Control: immutable`, nosniff, CORS `*`, and since 0.2.9 a
+  `Content-Security-Policy: default-src 'none'; sandbox` + `Content-Disposition: inline` so an
+  SVG navigated to directly cannot run script in the operator's web origin (the wallet also runs
+  `SvgSanitizer` on SVG before uploading). `/nft` has its own rate budget
+  (`parlons.gateway.rate.nft.global` 400/s, `.perip` 40/s) so hot-linked art never spends the
+  wallet `/cmd` buckets. Abandoned upload parts are pruned after 24 h; the client retries a
+  chunk once (offset-idempotent). The TLS front needs a
   second `<Location "/parlons-node/nft">` ProxyPass to `127.0.0.1:9585/nft` (GET/HEAD only) next
   to the `/cmd` one — added on sally, hetzner and megammr; put it in the Apache snippet on any
   new gateway box.

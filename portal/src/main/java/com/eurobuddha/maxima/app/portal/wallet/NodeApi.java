@@ -55,7 +55,7 @@ public class NodeApi {
 
     /** The wallet's own lane — a 3-minute command must never freeze the status pill or the
      *  other pages queued on CloudSession's shared interactive lane. */
-    private static final java.util.concurrent.ExecutorService WALLET =
+    static final java.util.concurrent.ExecutorService WALLET =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
                 Thread t = new Thread(r, "portal-wallet-node");
                 t.setDaemon(true);

@@ -54,6 +54,10 @@ public final class NodeGateway {
     private HttpServer mServer;
     private java.util.concurrent.ExecutorService mExecutor;
     private volatile NftStore mNft;   // hosted NFT art, served read-only at /nft/<path>
+    /** Static art has its own budget: a hot-linked collection or a crawler must never spend the
+     *  wallet /cmd buckets. Immutable caching keeps repeats off the node anyway. */
+    private final RateLimiter mNftLimiter = new RateLimiter(
+            doubleProp("parlons.gateway.rate.nft.global", 400), doubleProp("parlons.gateway.rate.nft.perip", 40));
 
     /** Plug in the NFT store before {@link #start()}; without it /nft answers 404. */
     public void setNftStore(NftStore zStore) { mNft = zStore; }
@@ -196,7 +200,7 @@ public final class NodeGateway {
         try {
             String clientIp = ex.getRemoteAddress() == null ? "?"
                     : ex.getRemoteAddress().getAddress().getHostAddress();
-            if (!mLimiter.allow(clientIp)) { fail(ex, 429, "rate limit exceeded"); return; }
+            if (!mNftLimiter.allow(clientIp)) { fail(ex, 429, "rate limit exceeded"); return; }
             String method = ex.getRequestMethod();
             boolean head = "HEAD".equalsIgnoreCase(method);
             if (!head && !"GET".equalsIgnoreCase(method)) { fail(ex, 405, "GET only"); return; }
@@ -210,7 +214,16 @@ public final class NodeGateway {
             ex.getResponseHeaders().set("Cache-Control", "public, max-age=31536000, immutable");
             ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
             ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            if (head) { ex.sendResponseHeaders(200, -1); ex.close(); return; }
+            // Served from the operator's web origin: an SVG (or anything) navigated to directly
+            // must not be able to run script there. Renders fine inside <img>.
+            ex.getResponseHeaders().set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+            ex.getResponseHeaders().set("Content-Disposition", "inline; filename=\"" + rel.substring(rel.lastIndexOf('/') + 1) + "\"");
+            if (head) {
+                ex.getResponseHeaders().set("Content-Length", String.valueOf(len));
+                ex.sendResponseHeaders(200, -1);
+                ex.close();
+                return;
+            }
             ex.sendResponseHeaders(200, len);
             try (OutputStream os = ex.getResponseBody();
                  java.io.InputStream in = java.nio.file.Files.newInputStream(file)) {

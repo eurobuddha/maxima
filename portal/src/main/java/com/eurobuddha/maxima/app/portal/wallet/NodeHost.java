@@ -11,7 +11,7 @@ import org.minima.utils.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.util.List;
+
 import java.util.Locale;
 
 /**
@@ -26,12 +26,6 @@ final class NodeHost {
 
     interface Cb {
         void done(String url, String path, String sha256);
-        void fail(String why);
-        default void progress(String note) { }
-    }
-
-    interface CollectionCb {
-        void done(String base, String ext, int count);
         void fail(String why);
         default void progress(String note) { }
     }
@@ -71,92 +65,54 @@ final class NodeHost {
         }
     }
 
-    /** Host one file. Callbacks on the main thread. */
-    static void upload(final Activity act, final Uri uri, final String collection, final int index, final Cb cb) {
-        new Thread(() -> {
+    /** Host one file. The session is only borrowed to obtain the remote; the upload itself runs on
+     *  the wallet's own lane ({@link NodeApi#WALLET}), never on CloudSession's shared interactive
+     *  lane (a 30 MB upload there would freeze the status pill and every page behind it).
+     *  Callbacks on the main thread. */
+    static void upload(final Activity act, final Uri uri, final Cb cb) {
+        NodeApi.WALLET.execute(() -> {
             final byte[] bytes;
             final String ext;
             try {
                 ext = extOf(act, uri);
-                bytes = readAll(act, uri);
+                byte[] raw = readAll(act, uri);
+                // Hosted files are served from the operator's web origin: strip scripts, foreign
+                // objects and event handlers from SVG before it ever leaves the phone.
+                if ("svg".equals(ext)) {
+                    String clean = SvgSanitizer.sanitize(new String(raw, java.nio.charset.StandardCharsets.UTF_8));
+                    raw = clean.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                }
+                bytes = raw;
             } catch (Exception e) {
                 act.runOnUiThread(() -> cb.fail(e.getMessage() == null ? e.toString() : e.getMessage()));
                 return;
             }
             CloudSession.connectInteractive(act, new CloudSession.Cb() {
                 @Override public void ok(ParlonsRemote r) {
-                    try {
-                        JSONObject o = r.nftPut(bytes, ext, collection, index, (sent, total) ->
-                                act.runOnUiThread(() -> cb.progress("Uploading to your node… "
-                                        + (sent * 100 / Math.max(1, total)) + "%")));
-                        if (!Boolean.TRUE.equals(o.get("ok"))) {
-                            final String why = String.valueOf(o.getOrDefault("error", "the node refused the upload"));
+                    NodeApi.WALLET.execute(() -> {
+                        try {
+                            JSONObject o = r.nftPut(bytes, ext, "", 0, (sent, total) ->
+                                    act.runOnUiThread(() -> cb.progress("Uploading to your node… "
+                                            + (sent * 100 / Math.max(1, total)) + "%")));
+                            if (!Boolean.TRUE.equals(o.get("ok"))) {
+                                final String why = String.valueOf(o.getOrDefault("error", "the node refused the upload"));
+                                act.runOnUiThread(() -> cb.fail(why));
+                                return;
+                            }
+                            final String url = String.valueOf(o.getOrDefault("url", ""));
+                            final String path = String.valueOf(o.getOrDefault("path", ""));
+                            final String sha = String.valueOf(o.getOrDefault("sha256", ""));
+                            act.runOnUiThread(() -> cb.done(url, path, sha));
+                        } catch (Exception e) {
+                            final String why = e.getMessage() == null ? e.toString() : e.getMessage();
                             act.runOnUiThread(() -> cb.fail(why));
-                            return;
                         }
-                        final String url = String.valueOf(o.getOrDefault("url", ""));
-                        final String path = String.valueOf(o.getOrDefault("path", ""));
-                        final String sha = String.valueOf(o.getOrDefault("sha256", ""));
-                        act.runOnUiThread(() -> cb.done(url, path, sha));
-                    } catch (Exception e) {
-                        final String why = e.getMessage() == null ? e.toString() : e.getMessage();
-                        act.runOnUiThread(() -> cb.fail(why));
-                    }
+                    });
                 }
                 @Override public void err(String m) {
                     act.runOnUiThread(() -> cb.fail("Can't reach your node: " + m));
                 }
             });
-        }, "nft-host").start();
-    }
-
-    /**
-     * Host a whole State-NFT collection: a fresh folder on the node, item images uploaded as
-     * 1..n (the stamp index), all with the first image's extension. Callbacks on the main thread.
-     */
-    static void uploadCollection(final Activity act, final List<Uri> uris, final CollectionCb cb) {
-        if (uris == null || uris.isEmpty()) { cb.fail("no images picked"); return; }
-        new Thread(() -> CloudSession.connectInteractive(act, new CloudSession.Cb() {
-            @Override public void ok(ParlonsRemote r) {
-                try {
-                    JSONObject col = r.nftNewCollection();
-                    if (!Boolean.TRUE.equals(col.get("ok"))) {
-                        final String why = String.valueOf(col.getOrDefault("error", "the node refused"));
-                        act.runOnUiThread(() -> cb.fail(why));
-                        return;
-                    }
-                    final String id = String.valueOf(col.get("collection"));
-                    final String base = String.valueOf(col.getOrDefault("base", ""));
-                    final String ext = extOf(act, uris.get(0));
-                    int i = 0;
-                    for (Uri u : uris) {
-                        i++;
-                        final int n = i;
-                        String thisExt = extOf(act, u);
-                        if (!thisExt.equals(ext)) {
-                            act.runOnUiThread(() -> cb.fail("item " + n + " is a different image type (" + thisExt
-                                    + " vs " + ext + ") - a collection uses one extension"));
-                            return;
-                        }
-                        byte[] bytes = readAll(act, u);
-                        act.runOnUiThread(() -> cb.progress("Uploading item " + n + " of " + uris.size() + "…"));
-                        JSONObject o = r.nftPut(bytes, ext, id, i, null);
-                        if (!Boolean.TRUE.equals(o.get("ok"))) {
-                            final String why = "item " + n + ": " + o.getOrDefault("error", "the node refused");
-                            act.runOnUiThread(() -> cb.fail(why));
-                            return;
-                        }
-                    }
-                    final int count = i;
-                    act.runOnUiThread(() -> cb.done(base, "." + ext, count));
-                } catch (Exception e) {
-                    final String why = e.getMessage() == null ? e.toString() : e.getMessage();
-                    act.runOnUiThread(() -> cb.fail(why));
-                }
-            }
-            @Override public void err(String m) {
-                act.runOnUiThread(() -> cb.fail("Can't reach your node: " + m));
-            }
-        }), "nft-host-collection").start();
+        });
     }
 }

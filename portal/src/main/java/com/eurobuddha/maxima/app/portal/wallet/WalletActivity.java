@@ -158,12 +158,8 @@ public class WalletActivity extends AppCompatActivity {
                 requestReload();
             } else {
                 setPaired(false);
-                schedulePairingRetry();
             }
         });
-        // The REGISTER broadcast is a one-shot — lost if Minima Core isn't running yet. Retry
-        // until the first pairing signal arrives (reRegister() is a no-op while writes are in flight).
-        schedulePairingRetry();
 
         views = new BaseView[]{
                 new BalancesView(this),
@@ -278,21 +274,6 @@ public class WalletActivity extends AppCompatActivity {
         if (currentTab() == TAB_HISTORY) views[TAB_HISTORY].onShown();
     }
 
-    // Re-send the one-shot REGISTER every 10 s until the node answers (see NodeApi.reRegister).
-    private static final long PAIRING_RETRY_MS = 10000;
-    private final Runnable pairingRetry = new Runnable() {
-        @Override public void run() {
-            if (node == null || node.isEnabled()) return;
-            node.reRegister();
-            ui.postDelayed(this, PAIRING_RETRY_MS);
-        }
-    };
-
-    private void schedulePairingRetry() {
-        ui.removeCallbacks(pairingRetry);
-        ui.postDelayed(pairingRetry, PAIRING_RETRY_MS);
-    }
-
     @Override
     protected void onPause() {
         super.onPause();
@@ -304,7 +285,6 @@ public class WalletActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         ui.removeCallbacks(reloadTask);
-        ui.removeCallbacks(pairingRetry);
         if (node != null) node.onDestroy();
         ui.removeCallbacks(blockPoll);
     }

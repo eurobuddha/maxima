@@ -695,7 +695,13 @@ public final class ParlonsRemote {
                 p.put("collection", zCollection);
                 p.put("index", zIndex);
             }
-            last = rpc(ParlonsControl.M_NFT_PUT, p, 60_000);
+            try {
+                last = rpc(ParlonsControl.M_NFT_PUT, p, 60_000);
+            } catch (Exception transport) {
+                // One retry: chunks are offset-idempotent on the node, so re-sending is safe and
+                // beats abandoning a part file after a single lost reply.
+                last = rpc(ParlonsControl.M_NFT_PUT, p, 60_000);
+            }
             if (!Boolean.TRUE.equals(last.get("ok"))) {
                 return last;
             }

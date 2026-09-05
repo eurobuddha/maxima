@@ -46,8 +46,12 @@ public final class CloudWalletPage implements Page {
     private String mResyncError = "";
     private String mConfirmed = "";
     private String mSendable = "";
+    private String mUnconfirmed = "";
+    private int mCoins = -1;
+    private long mBalanceAt;              // when the balance reply landed ("updated Ns ago")
+    private boolean mWholeWallet;         // node account: figures are the WHOLE wallet, every address
     private String mError = "";
-    private JSONArray mTokens;            // non-Minima tokens (from walletTokens)
+    private JSONArray mTokens;            // non-Minima tokens (whole-wallet rows on a node account)
     private int mUses = -1;               // one-time-signature counter (from walletUses)
     private int mMaxUses = CloudWallet.MAX_USES;
 
@@ -100,6 +104,9 @@ public final class CloudWalletPage implements Page {
                 String addr = "";
                 String confirmed = "";
                 String sendable = "";
+                String unconfirmed = "";
+                int coins = -1;
+                boolean whole = false;
                 String error = "";
                 boolean canResync = false;
                 String resyncError = "";
@@ -121,7 +128,28 @@ public final class CloudWalletPage implements Page {
                             public void onError(String m) {}
                         });
                     }
-                    if (!addr.isEmpty()) {
+                    if (canResync) {
+                        // A Parlons Node account: the REAL wallet balance is the node's own
+                        // `balance` — every one of its addresses, every token — not the per-address
+                        // read of whichever default address it advertised this boot. Same rules as
+                        // PandaPools/AtomiX: headline = sendable; locked ≈ confirmed - sendable.
+                        org.minima.utils.json.JSONObject o = r.nodeCmd("balance", 60_000);
+                        if (!Boolean.TRUE.equals(o.get("ok"))) {
+                            throw new IllegalStateException(String.valueOf(o.getOrDefault("error", "balance unavailable")));
+                        }
+                        Object parsed = new org.minima.utils.json.parser.JSONParser().parse(String.valueOf(o.get("output")));
+                        JSONObject bal = parsed instanceof JSONObject ? (JSONObject) parsed : new JSONObject();
+                        if (!Boolean.TRUE.equals(bal.get("status"))) {
+                            throw new IllegalStateException(String.valueOf(bal.getOrDefault("error", bal.getOrDefault("message", "balance refused"))));
+                        }
+                        String[] cs = extractFull(bal);
+                        confirmed = cs[0];
+                        sendable = cs[1];
+                        unconfirmed = cs[2];
+                        coins = cs[3].isEmpty() ? -1 : Integer.parseInt(cs[3]);
+                        whole = true;
+                        tokens = nonMinima(bal);
+                    } else if (!addr.isEmpty()) {
                         JSONObject b = r.balance();
                         JSONObject bal = obj(b, "balance");
                         String[] cs = extract(bal);
@@ -131,15 +159,16 @@ public final class CloudWalletPage implements Page {
                 } catch (Exception e) {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
-                // The account's OWN wallet (not a device watch address) also has a token list and
-                // the one-time-signature counter — read them too, best-effort (a miss just omits
-                // the card, never blocks the balance).
-                try {
-                    JSONObject t = r.walletTokens();
-                    if (t.get("ok") == Boolean.TRUE) {
-                        tokens = nonMinima(obj(t, "balance"));
+                // A cloud account's own wallet (not a device watch address) also has a token list
+                // — read it best-effort (a miss just omits the card, never blocks the balance).
+                if (!whole) {
+                    try {
+                        JSONObject t = r.walletTokens();
+                        if (t.get("ok") == Boolean.TRUE) {
+                            tokens = nonMinima(obj(t, "balance"));
+                        }
+                    } catch (Exception ignored) {
                     }
-                } catch (Exception ignored) {
                 }
                 try {
                     JSONObject u = r.walletUses(0);
@@ -150,8 +179,9 @@ public final class CloudWalletPage implements Page {
                     }
                 } catch (Exception ignored) {
                 }
-                final String fa = addr, fc = confirmed, fs = sendable, fe = error, fre = resyncError;
-                final boolean fcr = canResync;
+                final String fa = addr, fc = confirmed, fs = sendable, fe = error, fre = resyncError, fun = unconfirmed;
+                final boolean fcr = canResync, fw = whole;
+                final int fco = coins;
                 final JSONArray ft = tokens;
                 final int fu = uses, fm = maxUses;
                 mAct.runOnUiThread(() -> {
@@ -162,6 +192,10 @@ public final class CloudWalletPage implements Page {
                     mResyncError = fre;
                     mConfirmed = fc;
                     mSendable = fs;
+                    mUnconfirmed = fun;
+                    mCoins = fco;
+                    mWholeWallet = fw;
+                    if (fe.isEmpty()) mBalanceAt = System.currentTimeMillis();
                     mError = fe;
                     mTokens = ft;
                     mUses = fu;
@@ -225,22 +259,39 @@ public final class CloudWalletPage implements Page {
         }
 
         // --- balance ---
-        mRoot.addView(PortalUi.section(c, "Total balance"));
+        mRoot.addView(PortalUi.section(c, mWholeWallet ? "Balance · whole wallet" : "Total balance"));
         LinearLayout bal = PortalUi.card(c);
         TextView big = new TextView(c);
-        big.setText(mConfirmed.isEmpty() ? (mError.isEmpty() ? "…" : "unavailable") : mConfirmed);
+        // Headline = SENDABLE (what can actually be spent); `confirmed` includes coins locked in
+        // contracts and overstates it - the rule every wallet in the family follows.
+        String headline = mWholeWallet ? tidy(mSendable) : mConfirmed;
+        big.setText(headline.isEmpty() ? (mError.isEmpty() ? "…" : "unavailable") : headline);
         big.setTextColor(c.getColor(R.color.ux_text));
         big.setTextSize(34);
         big.setTypeface(big.getTypeface(), Typeface.BOLD);
         bal.addView(big);
         TextView unit = new TextView(c);
-        // Honest custody line: the ACCOUNT's own wallet signs on the node; a device-set watch
-        // address is the read-only mode.
-        unit.setText(mSendable.isEmpty() ? "MINIMA · your account's wallet"
-                : mSendable + " sendable · keys live on your cloud node");
+        if (mWholeWallet) {
+            // The PandaPools / AtomiX breakdown line, zeros included - a hidden zero is what makes
+            // an all-in-a-pool wallet read as "0" with no explanation.
+            unit.setText(mSendable.isEmpty() ? "MINIMA · sendable, across every address of your node's wallet"
+                    : "MINIMA sendable  ·  confirmed " + tidy(mConfirmed) + "  ·  locked ≈ " + locked(mConfirmed, mSendable)
+                    + "  ·  unconfirmed " + tidy(mUnconfirmed) + (mCoins >= 0 ? "  ·  " + mCoins + " coin" + (mCoins == 1 ? "" : "s") : "")
+                    + "  ·  updated " + ago(mBalanceAt));
+        } else {
+            // Honest custody line: the ACCOUNT's own wallet signs on the node; a device-set watch
+            // address is the read-only mode.
+            unit.setText(mSendable.isEmpty() ? "MINIMA · your account's wallet"
+                    : mSendable + " sendable · keys live on your cloud node");
+        }
         unit.setTextColor(c.getColor(R.color.ux_subtext));
         unit.setTextSize(13);
         bal.addView(unit);
+        if (!mError.isEmpty()) {
+            TextView why = PortalUi.label(c, "Balance unavailable: " + mError);
+            why.setTextColor(c.getColor(R.color.ux_error));
+            bal.addView(why);
+        }
         mRoot.addView(bal);
 
         // --- receive ---
@@ -275,7 +326,7 @@ public final class CloudWalletPage implements Page {
                 if (!(mTokens.get(i) instanceof JSONObject)) continue;
                 JSONObject t = (JSONObject) mTokens.get(i);
                 String name = tokenName(t);
-                String amt = str(t, "confirmed");
+                String amt = mWholeWallet ? tidy(str(t, "sendable").isEmpty() ? str(t, "confirmed") : str(t, "sendable")) : str(t, "confirmed");
                 String tid = str(t, "tokenid");
                 LinearLayout row = new LinearLayout(c);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -289,6 +340,18 @@ public final class CloudWalletPage implements Page {
                 nm.setTextSize(15);
                 nm.setTypeface(nm.getTypeface(), Typeface.BOLD);
                 left.addView(nm);
+                if (mWholeWallet) {
+                    String lk = locked(str(t, "confirmed"), str(t, "sendable").isEmpty() ? str(t, "confirmed") : str(t, "sendable"));
+                    String un = tidy(str(t, "unconfirmed"));
+                    String sub = "sendable" + ("0".equals(lk) || "—".equals(lk) ? "" : "  ·  locked ≈ " + lk)
+                            + ("0".equals(un) || un.isEmpty() ? "" : "  ·  unconfirmed " + un)
+                            + (str(t, "coins").isEmpty() ? "" : "  ·  " + str(t, "coins") + " coins");
+                    TextView subv = new TextView(c);
+                    subv.setText(sub);
+                    subv.setTextColor(c.getColor(R.color.ux_subtext));
+                    subv.setTextSize(11);
+                    left.addView(subv);
+                }
                 TextView id = new TextView(c);
                 id.setText(tid);                                   // full token id, never truncated
                 id.setTextColor(c.getColor(R.color.ux_subtext));
@@ -859,6 +922,56 @@ public final class CloudWalletPage implements Page {
         } catch (Exception ignored) {
         }
         return new String[]{"", ""};
+    }
+
+    /** The Minima row of a whole-wallet `balance`: {confirmed, sendable, unconfirmed, coins}. */
+    private static String[] extractFull(JSONObject bal) {
+        try {
+            Object resp = bal.get("response");
+            if (resp instanceof JSONArray) {
+                for (Object o : (JSONArray) resp) {
+                    if (!(o instanceof JSONObject)) continue;
+                    JSONObject t = (JSONObject) o;
+                    String tid = str(t, "tokenid");
+                    if (tid.isEmpty() || "0x00".equalsIgnoreCase(tid)) {
+                        String sendable = str(t, "sendable").isEmpty() ? str(t, "confirmed") : str(t, "sendable");
+                        return new String[]{str(t, "confirmed"), sendable, str(t, "unconfirmed"), str(t, "coins")};
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return new String[]{"", "", "", ""};
+    }
+
+    /** Trailing-zero trim (PandaBear's Format.tidyAmount): never rounds. */
+    static String tidy(String s) {
+        if (s == null || s.isEmpty()) return "";
+        if (!s.contains(".")) return s;
+        String t = s.replaceAll("0+$", "");
+        if (t.endsWith(".")) t = t.substring(0, t.length() - 1);
+        return t.isEmpty() ? "0" : t;
+    }
+
+    /** confirmed - sendable, exact BigDecimal, clamped at 0; "—" if either is unparseable
+     *  (a wrong number on a wallet card is worse than no number). */
+    static String locked(String confirmed, String sendable) {
+        try {
+            java.math.BigDecimal d = new java.math.BigDecimal(confirmed).subtract(new java.math.BigDecimal(sendable));
+            if (d.signum() < 0) d = java.math.BigDecimal.ZERO;
+            return tidy(d.toPlainString());
+        } catch (Exception e) {
+            return "—";
+        }
+    }
+
+    static String ago(long at) {
+        if (at <= 0) return "never";
+        long s = (System.currentTimeMillis() - at) / 1000;
+        if (s < 5) return "just now";
+        if (s < 60) return s + "s ago";
+        if (s < 3600) return (s / 60) + "m ago";
+        return (s / 3600) + "h ago";
     }
 
     /** All tokens EXCEPT Minima (0x00) from the gateway balance JSON — the "Tokens" section. */

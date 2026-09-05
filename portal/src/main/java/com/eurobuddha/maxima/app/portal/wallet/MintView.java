@@ -434,7 +434,7 @@ public class MintView extends BaseView {
         nUrl = addField(nUrlBlock, "Image URL (URL mode)", "https://…  or  ipfs://…", InputType.TYPE_TEXT_VARIATION_URI);
         hostButton(nUrlBlock, "Upload the image to my node instead…", v -> act.pickImage(uri -> {
             status(nStatus, "Uploading to your node…", true);
-            NodeHost.upload(act, uri, "", 0, new NodeHost.Cb() {
+            NodeHost.upload(act, uri, new NodeHost.Cb() {
                 @Override public void done(String url, String path, String sha256) {
                     if (url.isEmpty()) {
                         status(nStatus, "Hosted on the node as " + path + " but the node has no public web address set "
@@ -710,25 +710,6 @@ public class MintView extends BaseView {
         cUrlBlock.setOrientation(LinearLayout.VERTICAL);
         colForm.addView(cUrlBlock);
         cBase = addField(cUrlBlock, "Image base URL (item = base + index + ext)", "https://mysite.com/nft/", InputType.TYPE_TEXT_VARIATION_URI);
-        hostButton(cUrlBlock, "Upload the item images to my node (in order)…", v -> act.pickImages(uris -> {
-            status(cStatus, "Hosting " + uris.size() + " item image(s) on your node…", true);
-            NodeHost.uploadCollection(act, uris, new NodeHost.CollectionCb() {
-                @Override public void done(String base, String ext, int count) {
-                    if (base.isEmpty()) {
-                        status(cStatus, "Hosted on the node, but it has no public web address set "
-                                + "(-Dparlons.node.public) - ask the operator.", false);
-                        return;
-                    }
-                    cBase.setText(base);
-                    cExt.setText(ext);
-                    if (cSize.getText().toString().trim().isEmpty()) cSize.setText(String.valueOf(count));
-                    status(cStatus, "Hosted " + count + " item(s) on your node ✓ base " + base + " ext " + ext
-                            + " - item N = base + N + ext (1-based, matching the stamp index)", true);
-                }
-                @Override public void fail(String why) { status(cStatus, "Hosting failed: " + why, false); }
-                @Override public void progress(String note) { status(cStatus, note, true); }
-            });
-        }));
 
         cImagesBlock = new LinearLayout(act);
         cImagesBlock.setOrientation(LinearLayout.VERTICAL);
@@ -810,21 +791,6 @@ public class MintView extends BaseView {
         cIconUrlBlock.setOrientation(LinearLayout.VERTICAL);
         colForm.addView(cIconUrlBlock);
         cIconUrl = addField(cIconUrlBlock, "Icon URL", "https://…", InputType.TYPE_TEXT_VARIATION_URI);
-        hostButton(cIconUrlBlock, "Upload the icon to my node instead…", v -> act.pickImage(uri -> {
-            status(cStatus, "Uploading the icon to your node…", true);
-            NodeHost.upload(act, uri, "", 0, new NodeHost.Cb() {
-                @Override public void done(String url, String path, String sha256) {
-                    if (url.isEmpty()) {
-                        status(cStatus, "Hosted as " + path + " but the node has no public web address set.", false);
-                        return;
-                    }
-                    cIconUrl.setText(url);
-                    status(cStatus, "Icon hosted on your node ✓ " + url, true);
-                }
-                @Override public void fail(String why) { status(cStatus, "Hosting failed: " + why, false); }
-                @Override public void progress(String note) { status(cStatus, note, true); }
-            });
-        }));
         cExtUrl = addField(colForm, "External URL (optional)", "https://…", InputType.TYPE_TEXT_VARIATION_URI);
         cWebv = addField(colForm, "Web validation URL (optional)", "https://…/collection.txt", InputType.TYPE_TEXT_VARIATION_URI);
 
