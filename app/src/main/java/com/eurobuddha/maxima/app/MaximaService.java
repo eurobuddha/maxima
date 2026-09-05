@@ -214,8 +214,11 @@ public final class MaximaService extends Service {
                 new com.eurobuddha.maxima.core.chat.ChatEngine(sNode);
         // Coalescing store: one rewrite per 2 s burst instead of one per message. Safe because
         // the built-in engine flushes it before signing any mailbox ack (ChatPort.addFlushHook).
-        chat.setStore(com.eurobuddha.maxima.core.store.FileStore.coalescing(
-                new java.io.File(getFilesDir(), "chat"), 2000));
+        // Loaded OFF the main thread: parsing a long history here was an ANR at ~30k messages;
+        // reads and sends wait for the load, inbound queues on the node's inbound lane.
+        chat.setStoreAsync(com.eurobuddha.maxima.core.store.FileStore.coalescing(
+                new java.io.File(getFilesDir(), "chat"), 2000),
+                () -> EventLog.add("chat history loaded"));
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
         chat.setMediaService(sMedia);   // photos/videos in chat, self-hosted
         final MaximaNode node = sNode;
@@ -384,8 +387,8 @@ public final class MaximaService extends Service {
 
         com.eurobuddha.maxima.core.chat.ChatEngine chat =
                 new com.eurobuddha.maxima.core.chat.ChatEngine(jar);
-        chat.setStore(new com.eurobuddha.maxima.core.store.FileStore(
-                new java.io.File(getFilesDir(), "chat")));
+        chat.setStoreAsync(new com.eurobuddha.maxima.core.store.FileStore(
+                new java.io.File(getFilesDir(), "chat")), () -> EventLog.add("chat history loaded"));
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
         // Media in LOCAL-ONLY mode (null node): inbound classic inline images
         // are stored and displayed, and our photos go out inline to classic

@@ -795,7 +795,7 @@ public final class ParlonsControl {
                     o.put("sname", nameFor(e.sender));   // group sender name
                 }
                 if (grp && e.mine) {
-                    o.put("delivered", e.deliveredBy.size());   // per-member delivery count
+                    o.put("delivered", e.deliveredBy().size());   // per-member delivery count
                 }
                 arr.add(o);
             }

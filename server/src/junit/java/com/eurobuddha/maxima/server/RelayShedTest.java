@@ -82,11 +82,11 @@ public class RelayShedTest {
             long now = System.currentTimeMillis();
             relay.shedIfOverloaded(now);          // 2 routes, target 1 -> one client asked
             assertTrue(waitFor(() -> relay.shedsSent() == 1, 5));
-            assertEquals(1, a.sheds.get() + b.sheds.get());
+            assertTrue("one client received the shed", waitFor(() -> a.sheds.get() + b.sheds.get() == 1, 5));
             relay.shedIfOverloaded(now + 1000);   // still over: the OTHER client is asked
             assertTrue(waitFor(() -> relay.shedsSent() == 2, 5));
-            assertEquals(1, a.sheds.get());
-            assertEquals(1, b.sheds.get());
+            assertTrue("each client asked exactly once",
+                    waitFor(() -> a.sheds.get() == 1 && b.sheds.get() == 1, 5));
             relay.shedIfOverloaded(now + 2000);   // both asked within the window: nobody again
             Thread.sleep(300);
             assertEquals(2, relay.shedsSent());

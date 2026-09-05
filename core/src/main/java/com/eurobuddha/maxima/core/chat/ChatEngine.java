@@ -50,21 +50,82 @@ public final class ChatEngine {
          *  delivery visible ("sent 13:56 · arrived 14:02"). */
         public volatile long arrived;
 
-        /** For a group: who has confirmed delivery so far. */
-        public final java.util.Set<String> deliveredBy =
-                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+        /**
+         * Group bookkeeping - deliveredBy / classicSent / resendAttempts / resendNotBefore /
+         * undeliveredBy - is allocated LAZILY. Five synchronized collections per entry cost
+         * ~1 KB each on a 1:1 message that never uses them; at 50 000 stored messages that was
+         * tens of MB of empty sets on a phone. Readers get an empty view when nothing was
+         * ever recorded; writers create on first use.
+         */
+        private volatile java.util.Set<String> mDeliveredBy;
+        private volatile java.util.Set<String> mClassicSent;
+        private volatile java.util.Map<String, Integer> mResendAttempts;
+        private volatile java.util.Map<String, Long> mResendNotBefore;
+        private volatile java.util.Set<String> mUndeliveredBy;
+
+        /** For a group: who has confirmed delivery so far (read view; empty if none). */
+        public java.util.Set<String> deliveredBy() {
+            java.util.Set<String> v = mDeliveredBy;
+            return v == null ? java.util.Collections.emptySet() : v;
+        }
+
+        synchronized java.util.Set<String> deliveredByMut() {
+            if (mDeliveredBy == null) {
+                mDeliveredBy = java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+            }
+            return mDeliveredBy;
+        }
+
         /** Classic members we've already sent to once (redeliver dedup only -
          *  NOT a delivery confirmation, kept out of deliveredBy). */
-        final java.util.Set<String> classicSent =
-                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
-        /** Group resend bookkeeping (in-memory): member -> resend attempts so far, and the
-         *  earliest time the next attempt may run. Bounded at GROUP_RESEND_MAX with backoff,
-         *  so one permanently-offline member cannot keep a whole group in the ladder for 24 h. */
-        final java.util.Map<String, Integer> resendAttempts = new java.util.concurrent.ConcurrentHashMap<>();
-        final java.util.Map<String, Long> resendNotBefore = new java.util.concurrent.ConcurrentHashMap<>();
-        /** Members given up on after GROUP_RESEND_MAX attempts (a grey tick, not a red cross). */
-        public final java.util.Set<String> undeliveredBy =
-                java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+        java.util.Set<String> classicSent() {
+            java.util.Set<String> v = mClassicSent;
+            return v == null ? java.util.Collections.emptySet() : v;
+        }
+
+        synchronized java.util.Set<String> classicSentMut() {
+            if (mClassicSent == null) {
+                mClassicSent = java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+            }
+            return mClassicSent;
+        }
+
+        java.util.Map<String, Integer> resendAttempts() {
+            java.util.Map<String, Integer> v = mResendAttempts;
+            return v == null ? java.util.Collections.emptyMap() : v;
+        }
+
+        synchronized java.util.Map<String, Integer> resendAttemptsMut() {
+            if (mResendAttempts == null) {
+                mResendAttempts = new java.util.concurrent.ConcurrentHashMap<>();
+            }
+            return mResendAttempts;
+        }
+
+        java.util.Map<String, Long> resendNotBefore() {
+            java.util.Map<String, Long> v = mResendNotBefore;
+            return v == null ? java.util.Collections.emptyMap() : v;
+        }
+
+        synchronized java.util.Map<String, Long> resendNotBeforeMut() {
+            if (mResendNotBefore == null) {
+                mResendNotBefore = new java.util.concurrent.ConcurrentHashMap<>();
+            }
+            return mResendNotBefore;
+        }
+
+        /** Group members the bounded resend has given up on (read view; empty if none). */
+        public java.util.Set<String> undeliveredBy() {
+            java.util.Set<String> v = mUndeliveredBy;
+            return v == null ? java.util.Collections.emptySet() : v;
+        }
+
+        synchronized java.util.Set<String> undeliveredByMut() {
+            if (mUndeliveredBy == null) {
+                mUndeliveredBy = java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+            }
+            return mUndeliveredBy;
+        }
 
         Entry(String zId, String zPeer, String zGroupId, String zSender,
               String zBody, long zTime, boolean zMine, String zState) {
@@ -206,7 +267,58 @@ public final class ChatEngine {
         // Before the engine acknowledges held mail, everything we have written must be on
         // disk - this is what makes a coalescing (write-behind) chat store safe.
         mNode.addFlushHook(() -> mStore.flush());
+        mStoreAttached = true;
         load();
+        mLoaded.countDown();
+    }
+
+    /**
+     * As {@link #setStore} but the reload runs on its own thread: parsing tens of thousands
+     * of message records on the Android main thread was an ANR at ~30 000 messages. Every
+     * read or send waits (bounded) for the load; inbound arriving meanwhile queues on the
+     * node's inbound lane. {@code zOnLoaded} runs on the loader thread when done.
+     */
+    public void setStoreAsync(Store zStore, Runnable zOnLoaded) {
+        mStore = zStore == null ? Store.MEMORY_ONLY : zStore;
+        mNode.addFlushHook(() -> mStore.flush());
+        mStoreAttached = true;
+        Thread t = new Thread(() -> {
+            try {
+                load();
+            } finally {
+                mLoaded.countDown();
+            }
+            if (zOnLoaded != null) {
+                try {
+                    zOnLoaded.run();
+                } catch (Exception ignored) {
+                }
+            }
+        }, "chat-load");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Counts down once the store is loaded (immediately for a memory-only engine). */
+    private final java.util.concurrent.CountDownLatch mLoaded = new java.util.concurrent.CountDownLatch(1);
+
+    /** True once loaded; a UI can poll this instead of blocking. */
+    public boolean isLoaded() {
+        return mLoaded.getCount() == 0;
+    }
+
+    /** Block (bounded) until the store is loaded. */
+    private volatile boolean mStoreAttached;
+
+    private void awaitLoaded() {
+        if (!mStoreAttached || mLoaded.getCount() == 0) {
+            return;   // a memory-only engine (tests, no store) is loaded by definition
+        }
+        try {
+            mLoaded.await(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void setMaxPerConversation(int zMax) {
@@ -295,7 +407,7 @@ public final class ChatEngine {
                 .put("arrived", Long.toString(e.arrived))
                 .put("mine", Boolean.toString(e.mine))
                 .put("state", e.state)
-                .put("delivered", String.join(",", e.deliveredBy))
+                .put("delivered", String.join(",", e.deliveredBy()))
                 .done();
     }
 
@@ -316,7 +428,7 @@ public final class ChatEngine {
         }
         for (String d : m.getOrDefault("delivered", "").split(",")) {
             if (!d.trim().isEmpty()) {
-                e.deliveredBy.add(d.trim());
+                e.deliveredByMut().add(d.trim());
             }
         }
         return e;
@@ -347,6 +459,7 @@ public final class ChatEngine {
      * @return how many were written
      */
     public int flushState() {
+        awaitLoaded();
         List<String> ids;
         synchronized (mDirty) {
             if (mDirty.isEmpty()) {
@@ -408,14 +521,17 @@ public final class ChatEngine {
     }
 
     public List<Group> groups() {
+        awaitLoaded();
         return new ArrayList<>(mGroups.values());
     }
 
     public Group group(String zId) {
+        awaitLoaded();
         return mGroups.get(zId);
     }
 
     public List<Entry> conversation(String zPeerOrGroup) {
+        awaitLoaded();
         List<Entry> out = new ArrayList<>();
         if (zPeerOrGroup == null || zPeerOrGroup.isEmpty()) {
             // Group entries carry peer == "", so an empty key would match every
@@ -431,11 +547,13 @@ public final class ChatEngine {
     }
 
     public Entry message(String zId) {
+        awaitLoaded();
         return mMessages.get(zId);
     }
 
     /** A snapshot of every stored message — a single pass for search/audit (read-only). */
     public java.util.Collection<Entry> allMessages() {
+        awaitLoaded();
         return new ArrayList<>(mMessages.values());
     }
 
@@ -447,6 +565,7 @@ public final class ChatEngine {
      * how many messages were removed.
      */
     public int clearConversation(String zPeerOrGroup) {
+        awaitLoaded();
         if (zPeerOrGroup == null || zPeerOrGroup.isEmpty()) {
             return 0;
         }
@@ -472,6 +591,7 @@ public final class ChatEngine {
      * cannot drift out of step with what is actually on screen.
      */
     public int unread(String zPeerOrGroup) {
+        awaitLoaded();
         long since = lastRead(zPeerOrGroup);
         int n = 0;
         for (Entry e : conversation(zPeerOrGroup)) {
@@ -484,6 +604,7 @@ public final class ChatEngine {
 
     /** One pass. Polled by the main screen, so it must not scan per conversation. */
     public int totalUnread() {
+        awaitLoaded();
         int n = 0;
         for (Entry e : mMessages.values()) {
             if (e.mine) {
@@ -527,6 +648,7 @@ public final class ChatEngine {
      * hundred messages and a burst of ticks that is a visible stall.
      */
     public List<Summary> summaries() {
+        awaitLoaded();
         Map<String, Entry> newest = new LinkedHashMap<>();
         Map<String, Integer> unread = new LinkedHashMap<>();
         for (Entry e : mMessages.values()) {
@@ -553,6 +675,7 @@ public final class ChatEngine {
     }
 
     public long lastRead(String zPeerOrGroup) {
+        awaitLoaded();
         Long v = mLastRead.get(key(zPeerOrGroup));
         return v == null ? 0L : v;
     }
@@ -692,6 +815,7 @@ public final class ChatEngine {
     }
 
     public Entry send(Contact zTo, String zBody) {
+        awaitLoaded();
         String id = newId();
         Entry e = new Entry(id, Keys.norm(zTo.publicKey), "",
                 Keys.norm(mNode.publicKeyHex()), zBody,
@@ -718,6 +842,7 @@ public final class ChatEngine {
      * do not resend history forever) are retried. Returns how many were re-sent.
      */
     public int resendUndelivered() {
+        awaitLoaded();
         long now = System.currentTimeMillis();
         int n = 0;
         int tried = 0;
@@ -774,7 +899,7 @@ public final class ChatEngine {
             java.util.List<String> due = new ArrayList<>();
             for (String m : g.others(mNode.publicKeyHex())) {
                 String k = Keys.norm(m);
-                if (e.deliveredBy.contains(k)) {
+                if (e.deliveredBy().contains(k)) {
                     continue;   // this member already confirmed
                 }
                 Contact c = mNode.contact(m);
@@ -786,24 +911,24 @@ public final class ChatEngine {
                 // 1:1 classic guard in resendUndelivered). Track that in a
                 // SEPARATE set: deliveredBy must hold only real confirmations,
                 // or a reader (e.g. desktop ticks) shows a false delivered.
-                if (c.isClassic() && e.classicSent.contains(k)) {
+                if (c.isClassic() && e.classicSent().contains(k)) {
                     continue;
                 }
                 // Bounded: GROUP_RESEND_MAX attempts per member with backoff, then that
                 // member is undelivered (grey tick) and costs nothing more - one dead member
                 // must not keep the whole group's full body in the ladder for 24 h.
-                int attempts = e.resendAttempts.getOrDefault(k, 0);
+                int attempts = e.resendAttempts().getOrDefault(k, 0);
                 if (attempts >= GROUP_RESEND_MAX) {
-                    if (e.undeliveredBy.add(k)) {
+                    if (e.undeliveredByMut().add(k)) {
                         fireState(e);
                     }
                     continue;
                 }
-                if (now < e.resendNotBefore.getOrDefault(k, 0L)) {
+                if (now < e.resendNotBefore().getOrDefault(k, 0L)) {
                     continue;
                 }
-                e.resendAttempts.put(k, attempts + 1);
-                e.resendNotBefore.put(k, now + GROUP_RESEND_BACKOFF_MS[Math.min(attempts, GROUP_RESEND_BACKOFF_MS.length - 1)]);
+                e.resendAttemptsMut().put(k, attempts + 1);
+                e.resendNotBeforeMut().put(k, now + GROUP_RESEND_BACKOFF_MS[Math.min(attempts, GROUP_RESEND_BACKOFF_MS.length - 1)]);
                 due.add(m);
             }
             if (due.isEmpty()) {
@@ -812,7 +937,7 @@ public final class ChatEngine {
             int n = fanOutGroup(due, cm, ok -> {
                 Contact c = mNode.contact(ok);
                 if (c != null && c.isClassic()) {
-                    e.classicSent.add(Keys.norm(ok));
+                    e.classicSentMut().add(Keys.norm(ok));
                 }
             });
             return n > 0;
@@ -832,6 +957,7 @@ public final class ChatEngine {
 
     /** The wallet receive address a contact shared, or "" if we have none. */
     public String walletAddress(String zPeer) {
+        awaitLoaded();
         String a = mWalletAddr.getOrDefault(Keys.norm(zPeer), "");
         if (!a.isEmpty()) {
             return a;
@@ -921,6 +1047,7 @@ public final class ChatEngine {
      * no key they still hold.
      */
     public Entry sendGroup(String zGroupId, String zBody) {
+        awaitLoaded();
         Group g = mGroups.get(zGroupId);
         if (g == null) {
             throw new IllegalArgumentException("unknown group " + zGroupId);
@@ -978,6 +1105,7 @@ public final class ChatEngine {
 
     /** Create a group and push the roster to every member. */
     public Group createGroup(String zName, List<String> zMemberKeys) {
+        awaitLoaded();
         String me = mNode.publicKeyHex();
         Group g = new Group(newId());
         g.name = zName;
@@ -998,6 +1126,7 @@ public final class ChatEngine {
 
     /** Change membership. Only an admin may, and only an admin is obeyed. */
     public void updateGroup(Group zGroup) {
+        awaitLoaded();
         String me = mNode.publicKeyHex();
         if (!zGroup.isAdmin(me)) {
             throw new IllegalStateException("only an admin can change the roster");
@@ -1121,6 +1250,7 @@ public final class ChatEngine {
      * because classic relays re-push held mail on every re-attach.
      */
     public boolean onInbound(MaximaMessage zMsg, String zMsgid) {
+        awaitLoaded();
         String app = zMsg.mApplication.toString();
         if (ClassicChat.APPLICATION.equals(app)) {
             // NB: receiving a classic-wire message is NOT proof the peer is on
@@ -1434,16 +1564,16 @@ public final class ChatEngine {
             if (g == null || !g.isMember(zFrom)) {
                 return;
             }
-            e.deliveredBy.add(Keys.norm(zFrom));
-            e.undeliveredBy.remove(Keys.norm(zFrom));
+            e.deliveredByMut().add(Keys.norm(zFrom));
+            e.undeliveredByMut().remove(Keys.norm(zFrom));
             if (zMsg.upto) {
                 // Coalesced receipt: this member has everything of ours in this group up to
                 // and including the referenced message (ids are random; ORDER is by time).
                 for (Entry older : new ArrayList<>(mMessages.values())) {
                     if (older != e && older.mine && older.groupId.equals(e.groupId)
                             && older.time <= e.time
-                            && older.deliveredBy.add(Keys.norm(zFrom))) {
-                        older.undeliveredBy.remove(Keys.norm(zFrom));
+                            && older.deliveredByMut().add(Keys.norm(zFrom))) {
+                        older.undeliveredByMut().remove(Keys.norm(zFrom));
                         settleGroupState(older, g);
                     }
                 }
@@ -1482,7 +1612,7 @@ public final class ChatEngine {
         }
         int confirmed = 0;
         for (String m : current) {
-            if (e.deliveredBy.contains(Keys.norm(m))) {
+            if (e.deliveredBy().contains(Keys.norm(m))) {
                 confirmed++;
             }
         }
@@ -1518,6 +1648,7 @@ public final class ChatEngine {
      * previous per-message loop could fire hundreds of sends from a single tap.
      */
     public void markRead(String zPeerOrGroup) {
+        awaitLoaded();
         // The local mark is set whether or not we TELL them. Read receipts are
         // a privacy choice about the other person; the unread badge is ours.
         //
@@ -1646,6 +1777,7 @@ public final class ChatEngine {
 
     /** Conversations with activity, newest first. */
     public synchronized List<String> conversations() {
+        awaitLoaded();
         Map<String, Long> latest = new LinkedHashMap<>();
         for (Entry e : mMessages.values()) {
             String key = e.isGroup() ? e.groupId : e.peer;

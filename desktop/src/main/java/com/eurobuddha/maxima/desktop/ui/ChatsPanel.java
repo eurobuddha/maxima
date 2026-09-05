@@ -401,7 +401,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     .thenComparing(e -> e.id));
             StringBuilder ts = new StringBuilder();
             for (ChatEngine.Entry e : conv) {
-                ts.append(e.id).append(e.state).append(e.deliveredBy.size()).append('|');
+                ts.append(e.id).append(e.state).append(e.deliveredBy().size()).append('|');
             }
             if (!ts.toString().equals(mThreadSig)) {
                 mThreadSig = ts.toString();
@@ -1863,7 +1863,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         String st = e.state == null ? "" : e.state;
         if (st.contains("fail")) return "✗";                       // phone: ic_error ✗
         if (st.contains("read")) return "✓✓";
-        if (st.contains("deliver") || !e.deliveredBy.isEmpty()) return "✓✓";
+        if (st.contains("deliver") || !e.deliveredBy().isEmpty()) return "✓✓";
         if (st.contains("sent")) return "✓";
         return "⋯";                                                // sending (phone: ⋯)
     }
