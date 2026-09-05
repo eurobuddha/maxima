@@ -155,6 +155,15 @@ public final class DesktopNode {
             // ---- built-in engine (default) ----
             mNode = new MaximaNode(zId, PROTOCOL, RELAY_TARGET);
             mGossip = new RelayGossipClient(zId, PROTOCOL, 8);
+            // The desktop wallet's gateway list follows relay discovery (see the phone).
+            final MaximaNode gwNode = mNode;
+            com.eurobuddha.maxima.desktop.wallet.DesktopWalletPublisher.setDiscoveredGateways(() -> {
+                java.util.List<String[]> eps = new java.util.ArrayList<>();
+                for (com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway g : gwNode.discovery().gateways()) {
+                    eps.add(new String[] {g.url, g.key});
+                }
+                return eps;
+            });
             mNode.setStore(new FileStore(new File(base, "node")));
             mNode.setName(zDisplayName);
             mNode.setNodeKind("core");

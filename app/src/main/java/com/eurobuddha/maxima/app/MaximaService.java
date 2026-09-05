@@ -597,6 +597,18 @@ public final class MaximaService extends Service {
                 }
                 List<String> relays = new ArrayList<>(seed);
                 EventLog.add("attaching to " + relays.size() + " candidate relay(s)");
+                // The wallet's gateway list follows relay discovery: every verified relay whose
+                // node advertises a gateway is one more gateway this phone may use.
+                final MaximaNode gwNode = node;
+                com.eurobuddha.maxima.app.wallet.WalletPublisher.setDiscoveredGateways(() -> {
+                    java.util.List<com.eurobuddha.maxima.app.wallet.GatewayNode.Endpoint> eps =
+                            new java.util.ArrayList<>();
+                    for (com.eurobuddha.maxima.core.session.PeerDiscovery.Gateway g
+                            : gwNode.discovery().gateways()) {
+                        eps.add(new com.eurobuddha.maxima.app.wallet.GatewayNode.Endpoint(g.url, g.key));
+                    }
+                    return eps;
+                });
                 int attached = node.start(relays, 30000);
                 // Do NOT feed our OWN addresses back into the swarm store. myAddresses()
                 // includes our direct/LAN endpoint, and persisting that as a "relay"

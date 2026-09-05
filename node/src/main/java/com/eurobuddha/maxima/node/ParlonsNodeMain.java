@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.20";
+    public static final String  NODE_VERSION = "0.2.21";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -212,6 +212,14 @@ public final class ParlonsNodeMain {
                                : publicBase + "/nft/<file>"));
                     gw.start();
                     gatewayHolder.set(gw);
+                    // Advertise the gateway in the cape's greeting so phones that discover this
+                    // relay discover its wallet gateway too. Only a MegaMMR node can serve the
+                    // wallet's megammr:true reads, and only a public TLS front is reachable.
+                    if (GeneralParams.IS_MEGAMMR && !publicBase.isEmpty() && relay.server() != null) {
+                        relay.server().setGateway(publicBase + "/cmd", gw.token());
+                        System.out.println("[parlons-node] wallet gateway advertised to phones: "
+                                + publicBase + "/cmd");
+                    }
                     System.out.println("[parlons-node] wallet gateway up on " + gw.bindHost() + ":"
                             + gw.port() + "/cmd (megammr=" + GeneralParams.IS_MEGAMMR
                             + ", bearer token in " + dataFolder + "/gateway-token.txt)");

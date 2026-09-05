@@ -38,6 +38,39 @@ public final class DesktopWalletPublisher {
             "9cb300300968390a91c2b998720b1385f6851242e48ab3021e724536ac9d4468";
     static final String DEFAULT_GATEWAY_URL = FLEET_GATEWAY_URLS[0];
     static final String DEFAULT_GATEWAY_TOKEN = FLEET_GATEWAY_TOKEN;
+
+    /** Gateways discovered with the relays (the node's cape advertises its gateway); see the
+     *  phone's WalletPublisher for the trust model. {url, key} pairs; null = none. */
+    private static volatile java.util.concurrent.Callable<java.util.List<String[]>> sDiscovered;
+
+    public static void setDiscoveredGateways(java.util.concurrent.Callable<java.util.List<String[]>> zSource) {
+        sDiscovered = zSource;
+    }
+
+    /** This publisher's fleet: discovered + the compiled-in floor, shuffled once so the sticky
+     *  index below lands each desktop on a random gateway. {url, key} pairs. */
+    private final java.util.List<String[]> mFleet = fleetEndpoints();
+
+    static java.util.List<String[]> fleetEndpoints() {
+        java.util.LinkedHashMap<String, String[]> all = new java.util.LinkedHashMap<>();
+        java.util.concurrent.Callable<java.util.List<String[]>> src = sDiscovered;
+        if (src != null) {
+            try {
+                for (String[] e : src.call()) {
+                    if (e != null && e.length == 2 && e[0].startsWith("https://") && !e[1].isEmpty()) {
+                        all.put(e[0], e);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        for (String u : FLEET_GATEWAY_URLS) {
+            all.putIfAbsent(u, new String[] {u, FLEET_GATEWAY_TOKEN});
+        }
+        java.util.List<String[]> eps = new java.util.ArrayList<>(all.values());
+        java.util.Collections.shuffle(eps);
+        return eps;
+    }
     /** The pre-1.5.34 default (the hosted proxy on maxlite): a desktop that stored this literal
      *  as its "own" URL follows the fleet too. */
     static final String LEGACY_GATEWAY_URL = "https://relay.privateprivate.org/cmd";
@@ -75,7 +108,7 @@ public final class DesktopWalletPublisher {
 
     /** The gateway URL in use right now (fleet node that last answered, or the user's own). */
     public String activeGatewayUrl() {
-        return usesFleet() ? FLEET_GATEWAY_URLS[Math.min(mCurrent, FLEET_GATEWAY_URLS.length - 1)] : gatewayUrl();
+        return usesFleet() ? mFleet.get(Math.min(mCurrent, mFleet.size() - 1))[0] : gatewayUrl();
     }
 
     // ---- the uniform surface (mirrors the phone's WalletPublisher) ----
@@ -179,13 +212,13 @@ public final class DesktopWalletPublisher {
         if (!usesFleet()) {
             return exchange(gatewayUrl(), gatewayToken(), command);
         }
-        int n = FLEET_GATEWAY_URLS.length;
+        int n = mFleet.size();
         int start = Math.min(mCurrent, n - 1);
         String lastErr = "";
         for (int a = 0; a < n; a++) {
             int idx = (start + a) % n;
             try {
-                JSONObject r = exchange(FLEET_GATEWAY_URLS[idx], FLEET_GATEWAY_TOKEN, command);
+                JSONObject r = exchange(mFleet.get(idx)[0], mFleet.get(idx)[1], command);
                 mCurrent = idx;
                 return r;
             } catch (Unreachable u) {
@@ -200,8 +233,8 @@ public final class DesktopWalletPublisher {
         if (!usesFleet()) {
             return exchange(gatewayUrl(), gatewayToken(), command);
         }
-        int idx = Math.min(Math.max(zPin, 0), FLEET_GATEWAY_URLS.length - 1);
-        return exchange(FLEET_GATEWAY_URLS[idx], FLEET_GATEWAY_TOKEN, command);
+        int idx = Math.min(Math.max(zPin, 0), mFleet.size() - 1);
+        return exchange(mFleet.get(idx)[0], mFleet.get(idx)[1], command);
     }
 
     private JSONObject exchange(String url, String token, String command) throws Exception {

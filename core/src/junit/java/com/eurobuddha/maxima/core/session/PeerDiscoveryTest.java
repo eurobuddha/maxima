@@ -39,6 +39,9 @@ public class PeerDiscoveryTest {
         final int port;
         volatile int greeted;
         volatile boolean running = true;
+        /** A wallet gateway to advertise, or null. */
+        volatile String gateway;
+        volatile String gatewayKey;
 
         FakeRelay(List<String> zPeers) throws Exception {
             server = new ServerSocket(0);
@@ -69,7 +72,8 @@ public class PeerDiscoveryTest {
                 DataOutputStream out = new DataOutputStream(s.getOutputStream());
                 Frame.readOrSkip(in, 65536);   // their greeting
                 Frame.write(out, Frame.body(Frame.MSG_GREETING,
-                        Greeting.commsOnly(PROTO, "127.0.0.1", port, peers, 64, true, 3)));
+                        Greeting.commsOnly(PROTO, "127.0.0.1", port, peers, 64, true, 3,
+                                gateway, gatewayKey)));
                 greeted++;
                 // hold the socket like a relay would, until the peer goes
                 while (running) {
@@ -223,6 +227,53 @@ public class PeerDiscoveryTest {
         assertEquals(2, d.verifiedCount());
         assertEquals(0, d.unverifiedCount());
         d.stop();
+    }
+
+    // ---- a relay's node advertises its wallet gateway; discovery keeps it with the peer ----
+
+    @Test
+    public void aVerifiedRelaysGatewayIsRememberedPersistedAndDroppedWithIt() throws Exception {
+        File dir = new File(System.getProperty("java.io.tmpdir"), "maxima-peers-gw-" + System.nanoTime());
+        try (FakeRelay a = new FakeRelay(new ArrayList<>());
+             FakeRelay b = new FakeRelay(new ArrayList<>())) {
+            a.gateway = "https://node-a.example/parlons-node/cmd";
+            a.gatewayKey = "0123456789abcdef0123456789abcdef";
+            PeerDiscovery d = discovery();
+            d.setStore(new FileStore(dir));
+            d.check(a.hostPort(), true);
+            d.check(b.hostPort(), true);   // b advertises none
+            assertEquals(1, d.gateways().size());
+            assertEquals(a.gateway, d.gateways().get(0).url);
+            assertEquals(a.gatewayKey, d.gateways().get(0).key);
+            assertEquals(a.hostPort(), d.gateways().get(0).relay);
+            d.save();
+
+            PeerDiscovery again = discovery();
+            again.setStore(new FileStore(dir));
+            assertEquals("gateway survives a restart with its relay", 1, again.gateways().size());
+            assertEquals(a.gateway, again.gateways().get(0).url);
+
+            again.noConnect(a.hostPort());
+            assertTrue("gone with the relay", again.gateways().isEmpty());
+            d.stop();
+            again.stop();
+        }
+    }
+
+    @Test
+    public void onlyHttpsGatewaysWithAKeyAreAccepted() {
+        assertEquals("", Greeting.gatewayOf("{\"gw\":\"http://plain.example/cmd\",\"gwkey\":\"abcdefghij\"}"));
+        assertEquals("https://x.example/parlons-node/cmd",
+                Greeting.gatewayOf("{\"gw\":\"https://x.example/parlons-node/cmd\",\"gwkey\":\"abcdefghij\"}"));
+        assertEquals("", Greeting.gatewayKeyOf("{\"gwkey\":\"short\"}"));
+        assertEquals("", Greeting.gatewayKeyOf("{\"gwkey\":\"has space in it\"}"));
+        // an omitted gateway leaves both empty
+        String g = Greeting.commsOnly(PROTO, "1.2.3.4", 9501, new ArrayList<>(), 8, true, 1, null, null).getExtraData();
+        assertEquals("", Greeting.gatewayOf(g));
+        String h = Greeting.commsOnly(PROTO, "1.2.3.4", 9501, new ArrayList<>(), 8, true, 1,
+                "https://n.example/parlons-node/cmd", "key_0123456789").getExtraData();
+        assertEquals("https://n.example/parlons-node/cmd", Greeting.gatewayOf(h));
+        assertEquals("key_0123456789", Greeting.gatewayKeyOf(h));
     }
 
     // ---- classic full list: 10% admission, random eviction keeps the size ----

@@ -48,6 +48,47 @@ public final class WalletPublisher {
 
     private static final String CORE_PKG = "org.minimarex.minimacore";
 
+    /**
+     * Gateways DISCOVERED with the relays (a Parlons Node's cape advertises its node's gateway
+     * in its greeting - see PeerDiscovery.gateways()). Set once by the engine host; null = none.
+     * With it the fleet's gateway capacity grows with its nodes; the two compiled-in URLs stay
+     * as the floor. Trust model, same as for relays: a discovered gateway is a fleet node's;
+     * signing never leaves the phone, so the worst a bad one can do is a wrong read or a dropped
+     * relay, which the next gateway corrects.
+     */
+    private static volatile java.util.concurrent.Callable<java.util.List<GatewayNode.Endpoint>> sDiscovered;
+
+    public static void setDiscoveredGateways(
+            java.util.concurrent.Callable<java.util.List<GatewayNode.Endpoint>> zSource) {
+        sDiscovered = zSource;
+    }
+
+    /**
+     * The fleet as this wallet sees it: discovered gateways plus the compiled-in floor, in a
+     * RANDOM order that the transport then sticks with - so a population of phones spreads over
+     * every gateway instead of all starting on the first compiled-in one. (Coins imported and
+     * transactions built on a gateway live on THAT gateway, which is why the order is fixed per
+     * publisher and only failover moves it.)
+     */
+    static java.util.List<GatewayNode.Endpoint> fleetEndpoints() {
+        java.util.LinkedHashMap<String, GatewayNode.Endpoint> all = new java.util.LinkedHashMap<>();
+        java.util.concurrent.Callable<java.util.List<GatewayNode.Endpoint>> src = sDiscovered;
+        if (src != null) {
+            try {
+                for (GatewayNode.Endpoint e : src.call()) {
+                    if (e != null && e.usable()) all.put(e.url, e);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        for (String u : FLEET_GATEWAY_URLS) {
+            all.putIfAbsent(u, new GatewayNode.Endpoint(u, FLEET_GATEWAY_TOKEN));
+        }
+        java.util.List<GatewayNode.Endpoint> eps = new java.util.ArrayList<>(all.values());
+        java.util.Collections.shuffle(eps);
+        return eps;
+    }
+
     private final Context mCtx;
     private final GatewayNode mGateway;
     private final NodeLink mNode;
@@ -63,10 +104,9 @@ public final class WalletPublisher {
         Handler main = new Handler(Looper.getMainLooper());
         String url = gatewayUrl(zCtx);
         if (usesDefaultGateway(zCtx)) {
-            // The fleet, with failover. A user-configured node is a single fixed endpoint.
-            java.util.List<GatewayNode.Endpoint> eps = new java.util.ArrayList<>();
-            for (String u : FLEET_GATEWAY_URLS) eps.add(new GatewayNode.Endpoint(u, FLEET_GATEWAY_TOKEN));
-            mGateway = new GatewayNode(eps, main);
+            // The fleet, with failover: discovered gateways + the compiled-in floor, random start.
+            // A user-configured node is a single fixed endpoint.
+            mGateway = new GatewayNode(fleetEndpoints(), main);
         } else {
             mGateway = new GatewayNode(url, gatewayToken(zCtx), main);
         }

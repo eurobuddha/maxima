@@ -74,6 +74,9 @@ public final class PeerDiscovery {
 
     /** verified host:port -> last verified ms (classic {@code verifiedPeers} / {@code knownPeers}). */
     private final Map<String, Long> mVerified = new ConcurrentHashMap<>();
+    /** verified host:port -> "url|key" of the wallet gateway its node advertised (only for
+     *  peers that do; a relay with no node, or a non-MegaMMR node, advertises none). */
+    private final Map<String, String> mGateways = new ConcurrentHashMap<>();
     /** unverified host:port -> true while a check is owed (classic {@code unverifiedPeers}). */
     private final Map<String, Boolean> mUnverified = new ConcurrentHashMap<>();
     /** host:port -> epoch ms a deferred recheck falls due (the 30-min / 60-s timers). */
@@ -169,13 +172,17 @@ public final class PeerDiscovery {
             if (!valid(hp) || mSelf.contains(hp)) {
                 continue;
             }
+            String[] v = e.getValue().split("\\|", 3);
             long seen;
             try {
-                seen = Long.parseLong(e.getValue());
+                seen = Long.parseLong(v[0]);
             } catch (NumberFormatException ex) {
                 seen = 0;
             }
             mVerified.put(hp, seen);
+            if (v.length == 3 && !v[1].isEmpty() && !v[2].isEmpty()) {
+                mGateways.put(hp, v[1] + "|" + v[2]);
+            }
             n++;
             Listener l = mListener;
             if (l != null) {
@@ -204,6 +211,10 @@ public final class PeerDiscovery {
             }
             for (Map.Entry<String, Long> e : mVerified.entrySet()) {
                 String v = Long.toString((e.getValue() / SAVE_GRAIN_MS) * SAVE_GRAIN_MS);
+                String gw = mGateways.get(e.getKey());
+                if (gw != null) {
+                    v = v + "|" + gw;
+                }
                 if (!v.equals(old.get(e.getKey()))) {
                     mStore.put(C_PEERS, e.getKey(), v);   // only what actually changed
                 }
@@ -239,10 +250,58 @@ public final class PeerDiscovery {
             // The relay we are actually talking to is a peer by definition: keep it fresh.
             if (mVerified.containsKey(zFromHostPort)) {
                 mVerified.put(zFromHostPort, System.currentTimeMillis());
+                noteGateway(zFromHostPort, extra);
             } else {
                 addPeer(zFromHostPort);
             }
         }
+    }
+
+    /** A relay's OWN greeting names its node's wallet gateway; remember it with the peer. A
+     *  gateway is only ever taken from the greeting of the relay that offers it, never from a
+     *  peer list, and only while that relay is verified. */
+    private void noteGateway(String zHostPort, String zExtra) {
+        String url = Greeting.gatewayOf(zExtra);
+        String key = Greeting.gatewayKeyOf(zExtra);
+        if (url.isEmpty() || key.isEmpty()) {
+            if (mGateways.remove(zHostPort) != null) {
+                mDirty = true;
+            }
+            return;
+        }
+        String v = url + "|" + key;
+        if (!v.equals(mGateways.put(zHostPort, v))) {
+            mDirty = true;
+        }
+    }
+
+    /** One discovered wallet gateway. */
+    public static final class Gateway {
+        public final String relay;
+        public final String url;
+        public final String key;
+
+        Gateway(String zRelay, String zUrl, String zKey) {
+            relay = zRelay;
+            url = zUrl;
+            key = zKey;
+        }
+    }
+
+    /** Every wallet gateway advertised by a currently VERIFIED relay, a copy. */
+    public List<Gateway> gateways() {
+        List<Gateway> out = new ArrayList<>();
+        for (Map.Entry<String, String> e : mGateways.entrySet()) {
+            if (!mVerified.containsKey(e.getKey())) {
+                continue;
+            }
+            int bar = e.getValue().indexOf('|');
+            if (bar > 0) {
+                out.add(new Gateway(e.getKey(), e.getValue().substring(0, bar),
+                        e.getValue().substring(bar + 1)));
+            }
+        }
+        return out;
     }
 
     /**
@@ -280,6 +339,7 @@ public final class PeerDiscovery {
      *  peer is removed from the known list. */
     public void noConnect(String zHostPort) {
         boolean was = mVerified.remove(zHostPort) != null;
+        mGateways.remove(zHostPort);
         mUnverified.remove(zHostPort);
         mDue.remove(zHostPort);
         // Left alone for the recheck interval, like a dead peer: a relay that greets but will
@@ -429,6 +489,7 @@ public final class PeerDiscovery {
                 }
             }
             mVerified.put(zHostPort, System.currentTimeMillis());
+            noteGateway(zHostPort, g.getExtraData());
             mDirty = true;
             Listener l = mListener;
             if (l != null) {
@@ -439,6 +500,7 @@ public final class PeerDiscovery {
                 addPeer(peer);
             }
         } else {
+            mGateways.remove(zHostPort);
             if (mVerified.remove(zHostPort) != null) {
                 // Classic: a verified peer that went quiet gets ONE more look in 30 minutes.
                 mUnverified.put(zHostPort, Boolean.TRUE);
@@ -466,6 +528,7 @@ public final class PeerDiscovery {
         }
         String victim = all.get(mRand.nextInt(all.size()));
         mVerified.remove(victim);
+        mGateways.remove(victim);
         return victim;
     }
 

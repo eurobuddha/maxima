@@ -135,6 +135,25 @@ public final class Greeting implements Streamable {
     public static Greeting commsOnly(String zVersion, String zHost, int zPort,
                                      List<String> zPeers, int zCapacity, boolean zPool,
                                      int zConns) {
+        return commsOnly(zVersion, zHost, zPort, zPeers, zCapacity, zPool, zConns, null, null);
+    }
+
+    /**
+     * As above, plus the WALLET GATEWAY this relay's node offers ({@code "gw"}: the full
+     * {@code …/cmd} URL, {@code "gwkey"}: its bearer). A Parlons Node that is a MegaMMR node
+     * with a public TLS front advertises it, so a phone that discovers the relay discovers a
+     * wallet gateway with it - the fleet's gateway capacity grows with its nodes instead of
+     * staying two compiled-in URLs. The key is the same kind of shared-public credential the
+     * app already ships for the fleet: the gateway is an allow-listed read+relay proxy that
+     * cannot move funds, and the bearer only keeps anonymous scrapers off; rate limits do
+     * the real protecting. Null / empty omits both.
+     */
+    public static Greeting commsOnly(String zVersion, String zHost, int zPort,
+                                     List<String> zPeers, int zCapacity, boolean zPool,
+                                     int zConns, String zGateway, String zGatewayKey) {
+        boolean gw = zGateway != null && !zGateway.isEmpty()
+                && zGatewayKey != null && !zGatewayKey.isEmpty()
+                && zGateway.indexOf('"') < 0 && zGatewayKey.indexOf('"') < 0;
         boolean known = zHost != null && !zHost.isEmpty()
                 && !zHost.equals("0.0.0.0") && !zHost.equals("::");
         StringBuilder peers = new StringBuilder("[");
@@ -151,6 +170,7 @@ public final class Greeting implements Streamable {
                 + (zCapacity > 0 ? ",\"cap\":\"" + zCapacity + "\"" : "")
                 + (zPool ? ",\"pool\":\"true\"" : "")
                 + (zConns >= 0 ? ",\"conns\":\"" + zConns + "\"" : "")
+                + (gw ? ",\"gw\":\"" + zGateway + "\",\"gwkey\":\"" + zGatewayKey + "\"" : "")
                 + ",\"peers\":" + peers + "}";
         return new Greeting(zVersion, json, -1);
     }
@@ -212,6 +232,19 @@ public final class Greeting implements Streamable {
         } catch (NumberFormatException e) {
             return 0;
         }
+    }
+
+    /** The wallet-gateway URL a relay's node advertises ({@code "gw"}), or "" if none. Only an
+     *  https URL is accepted: a gateway carries wallet reads and pre-signed transactions. */
+    public static String gatewayOf(String zExtraDataJson) {
+        String u = flatValue(zExtraDataJson, "gw");
+        return u.startsWith("https://") && u.length() <= 256 ? u : "";
+    }
+
+    /** The advertised gateway's bearer ({@code "gwkey"}), or "" if none. */
+    public static String gatewayKeyOf(String zExtraDataJson) {
+        String k = flatValue(zExtraDataJson, "gwkey");
+        return k.matches("[A-Za-z0-9._-]{8,128}") ? k : "";
     }
 
     /** The "conns" (current clients) claim from a greeting's extra data, or -1 if absent. */

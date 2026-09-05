@@ -164,6 +164,16 @@ public final class RelayServer {
      * should keep using, e.g. behind a load balancer.
      */
     private volatile String mPublicHost = "";
+    /** The wallet gateway our node offers (full /cmd URL + bearer), "" when none - see
+     *  {@link Greeting#commsOnly(String, String, int, java.util.List, int, boolean, int, String, String)}. */
+    private volatile String mGatewayUrl = "";
+    private volatile String mGatewayKey = "";
+
+    /** Advertise (or, with empty values, stop advertising) our node's wallet gateway. */
+    public void setGateway(String zUrl, String zKey) {
+        mGatewayUrl = zUrl == null ? "" : zUrl.trim();
+        mGatewayKey = zKey == null ? "" : zKey.trim();
+    }
     private final MlsService mMls = new MlsService(mDirectory);
     private final Mailbox mMailbox = new Mailbox();
 
@@ -459,7 +469,7 @@ public final class RelayServer {
             }
         }
         return Greeting.commsOnly(mVersion, mPublicHost, mPort, peers, mMaxConnections, mPool,
-                mRoutes.size());
+                mRoutes.size(), mGatewayUrl, mGatewayKey);
     }
 
     /**
