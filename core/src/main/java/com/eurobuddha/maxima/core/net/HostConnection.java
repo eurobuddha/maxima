@@ -194,7 +194,25 @@ public final class HostConnection implements Closeable {
     private static final int CTRL_MAILBOX_INFO = 40;
     private static final int CTRL_MAILBOX_ACK = 41;
 
+    /** Runs before a mailbox ack is signed (the node flushes its stores here). */
+    private volatile Runnable mBeforeAck;
+
+    public void setBeforeAck(Runnable zHook) {
+        mBeforeAck = zHook;
+    }
+
     private void answerMailboxChallenge(MaximaCTRLMessage zCtrl) {
+        // Everything delivered on this connection so far must be durable BEFORE we sign the
+        // ack that lets the relay delete its copy. (seq 0 is the possession probe; the flush
+        // is then a no-op on a clean store.)
+        Runnable before = mBeforeAck;
+        if (before != null) {
+            try {
+                before.run();
+            } catch (Exception ignored) {
+                // a failed flush must not stop the ack: the relay keeps mail until the TTL anyway
+            }
+        }
         try {
             java.io.DataInputStream d = new java.io.DataInputStream(
                     new java.io.ByteArrayInputStream(zCtrl.getData().getBytes()));

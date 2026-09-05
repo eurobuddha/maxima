@@ -58,4 +58,17 @@ public interface ChatPort {
 
 	/** A diagnostic line for the in-app event log. */
 	void log(String zLine);
+
+	/**
+	 * Register work to run BEFORE this engine acknowledges held mail to a relay (the signed
+	 * mailbox ack that lets the relay delete). The chat store registers its flush here, so a
+	 * message is on disk before the only other copy of it is destroyed - which is what lets
+	 * the store coalesce writes instead of rewriting its file per message.
+	 *
+	 * @return true if this engine honours the hook (an engine that never acknowledges mail
+	 *         through us returns false, and its store must stay write-through)
+	 */
+	default boolean addFlushHook(Runnable zHook) {
+		return false;
+	}
 }

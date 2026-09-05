@@ -167,6 +167,15 @@ public final class HostPool {
 
     /** Our proven public endpoint to claim in greetings, or null (see HostConnection). */
     private volatile String mAdvertisedEndpoint;
+    /** Runs before any attached connection signs a mailbox ack (see HostConnection). */
+    private volatile Runnable mBeforeAck;
+
+    public void setBeforeAck(Runnable zHook) {
+        mBeforeAck = zHook;
+        for (HostConnection c : mActive.values()) {
+            c.setBeforeAck(zHook);
+        }
+    }
 
     /** Claim (or stop claiming, with null) a proven endpoint on all FUTURE attaches. */
     public void setAdvertisedEndpoint(String zHostPort) {
@@ -316,6 +325,7 @@ public final class HostPool {
                 mIdentity.hostKey(zHostPort),
                 mVersion);
         conn.setAdvertisedEndpoint(mAdvertisedEndpoint);
+        conn.setBeforeAck(mBeforeAck);
         try {
             conn.attach(zTimeoutMs);
             mActive.put(zHostPort, conn);

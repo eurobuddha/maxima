@@ -124,7 +124,7 @@ public final class ParlonsCore {
         mMedia = new MediaService(mNode, blobs);
         mNode.setLocalBlobs(blobs);
         mChat = new ChatEngine(mNode);
-        mChat.setStore(new FileStore(new File(base, "chat")));
+        mChat.setStore(FileStore.coalescing(new File(base, "chat"), 2000));   // flushed before any mailbox ack
         mChat.setMediaService(mMedia);
         // (listener wired AFTER mControl below — it fans events out through the control push)
         mNode.setLogListener(s -> log("node: " + s));   // log() tees into the ring itself
@@ -455,6 +455,9 @@ public final class ParlonsCore {
             try { mChat.resendUndelivered(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
         mMaint.scheduleWithFixedDelay(() -> {
+            // Ticks, receipts and read state are batched in memory (persistLater): without this
+            // beat they only reached disk at shutdown, so a crash cost every tick since boot.
+            try { mChat.flushState(); } catch (Exception ignored) { }
             try { mControl.maintenanceSweep(); } catch (Exception ignored) { }
             // Wallet upkeep does blocking gateway HTTP (2+2N calls) — its OWN thread, so a slow
             // gateway can't starve maintain()/gossip/resend/MLS on the shared maint executor.

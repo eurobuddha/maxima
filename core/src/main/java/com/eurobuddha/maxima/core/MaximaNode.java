@@ -213,6 +213,7 @@ public final class MaximaNode implements ChatPort {
                 mPool.removeCandidate(zHostPort);
             }
         });
+        mPool.setBeforeAck(this::runFlushHooks);
         mPool.setListener(new HostPool.Listener() {
             @Override
             public void onAttached(String zHostPort,
@@ -265,6 +266,30 @@ public final class MaximaNode implements ChatPort {
     /** The relay discovery (classic peers checker) this node runs. */
     public PeerDiscovery discovery() {
         return mDiscovery;
+    }
+
+    /** Work to run before a mailbox ack is signed: our own store, then whatever apps add. */
+    private final List<Runnable> mFlushHooks = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    @Override
+    public boolean addFlushHook(Runnable zHook) {
+        if (zHook != null) {
+            mFlushHooks.add(zHook);
+        }
+        return true;
+    }
+
+    private void runFlushHooks() {
+        try {
+            mStore.flush();
+        } catch (Exception ignored) {
+        }
+        for (Runnable r : mFlushHooks) {
+            try {
+                r.run();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     public ServiceRegistry services() {

@@ -212,8 +212,10 @@ public final class MaximaService extends Service {
 
         com.eurobuddha.maxima.core.chat.ChatEngine chat =
                 new com.eurobuddha.maxima.core.chat.ChatEngine(sNode);
-        chat.setStore(new com.eurobuddha.maxima.core.store.FileStore(
-                new java.io.File(getFilesDir(), "chat")));
+        // Coalescing store: one rewrite per 2 s burst instead of one per message. Safe because
+        // the built-in engine flushes it before signing any mailbox ack (ChatPort.addFlushHook).
+        chat.setStore(com.eurobuddha.maxima.core.store.FileStore.coalescing(
+                new java.io.File(getFilesDir(), "chat"), 2000));
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
         chat.setMediaService(sMedia);   // photos/videos in chat, self-hosted
         final MaximaNode node = sNode;

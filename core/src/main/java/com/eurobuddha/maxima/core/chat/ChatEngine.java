@@ -203,6 +203,9 @@ public final class ChatEngine {
     /** Attach storage and reload groups and threads. Call before use. */
     public void setStore(Store zStore) {
         mStore = zStore == null ? Store.MEMORY_ONLY : zStore;
+        // Before the engine acknowledges held mail, everything we have written must be on
+        // disk - this is what makes a coalescing (write-behind) chat store safe.
+        mNode.addFlushHook(() -> mStore.flush());
         load();
     }
 
@@ -360,6 +363,7 @@ public final class ChatEngine {
                 n++;
             }
         }
+        mStore.flush();   // a write-behind store lands the batch now, not on its timer
         return n;
     }
 

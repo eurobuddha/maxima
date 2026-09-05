@@ -72,6 +72,41 @@ public final class FileStore implements Store {
         mWriteBehind = zOn;
     }
 
+    /**
+     * Coalescing write-behind: a dirty collection is written {@code zDelayMs} after the first
+     * change that dirtied it, whatever else changes meanwhile - one rewrite per burst instead
+     * of one per record. A chat store used to rewrite and fsync its whole message file for
+     * EVERY inbound message and every tick; a phone with 30 000 messages spent seconds per
+     * message doing it, on the inbound path. {@link #flush()} still forces everything out at
+     * once (the client calls it before it acknowledges held mail, so nothing acknowledged is
+     * ever only in memory). 0 disables the timer (plain write-behind, flushed by the caller).
+     */
+    public void setFlushDelay(long zDelayMs) {
+        mFlushDelayMs = Math.max(0, zDelayMs);
+        if (mFlushDelayMs > 0) {
+            mWriteBehind = true;
+        }
+    }
+
+    /** A store that coalesces writes {@code zDelayMs} after the first change (see
+     *  {@link #setFlushDelay}). */
+    public static FileStore coalescing(File zDir, long zDelayMs) {
+        FileStore s = new FileStore(zDir);
+        s.setFlushDelay(zDelayMs);
+        return s;
+    }
+
+    private volatile long mFlushDelayMs;
+    private final java.util.concurrent.atomic.AtomicBoolean mFlushScheduled =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** One daemon timer for every coalescing store in the process. */
+    private static final java.util.concurrent.ScheduledExecutorService FLUSHER =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "store-flush");
+                t.setDaemon(true);
+                return t;
+            });
+
     // ---------------------------------------------------------------
     // keyed records
     // ---------------------------------------------------------------
@@ -98,6 +133,17 @@ public final class FileStore implements Store {
     private void markOrPersist(String zCollection) {
         if (mWriteBehind) {
             mDirty.add(zCollection);
+            long delay = mFlushDelayMs;
+            if (delay > 0 && mFlushScheduled.compareAndSet(false, true)) {
+                FLUSHER.schedule(() -> {
+                    mFlushScheduled.set(false);   // a change during the flush schedules the next
+                    try {
+                        flush();
+                    } catch (Exception e) {
+                        System.err.println("[store] scheduled flush failed: " + e);
+                    }
+                }, delay, java.util.concurrent.TimeUnit.MILLISECONDS);
+            }
         } else {
             persist(zCollection);
         }

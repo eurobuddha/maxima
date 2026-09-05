@@ -162,7 +162,7 @@ public final class DesktopNode {
             mNode.setLocalBlobs(blobs);
             mPort = mNode;
             mChat = new ChatEngine(mNode);
-            mChat.setStore(new FileStore(new File(base, "chat")));
+            mChat.setStore(FileStore.coalescing(new File(base, "chat"), 2000));   // flushed before any mailbox ack
             mChat.setMediaService(mMedia);
             mChat.setListener(fanout());
             mNode.setLogListener(DesktopEventLog::add);
