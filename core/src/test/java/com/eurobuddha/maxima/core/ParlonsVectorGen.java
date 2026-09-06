@@ -285,8 +285,8 @@ public class ParlonsVectorGen {
 
         // ---------- 8. MLS ----------
         String keyBHex = new MiniData(derB).to0xString();
-        vec("mls.getreq", "MLSPacketGETReq", "GET for B's key with nonce 0xAABBCCDD", hex(ser(new MLSPacketGETReq(keyBHex, "0xAABBCCDD"))));
-        vec("mls.getresp", "MLSPacketGETResp", "answer: B at Mx(B)@1.2.3.4:9501, nonce 0xAABBCCDD",
+        vec("mls.getreq.B", "MLSPacketGETReq", "GET for B's key with nonce 0xAABBCCDD", hex(ser(new MLSPacketGETReq(keyBHex, "0xAABBCCDD"))));
+        vec("mls.getresp.B", "MLSPacketGETResp", "answer: B at Mx(B)@1.2.3.4:9501, nonce 0xAABBCCDD",
                 hex(ser(new MLSPacketGETResp(keyBHex, MxAddress.make(derB) + "@1.2.3.4:9501", "0xAABBCCDD"))));
         text("mls.permanent.B", "MAX# form: MAX#<B key 0x hex>#<Mx(B)@1.2.3.4:9501>",
                 "MAX#" + keyBHex + "#" + MxAddress.make(derB) + "@1.2.3.4:9501");
