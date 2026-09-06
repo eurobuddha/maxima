@@ -436,6 +436,31 @@ Boot log line: `[parlons-node] wallet gateway advertised to phones: <url>`. Not 
 Trust model: a discovered gateway is a fleet node's, like a relay; signing never leaves the device,
 so the worst a bad one can do is a wrong read or a dropped relay, which failover corrects.
 
+### Stage-2 throughput (2026-09-06: server 0.4.49→0.4.53, node 0.2.24→0.2.28, app 0.6.71, portal 0.2.16)
+Every item was checked against the decentralization rule (no central point of control/failure,
+no steering, no new hosted dependency): all are local scheduling, memory or reply-sizing changes,
+plus one advisory relay message.
+- **Load shedding, advisory** (`--shed N` / `-Dmaxima.relay.shed`, default 384, 0 = off): over its
+  soft client target a relay sends `CTRL_SHED` (42) to ≤4 clients per tick, each ≤ once per 30 min.
+  The message names NO destination: the client draws its own replacement at random from relays it
+  verified, never leaves its preferred cape, honours a relay ≤ once per 30 min, and only detaches after
+  the replacement attached. (Classic's DoSwap names the target — that lets a relay steer clients, so
+  it was not ported.) Stats line: `sheds=`.
+- **Inbound lock narrowed**: `MaximaNode.handle` holds its lock for dedup + last-seen only; chat and
+  contact-ctrl run in order on an inbound lane, RPC on its own lane, the reciprocal introduce on a side
+  lane; the before-ack hook drains the inbound lane first. The account's send thread is now keyed lanes
+  (`SerialLanes`: per peer / "wallet" / "group" / "mls", 4 threads). `node.cmd` leash 2.5 s → 300 ms.
+- **Chat history loads off the main thread** (`ChatEngine.setStoreAsync`); per-message group bookkeeping
+  is allocated lazily.
+- **Contacts refresh** 4 at a time under a 90 s budget with exponential backoff per dead contact;
+  `parlons.contacts.list` / `parlons.chat.summaries` are **paged** (offset/limit, `more`/`next`,
+  250 / 200 per page) and `ParlonsRemote` fetches every page; older nodes/clients unchanged.
+- **Push fan-out**: 4 s / 6 s socket leashes, an address failing 3 pushes running is skipped until the
+  device's next RPC, pool 4→16 under load, state ticks coalesced per entry per 400 ms; RPC replies on a
+  bounded pool.
+- **Knobs**: `--maxconn N` (relay) / `-Dparlons.relay.maxconn` (cape) raise the 512-connection cap on big
+  boxes; `-Dparlons.gateway.threads` (default 8). Parsed RSA public keys are cached (LRU 1024).
+
 ## Ports
 
 | port | what | exposure |
