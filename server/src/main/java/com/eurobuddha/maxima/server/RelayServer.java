@@ -271,9 +271,10 @@ public final class RelayServer {
      * Forward fan-out runs in parallel here so a miss is answered inside the client's leash.
      * A dial abandoned by the 4.5 s answer budget still holds its thread for up to 5.5 s
      * (socket connects are not interruptible), so under a burst of misses to dead peers the
-     * pool can fill; a dial that finds no thread is DISCARDED (one peer unasked for that miss)
-     * - it is never run on the asking client's connection thread, which is what caller-runs
-     * did and what would have stalled that client for the whole dial.
+     * pool can fill; a dial that finds no thread is REFUSED (one peer unasked for that miss,
+     * counted in forwardDiscards) - never run on the asking client's connection thread, which
+     * is what caller-runs did and what would have stalled that client for the whole dial. The
+     * refusal is an exception at submit time, so the fan-out only waits for dials that exist.
      */
     private final java.util.concurrent.ExecutorService mForwardExec =
             new java.util.concurrent.ThreadPoolExecutor(0, 32, 30, java.util.concurrent.TimeUnit.SECONDS,
@@ -283,7 +284,14 @@ public final class RelayServer {
                         t.setDaemon(true);
                         return t;
                     },
-                    new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy());
+                    new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    private final java.util.concurrent.atomic.AtomicLong mForwardDiscards =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /** Forward dials refused because every forward thread was busy. */
+    public long forwardDiscards() {
+        return mForwardDiscards.get();
+    }
     /**
      * Replication has its own small lane: it must not sit on the push pool (keep-alives and
      * drains would wait behind 3 × 5.5 s dials) nor on the forward pool (CallerRuns there
@@ -1428,16 +1436,20 @@ public final class RelayServer {
                 } catch (Exception e) {
                     continue;
                 }
-                asked++;
-                cs.submit(() -> {
-                    DirAnswer ans = RelayQueryClient.query(host, port, fkey, FORWARD_CONNECT_MS, FORWARD_READ_MS);
-                    if (ans == null) {
-                        return null;
-                    }
-                    String a = MlsService.verifiedAddress(fkey,
-                            ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig());
-                    return a == null ? null : new Object[] {a, ans, host + ":" + port};
-                });
+                try {
+                    cs.submit(() -> {
+                        DirAnswer ans = RelayQueryClient.query(host, port, fkey, FORWARD_CONNECT_MS, FORWARD_READ_MS);
+                        if (ans == null) {
+                            return null;
+                        }
+                        String a = MlsService.verifiedAddress(fkey,
+                                ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig());
+                        return a == null ? null : new Object[] {a, ans, host + ":" + port};
+                    });
+                    asked++;   // only a dial that really exists is waited for
+                } catch (java.util.concurrent.RejectedExecutionException full) {
+                    mForwardDiscards.incrementAndGet();
+                }
             }
             // Answer inside the CLIENT's 5 s self-heal leash: whatever has not come back by
             // then would reach a client that has already given up.
