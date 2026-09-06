@@ -93,7 +93,7 @@ else
         # brew's openjdk is keg-only: put it on PATH for this run and for the service
         JHOME="$(brew --prefix openjdk@21)"; export PATH="$JHOME/bin:$PATH"
     elif command -v apt-get >/dev/null 2>&1; then
-        need_root; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq default-jre-headless qrencode >/dev/null
+        need_root; $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -qq && $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq default-jre-headless qrencode >/dev/null 2>&1
     elif command -v dnf >/dev/null 2>&1; then
         need_root
         $SUDO dnf install -y -q java-21-openjdk-headless qrencode >/dev/null
@@ -109,7 +109,7 @@ else
 fi
 if ! command -v qrencode >/dev/null 2>&1; then
     if [ "$OSN" = mac ] && command -v brew >/dev/null 2>&1; then brew install --quiet qrencode >/dev/null 2>&1 || true
-    elif command -v apt-get >/dev/null 2>&1 && [ "$SUDO" != "__none__" ]; then $SUDO apt-get install -y -qq qrencode >/dev/null 2>&1 || true
+    elif command -v apt-get >/dev/null 2>&1 && [ "$SUDO" != "__none__" ]; then $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qrencode >/dev/null 2>&1 || true
     fi
 fi
 JAVA_BIN="$(command -v java)"
