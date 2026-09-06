@@ -22,7 +22,7 @@ public final class ApnsClient {
     static String payload(String zKind) {
         boolean call = "call".equals(zKind);
         return "{\"aps\":{\"alert\":{\"title\":\"Parlons\",\"body\":\"" + (call ? "Incoming call" : "New message")
-                + "\"},\"mutable-content\":1,\"sound\":\"default\",\"thread-id\":\"parlons\","
+                + "\"},\"mutable-content\":1,\"sound\":\"pssst.caf\",\"thread-id\":\"parlons\","
                 + "\"interruption-level\":\"" + (call ? "time-sensitive" : "active") + "\"},\"wake\":1}";
     }
 
