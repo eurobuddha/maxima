@@ -227,7 +227,8 @@ public final class ParlonsCore {
                 if (zOn) {
                     mNode.pool().addFloor(com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
                 }
-                log("built-in relay list " + (zOn ? "ON" : "OFF - seeds are your own relays only"));
+                log("built-in relay list " + (zOn ? "ON"
+                        : "OFF - seeds are your own relays only (relays already attached stay until restart)"));
                 return true;
             }
             public boolean addHost(String zHostPort) {
@@ -253,6 +254,13 @@ public final class ParlonsCore {
                 try { mNode.pool().detach(zHostPort); } catch (Exception ignored) { }
                 if (mCfg.extraRelays.remove(zHostPort)) {
                     persistExtraRelays();
+                }
+                // Never leave the account with no seed: dropping the last own relay while the
+                // compiled-in list is off switches the list back on.
+                if (com.eurobuddha.maxima.core.session.SeedRelays.builtInMustReturn(
+                        mCfg.extraRelays, null, mCfg.builtInRelays)) {
+                    setBuiltInRelays(true);
+                    log("that was the last relay of your own: the built-in list is back on");
                 }
                 return true;
             }

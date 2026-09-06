@@ -104,17 +104,24 @@ public final class DesktopRelayStore {
         save(file, cur);
     }
 
-    public synchronized void remove(String hostPort) {
+    /** Drop a relay. Returns true when that was the last seed while the compiled-in list was
+     *  off - the list is then switched back on (never leave this machine with nowhere to start). */
+    public synchronized boolean remove(String hostPort) {
         String hp = hostPort == null ? "" : hostPort.trim();
         if (isBuiltIn(hp)) {
             Set<String> ex = excluded();
             ex.add(hp);
             save(excludedFile, ex);
-            return;
+            return false;
         }
         Set<String> cur = new LinkedHashSet<>(userSeeds());
         cur.remove(hp);
         save(file, cur);
+        if (SeedRelays.builtInMustReturn(cur, null, builtInEnabled())) {
+            try { Files.deleteIfExists(builtInFile.toPath()); } catch (Exception ignored) { }
+            return true;
+        }
+        return false;
     }
 
     /** Back to the compiled-in list only. */

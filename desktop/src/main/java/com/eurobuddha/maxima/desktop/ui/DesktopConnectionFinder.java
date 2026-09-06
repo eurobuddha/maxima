@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * The desktop's "Auto-connect" engine — the counterpart of the phone's
  * {@code ConnectionFinder}. Gathers candidate relays (currently-attached ∪ the
- * configured {@link DesktopRelayStore} ∪ the {@link Bootstrap} floor), probes them
+ * configured {@link DesktopRelayStore} seeds), probes them
  * concurrently with {@link Probe#dial} (a real greeting, not just an open port), and
  * attaches the reachable ones LIVE through the pool — no reconnect. Reports plain
  * steps on the Swing thread; one run at a time; onDone always fires.
@@ -54,8 +54,7 @@ public final class DesktopConnectionFinder {
                 step(cb, "Checking your network…");
                 LinkedHashSet<String> cands = new LinkedHashSet<>();
                 cands.addAll(node.pool().activeHosts());
-                cands.addAll(store.get());
-                cands.addAll(Bootstrap.RELAYS);
+                cands.addAll(store.get());   // yours, then the compiled-in list only while it is on
                 step(cb, "Finding the best relays…");
                 List<String> reachable = probe(new ArrayList<>(cands));
                 step(cb, "Connecting…");

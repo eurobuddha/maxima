@@ -139,17 +139,27 @@ public final class RelayStore {
         prefs(zCtx).edit().putStringSet(KEY, s).apply();
     }
 
-    public static void remove(Context zCtx, String zHostPort) {
+    /**
+     * Drop a relay. Returns true when this was the last seed while the compiled-in list was
+     * off - the list is then switched back on, so the phone is never left with nowhere to start.
+     */
+    public static boolean remove(Context zCtx, String zHostPort) {
         String hp = zHostPort.trim();
         if (isBuiltIn(hp)) {
             Set<String> ex = excluded(zCtx);
             ex.add(hp);
             prefs(zCtx).edit().putStringSet(KEY_EXCLUDED, ex).apply();
-            return;
+            return false;
         }
         Set<String> s = new LinkedHashSet<>(userSeeds(zCtx));
         s.remove(hp);
         prefs(zCtx).edit().putStringSet(KEY, s).apply();
+        if (com.eurobuddha.maxima.core.session.SeedRelays.builtInMustReturn(
+                s, SwarmStore.recent(zCtx), builtInEnabled(zCtx))) {
+            prefs(zCtx).edit().putBoolean(KEY_BUILTIN, true).apply();
+            return true;
+        }
+        return false;
     }
 
     /** Back to the compiled-in list only: your seeds, your drops and the switch are cleared. */

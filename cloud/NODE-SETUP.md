@@ -474,7 +474,7 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
-### Bootstrap without a single operator (server 0.4.58, node 0.2.33, app 0.6.76, portal 0.2.21, desktop 1.5.56)
+### Bootstrap without a single operator (server 0.4.59, node 0.2.34, app 0.6.77, portal 0.2.22, desktop 1.5.57)
 The compiled-in relay list (`Bootstrap.RELAYS`) is now ONE seed source among several, never a
 requirement (`core/session/SeedRelays`): a client starts from (1) the relays its user added -
 typed, pasted, or scanned from a relay's QR - then (2) the relays it remembers (discovery's saved

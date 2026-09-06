@@ -869,7 +869,9 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         dot.setFont(t.font(10f));
         dot.setForeground(connected ? t.success : DKit.alpha(t.subtext, 110));
         row.add(dot, BorderLayout.WEST);
-        JLabel h = new JLabel(hostPort + (DesktopRelayStore.isBuiltIn(hostPort) ? "   built-in" : "   yours"));
+        String kind = DesktopRelayStore.isBuiltIn(hostPort) ? "built-in"
+                : node.relayStore().userSeeds().contains(hostPort) ? "yours" : "learned";
+        JLabel h = new JLabel(hostPort + "   " + kind);
         h.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
         h.setForeground(t.text);
         row.add(h, BorderLayout.CENTER);
@@ -890,7 +892,14 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         }
         DKit.HoverButton rm = k.dangerButton("Remove");
         rm.setFont(t.semibold(11f));
-        rm.onClick(() -> { node.relayStore().remove(hostPort); mSig = ""; refresh(); });
+        rm.onClick(() -> {
+            if (node.relayStore().remove(hostPort)) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "That was your last relay, so the built-in list is back on.");
+            }
+            mSig = "";
+            refresh();
+        });
         actions.add(rm);
         row.add(actions, BorderLayout.EAST);
         return row;

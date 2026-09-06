@@ -53,6 +53,19 @@ public class SeedRelaysTest {
     }
 
     @Test
+    public void aClientIsNeverLeftWithoutASeed() {
+        assertFalse("list on: nothing to restore", SeedRelays.builtInMustReturn(null, null, true));
+        assertFalse("list off but an own relay remains", SeedRelays.builtInMustReturn(
+                Collections.singletonList("mine:1"), null, false));
+        assertFalse("list off but a remembered relay remains", SeedRelays.builtInMustReturn(
+                null, Collections.singletonList("seen:2"), false));
+        assertTrue("list off and the last seed gone: it must come back",
+                SeedRelays.builtInMustReturn(Collections.emptyList(), Collections.emptyList(), false));
+        assertTrue("junk entries do not count as seeds",
+                SeedRelays.builtInMustReturn(Collections.singletonList("not a host"), null, false));
+    }
+
+    @Test
     public void builtInMembershipIsExact() {
         assertTrue(SeedRelays.isBuiltIn(Bootstrap.RELAYS.get(2)));
         assertTrue(SeedRelays.isBuiltIn(" " + Bootstrap.RELAYS.get(2) + " "));

@@ -143,6 +143,31 @@ public final class SeedRelays {
         return new ArrayList<>(out);
     }
 
+    /**
+     * The one invariant every store keeps: a client is never left with NO seed. Switching the
+     * compiled-in list off is refused while nothing else is configured, and dropping the last
+     * remaining seed while it is off switches it back on. True = the list must be (re)enabled.
+     */
+    public static boolean builtInMustReturn(Collection<String> zUserSeeds,
+                                            Collection<String> zRemembered,
+                                            boolean zBuiltInEnabled) {
+        if (zBuiltInEnabled) {
+            return false;
+        }
+        boolean any = false;
+        if (zUserSeeds != null) {
+            for (String hp : zUserSeeds) {
+                any |= isValid(hp);
+            }
+        }
+        if (!any && zRemembered != null) {
+            for (String hp : zRemembered) {
+                any |= isValid(hp);
+            }
+        }
+        return !any;
+    }
+
     /** Lower-cased, trimmed key for comparing user input against stored entries. */
     public static String norm(String zHostPort) {
         return zHostPort == null ? "" : zHostPort.trim().toLowerCase(Locale.ROOT);

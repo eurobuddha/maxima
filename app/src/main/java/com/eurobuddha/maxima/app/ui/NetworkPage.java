@@ -605,9 +605,11 @@ public final class NetworkPage implements Page {
         rm.setPadding(k.dp(10), k.dp(6), k.dp(10), k.dp(6));
         rm.setBackground(k.ripple());
         rm.setOnClickListener(v -> {
-            RelayStore.remove(mAct, host);
+            boolean restored = RelayStore.remove(mAct, host);
             EventLog.add("host removed: " + host);
-            mAct.toast("Removed " + host);
+            mAct.toast(restored
+                    ? "Removed " + host + " - that was your last relay, so the built-in list is back on"
+                    : "Removed " + host);
             st.setText("Removed");
             st.setTextColor(k.col(R.color.ux_subtext));
             render();

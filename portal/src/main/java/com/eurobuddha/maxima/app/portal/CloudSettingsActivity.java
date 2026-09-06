@@ -73,7 +73,10 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             TextView rm = PortalUi.ghost(c, "Drop");
             rm.setTextColor(getColor(R.color.ux_error));
             rm.setOnClickListener(v -> {
-                PortalRelayStore.remove(c, h);
+                if (PortalRelayStore.remove(c, h)) {
+                    android.widget.Toast.makeText(c, "That was your last relay - the built-in list is back on",
+                            android.widget.Toast.LENGTH_LONG).show();
+                }
                 if (dlg[0] != null) dlg[0].dismiss();
                 showRelays();
             });
@@ -141,9 +144,11 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         body.addView(PortalUi.label(c, "Changes apply on the next reconnect. Relays this phone has "
                 + "already learned from the network are kept either way."));
 
+        android.widget.ScrollView scroll = new android.widget.ScrollView(c);
+        scroll.addView(body);
         dlg[0] = new android.app.AlertDialog.Builder(this)
                 .setTitle("Relays this phone starts from")
-                .setView(body)
+                .setView(scroll)
                 .setPositiveButton("Done", null)
                 .setNeutralButton("Reset", (d, w) -> {
                     PortalRelayStore.reset(c);
