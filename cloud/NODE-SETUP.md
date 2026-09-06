@@ -474,6 +474,19 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### iOS wakes: only the app's own heartbeat counts as live (node 0.2.41, cloud 0.11.37)
+Live on the owner's iPhone, messages showed only when the app was opened. Cause: ANY authorized RPC
+stamped the device live for 3 min - including the notification extension's fetch after a wake and
+a background refresh - so the next messages were delivered to relay addresses nobody was listening
+on (the relay mailboxes them, so "delivered" looked true) and no wake was sent; on top, a 5-min quiet
+window after each wake hid everything when a fetch was slow. Now a device with a wake path is live
+only on an explicit `push.register` heartbeat (90 s; the app beats every 60 s in the foreground and
+sends `live:false` on background), every other RPC leaves the wake decision alone, and the quiet
+window is 45 s (cleared earlier by the device's next RPC). Devices without a wake path (Android
+portal) keep the 3-min any-RPC rule. Gain: every message wakes the phone unless the app is visibly
+open. Preservation: the wake is still content-free and optional; nothing new is trusted. Risk: more
+wakes per hour for a chatty account - bounded by the 20 s coalesce and the proxy's per-token limits.
+
 ### A restarted account is reachable at once (server 0.4.62, node 0.2.40, cloud 0.11.36)
 Found by the iOS smoke test: an account that restarts attached to a DIFFERENT relay set was
 unreachable through any relay still holding its earlier own SET, for the whole 24 h TTL. The

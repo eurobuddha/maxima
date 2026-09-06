@@ -108,10 +108,19 @@ public final class ParlonsControl {
     // parlons.push service. This is what makes the portal instant instead of a 3s poll, and it
     // is the only way an incoming CALL can ring a device in time.
     private static final long LIVE_MS = 3 * 60_000L;   // a device is "live" this long after its last RPC
+    /** A device with a WAKE path (iOS) is live only on its own word: an explicit foreground
+     *  heartbeat ({@code push.register} without {@code live:false}) counts for this long (the
+     *  app beats every 60 s). Any other RPC - the notification extension's fetch after a wake,
+     *  a background refresh - must NOT count: it stamped the device live for 3 min with relay
+     *  addresses nobody was listening on, the relay mailboxed every push, and the next messages
+     *  were never woken (seen live 2026-09-06). */
+    private static final long LIVE_EXPLICIT_MS = 90_000L;
 
     private static final class Live {
         volatile List<String> addrs;
         volatile long seen;
+        /** Until when an explicit heartbeat says the app is in the foreground. */
+        volatile long liveUntil;
         /** address -> consecutive push failures; an address failing PUSH_ADDR_FAILS times in a
          *  row is skipped until the device's next RPC refreshes its address list. */
         final java.util.Map<String, Integer> failures = new java.util.concurrent.ConcurrentHashMap<>();
@@ -1153,12 +1162,15 @@ public final class ParlonsControl {
             // window NOW so the next event wakes it through APNs instead of dialling relay
             // addresses that only mailbox the event; the addresses stay for a later `state`.
             JSONObject in = parse(req);
+            String key = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
+            Live l = mLive.get(key);
             if (in.containsKey("live") && !bool(in, "live")) {
-                String key = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
-                Live l = mLive.get(key);
                 if (l != null) {
                     l.seen = 0;
+                    l.liveUntil = 0;
                 }
+            } else if (l != null) {
+                l.liveUntil = System.currentTimeMillis() + LIVE_EXPLICIT_MS;   // the app itself says so
             }
             return bytes(ok());
         });
@@ -2061,7 +2073,8 @@ public final class ParlonsControl {
                     continue;
                 }
                 Live l = mLive.get(d.key);
-                boolean live = l != null && l.addrs != null && now - l.seen <= LIVE_MS;
+                // Only the app's own heartbeat keeps a wake-capable device off the wake path.
+                boolean live = l != null && l.addrs != null && now < l.liveUntil;
                 if (!live) {
                     mWake.wake(d.key, d.wakeProxy, d.apnsToken, d.apnsEnv, kind);
                 }

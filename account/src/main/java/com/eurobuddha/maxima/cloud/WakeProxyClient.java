@@ -25,7 +25,10 @@ import java.util.concurrent.Executors;
 public final class WakeProxyClient {
 
     static final long COALESCE_MS = 20_000;
-    static final long QUIET_MS = 5 * 60_000;
+    /** After a wake, no second wake until the device shows up (an authorized RPC) or this
+     *  passes. 45 s, not minutes: a wake is one tiny push, and a phone whose fetch failed must
+     *  not lose the next five minutes of messages. */
+    static final long QUIET_MS = 45_000;
     static final long BACKOFF_MS = 5 * 60_000;
     static final int BACKOFF_AFTER = 3;
 
