@@ -86,6 +86,8 @@ public class AccountBackupTest {
         FileStore node2 = new FileStore(new File(fresh.toFile(), AccountBackup.NODE_DIR));
         assertEquals(node.all("contacts"), node2.all("contacts"));
         assertEquals("eurobuddhaCloud", node2.get("settings", "name"));
+        assertEquals("the old host's anchor is not carried over; the new host pins its own",
+                null, node2.get("settings", "staticmls"));
         assertEquals("1757100000000", node2.get("peers", "45.77.246.226:9501"));
         assertEquals(node.read("addrhistory"), node2.read("addrhistory"));
         FileStore chat2 = new FileStore(new File(fresh.toFile(), AccountBackup.CHAT_DIR));

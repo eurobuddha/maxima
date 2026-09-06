@@ -482,7 +482,28 @@ public final class ParlonsRemote {
     public JSONObject backupExport(String zPassphrase) throws Exception {
         JSONObject p = new JSONObject();
         p.put("passphrase", zPassphrase);
-        return rpc(ParlonsControl.M_BACKUP_EXPORT, p);
+        JSONObject r = rpc(ParlonsControl.M_BACKUP_EXPORT, p);
+        if (!Boolean.TRUE.equals(r.get("ok"))) {
+            return r;
+        }
+        // The bundle is paged (it carries the chat history): stitch every page back together
+        // so callers still see one {ok, blob}.
+        StringBuilder b64 = new StringBuilder(String.valueOf(r.get("blob")));
+        String key = String.valueOf(r.get("key"));
+        while (Boolean.TRUE.equals(r.get("more"))) {
+            JSONObject next = new JSONObject();
+            next.put("key", key);
+            next.put("offset", b64.length());
+            r = rpc(ParlonsControl.M_BACKUP_EXPORT, next);
+            if (!Boolean.TRUE.equals(r.get("ok"))) {
+                return r;
+            }
+            b64.append(String.valueOf(r.get("blob")));
+        }
+        JSONObject out = new JSONObject();
+        out.put("ok", true);
+        out.put("blob", b64.toString());
+        return out;
     }
 
     /** Send from the ACCOUNT wallet to any Minima address (pid-idempotent). Result arrives

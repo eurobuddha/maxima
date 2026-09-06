@@ -332,6 +332,27 @@ public final class ParlonsControl {
         mNft = zHost;
     }
 
+    /** Backup blobs (base64) being paged out to a device, newest last. */
+    private final java.util.LinkedHashMap<String, String> mBackupPages = new java.util.LinkedHashMap<>();
+
+    private JSONObject backupPage(String zKey, String zB64, int zOffset) {
+        JSONObject out = ok();
+        int from = Math.max(0, Math.min(zOffset, zB64.length()));
+        int to = Math.min(zB64.length(), from + CMD_CHUNK);
+        boolean more = to < zB64.length();
+        out.put("key", zKey);
+        out.put("blob", zB64.substring(from, to));
+        out.put("offset", from);
+        out.put("total", zB64.length());
+        out.put("more", more);
+        if (!more) {
+            synchronized (mBackupPages) {
+                mBackupPages.remove(zKey);   // the device has the last page
+            }
+        }
+        return out;
+    }
+
     /** One Terminal command in flight or finished; its output is paged out in CMD_CHUNK pieces. */
     private static final class ConsoleJob {
         final String command;
@@ -1353,6 +1374,21 @@ public final class ParlonsControl {
         zReg.register(M_BACKUP_EXPORT, req -> {
             requireAuth(req);
             JSONObject in = parse(req);
+            // PAGED like the Terminal output: the portable bundle carries the chat history and
+            // easily exceeds the 256K wire message. First call: {passphrase} -> page 0 + key;
+            // then {key, offset} until "more" is false (ParlonsRemote.backupExport stitches).
+            String key = str(in, "key");
+            if (!key.isEmpty()) {
+                String b64;
+                synchronized (mBackupPages) {
+                    b64 = mBackupPages.get(key);
+                }
+                if (b64 == null) {
+                    return bytes(err("that backup has expired - export again"));
+                }
+                int offset = intOf(in, "offset", 0);
+                return bytes(backupPage(key, b64, offset));
+            }
             String pw = str(in, "passphrase");
             if (pw.length() < 6) {
                 return bytes(err("use a passphrase of at least 6 characters"));
@@ -1364,10 +1400,18 @@ public final class ParlonsControl {
             char[] pwc = pw.toCharArray();
             try {
                 byte[] blob = bs.exportBackup(pwc);
-                JSONObject out = ok();
-                out.put("blob", java.util.Base64.getEncoder().encodeToString(blob));
-                mNode.log("encrypted backup exported to a paired device");
-                return bytes(out);
+                String b64 = java.util.Base64.getEncoder().encodeToString(blob);
+                String k = new com.eurobuddha.maxima.core.codec.MiniData(
+                        com.eurobuddha.maxima.core.crypto.MaximaCrypto.randomBytes(12)).to0xString();
+                synchronized (mBackupPages) {
+                    while (mBackupPages.size() >= 4) {   // a handful in flight at most
+                        String oldest = mBackupPages.keySet().iterator().next();
+                        mBackupPages.remove(oldest);
+                    }
+                    mBackupPages.put(k, b64);
+                }
+                mNode.log("encrypted backup exported to a paired device (" + blob.length + " bytes)");
+                return bytes(backupPage(k, b64, 0));
             } finally {
                 java.util.Arrays.fill(pwc, '\0');
             }

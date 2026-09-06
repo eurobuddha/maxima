@@ -474,7 +474,7 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
-### Portable accounts, then an optional multi-account host (node 0.2.35, cloud 0.11.31, portal 0.2.23)
+### Portable accounts, then an optional multi-account host (node 0.2.36, cloud 0.11.32, portal 0.2.24)
 **The portable account bundle.** `Back up account…` on a paired device (or `parlons backup
 <file.pbk>`) now writes the WHOLE account, encrypted under your passphrase (scrypt + AES-GCM, the
 same `.pbk` container the phone app reads): the identity phrase, the paired devices

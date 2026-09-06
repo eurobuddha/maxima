@@ -177,6 +177,9 @@ public final class AccountBackup {
             if (nodeCols != null) {
                 for (Map.Entry<String, Map<String, String>> col : nodeCols.entrySet()) {
                     for (Map.Entry<String, String> e : col.getValue().entrySet()) {
+                        if ("settings".equals(col.getKey()) && "staticmls".equals(e.getKey())) {
+                            continue;   // the anchor belongs to the OLD host - see below
+                        }
                         node.put(col.getKey(), e.getKey(), e.getValue());
                     }
                 }
@@ -226,9 +229,9 @@ public final class AccountBackup {
         if (zBundle.displayName != null && !zBundle.displayName.isEmpty()) {
             node.put("settings", "name", zBundle.displayName);
         }
-        if (zBundle.mls != null && !zBundle.mls.isEmpty()) {
-            node.put("settings", "staticmls", zBundle.mls);
-        }
+        // The pinned MLS anchor is NOT restored: it names the old host's relay, which is being
+        // retired. The account pins a fresh, reachable anchor on its first boot here; the old
+        // MAX# (same key, old anchor) keeps resolving through the fleet's replicated directory.
         node.flush();
         if (zUses != null) {
             zUses.importRaiseOnly(zBundle.keyUses);
