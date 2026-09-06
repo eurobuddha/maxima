@@ -40,14 +40,61 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.42";
+    public static final String  NODE_VERSION = "0.2.43";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
     private static final String PROTOCOL   = "1.0.48";
     private static final int    RELAY_RATE = 600;
 
+    /** What a person needs to run this jar by hand. The supported install is the deploy script. */
+    static void help(java.io.PrintStream out) {
+        out.println("Parlons Node " + NODE_VERSION + " - a full Minima node + Maxima relay + wallet gateway + your always-on");
+        out.println("Parlons account, in one process.");
+        out.println();
+        out.println("This jar takes NO command-line options. Everything is a -D property before -jar:");
+        out.println();
+        out.println("  java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar");
+        out.println();
+        out.println("  -Dparlons.node.data=<dir>        data dir (default ~/.parlons-node); identity.txt, pair-code.txt,");
+        out.println("                                    account.txt, invite.txt, devices.json live here");
+        out.println("  -Dparlons.node.port=9001         Minima P2P port (public); RPC is loopback on port+4 when enabled");
+        out.println("  -Dparlons.node.rootnode=host:port  a peer to discover the chain from (first run)");
+        out.println("  -Dparlons.node.megammr=true      keep the MegaMMR (wallet gateway needs it; 3 GB heap)");
+        out.println("  -Dparlons.node.rpc=false         loopback admin RPC (needed for wallet resync / the vault)");
+        out.println("  -Dparlons.node.args=\"…\"         Minima's own flags, e.g. \"-host 1.2.3.4 -archive\"");
+        out.println("  -Dparlons.relay.port=9501        the Maxima relay (public); -Dparlons.relay.peers=h:p,… mesh peers");
+        out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
+        out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
+        out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
+        out.println("  -Dparlons.account=true           run the Parlons account layer;  -Dparlons.account.name=<name>");
+        out.println("  -Dparlons.node.passphrase.file=<f>  unlock a password-locked node (or PARLONS_NODE_PASSPHRASE)");
+        out.println("  -Dparlons.restore=<bundle.pbk>   restore a portable account bundle into a FRESH data dir, then exit");
+        out.println();
+        out.println("First run: the node syncs the chain (watch the 'heartbeat' log line until block= reaches the tip),");
+        out.println("pins its identity into <data>/identity.txt, attaches to the relays and prints");
+        out.println("'permanent address MAX#…'. Pair your first device with <data>/invite.txt (address + one-time code).");
+        out.println();
+        out.println("The supported install on a server is ONE command from the repository:");
+        out.println("  ops/deploy-parlons-node.sh root@your.box --rootnode 65.109.31.226:9001");
+        out.println("(Java, user, hardened systemd unit, firewall, MegaMMR seed - see cloud/NODE-SETUP.md).");
+        out.println("Just want an always-on account without the blockchain? Use parlons-cloud.jar instead (1 GB RAM).");
+    }
+
     public static void main(String[] zArgs) throws Exception {
+        // The jar takes no command-line flags: every knob is a -D property (see help()). Anything
+        // on the command line is therefore a misunderstanding - answer it with the help text
+        // instead of silently ignoring it, which is what happened until 0.2.43.
+        if (zArgs != null && zArgs.length > 0) {
+            if ("-v".equals(zArgs[0]) || "--version".equals(zArgs[0])) {
+                System.out.println("parlons-node " + NODE_VERSION);
+                return;
+            }
+            boolean help = "-h".equals(zArgs[0]) || "--help".equals(zArgs[0]) || "help".equals(zArgs[0]);
+            help(help ? System.out : System.err);
+            System.exit(help ? 0 : 2);
+            return;
+        }
         // --- configure the embedded node's global params (mirrors Minima.main, minus the CLI bits) ---
         GeneralParams.resetDefaults();
 
@@ -377,6 +424,9 @@ public final class ParlonsNodeMain {
             });
         }
         int hosts = core.start();
+        // account.txt + invite.txt beside the account's files: what a person reads to pair a device.
+        com.eurobuddha.maxima.cloud.AccountFiles.startRefresher(core.pairing().codeFile().getParent(),
+                () -> core.node().permanentAddress(), 3_000);
         System.out.println("[parlons-node] account up: attached to " + hosts + " relay(s), "
                 + core.pairing().authorizedCount() + " paired device(s)"
                 + (core.pairing().authorizedCount() == 0
