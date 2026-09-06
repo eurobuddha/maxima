@@ -118,6 +118,31 @@ public final class Client {
                 }
                 break;
             }
+            case "newcode": {
+                JSONObject o = r.newCode();
+                if (!isOk(o)) { fail(o); break; }
+                System.out.println("new one-time pairing code minted on the account.");
+                String inv = waitLocalInvite(6_000);
+                if (inv != null) {
+                    System.out.println("invite : " + inv);
+                    System.out.println("(scan or paste it in the Parlons Cloud app; the code half works once)");
+                } else {
+                    System.out.println("read it on the account's machine:  cat <data>/invite.txt");
+                    System.out.println("(or <data>/pair-code.txt for the code alone)");
+                }
+                break;
+            }
+            case "invite": {
+                String inv = localInvite();
+                if (inv != null) {
+                    System.out.println(inv);
+                } else {
+                    System.out.println("no invite here: the account's data dir is not on this machine, or no");
+                    System.out.println("one-time code is outstanding. Mint one:  parlons newcode");
+                    System.exit(1);
+                }
+                break;
+            }
             case "devices": {
                 JSONObject o = r.devices();
                 if (!isOk(o)) { fail(o); break; }
@@ -452,6 +477,43 @@ public final class Client {
         if (s == null) return "";
         return s.length() > n ? s.substring(0, n) + "…" : s;
     }
+    /** The account's own data dir when it runs on THIS machine: PARLONS_ACCOUNT_DIR, else ~/.parlons. */
+    static Path localAccountDir() {
+        String d = System.getenv("PARLONS_ACCOUNT_DIR");
+        return Paths.get(d == null || d.isEmpty() ? System.getProperty("user.home") + "/.parlons" : d);
+    }
+
+    /** MAX#…?code=… from the local account's account.txt + pair-code.txt; null when either is missing. */
+    static String localInvite() {
+        try {
+            Path dir = localAccountDir();
+            Path inv = dir.resolve("invite.txt");
+            if (Files.isRegularFile(inv)) {
+                String s = new String(Files.readAllBytes(inv), java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (s.startsWith("MAX#") && s.contains("?code=")) return s;
+            }
+            Path acct = dir.resolve("account.txt"), code = dir.resolve("pair-code.txt");
+            if (Files.isRegularFile(acct) && Files.isRegularFile(code)) {
+                String a = new String(Files.readAllBytes(acct), java.nio.charset.StandardCharsets.UTF_8).trim();
+                String c = new String(Files.readAllBytes(code), java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (a.startsWith("MAX#") && !c.isEmpty()) return a + "?code=" + c;
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
+
+    /** After newcode: the account rewrites pair-code.txt at once and invite.txt within seconds. */
+    static String waitLocalInvite(long zMs) throws InterruptedException {
+        long until = System.currentTimeMillis() + zMs;
+        String last = null;
+        while (System.currentTimeMillis() < until) {
+            String inv = localInvite();
+            if (inv != null && !inv.equals(last)) return inv;
+            Thread.sleep(300);
+        }
+        return localInvite();
+    }
+
     private static void usage() {
         System.out.println("parlons — drive your Parlons Cloud account from the terminal");
         System.out.println();
@@ -460,6 +522,8 @@ public final class Client {
         System.out.println("  pair [<code>]          pair this device (bootstrap code, or pending→approve)");
         System.out.println("  ping                   account name + address");
         System.out.println("  devices                list paired / pending devices");
+        System.out.println("  newcode                mint a fresh one-time pairing code (prints the invite when local)");
+        System.out.println("  invite                 print MAX#…?code=… for the app to scan (account on this machine)");
         System.out.println("  approve <key>          approve a pending device");
         System.out.println("  revoke <key>           revoke a device");
         System.out.println("  status                 node status (uptime, relays, mesh, devices)");

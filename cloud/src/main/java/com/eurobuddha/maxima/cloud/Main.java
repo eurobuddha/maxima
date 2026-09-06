@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.39";
+    public static final String VERSION = "0.11.40";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -307,9 +307,17 @@ public final class Main {
         Runtime.getRuntime().addShutdownHook(new Thread(core::shutdown, "parlons-cloud-shutdown"));
         core.start();
 
+        // Keep account.txt (the permanent MAX#) and invite.txt (MAX#…?code=…) current, the same
+        // files a tenants host keeps, so an installer or a person can read them without grepping
+        // a log: the address appears once the account has attached, the invite whenever a pair
+        // code exists that is newer than the invite on disk.
+        AccountFiles.startRefresher(dir, () -> core.node().permanentAddress(), 3_000);
+
         System.out.println();
         System.out.println("  Running. This node holds your identity and stays online for you.");
-        System.out.println("  Pair a device to drive it: see the pairing note above (cat pair-code.txt).");
+        System.out.println("  Pair a device: " + dir.resolve(AccountFiles.INVITE_FILE) + " holds the invite");
+        System.out.println("  (address + one-time code in one line; " + dir.resolve(AccountFiles.ACCOUNT_FILE)
+                + " holds the address alone).");
         System.out.println();
 
         // Block forever; all work runs on the maintenance/reader threads.

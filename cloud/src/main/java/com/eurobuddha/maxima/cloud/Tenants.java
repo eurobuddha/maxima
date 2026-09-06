@@ -140,8 +140,8 @@ public final class Tenants {
                 + " --unlock prompt|env from now on.");
     }
 
-    public static final String ACCOUNT_FILE = "account.txt";   // the tenant's permanent MAX# address
-    public static final String INVITE_FILE = "invite.txt";     // MAX#…?code=… - one QR pairs a phone
+    public static final String ACCOUNT_FILE = AccountFiles.ACCOUNT_FILE;   // the tenant's permanent MAX# address
+    public static final String INVITE_FILE = AccountFiles.INVITE_FILE;     // MAX#…?code=… - one QR pairs a phone
     public static final String STOP_MARKER = ".stop";          // touch it to stop that tenant only
     static final long POLL_MS = 5_000;
     static final long RETRY_FAILED_MS = 60_000;
@@ -149,11 +149,7 @@ public final class Tenants {
     /** The invite a phone scans once: {@code MAX#…#Mx…@host:port?code=XXXX-XXXX-XXXX}. Null until
      *  both halves exist. A bare MAX# stays valid everywhere; the code half is one-time. */
     public static String invite(String zPermanent, String zCode) {
-        if (zPermanent == null || !zPermanent.trim().startsWith("MAX#")
-                || zCode == null || zCode.trim().isEmpty()) {
-            return null;
-        }
-        return zPermanent.trim() + "?code=" + zCode.trim();
+        return AccountFiles.invite(zPermanent, zCode);
     }
 
     /** Sub-folders that are not running yet (hot-add), sorted by name. */
@@ -171,37 +167,9 @@ public final class Tenants {
         return Files.exists(zDir.resolve(STOP_MARKER));
     }
 
-    /**
-     * Keep {@code account.txt} and {@code invite.txt} current for one tenant: the permanent
-     * address once the account has attached, and the invite whenever a pair code exists that is
-     * newer than the invite on disk (first run, or a fresh {@code pair.newcode}).
-     * @return true when a file was (re)written
-     */
+    /** Keep {@code account.txt} and {@code invite.txt} current for one tenant (see {@link AccountFiles}). */
     public static boolean refreshFiles(Path zDir, String zPermanent) throws Exception {
-        if (zPermanent == null || !zPermanent.startsWith("MAX#")) {
-            return false;
-        }
-        boolean wrote = false;
-        Path account = zDir.resolve(ACCOUNT_FILE);
-        if (!Files.isRegularFile(account)
-                || !zPermanent.equals(new String(Files.readAllBytes(account), StandardCharsets.UTF_8).trim())) {
-            Files.write(account, (zPermanent + "\n").getBytes(StandardCharsets.UTF_8));
-            wrote = true;
-        }
-        Path codeFile = zDir.resolve("pair-code.txt");
-        Path invite = zDir.resolve(INVITE_FILE);
-        if (Files.isRegularFile(codeFile)) {
-            String code = new String(Files.readAllBytes(codeFile), StandardCharsets.UTF_8).trim();
-            String inv = invite(zPermanent, code);
-            boolean stale = !Files.isRegularFile(invite)
-                    || Files.getLastModifiedTime(codeFile).toMillis() > Files.getLastModifiedTime(invite).toMillis()
-                    || !inv.equals(new String(Files.readAllBytes(invite), StandardCharsets.UTF_8).trim());
-            if (inv != null && stale) {
-                writePrivate(invite, (inv + "\n").getBytes(StandardCharsets.UTF_8));
-                wrote = true;
-            }
-        }
-        return wrote;
+        return AccountFiles.refresh(zDir, zPermanent);
     }
 
     /**

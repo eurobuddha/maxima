@@ -275,7 +275,8 @@ if [ -n "$code" ]; then
 else
     echo "   A device is already paired (no bootstrap code on disk)."
     echo "   To add another phone, mint a fresh code from an already-paired device"
-    echo "   (Node tab -> New pairing code), or with the CLI: parlons newcode."
+    echo "   (Node tab -> New pairing code), or on this box:  cat /var/lib/maxima/invite.txt"
+    echo "   after  parlons newcode  from a paired device."
 fi
 echo "  ------------------------------------------------------------"
 REMOTE
