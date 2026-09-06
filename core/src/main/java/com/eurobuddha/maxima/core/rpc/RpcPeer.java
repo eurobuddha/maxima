@@ -56,9 +56,16 @@ public final class RpcPeer {
     /** Addresses we can be reached on - all of them, when multi-homed. */
     private volatile List<String> mMyAddresses = new ArrayList<>();
 
+    /** Optional: send over an attached relay link instead of a fresh socket. */
+    private volatile MaximaSender.Attached mAttached;
+
     public RpcPeer(MaximaIdentity zIdentity, ServiceRegistry zServices) {
         mIdentity = zIdentity;
         mServices = zServices;
+    }
+
+    public void setAttached(MaximaSender.Attached zVia) {
+        mAttached = zVia;
     }
 
     public ServiceRegistry services() {
@@ -242,7 +249,7 @@ public final class RpcPeer {
                 zEnvelope.toBytes(),
                 System.currentTimeMillis());
 
-        MaximaSender.Result res = MaximaSender.send(host, port, built.unit, built.msgid, zConnectMs, zReadMs);
+        MaximaSender.Result res = MaximaSender.send(host, port, built.unit, built.msgid, zConnectMs, zReadMs, mAttached);
         if (!res.isOk()) {
             throw new IllegalStateException("send failed: " + res.statusName);
         }

@@ -474,6 +474,27 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### Relay capacity per box (server 0.4.56, node 0.2.31, app 0.6.74)
+Three changes, each evaluated against the decentralization principles (all three are pure
+throughput: no new party, no new dependency, nothing an operator gains control of):
+- **Connections on virtual threads** where the JDK has them (21+: sally, megammr, maxlite,
+  openproject). A parked client costs a few hundred bytes instead of a platform thread, so the
+  default cap is 4096 (was 512); JDK 11/17 boxes (hetzner, pi, vigilance) and phones keep
+  platform threads and the 512 default. `--maxconn` still overrides; `-Dmaxima.relay.vthreads=false`
+  forces platform threads. The relay logs `connections on virtual|platform threads, cap N` at start.
+  Upgrading a JDK 11/17 box to 21 raises its cape's capacity with no config change.
+- **Sends ride the attached connection.** A phone or account sending to a relay it is attached
+  to now writes one frame on that link and waits for the relay's ack there (acks are matched in
+  order; the relay handles a connection's frames serially), instead of a TCP handshake plus a
+  relay thread per message. Anything else - a relay we are not attached to, a peer's direct
+  port - still dials as before. A send whose ack does not arrive drops the link so the pool
+  re-attaches with a clean ledger. Directory publish/resolve and device pushes use the same path.
+- **Store locks narrowed.** The mailbox's durable write (file + fsync, milliseconds) now happens
+  OUTSIDE the mailbox monitor (reserve → write → commit, with the reservation undone on a failed
+  write or an eviction mid-write; a failed write answers `IO_ERROR` → the relay acks UNKNOWN so the
+  sender retries elsewhere). Blob shelf reads take no lock at all (files are published by atomic
+  rename). Verify: `MailboxStoreTest`, `AttachedSendTest`, `RelayVirtualThreadsTest`.
+
 ## Ports
 
 | port | what | exposure |

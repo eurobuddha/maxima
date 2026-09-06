@@ -30,8 +30,16 @@ public final class MlsClient {
     /** A fresh nonce per request, not per session, so replies cannot be replayed. */
     private final MaximaIdentity mIdentity;
 
+    /** Optional: send over an attached relay link instead of a fresh socket. */
+    private volatile MaximaSender.Attached mAttached;
+
     public MlsClient(MaximaIdentity zIdentity) {
         mIdentity = zIdentity;
+    }
+
+    public MlsClient attached(MaximaSender.Attached zVia) {
+        mAttached = zVia;
+        return this;
     }
 
     /** Publish our address(es) to a directory. */
@@ -147,6 +155,6 @@ public final class MlsClient {
                 mIdentity.publicKey(), mIdentity.keyPair().getPrivate(),
                 routing.getBytes(), zApplication, zData, System.currentTimeMillis());
 
-        return MaximaSender.send(host, port, built.unit, built.msgid, zConnectMs, zReadMs);
+        return MaximaSender.send(host, port, built.unit, built.msgid, zConnectMs, zReadMs, mAttached);
     }
 }

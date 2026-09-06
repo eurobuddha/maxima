@@ -134,4 +134,123 @@ public class MailboxStoreTest {
         assertEquals(1, m.acknowledge(KEY, 1));
         assertTrue(m.fetch(KEY, 0, 1).isEmpty());
     }
+
+    /** A Store whose durable write can be held open or made to fail, wrapped around a real one. */
+    static final class GatedStore implements com.eurobuddha.maxima.core.store.Store {
+        final FileStore inner;
+        volatile java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        volatile java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(0);
+        volatile boolean fail;
+
+        GatedStore(File zDir) {
+            inner = new FileStore(zDir);
+        }
+
+        @Override public void put(String c, String k, String v) { inner.put(c, k, v); }
+        @Override public String get(String c, String k) { return inner.get(c, k); }
+        @Override public void remove(String c, String k) { inner.remove(c, k); }
+        @Override public java.util.Map<String, String> all(String c) { return inner.all(c); }
+        @Override public void append(String l, String line) { inner.append(l, line); }
+        @Override public List<String> read(String l) { return inner.read(l); }
+        @Override public void rewrite(String l, List<String> lines) { inner.rewrite(l, lines); }
+        @Override public void flush() { inner.flush(); }
+        @Override public byte[] getBytes(String c, String k) { return inner.getBytes(c, k); }
+        @Override public void removeBytes(String c, String k) { inner.removeBytes(c, k); }
+        @Override public java.util.Map<String, Integer> listBytes(String c) { return inner.listBytes(c); }
+
+        @Override
+        public boolean putBytes(String c, String k, byte[] v) {
+            entered.countDown();
+            try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException ignored) {
+            }
+            return !fail && inner.putBytes(c, k, v);
+        }
+    }
+
+    @Test
+    public void theDurableWriteHappensOutsideTheMailboxMonitor() throws Exception {
+        File dir = tmp("outside");
+        GatedStore gated = new GatedStore(dir);
+        Mailbox m = new Mailbox();
+        m.setStore(gated);
+        gated.entered = new java.util.concurrent.CountDownLatch(1);
+        gated.release = new java.util.concurrent.CountDownLatch(1);
+        Mailbox.Result[] out = new Mailbox.Result[1];
+        Thread writer = new Thread(() -> out[0] = m.store(KEY, "held".getBytes()));
+        writer.start();
+        assertTrue("the write is in progress", gated.entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+
+        // While that fsync is "running", every other mailbox operation must still get the monitor.
+        int[] seen = new int[1];
+        Thread reader = new Thread(() -> {
+            seen[0] = m.count("0xOTHER") + m.fetch(KEY, 0, 10).size() + m.boxCount();
+            m.store("0xOTHER", "someone else's mail".getBytes());   // reserves, then blocks in the store too
+        });
+        reader.start();
+        long t0 = System.currentTimeMillis();
+        while (m.totalItems() < 2 && System.currentTimeMillis() - t0 < 5000) {
+            Thread.sleep(10);
+        }
+        assertEquals("a second store reserved its slot while the first write was still on disk", 2, m.totalItems());
+        assertEquals("the pending item is not visible to fetch yet", 0, m.fetch(KEY, 0, 10).size());
+
+        gated.release.countDown();
+        writer.join(5000);
+        reader.join(5000);
+        assertEquals(Mailbox.Result.STORED, out[0]);
+        assertEquals(2, files(dir));
+        List<Mailbox.Item> held = m.fetch(KEY, 0, 10);
+        assertEquals(1, held.size());
+        assertArrayEquals("held".getBytes(), held.get(0).ciphertext());
+        assertEquals(1, m.highestSequence(KEY));
+    }
+
+    @Test
+    public void aFailedDurableWriteIsReportedAndHoldsNothing() throws Exception {
+        File dir = tmp("ioerror");
+        GatedStore gated = new GatedStore(dir);
+        gated.fail = true;
+        Mailbox m = new Mailbox();
+        m.setStore(gated);
+        assertEquals(Mailbox.Result.IO_ERROR, m.store(KEY, "lost".getBytes()));
+        assertEquals("the reservation was undone", 0, m.totalItems());
+        assertEquals(0, m.totalBytes());
+        assertEquals(0, files(dir));
+        gated.fail = false;
+        assertEquals("the disk came back: the retry stores", Mailbox.Result.STORED, m.store(KEY, "lost".getBytes()));
+        assertEquals(1, m.totalItems());
+        assertEquals(1, files(dir));
+    }
+
+    @Test
+    public void aBoxEvictedDuringItsWriteLeavesNoOrphanFile() throws Exception {
+        File dir = tmp("evictmid");
+        GatedStore gated = new GatedStore(dir);
+        // Two boxes max: the third key evicts the least recently active box.
+        Mailbox m = new Mailbox(Mailbox.DEFAULT_TTL_MS, 10, 1 << 20, 2, 1 << 20);
+        m.setStore(gated);
+        gated.release = new java.util.concurrent.CountDownLatch(0);
+        assertEquals(Mailbox.Result.STORED, m.store("0xB", "b".getBytes()));
+        gated.entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch relA = new java.util.concurrent.CountDownLatch(1);
+        gated.release = relA;   // A's write will hold on this latch
+        Mailbox.Result[] out = new Mailbox.Result[1];
+        Thread writer = new Thread(() -> out[0] = m.store("0xA", "a-in-flight".getBytes()));
+        writer.start();
+        assertTrue(gated.entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        // Touch B (so A is the least recently active), then add C: with the cap at 2, A is
+        // evicted while its write is still in flight. Later writes must not block.
+        Thread.sleep(5);
+        gated.release = new java.util.concurrent.CountDownLatch(0);
+        assertEquals(Mailbox.Result.STORED, m.store("0xB", "b2".getBytes()));
+        assertEquals(Mailbox.Result.STORED, m.store("0xC", "c".getBytes()));
+        relA.countDown();
+        writer.join(5000);
+        assertEquals("the evicted box's in-flight item is refused", Mailbox.Result.QUOTA_COUNT, out[0]);
+        assertEquals("b, b2, c - and no orphan for A", 3, files(dir));
+        assertEquals(3, m.totalItems());
+        assertEquals(0, m.count("0xA"));
+    }
 }

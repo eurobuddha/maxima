@@ -91,6 +91,119 @@ public final class HostConnection implements Closeable {
      */
     private volatile String mAdvertisedEndpoint;
 
+    /**
+     * Sends in flight over THIS connection, oldest first. The relay handles a connection's
+     * frames in order and acks each one in order, so the n-th ack belongs to the n-th send:
+     * no correlation id is needed (the wire format has none). A send that timed out stays
+     * queued as a tombstone so its late ack cannot be mistaken for the next send's - and
+     * because a relay can silently drop a frame (its per-source flood cap), a timeout also
+     * closes the connection: the pool re-attaches and the ledger starts clean.
+     */
+    private final java.util.ArrayDeque<java.util.concurrent.CompletableFuture<MiniData>> mAckWaiters =
+            new java.util.ArrayDeque<>();
+    private final Object mSendLock = new Object();
+    private final java.util.concurrent.atomic.AtomicLong mAttachedSends =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /** Messages sent over this attached connection (not via a fresh socket). */
+    public long attachedSends() {
+        return mAttachedSends.get();
+    }
+
+    /** True while a send can go over this link: attached, with the reader that collects acks. */
+    public boolean canSend() {
+        return mAttached && mReader != null;
+    }
+
+    /**
+     * Send a message THROUGH this attached connection and wait for the relay's ack, exactly
+     * as {@link com.eurobuddha.maxima.core.MaximaSender#send} does on a fresh socket - the
+     * relay's handling is identical, only the transport differs. Returns null when this
+     * connection cannot carry a send right now (the caller then dials).
+     */
+    public com.eurobuddha.maxima.core.MaximaSender.Result send(MaxTxPoW zUnit, MiniData zMsgid,
+                                                               int zReadMs) {
+        if (!canSend()) {
+            return null;
+        }
+        byte[] body = Frame.body(Frame.MSG_MAXIMA_TXPOW, zUnit);
+        java.util.concurrent.CompletableFuture<MiniData> ack = new java.util.concurrent.CompletableFuture<>();
+        synchronized (mSendLock) {   // enqueue + write as one unit, so the ledger matches the wire order
+            synchronized (mAckWaiters) {
+                mAckWaiters.add(ack);
+            }
+            try {
+                writeFrame(body);
+            } catch (Exception e) {
+                synchronized (mAckWaiters) {
+                    mAckWaiters.remove(ack);
+                }
+                breakLink();   // a write that throws is a dead socket; the pool re-attaches
+                return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);
+            }
+        }
+        mAttachedSends.incrementAndGet();
+        MiniData payload;
+        try {
+            payload = ack.get(zReadMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException te) {
+            // The ack ledger may be off by one from here (a dropped frame): start over.
+            breakLink();
+            return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);
+        } catch (Exception e) {
+            return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);
+        }
+        byte[] pb = payload.getBytes();
+        if (pb.length == 1) {
+            return new com.eurobuddha.maxima.core.MaximaSender.Result(pb[0] & 0xFF, zMsgid, body.length, payload);
+        }
+        // A data reply (an MLS GET result, a blob) standing in for the ack.
+        return new com.eurobuddha.maxima.core.MaximaSender.Result(Frame.RESPONSE_OK, zMsgid, body.length, payload);
+    }
+
+    /** An ack frame (MSG_PING) from the relay: it answers the oldest send still waiting. */
+    private void deliverAck(byte[] zBody) {
+        java.util.concurrent.CompletableFuture<MiniData> waiter;
+        synchronized (mAckWaiters) {
+            waiter = mAckWaiters.poll();
+        }
+        if (waiter == null) {
+            return;   // nobody asked: ignore, as before
+        }
+        byte[] after = new byte[zBody.length - 1];
+        System.arraycopy(zBody, 1, after, 0, after.length);
+        try {
+            waiter.complete(Codec.deserialise(new MiniData(), after));
+        } catch (Exception e) {
+            waiter.completeExceptionally(e);
+        }
+    }
+
+    /**
+     * Drop the socket as if the far side had died: the reader thread sees the closed socket,
+     * reports {@link Sink#onDead} and the pool re-attaches. Unlike {@link #close()} this is
+     * not a deliberate detach, so the death IS reported.
+     */
+    private void breakLink() {
+        try {
+            if (mSocket != null) mSocket.close();
+        } catch (Exception ignored) {
+        }
+        mAttached = false;
+        failWaiters();
+    }
+
+    private void failWaiters() {
+        java.util.List<java.util.concurrent.CompletableFuture<MiniData>> all;
+        synchronized (mAckWaiters) {
+            all = new java.util.ArrayList<>(mAckWaiters);
+            mAckWaiters.clear();
+        }
+        for (java.util.concurrent.CompletableFuture<MiniData> f : all) {
+            f.completeExceptionally(new java.io.IOException("connection closed"));
+        }
+    }
+
     public void setAdvertisedEndpoint(String zHostPort) {
         mAdvertisedEndpoint = (zHostPort == null || zHostPort.isEmpty()) ? null : zHostPort;
     }
@@ -431,6 +544,10 @@ public final class HostConnection implements Closeable {
             }
 
             int type = Frame.typeOf(rx);
+            if (type == Frame.MSG_PING) {
+                deliverAck(rx);   // the relay's answer to a send of ours over this link
+                continue;
+            }
             if (type != Frame.MSG_MAXIMA_TXPOW) {
                 handleControlFrame(rx);
                 continue;
@@ -495,6 +612,7 @@ public final class HostConnection implements Closeable {
         } catch (Exception ignored) {
         }
         mAttached = false;
+        failWaiters();   // a send waiting on this link fails now, not after its full timeout
     }
 
     // ---------------------------------------------------------------

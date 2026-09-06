@@ -88,7 +88,24 @@ public final class RelayServer {
      * enough to OOM the box before the cap even bit. A relay serving real
      * clients needs far fewer, and clients re-attach if reaped.
      */
-    private volatile int mMaxConnections = 512;
+    /**
+     * Connections on VIRTUAL threads where the JDK has them (21+): a parked client then
+     * costs a few hundred bytes instead of a platform thread's stack and kernel task, so the
+     * default cap rises 8x. Platform threads (JDK 11/17, Android) keep the old cap. Either
+     * way {@code --maxconn} overrides. {@code -Dmaxima.relay.vthreads=false} forces platform.
+     */
+    private final boolean mVirtualThreads =
+            com.eurobuddha.maxima.core.util.Threads.virtualAvailable()
+                    && Boolean.parseBoolean(System.getProperty("maxima.relay.vthreads", "true"));
+    static final int DEFAULT_MAX_CONNECTIONS = 512;
+    static final int DEFAULT_MAX_CONNECTIONS_VIRTUAL = 4096;
+    private volatile int mMaxConnections =
+            mVirtualThreads ? DEFAULT_MAX_CONNECTIONS_VIRTUAL : DEFAULT_MAX_CONNECTIONS;
+
+    /** "virtual" or "platform": what each connection's thread is. */
+    public String threadMode() {
+        return mVirtualThreads ? "virtual" : "platform";
+    }
     /** Concurrent connections from one source IP (a CGNAT still fits many users). */
     /** Concurrent connections per source IP. 32: a Parlons Node + several phones + a desktop
      *  behind one home NAT all count as ONE source; 16 was refusing a normal household once a
@@ -662,6 +679,7 @@ public final class RelayServer {
         mServer.setReuseAddress(true);
         mServer.bind(new InetSocketAddress("0.0.0.0", mPort));
         mRunning = true;
+        log("connections on " + threadMode() + " threads, cap " + mMaxConnections);
         startAcceptThread();
     }
 
@@ -748,8 +766,8 @@ public final class RelayServer {
             }
 
             final Conn fc = c;
-            Thread t = new Thread(() -> serve(fc), "relay-conn-" + c.id);
-            t.setDaemon(true);
+            Thread t = com.eurobuddha.maxima.core.util.Threads.newThread(
+                    "relay-conn-" + c.id, () -> serve(fc), mVirtualThreads);
             mConns.put(c.id, c);   // before start(), so serve()'s cleanup always finds it
             t.start();
         } catch (Throwable e) {
@@ -1060,6 +1078,9 @@ public final class RelayServer {
                 if (r == Mailbox.Result.STORED || r == Mailbox.Result.DUPLICATE) {
                     mStored.incrementAndGet();
                     handled = true;
+                } else if (r == Mailbox.Result.IO_ERROR) {
+                    log("mailbox write FAILED for " + safe(to) + " (disk full? permissions?)"
+                            + " - answering UNKNOWN so the sender retries elsewhere");
                 }
             }
             if (dest != null && !dest.socket.isClosed() && allow(to)) {

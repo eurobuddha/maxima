@@ -246,6 +246,7 @@ public final class MaximaNode implements ChatPort {
             }
         });
         mRpc = new RpcPeer(zIdentity, mServices);
+        mRpc.setAttached(mPool.attachedSender());   // device pushes ride the attached relay links
         mTier1 = new Tier1Services(zIdentity, mMailbox, mDirectory);
         mTier1.registerAll(mServices);
     }
@@ -783,7 +784,7 @@ public final class MaximaNode implements ChatPort {
         String mls = zMaxAddress.substring(b + 1);
 
         com.eurobuddha.maxima.core.directory.MlsClient c =
-                new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity);
+                mlsClient();
         // The anchor with the self-heal leash (5 s / 5 s), not the 20 s / 20 s defaults: a
         // black-holed anchor used to cost 40 s before the fallback below even started.
         com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
@@ -831,7 +832,7 @@ public final class MaximaNode implements ChatPort {
         targets.addAll(reachableDirectories());   // every attached relay's directory
         for (String mls : targets) {
             try {
-                any |= new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
+                any |= mlsClient()
                         .publish(mls, myAddresses(), readers,
                                 SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
             } catch (Exception e) {
@@ -1819,8 +1820,15 @@ public final class MaximaNode implements ChatPort {
                 mIdentity.publicKey(), mIdentity.keyPair().getPrivate(),
                 routing.getBytes(), zApplication, zData, System.currentTimeMillis());
 
+        // Over the attached link when this host is one of our relays; a fresh socket otherwise.
         return MaximaSender.send(host, port, built.unit, built.msgid,
-                zConnectTimeoutMs, zReadTimeoutMs);
+                zConnectTimeoutMs, zReadTimeoutMs, mPool.attachedSender());
+    }
+
+    /** A directory client that sends over our attached relay links where it can. */
+    private com.eurobuddha.maxima.core.directory.MlsClient mlsClient() {
+        return new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
+                .attached(mPool.attachedSender());
     }
 
     /**
@@ -2142,7 +2150,7 @@ public final class MaximaNode implements ChatPort {
     private String tryResolve(String zDir, String zTargetKey) {
         try {
             com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
-                    new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity)
+                    mlsClient()
                             .resolve(zDir, zTargetKey, SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
             return r.ok() && r.address != null && !r.address.isEmpty() ? r.address : null;
         } catch (Exception e) {

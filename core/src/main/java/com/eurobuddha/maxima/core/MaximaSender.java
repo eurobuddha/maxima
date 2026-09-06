@@ -59,11 +59,11 @@ public final class MaximaSender {
          */
         public final MiniData replyData;
 
-        Result(int zStatus, MiniData zMsgid, int zSent) {
+        public Result(int zStatus, MiniData zMsgid, int zSent) {
             this(zStatus, zMsgid, zSent, null);
         }
 
-        Result(int zStatus, MiniData zMsgid, int zSent, MiniData zReply) {
+        public Result(int zStatus, MiniData zMsgid, int zSent, MiniData zReply) {
             status = zStatus;
             msgid = zMsgid;
             sentBytes = zSent;
@@ -188,6 +188,39 @@ public final class MaximaSender {
     public static Result send(String zHost, int zPort, MaxTxPoW zUnit, MiniData zMsgid,
                               int zConnectTimeoutMs, int zReadTimeoutMs)
             throws Exception {
+        return send(zHost, zPort, zUnit, zMsgid, zConnectTimeoutMs, zReadTimeoutMs, null);
+    }
+
+    /**
+     * A way to send over a connection we ALREADY hold to a host (the attached relay link),
+     * instead of opening a fresh TCP connection per message. Returns null when no such
+     * connection exists for that host, in which case the caller dials as before.
+     */
+    public interface Attached {
+        Result send(String zHost, int zPort, MaxTxPoW zUnit, MiniData zMsgid, int zReadMs)
+                throws Exception;
+    }
+
+    /** Fresh sockets opened by {@link #send} - diagnostics for the attached-send path. */
+    public static final java.util.concurrent.atomic.AtomicLong FRESH_SOCKETS =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /**
+     * Send, preferring an attached connection when {@code zVia} offers one. A relay we are
+     * attached to already holds a socket, a greeting and our route: sending over it costs
+     * one frame and one ack instead of a TCP handshake plus a thread on the relay for every
+     * message, which is where a busy relay's connection budget went.
+     */
+    public static Result send(String zHost, int zPort, MaxTxPoW zUnit, MiniData zMsgid,
+                              int zConnectTimeoutMs, int zReadTimeoutMs, Attached zVia)
+            throws Exception {
+        if (zVia != null) {
+            Result viaAttached = zVia.send(zHost, zPort, zUnit, zMsgid, zReadTimeoutMs);
+            if (viaAttached != null) {
+                return viaAttached;
+            }
+        }
+        FRESH_SOCKETS.incrementAndGet();
 
         byte[] body = Frame.body(Frame.MSG_MAXIMA_TXPOW, zUnit);
 

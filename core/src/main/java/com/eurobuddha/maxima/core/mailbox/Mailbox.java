@@ -83,15 +83,25 @@ public final class Mailbox {
     }
 
     public enum Result {
-        STORED, QUOTA_COUNT, QUOTA_BYTES, DUPLICATE
+        STORED, QUOTA_COUNT, QUOTA_BYTES, DUPLICATE,
+        /** The durable write failed (disk full, permissions): nothing is held. */
+        IO_ERROR
     }
 
     private static final class Box {
+        /** Committed items: written to the store (or memory-only), visible to fetch. */
         final List<Item> items = new ArrayList<>();
+        /** Bytes of committed items. */
         long bytes;
         long nextSeq = 1;
         /** For LRU eviction under the global cap. */
         long lastActivity = System.currentTimeMillis();
+        /** Items whose file is being written right now, outside the monitor. */
+        int pending;
+        long pendingBytes;
+        final java.util.Set<String> pendingIds = new java.util.HashSet<>();
+        /** Set when the box is evicted while a write is in flight: that write is undone. */
+        boolean evicted;
     }
 
     private final Map<String, Box> mBoxes = new ConcurrentHashMap<>();
@@ -263,64 +273,113 @@ public final class Mailbox {
      * The id is content-derived, so re-delivering the same message is idempotent
      * - a sender retrying does not fill the box with copies.
      */
-    public synchronized Result store(String zRecipientKey, byte[] zCiphertext) {
+    public Result store(String zRecipientKey, byte[] zCiphertext) {
         String key = norm(zRecipientKey);
+        int len = zCiphertext.length;
+        Box box;
+        Item item;
 
-        // Enforce the GLOBAL caps before allocating a new box. A brand-new key
-        // that would push us over either global limit is refused rather than
-        // evicting a real recipient's mail for a stranger's flood; an existing
-        // box makes room by evicting the least-recently-used OTHER boxes.
-        boolean isNew = !mBoxes.containsKey(key);
-        if (isNew && mBoxes.size() >= mMaxBoxes) {
-            if (!evictLruUnless(key)) {
-                return Result.QUOTA_COUNT;
+        // PHASE 1 (monitor): quotas, dedup, a sequence number, and a RESERVATION of the
+        // global and per-box budgets for this item.
+        synchronized (this) {
+            // Enforce the GLOBAL caps before allocating a new box. A brand-new key
+            // that would push us over either global limit is refused rather than
+            // evicting a real recipient's mail for a stranger's flood; an existing
+            // box makes room by evicting the least-recently-used OTHER boxes.
+            boolean isNew = !mBoxes.containsKey(key);
+            if (isNew && mBoxes.size() >= mMaxBoxes) {
+                if (!evictLruUnless(key)) {
+                    return Result.QUOTA_COUNT;
+                }
             }
-        }
-        if (mTotalBytes + zCiphertext.length > mMaxTotalBytes) {
-            evictUntilFits(zCiphertext.length, key);
-            if (mTotalBytes + zCiphertext.length > mMaxTotalBytes) {
-                return Result.QUOTA_BYTES;
-            }
-        }
-        if (mTotalItems + 1 > mMaxTotalItems) {
-            while (mTotalItems + 1 > mMaxTotalItems && evictLruUnless(key)) {
-                // make room by whole boxes, least recently active first
+            if (mTotalBytes + len > mMaxTotalBytes) {
+                evictUntilFits(len, key);
+                if (mTotalBytes + len > mMaxTotalBytes) {
+                    return Result.QUOTA_BYTES;
+                }
             }
             if (mTotalItems + 1 > mMaxTotalItems) {
+                while (mTotalItems + 1 > mMaxTotalItems && evictLruUnless(key)) {
+                    // make room by whole boxes, least recently active first
+                }
+                if (mTotalItems + 1 > mMaxTotalItems) {
+                    return Result.QUOTA_COUNT;
+                }
+            }
+
+            box = mBoxes.computeIfAbsent(key, k -> new Box());
+            expire(box);
+            box.lastActivity = System.currentTimeMillis();
+
+            String id = new MiniData(Hashes.sha3(zCiphertext)).to0xString();
+            for (Item i : box.items) {
+                if (i.id.equals(id)) {
+                    return Result.DUPLICATE;
+                }
+            }
+            if (box.pendingIds.contains(id)) {
+                return Result.DUPLICATE;   // the same message is being written right now
+            }
+            if (box.items.size() + box.pending >= mMaxPerPeer) {
                 return Result.QUOTA_COUNT;
             }
-        }
-
-        Box box = mBoxes.computeIfAbsent(key, k -> new Box());
-        expire(box);
-        box.lastActivity = System.currentTimeMillis();
-
-        String id = new MiniData(Hashes.sha3(zCiphertext)).to0xString();
-        for (Item i : box.items) {
-            if (i.id.equals(id)) {
-                return Result.DUPLICATE;
+            if (box.bytes + box.pendingBytes + len > mMaxBytesPerPeer) {
+                return Result.QUOTA_BYTES;
             }
+            long now = System.currentTimeMillis();
+            boolean durable = mStore != com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY;
+            // A durable store owns the bytes from here (one file); a memory-only store keeps
+            // them on the item so a test / the in-app mailbox needs no second copy.
+            item = new Item(this, id, key, box.nextSeq++, now, len, durable ? null : zCiphertext);
+            mTotalBytes += len;
+            mTotalItems++;
+            if (!durable) {
+                box.items.add(item);
+                box.bytes += len;
+                return Result.STORED;
+            }
+            box.pending++;
+            box.pendingBytes += len;
+            box.pendingIds.add(id);
         }
-        if (box.items.size() >= mMaxPerPeer) {
-            return Result.QUOTA_COUNT;
+
+        // PHASE 2 (no monitor): the durable write - a file plus an fsync, milliseconds on a
+        // VPS disk. Holding the mailbox monitor across it serialised every store, fetch and
+        // acknowledge on the relay behind one fsync at a time.
+        boolean ok = mStore.putBytes(C_ITEMS, recKey(item), zCiphertext);
+
+        // PHASE 3 (monitor): commit or undo the reservation.
+        synchronized (this) {
+            box.pending--;
+            box.pendingBytes -= len;
+            box.pendingIds.remove(item.id);
+            if (ok && !box.evicted) {
+                // The box may have been emptied and dropped by an acknowledge meanwhile, or
+                // replaced by a fresh one for the same key: the item joins whichever box the
+                // key has NOW (it is real, held mail either way).
+                Box cur = mBoxes.get(key);
+                if (cur == null) {
+                    mBoxes.put(key, box);
+                    cur = box;
+                }
+                cur.nextSeq = Math.max(cur.nextSeq, item.sequence + 1);
+                int at = cur.items.size();
+                while (at > 0 && cur.items.get(at - 1).sequence > item.sequence) {
+                    at--;   // keep the list in sequence order for highestSequence()
+                }
+                cur.items.add(at, item);
+                cur.bytes += len;
+                return Result.STORED;
+            }
+            mTotalBytes -= len;
+            mTotalItems--;
+            if (ok) {
+                // Evicted while being written: it must not survive on disk.
+                mStore.removeBytes(C_ITEMS, recKey(item));
+                return Result.QUOTA_COUNT;
+            }
+            return Result.IO_ERROR;
         }
-        if (box.bytes + zCiphertext.length > mMaxBytesPerPeer) {
-            return Result.QUOTA_BYTES;
-        }
-        long now = System.currentTimeMillis();
-        boolean durable = mStore != com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY;
-        // A durable store owns the bytes from here (one file); a memory-only store keeps
-        // them on the item so a test / the in-app mailbox needs no second copy.
-        Item item = new Item(this, id, key, box.nextSeq++, now, zCiphertext.length,
-                durable ? null : zCiphertext);
-        if (durable) {
-            mStore.putBytes(C_ITEMS, recKey(item), zCiphertext);
-        }
-        box.items.add(item);
-        box.bytes += zCiphertext.length;
-        mTotalBytes += zCiphertext.length;
-        mTotalItems++;
-        return Result.STORED;
     }
 
     /** Drop the single least-recently-used box other than zKeep. */
@@ -341,6 +400,7 @@ public final class Mailbox {
         }
         Box b = mBoxes.remove(victim);
         if (b != null) {
+            b.evicted = true;   // an in-flight write for this box undoes itself on commit
             mTotalBytes -= b.bytes;
             mTotalItems -= b.items.size();
             // Purge the durable copy too, or an evicted box reloads on restart
@@ -401,8 +461,8 @@ public final class Mailbox {
             return false;
         });
         // An emptied box is dropped so acknowledged recipients do not count
-        // toward the global box cap forever.
-        if (box.items.isEmpty()) {
+        // toward the global box cap forever (not while a write for it is in flight).
+        if (box.items.isEmpty() && box.pending == 0) {
             mBoxes.remove(norm(zRecipientKey), box);
         }
         return before - box.items.size();

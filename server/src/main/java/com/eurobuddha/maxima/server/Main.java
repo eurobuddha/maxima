@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.55";
+    public static final String VERSION = "0.4.56";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -258,7 +258,9 @@ public final class Main {
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
         out.println("  --peers <list>   comma-separated fleet host:ports to forward resolve");
         out.println("  --shed <n>       soft client target; above it clients are asked to move (0 = never; default 384)");
-        out.println("  --maxconn <n>    concurrent connections held (default 512; one thread each)");
+        out.println("  --maxconn <n>    concurrent connections held (default 4096 on JDK 21+ where each");
+        out.println("                   connection is a virtual thread, 512 on older JDKs / platform threads;");
+        out.println("                   -Dmaxima.relay.vthreads=false forces platform threads)");
         out.println("  --replicate <n>  pool peers that get a copy of each accepted directory entry (default 3; 0 = off)");
         out.println("  --maxpersource N concurrent connections per source IP (default 32)");
         out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");

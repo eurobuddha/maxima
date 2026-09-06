@@ -138,13 +138,18 @@ public final class BlobStore {
         return mPinnedBytes.get();
     }
 
+    // Reads take NO monitor: a chunk file is published by an atomic rename, so it either
+    // exists complete or not at all, and an eviction racing a read just makes that read a
+    // miss. Only writes and eviction (put) are serialised. Before this, one 1 MB chunk read
+    // blocked every put and every other get on the relay.
+
     /** True if this chunk is held pinned. */
-    public synchronized boolean isPinned(String zId) {
+    public boolean isPinned(String zId) {
         return new File(mPinned, norm(zId).substring(2)).exists();
     }
 
     /** The chunk, or null. A hit refreshes its LRU standing. */
-    public synchronized byte[] get(String zId) {
+    public byte[] get(String zId) {
         File f = fileFor(norm(zId));
         if (!f.exists()) {
             return null;
@@ -159,7 +164,7 @@ public final class BlobStore {
         }
     }
 
-    public synchronized boolean has(String zId) {
+    public boolean has(String zId) {
         return fileFor(norm(zId)).exists();
     }
 
@@ -167,7 +172,7 @@ public final class BlobStore {
         return mBytes.get();
     }
 
-    public synchronized int count() {
+    public int count() {
         File[] l = mDir.listFiles(f -> f.isFile() && !f.getName().endsWith(".tmp"));
         File[] p = mPinned.listFiles(f -> f.isFile() && !f.getName().endsWith(".tmp"));
         return (l == null ? 0 : l.length) + (p == null ? 0 : p.length);

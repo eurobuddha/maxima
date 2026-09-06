@@ -312,6 +312,17 @@ public final class HostPool {
     }
 
     /**
+     * Sends addressed to a relay we are attached to go over that attachment instead of a
+     * fresh socket per message; any other host still gets dialled.
+     */
+    public com.eurobuddha.maxima.core.MaximaSender.Attached attachedSender() {
+        return (host, port, unit, msgid, readMs) -> {
+            HostConnection c = mActive.get(host + ":" + port);
+            return c == null ? null : c.send(unit, msgid, readMs);
+        };
+    }
+
+    /**
      * Attach to one relay and record the outcome.
      *
      * @return true if it attached
