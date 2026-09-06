@@ -210,6 +210,8 @@ public final class RelayServer {
     private static final int FORWARD_FANOUT = 8;
     private static final int FORWARD_CONNECT_MS = 3000;
     private static final int FORWARD_READ_MS = 2500;
+    /** The whole parallel fan-out must answer within this (the client waits 5 s). */
+    private static final long FORWARD_ANSWER_BUDGET_MS = 4_500;
     /** Global forward budget — a miss flood must not amplify into a fan-out storm. */
     private static final int FORWARDS_PER_MIN = 240;
     /** A forwarded answer is cached this briefly, so repeats are instant and staleness is
@@ -230,6 +232,14 @@ public final class RelayServer {
     private static final int REPLICATIONS_PER_MIN = 600;
     /** Replicas ACCEPTED from one source per minute (a peer relay pushing junk is bounded). */
     private static final int PER_SOURCE_REPLICAS_PER_MIN = 120;
+    /**
+     * A replica lives 2 h, not the publisher's 24 h: an address moves when its owner changes
+     * relays, and a replica is refreshed only when a NEW publish reaches this relay through the
+     * random spread (accounts republish every 5 min, phones every ~20 min, three copies each
+     * time), so at any moment a live identity has dozens of fresh copies fleet-wide while a
+     * stale one ages out within two hours instead of a day.
+     */
+    static final long REPLICA_TTL_MS = 2L * 60 * 60 * 1000;
     private final Map<String, RateLimit> mReplicateLimit = new ConcurrentHashMap<>();
     private final Map<String, RateLimit> mReplicaInLimits = new ConcurrentHashMap<>();
     private final AtomicLong mReplicasSent = new AtomicLong();
@@ -250,6 +260,21 @@ public final class RelayServer {
                         return t;
                     },
                     new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+    /**
+     * Replication has its own small lane: it must not sit on the push pool (keep-alives and
+     * drains would wait behind 3 × 5.5 s dials) nor on the forward pool (CallerRuns there
+     * would block the connection that just published). A SET burst beyond the queue is
+     * simply not replicated - the publisher's own copy and the pull path still stand.
+     */
+    private final java.util.concurrent.ThreadPoolExecutor mReplicateExec =
+            new java.util.concurrent.ThreadPoolExecutor(0, 4, 30, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.LinkedBlockingQueue<>(256),
+                    r -> {
+                        Thread t = new Thread(r, "relay-replicate");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy());
 
     public void setReplicas(int zCount) {
         mReplicas = Math.max(0, zCount);
@@ -761,6 +786,8 @@ public final class RelayServer {
         mConns.clear();
         mRoutes.clear();
         mDrainExec.shutdownNow();
+        mReplicateExec.shutdownNow();
+        mForwardExec.shutdownNow();
     }
 
     // ---------------------------------------------------------------
@@ -1187,7 +1214,7 @@ public final class RelayServer {
                     final byte[] pf = mi.mFrom.getBytes();
                     final byte[] pp = mi.mData.getBytes();
                     final byte[] ps = mi.mSignature.getBytes();
-                    mDrainExec.execute(() -> replicate(pf, pp, ps));
+                    mReplicateExec.execute(() -> replicate(pf, pp, ps));
                 }
                 // Phase-B mesh: a pool relay that MISSED a resolve forwards it to peer pool
                 // relays, verifies the signed answer, and returns a real hit — so a client
@@ -1264,7 +1291,7 @@ public final class RelayServer {
         }
         String signer = new MiniData(p.getProofFrom()).to0xString();
         boolean stored = mDirectory.putReplica(signer, addr,
-                p.getProofFrom(), p.getProofPayload(), p.getProofSig(), MlsStore.DEFAULT_TTL_MS);
+                p.getProofFrom(), p.getProofPayload(), p.getProofSig(), REPLICA_TTL_MS);
         if (stored) {
             mReplicasStored.incrementAndGet();
         }
@@ -1362,7 +1389,9 @@ public final class RelayServer {
                     return a == null ? null : new Object[] {a, ans, host + ":" + port};
                 });
             }
-            long deadline = System.currentTimeMillis() + FORWARD_CONNECT_MS + FORWARD_READ_MS + 500;
+            // Answer inside the CLIENT's 5 s self-heal leash: whatever has not come back by
+            // then would reach a client that has already given up.
+            long deadline = System.currentTimeMillis() + FORWARD_ANSWER_BUDGET_MS;
             for (int i = 0; i < asked; i++) {
                 long left = deadline - System.currentTimeMillis();
                 if (left <= 0) {

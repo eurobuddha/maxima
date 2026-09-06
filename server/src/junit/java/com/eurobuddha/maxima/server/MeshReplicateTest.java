@@ -130,6 +130,24 @@ public class MeshReplicateTest {
     }
 
     @Test
+    public void replicasNeverEvictTheRelaysOwnPublishesThroughTheCap() {
+        MlsStore s = new MlsStore();
+        s.setOpenResolve(true);
+        s.setMaxEntries(4);   // replicas may hold at most 2
+        byte[] pf = new byte[] {1}, pp = new byte[] {2}, ps = new byte[] {3};
+        s.put("0xL1", Collections.singletonList("l1@h:1"), Collections.emptyList(), pf, pp, ps, 60_000);
+        s.put("0xL2", Collections.singletonList("l2@h:1"), Collections.emptyList(), pf, pp, ps, 60_000);
+        assertTrue(s.putReplica("0xR1", "r1@h:1", pf, pp, ps, 60_000));
+        assertTrue(s.putReplica("0xR2", "r2@h:1", pf, pp, ps, 60_000));
+        assertTrue(s.putReplica("0xR3", "r3@h:1", pf, pp, ps, 60_000));   // over the replica share
+        assertEquals(4, s.size());
+        assertNotNull("local publishes survive a replica flood", s.peek("0xL1"));
+        assertNotNull(s.peek("0xL2"));
+        assertNull("the least-recently-used replica made room", s.peek("0xR1"));
+        assertNotNull(s.peek("0xR3"));
+    }
+
+    @Test
     public void aReplicaNeverOverwritesTheRelaysOwnLivePublish() throws Exception {
         MlsStore s = new MlsStore();
         s.setOpenResolve(true);

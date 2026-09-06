@@ -193,6 +193,24 @@ public final class MlsStore {
             if (cur != null && !cur.replica && now <= cur.expiresAt) {
                 return false;   // the publisher's own SET is here and live: it outranks any replica
             }
+            // Replicas may hold at most HALF the directory: a flood of (valid) replicas from
+            // peers must never push this relay's OWN publishers out through the LRU cap. Over
+            // the share, the least-recently-used replica makes room - never a local entry.
+            if (cur == null && mEntries.size() >= mMaxEntries / 2) {
+                int replicas = 0;
+                String oldestReplica = null;
+                for (Map.Entry<String, Entry> e : mEntries.entrySet()) {
+                    if (e.getValue().replica) {
+                        replicas++;
+                        if (oldestReplica == null) {
+                            oldestReplica = e.getKey();   // access order: first seen = least recent
+                        }
+                    }
+                }
+                if (replicas >= mMaxEntries / 2 && oldestReplica != null) {
+                    mEntries.remove(oldestReplica);
+                }
+            }
             mEntries.put(key, new Entry(key, new ArrayList<>(java.util.Collections.singletonList(zAddress)),
                     new ArrayList<>(), now, now + zTtlMs, zProofFrom, zProofPayload, zProofSig, true));
             java.util.Iterator<String> it = mEntries.keySet().iterator();
