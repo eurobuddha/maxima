@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.38";
+    public static final String VERSION = "0.11.39";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -40,6 +40,8 @@ public final class Main {
         String importSeedArg = null;
         String restoreArg = null;
         String tenantsArg = null;
+        String tenantNewDir = null;
+        String tenantNewName = null;
         String unlockArg = null;
         boolean encryptSeeds = false;
 
@@ -58,6 +60,10 @@ public final class Main {
                     break;
                 case "--tenants":
                     tenantsArg = strArg(args, ++i, "--tenants");
+                    break;
+                case "--tenant-new":
+                    tenantNewDir = strArg(args, ++i, "--tenant-new");
+                    tenantNewName = strArg(args, ++i, "--tenant-new <dir> <name>");
                     break;
                 case "--unlock":
                     unlockArg = strArg(args, ++i, "--unlock");
@@ -129,6 +135,11 @@ public final class Main {
             }
             if (restoreArg != null) {
                 restoreBackup(Paths.get(data), restoreArg);
+                return;
+            }
+            if (tenantNewDir != null) {
+                String inv = Tenants.newTenant(Paths.get(tenantNewDir), tenantNewName, 60_000);
+                System.exit(inv == null ? 2 : 0);
                 return;
             }
             if (tenantsArg != null) {
@@ -374,6 +385,8 @@ public final class Main {
         out.println("  --unlock <prompt|env>  the passphrase that opens seed.enc files: asked on the");
         out.println("                      console, or read from PARLONS_UNLOCK (systemd). Needed when");
         out.println("                      any tenant seed is encrypted at rest");
+        out.println("  --tenant-new <dir> <name>  operator: make <dir>/<name>/, wait for the RUNNING host to");
+        out.println("                      start it, print its address, pair code and one-QR invite");
         out.println("  --encrypt-seeds     with --tenants and --unlock: turn every tenant's seed.txt into");
         out.println("                      seed.enc (scrypt + AES-GCM under the unlock passphrase), verify,");
         out.println("                      delete the plaintext, and exit. At-rest protection for the disk");

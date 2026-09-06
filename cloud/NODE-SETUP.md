@@ -474,6 +474,23 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### Hosted accounts for people without a server (cloud 0.11.39)
+An iPhone cannot hold an account, so a person with no server needs one hosted. `parlons-cloud
+--tenants <dir>` now hot-adds: a new `<dir>/<name>/` folder starts within 5 s (no restart for the
+others), `touch <name>/.stop` stops just that one, and every tenant keeps `account.txt` (its
+permanent `MAX#`) and `invite.txt` = `MAX#…?code=XXXX-XXXX-XXXX`, refreshed whenever a pair code is
+minted. Operator: `parlons-cloud --tenant-new <dir> <name>` (or `ops/tenant-new.sh <box> <name>`)
+makes the folder, waits for the host, prints the invite; the iPhone app scans one QR and pairs.
+`ops/deploy-parlons-tenants.sh` installs the host as `parlons-tenants.service`: `--no-relay
+--no-direct` (no inbound port, sits beside a node), seeds encrypted at rest under
+`/etc/parlons-tenants.env`, 512 MB heap for ~10 tenants. Decentralization: gain - the App Store app
+is usable without running a server; preservation - every tenant is a whole account that leaves as
+an encrypted bundle and keeps its `MAX#`, the app ships no host address (self-host is the
+recommended path in its onboarding), the host is optional and anyone can run one; risk - the
+operator holds running phrases; mitigation - at-rest encryption, export at any time, ~10 tenants
+per host keeps blast radius small. Required/optional: optional. Verify: `TenantsTest` (invite,
+hot-add scan, file refresh, operator wait); live: deploy, `tenant-new`, pair a phone with the invite.
+
 ### iOS wakes: only the app's own heartbeat counts as live (node 0.2.41, cloud 0.11.37)
 Live on the owner's iPhone, messages showed only when the app was opened. Cause: ANY authorized RPC
 stamped the device live for 3 min - including the notification extension's fetch after a wake and
