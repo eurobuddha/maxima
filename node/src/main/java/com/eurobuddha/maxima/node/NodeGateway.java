@@ -113,7 +113,10 @@ public final class NodeGateway {
         mServer = HttpServer.create(new InetSocketAddress(mBindHost, mPort), 0);
         mServer.createContext("/cmd", this::handleCmd);
         mServer.createContext("/nft", this::handleNft);
-        mExecutor = java.util.concurrent.Executors.newFixedThreadPool(4);
+        // Handler threads (-Dparlons.gateway.threads, default 8): each blocks for one node
+        // command; four was the ceiling on concurrent wallet reads per gateway.
+        int threads = Math.max(1, Integer.getInteger("parlons.gateway.threads", 8));
+        mExecutor = java.util.concurrent.Executors.newFixedThreadPool(threads);
         mServer.setExecutor(mExecutor);
         mServer.start();
     }

@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.52";
+    public static final String VERSION = "0.4.53";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -69,6 +69,11 @@ public final class Main {
                     if (blobBytes < 0) {
                         fail("--blobstore must be >= 0 (MB)");
                     }
+                    break;
+                case "--maxconn":
+                    // Concurrent connections held (default 512, sized for the Pi). A big node
+                    // with gigabytes of heap can hold far more; each is one thread.
+                    System.setProperty("maxima.relay.maxconn", Integer.toString(intArg(args, ++i, "--maxconn")));
                     break;
                 case "--shed":
                     // Soft client target above which clients are asked to move (0 = never).
@@ -191,6 +196,11 @@ public final class Main {
         RelayRuntime runtime = new RelayRuntime(id, port, protocol, rate, host, dir);
         runtime.setBlobBytes(blobBytes);
         runtime.setPeers(peers);
+        int maxConn = Integer.getInteger("maxima.relay.maxconn", 0);
+        if (maxConn > 0) {
+            runtime.setMaxConnections(maxConn);
+            System.out.println("  maxconn  : " + maxConn);
+        }
         if (!peers.isEmpty()) {
             System.out.println("  mesh     : forwarding resolve misses to " + peers.size()
                     + " bootstrap peer(s)");
@@ -244,6 +254,7 @@ public final class Main {
         out.println("  --protocol <s>   greeting version string       (default " + DEFAULT_PROTOCOL + ")");
         out.println("  --peers <list>   comma-separated fleet host:ports to forward resolve");
         out.println("  --shed <n>       soft client target; above it clients are asked to move (0 = never; default 384)");
+        out.println("  --maxconn <n>    concurrent connections held (default 512; one thread each)");
         out.println("  --maxpersource N concurrent connections per source IP (default 32)");
         out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");

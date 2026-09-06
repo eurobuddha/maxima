@@ -7,7 +7,7 @@ plugins {
 // A fresh artifact line. macOS jpackage requires a major version >= 1
 // (independent of the relay protocol version). 1.1.0 adds the windowed chat
 // client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
-version = '1.5.50'
+version = '1.5.51'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the

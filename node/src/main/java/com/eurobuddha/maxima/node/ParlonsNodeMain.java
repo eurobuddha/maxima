@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.27";
+    public static final String  NODE_VERSION = "0.2.28";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -168,6 +168,13 @@ public final class ParlonsNodeMain {
                 RelayRuntime relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
                         capeHost, relayDir);
                 relay.setPool(true);   // a VPS node is always-on + public => a permanent-anchor host
+                // Capacity knobs, same names as maxima-server.jar's flags: -Dparlons.relay.maxconn
+                // (connections held; default 512) and -Dmaxima.relay.shed (soft client target).
+                int maxConn = Integer.getInteger("parlons.relay.maxconn", 0);
+                if (maxConn > 0) {
+                    relay.setMaxConnections(maxConn);
+                    System.out.println("[parlons-node] cape holds up to " + maxConn + " connections");
+                }
                 // Fleet parity with maxima-server.jar: the Phase-B mesh bootstrap list (--peers) and
                 // the media blob shelf (--blobstore MB). Without peers a resolve MISS on this relay
                 // is unanswerable fleet-wide; without the shelf store users' photos have nowhere to go.

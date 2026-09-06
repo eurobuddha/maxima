@@ -46,9 +46,33 @@ public final class MaximaCrypto {
 
     // ---------- key encoding ----------
 
+    /**
+     * Parsed public keys, keyed by their DER. Every inbound message is signature-verified
+     * against its sender's key and every outbound one is encrypted to its recipient's; a
+     * KeyFactory parse per message was 1-3 ms of pure waste on a phone. Bounded LRU; a DER
+     * is immutable so a cached key can never go stale.
+     */
+    private static final int KEY_CACHE = 1024;
+    private static final java.util.Map<java.nio.ByteBuffer, PublicKey> PUBLIC_KEYS =
+            java.util.Collections.synchronizedMap(
+                    new java.util.LinkedHashMap<java.nio.ByteBuffer, PublicKey>(256, 0.75f, true) {
+                        @Override
+                        protected boolean removeEldestEntry(
+                                java.util.Map.Entry<java.nio.ByteBuffer, PublicKey> e) {
+                            return size() > KEY_CACHE;
+                        }
+                    });
+
     public static PublicKey publicKeyFromDer(byte[] zDer) {
+        java.nio.ByteBuffer k = java.nio.ByteBuffer.wrap(zDer.clone());
+        PublicKey cached = PUBLIC_KEYS.get(k);
+        if (cached != null) {
+            return cached;
+        }
         try {
-            return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(zDer));
+            PublicKey pk = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(zDer));
+            PUBLIC_KEYS.put(k, pk);
+            return pk;
         } catch (Exception e) {
             throw new IllegalArgumentException("Bad X.509 RSA public key", e);
         }

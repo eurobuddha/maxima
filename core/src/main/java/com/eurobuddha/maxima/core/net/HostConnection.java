@@ -361,6 +361,14 @@ public final class HostConnection implements Closeable {
      */
     public static int unwrap(MaxTxPoW zUnit, byte[] zExpectedKey, byte[] zPrivateDer,
                              Inbound[] zOut) {
+        return unwrap(zUnit, zExpectedKey, MaximaCrypto.privateKeyFromDer(zPrivateDer), zOut);
+    }
+
+    /** As above with a PRE-PARSED private key: the attached-host path decrypts every inbound
+     *  message with the same per-host key, and re-parsing its DER each time was a KeyFactory
+     *  round trip per message. */
+    public static int unwrap(MaxTxPoW zUnit, byte[] zExpectedKey, java.security.PrivateKey zPrivate,
+                             Inbound[] zOut) {
         try {
             if (!zUnit.checkValidTxPoW()) {
                 return Frame.RESPONSE_WRONGHASH;
@@ -378,7 +386,7 @@ public final class HostConnection implements Closeable {
                 return Frame.RESPONSE_UNKNOWN;
             }
             CryptoPackage cp = CryptoPackage.fromBytes(zUnit.mMaxima.mData.getBytes());
-            byte[] plain = MaximaCrypto.decrypt(cp, zPrivateDer);
+            byte[] plain = MaximaCrypto.decrypt(cp, zPrivate);
             MaximaInternal mi = MaximaInternal.fromBytes(plain);
             boolean sigOk = MaximaCrypto.verify(
                     mi.mFrom.getBytes(), mi.mData.getBytes(), mi.mSignature.getBytes());
@@ -438,8 +446,7 @@ public final class HostConnection implements Closeable {
             // verification, addressed to our per-host key and decrypted with the
             // per-host private key.
             Inbound[] holder = new Inbound[1];
-            int status = unwrap(unit, routingKey(),
-                    mPerHostKey.getPrivate().getEncoded(), holder);
+            int status = unwrap(unit, routingKey(), mPerHostKey.getPrivate(), holder);
             ack(status);
             if (status == Frame.RESPONSE_OK && holder[0] != null) {
                 return holder[0];

@@ -196,7 +196,7 @@ public final class DirectEndpoint {
                     MaxTxPoW unit = MaxTxPoW.fromBytes(payload);
                     status = HostConnection.unwrap(unit,
                             mIdentity.publicKey(),
-                            mIdentity.keyPair().getPrivate().getEncoded(),
+                            mIdentity.keyPair().getPrivate(),
                             holder);
                 } catch (Exception e) {
                     status = Frame.RESPONSE_FAIL;
