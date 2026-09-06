@@ -52,7 +52,7 @@ NAV = [("index", "Get started"), ("android", "Android"), ("iphone", "iPhone"), (
 
 CSS = """
   :root{--cream:#FBF6EE;--cream-2:#F4ECDF;--card:#FFFFFF;--ink:#1B1712;--ink-2:#5B5347;--faint:#9A9081;--line:#E7DECF;--orange:#EF4A1E;--orange-soft:#FFF1EA;--blue:#2E6BE6;--blue-soft:#EAF1FE;--shadow-sm:0 2px 10px rgba(60,40,20,.06);--maxw:860px}
-  *{box-sizing:border-box} body{margin:0;background:var(--cream);color:var(--ink);font-family:"Manrope",system-ui,-apple-system,sans-serif;font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box} html,body{max-width:100%;overflow-x:hidden} p,li,td,th,h1,h2,h3{overflow-wrap:break-word} td:first-child,th:first-child{white-space:nowrap} body{margin:0;background:var(--cream);color:var(--ink);font-family:"Manrope",system-ui,-apple-system,sans-serif;font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px} a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
   header{position:sticky;top:0;z-index:5;background:rgba(251,246,238,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)} .nav{display:flex;align-items:center;gap:16px;height:60px;overflow-x:auto;white-space:nowrap}
   .brand{font-weight:800;color:var(--ink);letter-spacing:-.02em;font-size:19px;flex:none} .sp{flex:1} .lk{color:var(--ink-2);font-weight:600;font-size:14px;flex:none} .lk.on{color:var(--ink);border-bottom:2px solid var(--orange)}
@@ -60,7 +60,7 @@ CSS = """
   h2{font-size:25px;letter-spacing:-.02em;margin:44px 0 10px;font-weight:800;line-height:1.15} h3{font-size:18px;margin:26px 0 6px;font-weight:700}
   p{margin:0 0 14px} li{margin:5px 0} ul,ol{padding-left:24px;margin:0 0 14px}
   code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--cream-2);padding:1px 5px;border-radius:5px;word-break:break-all}
-  pre{background:#1B1712;color:#F4ECDF;border-radius:12px;padding:14px 16px;overflow-x:auto;margin:0 0 16px;font-size:14px;line-height:1.5} pre code{background:none;padding:0;color:inherit;word-break:normal;font-size:inherit}
+  pre{max-width:100%;background:#1B1712;color:#F4ECDF;border-radius:12px;padding:14px 16px;overflow-x:auto;margin:0 0 16px;font-size:14px;line-height:1.5} pre code{background:none;padding:0;color:inherit;word-break:normal;font-size:inherit}
   .note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--orange);border-radius:12px;padding:12px 16px;margin:0 0 16px;box-shadow:var(--shadow-sm)} .note p:last-child{margin:0}
   .tablewrap{overflow-x:auto;margin:0 0 16px;border:1px solid var(--line);border-radius:12px;background:var(--card)} table{border-collapse:collapse;width:100%;font-size:15px} td,th{border-bottom:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top} th{color:var(--faint);font-size:12px;letter-spacing:.1em;text-transform:uppercase} tr:last-child td{border-bottom:0}
   hr{border:0;border-top:1px solid var(--line);margin:34px 0}
@@ -132,8 +132,16 @@ def render(md):
             out.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
             i = j + 1
             continue
-        if s.startswith("<div") or s.startswith("</div"):
-            flush(); out.append(s); i += 1; continue
+        if s.startswith("<div"):
+            # raw HTML block: pass every line through until the closing tag
+            flush()
+            while i < len(lines):
+                out.append(lines[i].strip())
+                if lines[i].strip().startswith("</div"):
+                    i += 1
+                    break
+                i += 1
+            continue
         if s.startswith("#"):
             flush()
             level = len(s) - len(s.lstrip("#"))
