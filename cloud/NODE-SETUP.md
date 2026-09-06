@@ -461,6 +461,19 @@ plus one advisory relay message.
 - **Knobs**: `--maxconn N` (relay) / `-Dparlons.relay.maxconn` (cape) raise the 512-connection cap on big
   boxes; `-Dparlons.gateway.threads` (default 8). Parsed RSA public keys are cached (LRU 1024).
 
+### Directory replication + anchor failover (server 0.4.54, node 0.2.29, app 0.6.72)
+A pool relay that accepts a signed directory SET now pushes it (`MSG_DIR_PUBLISH` 202, the same
+proof triplet `DIR_ANSWER` carries) to `--replicate N` random verified pool peers (default 3,
+`-Dmaxima.relay.replicate`, 0 = off). Every receiver re-verifies the signature and the signer/from
+binding before storing; a replica is never pushed a second hop; a replica never overwrites the relay's
+own live copy from the publisher. So a permanent `MAX#` resolves on relays its owner never touched,
+and keeps resolving while its anchor is down. The mesh pull on a miss now fans out in PARALLEL
+(first verified answer wins, inside the client's 5 s leash); clients dial a MAX#'s anchor with the
+5 s self-heal leash instead of 20 s + 20 s; the account attaches to 3 relays (own cape + 2). Stats
+line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay can withhold, never
+forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
+node for 2 min and resolve its MAX# via another relay.
+
 ## Ports
 
 | port | what | exposure |

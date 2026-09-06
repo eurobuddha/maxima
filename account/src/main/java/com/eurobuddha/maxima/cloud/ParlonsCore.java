@@ -40,7 +40,9 @@ public final class ParlonsCore {
 
     private static final String PROTOCOL = "1.0.48";
     /** How many fleet relays the client half attaches to (sole-holder of its key on each). */
-    private static final int RELAY_TARGET = 2;
+    /** Own cape + two random fleet relays: the account's directory entry and mailbox exist in
+     *  three places before any relay-side replication, so the cape going down costs nothing. */
+    private static final int RELAY_TARGET = 3;
     private static final int RELAY_RATE = 600;
 
     private final MaximaIdentity mIdentity;

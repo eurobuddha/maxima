@@ -40,10 +40,20 @@ public final class MlsStore {
         public final byte[] proofFrom;
         public final byte[] proofPayload;
         public final byte[] proofSig;
+        /** True when this entry arrived from a peer relay (replication / forward cache) rather
+         *  than from the publisher itself. A local publish always outranks a replica. */
+        public final boolean replica;
 
         Entry(String zKey, List<String> zAddresses, List<String> zAllowed,
               long zStoredAt, long zExpiresAt,
               byte[] zProofFrom, byte[] zProofPayload, byte[] zProofSig) {
+            this(zKey, zAddresses, zAllowed, zStoredAt, zExpiresAt, zProofFrom, zProofPayload, zProofSig, false);
+        }
+
+        Entry(String zKey, List<String> zAddresses, List<String> zAllowed,
+              long zStoredAt, long zExpiresAt,
+              byte[] zProofFrom, byte[] zProofPayload, byte[] zProofSig, boolean zReplica) {
+            replica = zReplica;
             publicKey = zKey;
             addresses = zAddresses;
             allowedReaders = zAllowed;
@@ -163,6 +173,35 @@ public final class MlsStore {
                 it.remove();
             }
         }
+    }
+
+    /**
+     * Store an entry REPLICATED from a peer relay (already signature-verified by the caller).
+     * A replica fills an absent or expired slot and replaces an older replica; it never
+     * overwrites an entry the publisher itself sent us (the wire SET carries no timestamp, so
+     * "the publisher's own copy wins" is the only safe freshness rule). The entry is stored
+     * exactly like a local one otherwise: it answers open resolves and DIR_QUERY with its proof.
+     *
+     * @return true if stored
+     */
+    public boolean putReplica(String zSignerPublicKey, String zAddress,
+                              byte[] zProofFrom, byte[] zProofPayload, byte[] zProofSig, long zTtlMs) {
+        String key = norm(zSignerPublicKey);
+        long now = System.currentTimeMillis();
+        synchronized (mEntries) {
+            Entry cur = mEntries.get(key);
+            if (cur != null && !cur.replica && now <= cur.expiresAt) {
+                return false;   // the publisher's own SET is here and live: it outranks any replica
+            }
+            mEntries.put(key, new Entry(key, new ArrayList<>(java.util.Collections.singletonList(zAddress)),
+                    new ArrayList<>(), now, now + zTtlMs, zProofFrom, zProofPayload, zProofSig, true));
+            java.util.Iterator<String> it = mEntries.keySet().iterator();
+            while (mEntries.size() > mMaxEntries && it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
+        return true;
     }
 
     /**

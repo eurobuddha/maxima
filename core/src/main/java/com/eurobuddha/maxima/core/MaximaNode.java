@@ -784,7 +784,10 @@ public final class MaximaNode implements ChatPort {
 
         com.eurobuddha.maxima.core.directory.MlsClient c =
                 new com.eurobuddha.maxima.core.directory.MlsClient(mIdentity);
-        com.eurobuddha.maxima.core.directory.MlsClient.Resolved r = c.resolve(mls, targetKey);
+        // The anchor with the self-heal leash (5 s / 5 s), not the 20 s / 20 s defaults: a
+        // black-holed anchor used to cost 40 s before the fallback below even started.
+        com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
+                c.resolve(mls, targetKey, SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
         if (r.ok()) {
             return r.address;
         }

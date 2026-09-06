@@ -30,6 +30,38 @@ final class RelayQueryClient {
      * present answer, or null if it did not answer, answered "absent", or the nonce did not
      * match (a mismatched or malformed reply is treated as no answer).
      */
+    /**
+     * Hand one peer relay a signed directory entry (replication). True only if the peer
+     * acknowledged that it verified and stored it; a refusal, a non-pool peer, a dead peer or
+     * a malformed reply all count as "not replicated there" (the caller tries others).
+     */
+    static boolean publish(String zHost, int zPort, DirPublish zEntry, int zConnectMs, int zReadMs) {
+        try (Socket s = new Socket()) {
+            s.connect(new InetSocketAddress(zHost, zPort), zConnectMs);
+            s.setSoTimeout(zReadMs);
+            DataInputStream in = new DataInputStream(s.getInputStream());
+            DataOutputStream out = new DataOutputStream(s.getOutputStream());
+            Frame.write(out, Frame.body(Frame.MSG_DIR_PUBLISH, zEntry));
+            for (int i = 0; i < 4; i++) {
+                byte[] frame = Frame.readOrSkip(in, 64 * 1024);
+                if (frame == null || frame.length < 1) {
+                    continue;
+                }
+                if (Frame.typeOf(frame) != Frame.MSG_PING) {
+                    continue;   // the ack rides the classic ack channel (MSG_PING + status byte)
+                }
+                byte[] payload = new byte[frame.length - 1];
+                System.arraycopy(frame, 1, payload, 0, payload.length);
+                byte[] status = com.eurobuddha.maxima.core.codec.MiniData.readFromStream(
+                        new DataInputStream(new java.io.ByteArrayInputStream(payload))).getBytes();
+                return status.length == 1 && (status[0] & 0xFF) == Frame.RESPONSE_OK;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     static DirAnswer query(String zHost, int zPort, String zTargetKeyHex,
                            int zConnectMs, int zReadMs) {
         byte[] nonce = new byte[16];

@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.53";
+    public static final String VERSION = "0.4.54";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -69,6 +69,10 @@ public final class Main {
                     if (blobBytes < 0) {
                         fail("--blobstore must be >= 0 (MB)");
                     }
+                    break;
+                case "--replicate":
+                    // Pool peers that receive a copy of each accepted directory entry (0 = never).
+                    System.setProperty("maxima.relay.replicate", Integer.toString(intArg(args, ++i, "--replicate")));
                     break;
                 case "--maxconn":
                     // Concurrent connections held (default 512, sized for the Pi). A big node
@@ -207,10 +211,10 @@ public final class Main {
         }
         runtime.setTickListener(s -> System.out.printf(
                 "[relay] conns=%d routes=%d relayed=%d stored=%d dropped=%d mail=%d dir=%d"
-                        + "%s acceptfail=%d stalls=%d pushdrop=%d sheds=%d%n",
+                        + "%s acceptfail=%d stalls=%d pushdrop=%d sheds=%d dirrep=%d/%d%n",
                 s.connections, s.routes, s.relayed, s.stored, s.dropped, s.mail, s.directory,
                 s.acceptAlive ? "" : " ACCEPT=DEAD", s.acceptFailures, s.writeStalls,
-                s.pushDiscards, s.sheds));
+                s.pushDiscards, s.sheds, s.replicasSent, s.replicasStored));
         runtime.start();
 
         // STUN on the same port number, UDP side: phones discover their public
@@ -255,6 +259,7 @@ public final class Main {
         out.println("  --peers <list>   comma-separated fleet host:ports to forward resolve");
         out.println("  --shed <n>       soft client target; above it clients are asked to move (0 = never; default 384)");
         out.println("  --maxconn <n>    concurrent connections held (default 512; one thread each)");
+        out.println("  --replicate <n>  pool peers that get a copy of each accepted directory entry (default 3; 0 = off)");
         out.println("  --maxpersource N concurrent connections per source IP (default 32)");
         out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");

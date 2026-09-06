@@ -55,6 +55,9 @@ public final class Frame {
      */
     public static final int MSG_DIR_QUERY = 200;
     public static final int MSG_DIR_ANSWER = 201;
+    /** Relay -> peer relay: "here is a signed directory entry I just accepted" (replication).
+     *  Answered on the ack channel (OK stored, FAIL refused, UNKNOWN not a pool relay). */
+    public static final int MSG_DIR_PUBLISH = 202;
 
     // ---- Liveness cadence (one place; both roles share it) ----
     /** Send a keep-alive down every held connection this often. Well under the

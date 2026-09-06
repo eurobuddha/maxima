@@ -216,6 +216,53 @@ public final class RelayServer {
      *  bounded regardless of the origin entry's own (longer) TTL. */
     private static final long FORWARD_CACHE_TTL_MS = 10 * 60 * 1000;
 
+    // ---- directory REPLICATION: a SET we accept is pushed to a few random pool peers ----
+    /**
+     * How many peer relays receive a copy of each signed SET this pool relay accepts
+     * (--replicate N / -Dmaxima.relay.replicate; 0 = never send). Before this an entry lived
+     * only where its publisher happened to be attached, so an anchor outage made the user
+     * unresolvable until it returned - a single point of failure per user. Copies go to RANDOM
+     * verified pool peers; every receiver re-verifies the signature; a replica is never
+     * re-replicated (strict 1-hop, loop-free like DIR_QUERY).
+     */
+    private volatile int mReplicas = Integer.getInteger("maxima.relay.replicate", 3);
+    /** Global budget so a SET flood cannot be amplified across the mesh. */
+    private static final int REPLICATIONS_PER_MIN = 600;
+    /** Replicas ACCEPTED from one source per minute (a peer relay pushing junk is bounded). */
+    private static final int PER_SOURCE_REPLICAS_PER_MIN = 120;
+    private final Map<String, RateLimit> mReplicateLimit = new ConcurrentHashMap<>();
+    private final Map<String, RateLimit> mReplicaInLimits = new ConcurrentHashMap<>();
+    private final AtomicLong mReplicasSent = new AtomicLong();
+    private final AtomicLong mReplicasStored = new AtomicLong();
+    /** Resolve misses that started a mesh fan-out (diagnostics; replication should make it rare). */
+    private final AtomicLong mForwards = new AtomicLong();
+
+    public long forwardsStarted() {
+        return mForwards.get();
+    }
+    /** Forward fan-out runs in parallel here so a miss is answered inside the client's leash. */
+    private final java.util.concurrent.ExecutorService mForwardExec =
+            new java.util.concurrent.ThreadPoolExecutor(0, 32, 30, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.SynchronousQueue<>(),
+                    r -> {
+                        Thread t = new Thread(r, "relay-forward");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+
+    public void setReplicas(int zCount) {
+        mReplicas = Math.max(0, zCount);
+    }
+
+    public long replicasSent() {
+        return mReplicasSent.get();
+    }
+
+    public long replicasStored() {
+        return mReplicasStored.get();
+    }
+
     /**
      * Bootstrap the mesh with a fleet peer list ({@code host:port}). Optional: without it the
      * mesh still forwards to any gossip-verified pool peers. Only pool relays should be given
@@ -883,6 +930,10 @@ public final class RelayServer {
                 handleMaxima(zConn, payload);
                 return;
             }
+            case Frame.MSG_DIR_PUBLISH: {
+                handleDirPublish(zConn, payload);
+                return;
+            }
             case Frame.MSG_DIR_QUERY: {
                 // A peer pool relay asks whether we hold a signed entry for a key (Phase-B
                 // mesh). We answer ONLY from our own store and never re-forward (strict
@@ -1127,6 +1178,17 @@ public final class RelayServer {
                     mi.mFrom.getBytes(), mi.mData.getBytes(), mi.mSignature.getBytes(),
                     Frame.RESPONSE_OK, Frame.RESPONSE_UNKNOWN);
             if (reply != null) {
+                // A SET we just accepted (signature verified above) is pushed to a few random
+                // pool peers, off this thread, so the entry outlives this box.
+                byte[] rb0 = reply.getBytes();
+                boolean setOk = rb0.length == 1 && (rb0[0] & 0xFF) == Frame.RESPONSE_OK
+                        && MlsService.APP_SET.equals(mm.mApplication.toString());
+                if (mPool && setOk && mReplicas > 0) {
+                    final byte[] pf = mi.mFrom.getBytes();
+                    final byte[] pp = mi.mData.getBytes();
+                    final byte[] ps = mi.mSignature.getBytes();
+                    mDrainExec.execute(() -> replicate(pf, pp, ps));
+                }
                 // Phase-B mesh: a pool relay that MISSED a resolve forwards it to peer pool
                 // relays, verifies the signed answer, and returns a real hit — so a client
                 // that reaches ANY pool relay resolves anything published anywhere in the pool.
@@ -1174,6 +1236,73 @@ public final class RelayServer {
     }
 
     /**
+     * A peer relay pushes a signed entry it accepted. Only a pool relay stores (a non-pool
+     * directory is allow-listed and must not fill with strangers' entries); the signature and
+     * the signer/from binding are re-verified exactly as for a forwarded answer; a replica is
+     * NEVER pushed onward from here. Ack on the classic ack channel.
+     */
+    private void handleDirPublish(Conn zConn, byte[] zPayload) throws Exception {
+        if (!mPool) {
+            zConn.write(Frame.ack(Frame.RESPONSE_UNKNOWN));
+            return;
+        }
+        if (!allow(mReplicaInLimits, zConn.sourceIp, PER_SOURCE_REPLICAS_PER_MIN)) {
+            zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+            return;
+        }
+        DirPublish p;
+        try {
+            p = DirPublish.fromBytes(zPayload);
+        } catch (Exception e) {
+            zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+            return;
+        }
+        String addr = MlsService.verifiedAddress(null, p.getProofFrom(), p.getProofPayload(), p.getProofSig());
+        if (addr == null) {
+            zConn.write(Frame.ack(Frame.RESPONSE_FAIL));   // unverifiable: a peer can never plant an entry
+            return;
+        }
+        String signer = new MiniData(p.getProofFrom()).to0xString();
+        boolean stored = mDirectory.putReplica(signer, addr,
+                p.getProofFrom(), p.getProofPayload(), p.getProofSig(), MlsStore.DEFAULT_TTL_MS);
+        if (stored) {
+            mReplicasStored.incrementAndGet();
+        }
+        zConn.write(Frame.ack(Frame.RESPONSE_OK));   // OK also when our own live copy outranks it
+    }
+
+    /** Push an accepted SET to {@link #mReplicas} random pool peers (best effort, budgeted). */
+    void replicate(byte[] zProofFrom, byte[] zProofPayload, byte[] zProofSig) {
+        int want = mReplicas;
+        if (want <= 0 || !allow(mReplicateLimit, "*", REPLICATIONS_PER_MIN)) {
+            return;
+        }
+        java.util.List<String> targets = forwardTargets();
+        java.util.Collections.shuffle(targets);
+        DirPublish entry = new DirPublish(zProofFrom, zProofPayload, zProofSig);
+        int done = 0;
+        for (String hp : targets) {
+            if (done >= want) {
+                break;
+            }
+            int c = hp.lastIndexOf(':');
+            if (c < 0) {
+                continue;
+            }
+            int port;
+            try {
+                port = Integer.parseInt(hp.substring(c + 1).trim());
+            } catch (Exception e) {
+                continue;
+            }
+            if (RelayQueryClient.publish(hp.substring(0, c), port, entry, FORWARD_CONNECT_MS, FORWARD_READ_MS)) {
+                done++;
+                mReplicasSent.incrementAndGet();
+            }
+        }
+    }
+
+    /**
      * Forward a resolve MISS to peer pool relays and, on the first VERIFIED answer, cache it
      * briefly and return a normal {@code MLSPacketGETResp} for the original client. Returns
      * null if no peer holds a verifiable entry. Only called on a pool relay, for an APP_GET
@@ -1198,33 +1327,68 @@ public final class RelayServer {
             if (!allow(mForwardLimit, "*", FORWARDS_PER_MIN)) {
                 return null;
             }
+            mForwards.incrementAndGet();
+            // PARALLEL fan-out, first verified answer wins: serially this was up to 8 × 5.5 s,
+            // far past the client's 5 s leash, so a first resolve of an entry held elsewhere
+            // always failed and only a retry (after the cache filled) succeeded.
+            java.util.List<String> targets = forwardTargets();
+            if (targets.size() > FORWARD_FANOUT) {
+                targets = new java.util.ArrayList<>(targets.subList(0, FORWARD_FANOUT));
+            }
+            final String fkey = targetKey;
+            java.util.concurrent.CompletionService<Object[]> cs =
+                    new java.util.concurrent.ExecutorCompletionService<>(mForwardExec);
             int asked = 0;
-            for (String hp : forwardTargets()) {
-                if (asked >= FORWARD_FANOUT) {
-                    break;
-                }
+            for (final String hp : targets) {
                 int c = hp.lastIndexOf(':');
                 if (c < 0) {
                     continue;
                 }
-                String host = hp.substring(0, c);
-                int port;
+                final String host = hp.substring(0, c);
+                final int port;
                 try {
                     port = Integer.parseInt(hp.substring(c + 1).trim());
                 } catch (Exception e) {
                     continue;
                 }
                 asked++;
-                DirAnswer ans = RelayQueryClient.query(host, port, targetKey,
-                        FORWARD_CONNECT_MS, FORWARD_READ_MS);
-                if (ans == null) {
+                cs.submit(() -> {
+                    DirAnswer ans = RelayQueryClient.query(host, port, fkey, FORWARD_CONNECT_MS, FORWARD_READ_MS);
+                    if (ans == null) {
+                        return null;
+                    }
+                    String a = MlsService.verifiedAddress(fkey,
+                            ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig());
+                    return a == null ? null : new Object[] {a, ans, host + ":" + port};
+                });
+            }
+            long deadline = System.currentTimeMillis() + FORWARD_CONNECT_MS + FORWARD_READ_MS + 500;
+            for (int i = 0; i < asked; i++) {
+                long left = deadline - System.currentTimeMillis();
+                if (left <= 0) {
+                    break;
+                }
+                java.util.concurrent.Future<Object[]> f;
+                try {
+                    f = cs.poll(left, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                if (f == null) {
+                    break;
+                }
+                Object[] hit;
+                try {
+                    hit = f.get();
+                } catch (Exception e) {
                     continue;
                 }
-                String addr = MlsService.verifiedAddress(targetKey,
-                        ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig());
-                if (addr == null) {
-                    continue;   // unverifiable answer — a peer can withhold, never forge
+                if (hit == null) {
+                    continue;   // unverifiable or absent — a peer can withhold, never forge
                 }
+                String addr = (String) hit[0];
+                DirAnswer ans = (DirAnswer) hit[1];
                 // Trust is the signature. Cache briefly (bounded staleness) so repeats are
                 // instant, then answer the client as if it had been a local hit.
                 mDirectory.put(targetKey,
@@ -1232,7 +1396,7 @@ public final class RelayServer {
                         java.util.Collections.emptyList(),
                         ans.getProofFrom(), ans.getProofPayload(), ans.getProofSig(),
                         FORWARD_CACHE_TTL_MS);
-                log("mesh: resolved " + safe(targetKey) + " via " + host + ":" + port);
+                log("mesh: resolved " + safe(targetKey) + " via " + hit[2]);
                 MLSPacketGETResp resp =
                         new MLSPacketGETResp(targetKey, addr, req.getRandomUID());
                 return new MiniData(Codec.serialise(resp));
@@ -1658,6 +1822,11 @@ public final class RelayServer {
     /** How often to re-push held mail to an attached client (slow: mail that is
      *  already delivered is deduped, so this only matters when mail is waiting). */
     private static final long DRAIN_INTERVAL_MS = 90_000;
+
+    /** Test hook: our identity (to build our mls address). */
+    MaximaIdentity identityForTest() {
+        return mIdentity;
+    }
 
     /** The relay's peer list (package-private: tests shape and read it through here). */
     com.eurobuddha.maxima.core.session.RelayPeers peers() {

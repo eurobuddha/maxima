@@ -62,15 +62,18 @@ public final class RelayRuntime {
         public final long pushDiscards;
         /** Clients asked to move because this relay was over its soft client target. */
         public final long sheds;
+        /** Directory entries pushed to peers / accepted from peers (replication). */
+        public final long replicasSent;
+        public final long replicasStored;
 
         Stats(int connections, int routes, long relayed, long stored, long dropped,
               int mail, int directory) {
-            this(connections, routes, relayed, stored, dropped, mail, directory, true, 0, 0, 0, 0);
+            this(connections, routes, relayed, stored, dropped, mail, directory, true, 0, 0, 0, 0, 0, 0);
         }
 
         Stats(int connections, int routes, long relayed, long stored, long dropped,
               int mail, int directory, boolean acceptAlive, long acceptFailures,
-              long writeStalls, long pushDiscards, long sheds) {
+              long writeStalls, long pushDiscards, long sheds, long replicasSent, long replicasStored) {
             this.connections = connections;
             this.routes = routes;
             this.relayed = relayed;
@@ -83,6 +86,8 @@ public final class RelayRuntime {
             this.writeStalls = writeStalls;
             this.pushDiscards = pushDiscards;
             this.sheds = sheds;
+            this.replicasSent = replicasSent;
+            this.replicasStored = replicasStored;
         }
     }
 
@@ -301,7 +306,7 @@ public final class RelayRuntime {
         return new Stats(r.connectionCount(), r.routeCount(), r.relayedCount(),
                 r.storedCount(), r.droppedCount(), r.mailbox().totalItems(),
                 r.directory().size(), r.acceptAlive(), r.acceptFailures(),
-                r.writeStalls(), r.pushDiscards(), r.shedsSent());
+                r.writeStalls(), r.pushDiscards(), r.shedsSent(), r.replicasSent(), r.replicasStored());
     }
 
     /** Stop the maintain loop, flush write-behind mail, and stop the relay. Idempotent. */
