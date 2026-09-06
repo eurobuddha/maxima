@@ -1169,8 +1169,10 @@ public final class ParlonsControl {
                     l.seen = 0;
                     l.liveUntil = 0;
                 }
-            } else if (l != null) {
-                l.liveUntil = System.currentTimeMillis() + LIVE_EXPLICIT_MS;   // the app itself says so
+            } else if (l != null && req.replyTo != null && !req.replyTo.isEmpty()) {
+                // The app itself says so - and it named addresses it is listening on. A heartbeat
+                // with no reply addresses (no relay attached) must not switch the wake path off.
+                l.liveUntil = System.currentTimeMillis() + LIVE_EXPLICIT_MS;
             }
             return bytes(ok());
         });

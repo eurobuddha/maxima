@@ -482,8 +482,9 @@ on (the relay mailboxes them, so "delivered" looked true) and no wake was sent; 
 window after each wake hid everything when a fetch was slow. Now a device with a wake path is live
 only on an explicit `push.register` heartbeat (90 s; the app beats every 60 s in the foreground and
 sends `live:false` on background), every other RPC leaves the wake decision alone, and the quiet
-window is 45 s (cleared earlier by the device's next RPC). Devices without a wake path (Android
-portal) keep the 3-min any-RPC rule. Gain: every message wakes the phone unless the app is visibly
+window is 45 s (cleared earlier by the device's next RPC). A heartbeat that names no reply
+addresses (the app has no relay attached) does not count either (node 0.2.42). Devices without a
+wake path (Android portal) keep the 3-min any-RPC rule. Gain: every message wakes the phone unless the app is visibly
 open. Preservation: the wake is still content-free and optional; nothing new is trusted. Risk: more
 wakes per hour for a chatty account - bounded by the 20 s coalesce and the proxy's per-token limits.
 
