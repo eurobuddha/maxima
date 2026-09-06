@@ -155,6 +155,40 @@ public class MeshReplicateTest {
         assertNotNull(s.peek("0xL2"));
     }
 
+    /** A signed publish payload (the MaximaMessage a SET proof wraps) stamped with the publisher's clock. */
+    private static byte[] signedPublish(long zTimeMilli) throws Exception {
+        com.eurobuddha.maxima.core.msg.MaximaMessage m = new com.eurobuddha.maxima.core.msg.MaximaMessage();
+        m.mRandom = new com.eurobuddha.maxima.core.codec.MiniData(new byte[32]);
+        m.mFrom = new com.eurobuddha.maxima.core.codec.MiniData(new byte[] {1});
+        m.mTo = new com.eurobuddha.maxima.core.codec.MiniData(new byte[] {2});
+        m.mTimeMilli = new com.eurobuddha.maxima.core.codec.MiniNumber(zTimeMilli);
+        m.mApplication = new com.eurobuddha.maxima.core.codec.MiniString("mls");
+        m.mData = new com.eurobuddha.maxima.core.codec.MiniData(new byte[] {3});
+        return com.eurobuddha.maxima.core.codec.Codec.serialise(m);
+    }
+
+    @Test
+    public void aNewerSignedPublishReplacesTheRelaysStaleOwnCopy() throws Exception {
+        // The account restarted attached to OTHER relays: its later signed publish arrives here
+        // as a replica while this relay still holds its own, now dead, copy for the full TTL.
+        MlsStore s = new MlsStore();
+        s.setOpenResolve(true);
+        byte[] pf = new byte[] {1}, ps = new byte[] {3};
+        byte[] older = signedPublish(1_000_000L), newer = signedPublish(2_000_000L);
+        s.put("0xAA", Collections.singletonList("me@dead-relay:1"), Collections.emptyList(), pf, older, ps, 60_000);
+        assertFalse("a replica of the SAME or an OLDER publish still loses",
+                s.putReplica("0xAA", "me@replay:1", pf, older, ps, 60_000));
+        assertTrue("the publisher's LATER publish wins wherever it arrives from",
+                s.putReplica("0xAA", "me@new-relay:1", pf, newer, ps, 60_000));
+        assertEquals("me@new-relay:1", s.peek("0xAA").primary());
+        assertFalse("and the old proof can never roll it back",
+                s.putReplica("0xAA", "me@dead-relay:1", pf, older, ps, 60_000));
+        assertEquals("me@new-relay:1", s.peek("0xAA").primary());
+        // an unsigned local publish (no clock to compare) keeps the old rule: it always outranks
+        s.put("0xBB", Collections.singletonList("b@here:1"), Collections.emptyList());
+        assertFalse(s.putReplica("0xBB", "b@elsewhere:1", pf, newer, ps, 60_000));
+    }
+
     @Test
     public void aReplicaNeverOverwritesTheRelaysOwnLivePublish() throws Exception {
         MlsStore s = new MlsStore();

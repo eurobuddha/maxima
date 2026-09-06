@@ -474,6 +474,22 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### A restarted account is reachable at once (server 0.4.62, node 0.2.40, cloud 0.11.36)
+Found by the iOS smoke test: an account that restarts attached to a DIFFERENT relay set was
+unreachable through any relay still holding its earlier own SET, for the whole 24 h TTL. The
+replication rule "the publisher's own copy outranks a replica" had no notion of WHEN, so the newer
+publish (arriving as a replica) was refused and the anchor kept answering the dead address —
+`send failed: UNKNOWN` on every RPC. Fix (`MlsStore.putReplica`): the signed proof wraps the
+publisher's own `timeMilli`, so a replica whose proof is strictly newer now replaces the relay's own
+stale copy, and no replica ever replaces a newer-or-equal signed publish (a replayed old proof cannot
+roll an entry back). Unsigned local publishes keep the old rule. Gain: restart or relay switch = live
+within one replication hop. Preservation: signature + signer/from binding re-verified as before; the
+clock compared is the publisher's own, never a relay's. Risk: a publisher with a wrong clock could
+publish "in the future" and pin itself — mitigation: only its own later publish is affected, and its
+next publish carries a later stamp again. Required for the mesh; nothing new to trust. Verify:
+`MeshReplicateTest.aNewerSignedPublishReplacesTheRelaysStaleOwnCopy`; live: restart a parlons-cloud
+with `--relay-port` changed and resolve it via openproject inside 5 s.
+
 ### The iOS wake path and catch-up (node 0.2.39, cloud 0.11.35, portal 0.2.27; wake proxy 0.1.0)
 Parlons Cloud for iOS (`support/parlons-ios`) is a paired device like the Android portal, but iOS
 kills a backgrounded socket, so three account-side additions carry it:

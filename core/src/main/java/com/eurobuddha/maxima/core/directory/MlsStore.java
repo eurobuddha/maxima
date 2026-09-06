@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.core.directory;
 
+import com.eurobuddha.maxima.core.msg.MaximaMessage;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -190,8 +194,26 @@ public final class MlsStore {
         long now = System.currentTimeMillis();
         synchronized (mEntries) {
             Entry cur = mEntries.get(key);
+            if (cur != null && now <= cur.expiresAt) {
+                // Never roll a live entry back: when both carry the publisher's clock, an older
+                // (or the same) publication loses whatever relay it took to get here.
+                long curTime = proofTime(cur.proofPayload);
+                long newTime = proofTime(zProofPayload);
+                if (curTime > 0 && newTime > 0 && newTime <= curTime) {
+                    return false;
+                }
+            }
             if (cur != null && !cur.replica && now <= cur.expiresAt) {
-                return false;   // the publisher's own SET is here and live: it outranks any replica
+                // The publisher's own SET is here and live: it outranks any replica - UNLESS the
+                // replica carries a publication the same publisher signed LATER. An account that
+                // restarts attached to other relays re-publishes there; without this rule every
+                // relay still holding its earlier own copy would answer with the dead address
+                // for the whole TTL (24 h), and resolvers that ask that relay first (the anchor)
+                // could not reach the account at all. The clock compared is the publisher's own,
+                // inside the signed proof, so a replayed old proof can never roll an entry back.
+                if (proofTime(cur.proofPayload) == 0 || proofTime(zProofPayload) == 0) {
+                    return false;
+                }
             }
             // Replicas may hold at most HALF the directory: a flood of (valid) replicas from
             // peers must never push this relay's OWN publishers out through the LRU cap. Over
@@ -271,6 +293,21 @@ public final class MlsStore {
 
     public boolean isPermanent(String zPublicKey) {
         return mPermanent.contains(norm(zPublicKey));
+    }
+
+    /** The publisher's own clock inside a signed publish (the {@code timeMilli} of the signed
+     *  MaximaMessage the proof wraps); 0 when the entry is unsigned or the proof does not parse. */
+    public static long proofTime(byte[] zProofPayload) {
+        if (zProofPayload == null) {
+            return 0;
+        }
+        try {
+            MaximaMessage m = MaximaMessage.readFromStream(
+                    new DataInputStream(new ByteArrayInputStream(zProofPayload)));
+            return m.mTimeMilli == null ? 0 : Math.max(0, m.mTimeMilli.getAsLong());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     public int flushExpired() {
