@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.34";
+    public static final String  NODE_VERSION = "0.2.35";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -70,6 +70,17 @@ public final class ParlonsNodeMain {
             dataFolder = new File(System.getProperty("user.home"), ".parlons-node");
         }
         sDataFolder = dataFolder;
+        // -Dparlons.restore=<file.pbk>: bring a PORTABLE ACCOUNT here (a fresh data dir). Writes
+        // the paired devices, settings, contacts, chat and the identity (identity.txt) and
+        // exits; the next normal start boots the node pinned to that identity - the same MAX#,
+        // so paired devices reconnect without re-pairing. The node's WALLET stays its own
+        // vault (resync it to the old phrase from a paired device if the funds should follow).
+        String restore = System.getProperty("parlons.restore", "").trim();
+        if (!restore.isEmpty()) {
+            restoreAccount(dataFolder, restore);
+            System.exit(0);
+            return;
+        }
         File minimaFolder = new File(dataFolder, GlobalParams.MINIMA_BASE_VERSION);
         GeneralParams.DATA_FOLDER     = minimaFolder.getAbsolutePath();
         // Layer-1 P2P port: -Dparlons.node.port > Minima -port > 9001. Every big fleet box already
@@ -416,6 +427,42 @@ public final class ParlonsNodeMain {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** Offline restore of a portable account bundle into this node's data dir (see main). */
+    private static void restoreAccount(File zDataFolder, String zPbkPath) throws Exception {
+        java.io.Console console = System.console();
+        if (console == null) {
+            System.err.println("ERROR: -Dparlons.restore needs an interactive console (passphrase).");
+            System.exit(1);
+            return;
+        }
+        byte[] blob = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(zPbkPath));
+        char[] pw = console.readPassword("Backup passphrase: ");
+        com.eurobuddha.maxima.cloud.BackupBundle b;
+        try {
+            b = com.eurobuddha.maxima.cloud.AccountBackup.read(blob, pw);
+        } catch (javax.crypto.AEADBadTagException bad) {
+            System.err.println("ERROR: wrong passphrase (or a damaged backup file).");
+            System.exit(1);
+            return;
+        } finally {
+            java.util.Arrays.fill(pw, '\0');
+        }
+        // The node owns its key-use counters (its vault): nothing to import there.
+        com.eurobuddha.maxima.cloud.AccountBackup.applyRestore(zDataFolder.toPath(), b, null, "identity.txt");
+        System.out.println("Restored into " + zDataFolder + ": "
+                + (b.displayName.isEmpty() ? "(unnamed)" : b.displayName) + " · "
+                + b.contacts.size() + " contact(s)"
+                + (b.hasAccount() ? " · paired devices, settings and chat (portable account bundle)"
+                        : " · (an older backup: contacts and identity only)"));
+        System.out.println();
+        System.out.println("  !! The host this backup came from must be STOPPED for good - one");
+        System.out.println("     identity, one live account.");
+        System.out.println("  Start the node normally: it boots pinned to this identity (same MAX#),");
+        System.out.println("  paired devices reconnect on their own. The wallet is this node's own");
+        System.out.println("  vault - resync it to the old phrase from a paired device if the funds");
+        System.out.println("  should follow.");
     }
 
     /** The ACCOUNT identity phrase: identity.txt if pinned, else the vault. Never logged. */

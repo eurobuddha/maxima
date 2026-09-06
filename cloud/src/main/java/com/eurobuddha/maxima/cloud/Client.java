@@ -480,6 +480,7 @@ public final class Client {
         System.out.println("  cmd <node command…>    run ANY Minima command on the account's node (Terminal); full output, never cut");
         System.out.println("  nft put <file> [col idx] host NFT art on the node (public URL, content-addressed); nft list | newcollection | delete <path>");
         System.out.println("  seed                   reveal the account's 24-word phrase");
-        System.out.println("  backup <file.pbk>      write an encrypted backup (phone-compatible)");
+        System.out.println("  backup <file.pbk>      write the encrypted PORTABLE ACCOUNT bundle (identity,");
+        System.out.println("                         devices, settings, contacts, chat; phone-compatible)");
     }
 }

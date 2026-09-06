@@ -53,6 +53,8 @@ public final class ParlonsCore {
     private final RelayGossipClient mGossip;
     private final MediaService mMedia;
     private final ChatEngine mChat;
+    /** The chat store instance (write-behind) - the LIVE one, for the portable backup. */
+    private final FileStore mChatStore;
     private final DevicePairing mPairing;
     private final AccountWallet mWallet;
     private final AccountBackup.Source mBackup;
@@ -129,7 +131,8 @@ public final class ParlonsCore {
         mMedia = new MediaService(mNode, blobs);
         mNode.setLocalBlobs(blobs);
         mChat = new ChatEngine(mNode);
-        mChat.setStore(FileStore.coalescing(new File(base, "chat"), 2000));   // flushed before any mailbox ack
+        mChatStore = FileStore.coalescing(new File(base, AccountBackup.CHAT_DIR), 2000);
+        mChat.setStore(mChatStore);   // flushed before any mailbox ack
         mChat.setMediaService(mMedia);
         // (listener wired AFTER mControl below — it fans events out through the control push)
         mNode.setLogListener(s -> log("node: " + s));   // log() tees into the ring itself
@@ -297,7 +300,13 @@ public final class ParlonsCore {
                 return mBackup.phrase();
             }
             public byte[] exportBackup(char[] zPassword) throws Exception {
-                return AccountBackup.export(mBackup, mNodeStore, mNode.name(), zPassword);
+                // The PORTABLE bundle: identity + devices + settings + every node and chat
+                // collection, from the live stores after a flush of the batched chat state.
+                try { mChat.flushState(); } catch (Exception ignored) { }
+                try { mChatStore.flush(); } catch (Exception ignored) { }
+                try { mNodeStore.flush(); } catch (Exception ignored) { }
+                return AccountBackup.export(mBackup, mDataDir, mNodeStore, mChatStore,
+                        mNode.name(), zPassword);
             }
         });
         mControl.registerOn(mNode.services());
@@ -319,6 +328,11 @@ public final class ParlonsCore {
      * Ride a relay the HOST already runs (a Parlons Node's cape) instead of starting our own:
      * its stats feed the Node tab and it is left alone on shutdown. Call before {@link #start}.
      */
+    /** The pool relay this account runs (or shares), or null when it has none. */
+    public RelayRuntime relayRuntime() {
+        return mRelay;
+    }
+
     public void useExternalRelay(RelayRuntime zRelay) {
         mRelay = zRelay;
         mExternalRelay = true;

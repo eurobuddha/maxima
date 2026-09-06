@@ -474,6 +474,38 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### Portable accounts, then an optional multi-account host (node 0.2.35, cloud 0.11.31, portal 0.2.23)
+**The portable account bundle.** `Back up account…` on a paired device (or `parlons backup
+<file.pbk>`) now writes the WHOLE account, encrypted under your passphrase (scrypt + AES-GCM, the
+same `.pbk` container the phone app reads): the identity phrase, the paired devices
+(`devices.json`), the host settings (`cloud-settings.properties`), every collection and log of the
+node store (contacts, settings, remembered relays, address history) and of the chat store (messages,
+groups, read state, wallet notes), plus the v1 fields every older reader knows - so the phone app's
+restore still takes it (identity + contacts), and an old v1 backup still restores here. Restore is
+OFFLINE and CLI-only by design (a paired device must never be able to swap the account from under
+the others): `java -jar parlons-cloud.jar --restore backup.pbk` on a server, or
+`java -Dparlons.restore=backup.pbk -jar parlons-node.jar` on a Parlons Node (writes `identity.txt`;
+the node's WALLET stays its own vault - resync it to the old phrase from a paired device if the funds
+should follow). The identity file is written LAST and never overwritten; a fresh data dir is
+required. Because the identity is the same, the MAX# is the same: paired devices reconnect without
+re-pairing (the old anchor is down, the fleet's replicated directory - Stage-3 item 1 - resolves
+the key at its new home). One identity, one live account: stop the old host for good.
+**The multi-account host** (optional, self-hostable, replaceable): `parlons-cloud --tenants <dir>`
+runs every `<dir>/<name>/` account - the same layout a bundle restores into - in one process,
+sharing one pool relay (the first tenant's `--relay-port`) and one Tier-2 listener. Seeds can be
+kept ENCRYPTED AT REST: `--tenants <dir> --unlock prompt --encrypt-seeds` turns each `seed.txt`
+into `seed.enc` (verified, plaintext deleted); from then on start with `--unlock prompt` (console)
+or `--unlock env` (`PARLONS_UNLOCK`, for systemd). Every tenant keeps its own identity, devices,
+contacts, chat, `pair-code.txt` and backup, and leaves at any time as a bundle. Honest limits: the
+running process holds the phrases (an always-on account must hold its key to act for you) - at-rest
+encryption protects disk images and backups, not against the operator; a user who wants no operator
+runs their own node, which is why this host is one option among several. Relays cap unregistered
+connections per source IP (32, `-Dmaxima.relay.maxpersource`), so plan on ~10 tenants per host
+before raising it on relays you run. Decentralization: nothing new is centralised - the bundle
+makes every account movable (principles 2, 3, 6), the host is optional and replaceable (3, 5), and
+restore stays out of the RPC surface (4). Verify: `AccountBackupTest`, `TenantsTest`; live: export
+from a paired device, restore into a fresh dir on another box, start, watch the device reconnect.
+
 ### Bootstrap without a single operator (server 0.4.59, node 0.2.34, app 0.6.77, portal 0.2.22, desktop 1.5.57)
 The compiled-in relay list (`Bootstrap.RELAYS`) is now ONE seed source among several, never a
 requirement (`core/session/SeedRelays`): a client starts from (1) the relays its user added -

@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.30";
+    public static final String VERSION = "0.11.31";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -39,6 +39,9 @@ public final class Main {
 
         String importSeedArg = null;
         String restoreArg = null;
+        String tenantsArg = null;
+        String unlockArg = null;
+        boolean encryptSeeds = false;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -52,6 +55,15 @@ public final class Main {
                     break;
                 case "--restore":
                     restoreArg = strArg(args, ++i, "--restore");
+                    break;
+                case "--tenants":
+                    tenantsArg = strArg(args, ++i, "--tenants");
+                    break;
+                case "--unlock":
+                    unlockArg = strArg(args, ++i, "--unlock");
+                    break;
+                case "--encrypt-seeds":
+                    encryptSeeds = true;
                     break;
                 case "-v":
                 case "--version":
@@ -117,6 +129,15 @@ public final class Main {
             }
             if (restoreArg != null) {
                 restoreBackup(Paths.get(data), restoreArg);
+                return;
+            }
+            if (tenantsArg != null) {
+                char[] unlock = Tenants.unlockPassphrase(unlockArg, encryptSeeds);
+                if (encryptSeeds) {
+                    Tenants.encryptSeeds(Paths.get(tenantsArg), unlock);
+                    return;
+                }
+                Tenants.run(Paths.get(tenantsArg), cfg, unlock);
                 return;
             }
             run(Paths.get(data), cfg);
@@ -199,15 +220,27 @@ public final class Main {
             java.util.Arrays.fill(pw, '\0');
         }
         CloudBackupManager.applyRestore(dir, b);
+        int chatRows = 0;
+        java.util.Map<String, java.util.Map<String, String>> chat = b.stores.get(AccountBackup.CHAT_DIR);
+        if (chat != null) {
+            for (java.util.Map<String, String> col : chat.values()) {
+                chatRows += col.size();
+            }
+        }
         System.out.println("Restored: " + (b.displayName.isEmpty() ? "(unnamed)" : b.displayName)
                 + " · " + b.contacts.size() + " contact(s) · " + b.keyUses.size()
-                + " key-use counter(s) (raise-only)");
+                + " key-use counter(s) (raise-only)"
+                + (b.hasAccount() ? " · paired devices, settings and " + chatRows
+                        + " chat record(s) (portable account bundle)"
+                        : " · (an older backup: contacts and identity only)"));
         System.out.println();
         System.out.println("  !! The node this backup came from must be STOPPED for good — two");
         System.out.println("     holders of one seed will eventually reuse a one-time signature");
-        System.out.println("     key. Chat history does not travel in a backup.");
+        System.out.println("     key.");
         System.out.println();
-        System.out.println("  Start the node normally to bring the account online here.");
+        System.out.println("  Start the node normally to bring the account online here. Paired");
+        System.out.println("  devices reconnect on their own: the identity - and so the MAX# - is");
+        System.out.println("  the same, and the fleet's replicated directory resolves it here.");
     }
 
     private static void run(Path dir, ParlonsCore.Config cfg) throws Exception {
@@ -322,7 +355,22 @@ public final class Main {
         out.println("  --peers <list>      mesh peers for the pool relay   (comma-separated; or MAXIMA_PEERS)");
         out.println("  --blobstore <MB>    relay media shelf size in MB    (default " + DEFAULT_BLOB_MB + ")");
         out.println("  --import-seed <f|prompt>  adopt an EXISTING 24-word phrase (fresh dir only)");
-        out.println("  --restore <file.pbk>      restore an encrypted Parlons backup (fresh dir only)");
+        out.println("  --restore <file.pbk>      restore an encrypted Parlons backup (fresh dir only):");
+        out.println("                            the PORTABLE ACCOUNT bundle - identity, paired devices,");
+        out.println("                            settings, contacts, chat - so the account comes back");
+        out.println("                            here with the same MAX#");
+        out.println();
+        out.println("  Multi-account host (optional, self-hostable; every tenant can leave with its bundle):");
+        out.println("  --tenants <dir>     run EVERY <dir>/<name>/ account in this one process, sharing");
+        out.println("                      one pool relay (the first tenant's --relay-port); a tenant dir");
+        out.println("                      holds seed.txt (or seed.enc), or is filled by --restore first");
+        out.println("  --unlock <prompt|env>  the passphrase that opens seed.enc files: asked on the");
+        out.println("                      console, or read from PARLONS_UNLOCK (systemd). Needed when");
+        out.println("                      any tenant seed is encrypted at rest");
+        out.println("  --encrypt-seeds     with --tenants and --unlock: turn every tenant's seed.txt into");
+        out.println("                      seed.enc (scrypt + AES-GCM under the unlock passphrase), verify,");
+        out.println("                      delete the plaintext, and exit. At-rest protection for the disk");
+        out.println("                      and its backups; the running process still holds the phrases.");
         out.println("  -v, --version       print version and exit");
         out.println("  -h, --help          this help");
         out.println();

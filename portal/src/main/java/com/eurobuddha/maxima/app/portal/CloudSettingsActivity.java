@@ -311,12 +311,15 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         keys.addView(backup);
         keys.addView(PortalUi.gap(c, 8));
         keys.addView(PortalUi.label(c, "Encrypted with your passphrase before it leaves the "
-                + "node (same .pbk format as the phone app — carries contacts and the "
-                + "signature counter, not chat history)."));
+                + "node. The portable account bundle: identity, paired devices, settings, "
+                + "contacts and chat history (same .pbk format the phone app reads)."));
         keys.addView(PortalUi.gap(c, 10));
-        keys.addView(PortalUi.label(c, "Restore / move this account: on the NEW server run\n"
+        keys.addView(PortalUi.label(c, "Move this account to ANY node or server with the same "
+                + "MAX#: on the new host run\n"
                 + "java -jar parlons-cloud.jar --restore backup.pbk\n"
-                + "with the old node stopped for good (one seed, one node — ever)."));
+                + "or, on a Parlons Node, java -Dparlons.restore=backup.pbk -jar parlons-node.jar\n"
+                + "with the old host stopped for good (one identity, one live account). Your "
+                + "paired devices reconnect on their own."));
         body.addView(keys);
 
         // --- Minima Core on this phone — the same "link to core" path phone users know.
