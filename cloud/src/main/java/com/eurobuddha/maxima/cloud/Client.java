@@ -119,10 +119,11 @@ public final class Client {
                 break;
             }
             case "newcode": {
+                String before = localInvite();   // the invite on disk NOW; the fresh one must differ
                 JSONObject o = r.newCode();
                 if (!isOk(o)) { fail(o); break; }
                 System.out.println("new one-time pairing code minted on the account.");
-                String inv = waitLocalInvite(6_000);
+                String inv = waitLocalInvite(before, 8_000);
                 if (inv != null) {
                     System.out.println("invite : " + inv);
                     System.out.println("(scan or paste it in the Parlons Cloud app; the code half works once)");
@@ -502,16 +503,17 @@ public final class Client {
         return null;
     }
 
-    /** After newcode: the account rewrites pair-code.txt at once and invite.txt within seconds. */
-    static String waitLocalInvite(long zMs) throws InterruptedException {
+    /** After newcode: the account rewrites pair-code.txt at once and invite.txt within seconds.
+     *  Returns the first invite that differs from {@code zBefore} (the stale one is never handed out). */
+    static String waitLocalInvite(String zBefore, long zMs) throws InterruptedException {
         long until = System.currentTimeMillis() + zMs;
-        String last = null;
         while (System.currentTimeMillis() < until) {
             String inv = localInvite();
-            if (inv != null && !inv.equals(last)) return inv;
+            if (inv != null && !inv.equals(zBefore)) return inv;
             Thread.sleep(300);
         }
-        return localInvite();
+        String inv = localInvite();
+        return inv != null && !inv.equals(zBefore) ? inv : null;
     }
 
     private static void usage() {
