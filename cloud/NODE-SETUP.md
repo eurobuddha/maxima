@@ -474,6 +474,35 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### The iOS wake path and catch-up (node 0.2.39, cloud 0.11.35, portal 0.2.27; wake proxy 0.1.0)
+Parlons Cloud for iOS (`support/parlons-ios`) is a paired device like the Android portal, but iOS
+kills a backgrounded socket, so three account-side additions carry it:
+- `parlons.push.register {live:false}` - the device says "going dark"; its 3-minute live window
+  ends now, so the next message wakes it instead of being dialled into a relay mailbox.
+- `parlons.push.apns {token, env, proxy}` - the device's APNs token and the wake proxy IT chose
+  ("" none, "off" never, or an https URL; stored with the pairing in `devices.json`, dropped on
+  revoke; `parlons.settings.get` reports it as `push`). When a `message` or `call` arrives and
+  the device is not live (or every live address failed), the account POSTs a bare
+  `{token, env, kind}` to that proxy (`WakeProxyClient`: one wake per device per 20 s, then quiet
+  until the device's next RPC or 5 min; a proxy failing three times is left alone 5 min). No
+  content, no sender, nothing but "wake" ever leaves the account.
+- `parlons.chat.since {cursor, limit, offset}` - every conversation's entries newer than the
+  cursor, ordered by newness (the later of `time` and `arrived`, so a late-relayed message is not
+  skipped), paged; the reply's `cursor` is what the device keeps. One RPC replaces N
+  `conversation(after)` calls on resume and in the notification extension.
+**The wake proxy** (`wakeproxy/`, `dist/parlons-wake-<ver>.jar`): stateless, holds the publisher's
+APNs `.p8` in memory, sends a content-free alert (`"New message"` / `"Incoming call"`,
+`mutable-content:1` so the app's extension fetches the real message E2E and rewrites the banner),
+per-token rate limits (1 per 10 s, 60 per hour, 3000/min global), never logs a token (an 8-hex
+SHA-256 prefix only). Deploy: `ops/deploy-wake-proxy.sh <box> --key AuthKey.p8 --key-id .. --team-id
+Z4JD286WF4 --bundle com.eurobuddha.parlons` (loopback bind, Caddy in front), verify with
+`ops/verify-wake-proxy.sh https://wake.<domain>`. Decentralization: the proxy is OPTIONAL (off =
+BGAppRefresh polling), REPLACEABLE (anyone building the app with their own bundle id and `.p8`
+runs their own), and blind (a token and a timestamp); the account, the relays and the message path
+are unchanged. Honest limit: Apple binds push keys to the publisher, so the App Store binary's
+wake path is publisher-run or off. Verify: `WakeProxyClientTest`, `DevicePairingApnsTest`,
+`WakeProxyTest`; live: `pkinterop watch` on a Mac paired to an account receives pushes E2E.
+
 ### Portable accounts, then an optional multi-account host (node 0.2.36, cloud 0.11.32, portal 0.2.24)
 **The portable account bundle.** `Back up account…` on a paired device (or `parlons backup
 <file.pbk>`) now writes the WHOLE account, encrypted under your passphrase (scrypt + AES-GCM, the

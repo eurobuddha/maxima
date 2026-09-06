@@ -43,11 +43,40 @@ public final class DevicePairing {
         public final String key;      // 0x-hex of the DER public key
         public final String label;
         public final long pairedAt;
+        /** iOS wake record: the APNs device token (hex), "prod"|"sandbox", and the wake proxy
+         *  the DEVICE chose - "" = none registered, "off" = never wake, else a URL. The proxy
+         *  only ever receives the token and the word "wake"; the message travels E2E after. */
+        public volatile String apnsToken = "";
+        public volatile String apnsEnv = "";
+        public volatile String wakeProxy = "";
+        public volatile long apnsUpdated;
         Device(String key, String label, long pairedAt) {
             this.key = key;
             this.label = label;
             this.pairedAt = pairedAt;
         }
+        public boolean canWake() {
+            return !apnsToken.isEmpty() && !wakeProxy.isEmpty() && !"off".equalsIgnoreCase(wakeProxy);
+        }
+    }
+
+    /** Record (or clear, with an empty token) a device's APNs wake registration. */
+    public synchronized boolean setApns(String zKeyHex, String zToken, String zEnv, String zProxy) {
+        Device d = mAuthorized.get(normalizeHex(zKeyHex));
+        if (d == null) {
+            return false;
+        }
+        d.apnsToken = zToken == null ? "" : zToken.trim();
+        d.apnsEnv = zEnv == null ? "" : zEnv.trim();
+        d.wakeProxy = zProxy == null ? "" : zProxy.trim();
+        d.apnsUpdated = System.currentTimeMillis();
+        save();
+        return true;
+    }
+
+    /** The device record for a key, or null. */
+    public synchronized Device device(String zKeyHex) {
+        return mAuthorized.get(normalizeHex(zKeyHex));
     }
 
     private final Path mFile;          // devices.json
@@ -249,7 +278,17 @@ public final class DevicePairing {
                     String label = String.valueOf(d.getOrDefault("label", "device"));
                     long at = d.get("pairedAt") == null ? 0L
                             : Long.parseLong(String.valueOf(d.get("pairedAt")));
-                    mAuthorized.put(key, new Device(key, label, at));
+                    Device dev = new Device(key, label, at);
+                    Object apns = d.get("apns");
+                    if (apns instanceof JSONObject) {
+                        JSONObject a = (JSONObject) apns;
+                        dev.apnsToken = String.valueOf(a.getOrDefault("token", ""));
+                        dev.apnsEnv = String.valueOf(a.getOrDefault("env", ""));
+                        dev.wakeProxy = String.valueOf(a.getOrDefault("proxy", ""));
+                        try { dev.apnsUpdated = Long.parseLong(String.valueOf(a.getOrDefault("updated", "0"))); }
+                        catch (Exception ignored) { }
+                    }
+                    mAuthorized.put(key, dev);
                 }
             }
             Object pend = o.get("pending");
@@ -273,6 +312,14 @@ public final class DevicePairing {
                 o.put("key", d.key);
                 o.put("label", d.label);
                 o.put("pairedAt", d.pairedAt);
+                if (!d.apnsToken.isEmpty() || !d.wakeProxy.isEmpty()) {
+                    JSONObject a = new JSONObject();
+                    a.put("token", d.apnsToken);
+                    a.put("env", d.apnsEnv);
+                    a.put("proxy", d.wakeProxy);
+                    a.put("updated", d.apnsUpdated);
+                    o.put("apns", a);
+                }
                 auth.add(o);
             }
             JSONArray pend = new JSONArray();

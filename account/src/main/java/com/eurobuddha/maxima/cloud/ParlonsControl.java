@@ -46,6 +46,10 @@ public final class ParlonsControl {
     public static final String M_CONTACT_RESOLVE = "parlons.contacts.resolve";
     public static final String M_MARK_READ    = "parlons.chat.markread";
     public static final String M_PUSH_REG     = "parlons.push.register";
+    /** iOS: register/clear this device's APNs wake token and the proxy it chose. */
+    public static final String M_PUSH_APNS    = "parlons.push.apns";
+    /** Cross-conversation catch-up: entries newer than a cursor, paged (the iOS resume path). */
+    public static final String M_CHAT_SINCE   = "parlons.chat.since";
     public static final String M_CALL_SIGNAL  = "parlons.call.signal";
     /** The method a DEVICE serves — the cloud dials the device's own node with events. */
     public static final String DEVICE_PUSH    = "parlons.push";
@@ -118,6 +122,14 @@ public final class ParlonsControl {
     private static final int PUSH_READ_MS = 6_000;
 
     private final java.util.Map<String, Live> mLive = new java.util.concurrent.ConcurrentHashMap<>();
+    /** The iOS wake path (content-free APNs via the proxy each device chose). */
+    private final WakeProxyClient mWake = new WakeProxyClient();
+    /** Page size for parlons.chat.since. */
+    static final int PAGE_SINCE = 100;
+
+    public WakeProxyClient wakeProxy() {
+        return mWake;
+    }
 
     private static final class Taken {
         final String device;
@@ -1137,7 +1149,101 @@ public final class ParlonsControl {
         // --- push channel: an explicit heartbeat. requireAuth records the live addresses. ---
         zReg.register(M_PUSH_REG, req -> {
             requireAuth(req);
+            // {live:false}: the device is about to go dark (iOS background). Forget its live
+            // window NOW so the next event wakes it through APNs instead of dialling relay
+            // addresses that only mailbox the event; the addresses stay for a later `state`.
+            JSONObject in = parse(req);
+            if (in.containsKey("live") && !bool(in, "live")) {
+                String key = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
+                Live l = mLive.get(key);
+                if (l != null) {
+                    l.seen = 0;
+                }
+            }
             return bytes(ok());
+        });
+        zReg.register(M_PUSH_APNS, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String token = str(in, "token").trim();
+            String env = str(in, "env").trim();
+            String proxy = str(in, "proxy").trim();
+            if (!token.isEmpty() && !token.matches("[0-9A-Fa-f]{32,512}")) {
+                return bytes(err("token must be the APNs device token as hex"));
+            }
+            if (!env.isEmpty() && !env.equals("prod") && !env.equals("sandbox")) {
+                return bytes(err("env must be prod or sandbox"));
+            }
+            if (!proxy.isEmpty() && !proxy.equalsIgnoreCase("off")
+                    && !proxy.matches("https://[A-Za-z0-9.\\-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~\\-/%]*)?")) {
+                return bytes(err("proxy must be an https URL, or off"));
+            }
+            String key = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
+            if (!mPairing.setApns(key, token, env, proxy)) {
+                return bytes(err("not a paired device"));
+            }
+            mNode.log("wake registration " + (token.isEmpty() ? "cleared" : "set") + " for a paired device ("
+                    + (proxy.isEmpty() ? "no proxy" : proxy.equalsIgnoreCase("off") ? "off" : "proxy " + proxy) + ")");
+            JSONObject out = ok();
+            out.put("wake", token.isEmpty() || proxy.isEmpty() || proxy.equalsIgnoreCase("off") ? "off" : "proxy");
+            return bytes(out);
+        });
+        zReg.register(M_CHAT_SINCE, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            long cursor = lngOf(in, "cursor");
+            int limit = (int) lngOf(in, "limit");
+            if (limit <= 0 || limit > PAGE_SINCE) {
+                limit = PAGE_SINCE;
+            }
+            int offset = (int) Math.max(0, lngOf(in, "offset"));
+            // Every conversation's entries newer than the cursor, ordered by NEWNESS - the later
+            // of time and arrived (a late-relayed message has an old time but a new arrival, and
+            // must not be missed by a device that has already moved its cursor past its time).
+            java.util.List<ChatEngine.Entry> all = new java.util.ArrayList<>();
+            java.util.Map<String, Boolean> groupOf = new java.util.HashMap<>();
+            for (ChatEngine.Summary s : mChat.summaries()) {
+                boolean grp = mChat.group(s.conversation) != null;
+                groupOf.put(s.conversation, grp);
+                for (ChatEngine.Entry e : mChat.conversation(s.conversation)) {
+                    if (newness(e) > cursor) {
+                        all.add(e);
+                    }
+                }
+            }
+            all.sort(java.util.Comparator.comparingLong(ParlonsControl::newness));
+            int end = Math.min(all.size(), offset + limit);
+            JSONArray entries = new JSONArray();
+            long maxSeen = cursor;
+            for (int i = offset; i < end; i++) {
+                ChatEngine.Entry e = all.get(i);
+                String conv = e.isGroup() ? e.groupId : e.peer;
+                JSONObject o = new JSONObject();
+                o.put("peer", conv);
+                o.put("group", groupOf.getOrDefault(conv, e.isGroup()));
+                o.put("name", nameFor(conv));
+                o.put("id", safe(e.id));
+                o.put("sender", safe(e.sender));
+                o.put("body", safe(e.body));
+                o.put("mine", e.mine);
+                o.put("time", e.time);
+                o.put("state", safe(e.state));
+                o.put("arrived", e.arrived);
+                if (e.isGroup()) {
+                    o.put("sname", nameFor(e.sender));
+                }
+                entries.add(o);
+                maxSeen = Math.max(maxSeen, newness(e));
+            }
+            JSONObject out = ok();
+            out.put("entries", entries);
+            out.put("total", all.size());
+            out.put("more", end < all.size());
+            out.put("next", end);
+            // The cursor to keep: the newest entry delivered on this page (only on the LAST page
+            // does it move past everything); the device advances it once the page is stored.
+            out.put("cursor", end < all.size() ? maxSeen : Math.max(maxSeen, cursor));
+            return bytes(out);
         });
 
         // --- calls: a paired device makes/answers calls AS the account. The device terminates
@@ -1592,6 +1698,14 @@ public final class ParlonsControl {
             SettingsSink s = mSettingsSink;
             JSONObject out = ok();
             out.put("readReceipts", s != null && s.readReceipts());
+            // This device's wake registration (iOS): what the Settings screen renders.
+            DevicePairing.Device d = mPairing.device(
+                    new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString());
+            JSONObject push = new JSONObject();
+            push.put("apns", d != null && !d.apnsToken.isEmpty());
+            push.put("proxy", d == null ? "" : safe(d.wakeProxy));
+            push.put("env", d == null ? "" : safe(d.apnsEnv));
+            out.put("push", push);
             return bytes(out);
         });
         zReg.register(M_SETTINGS_SET, req -> {
@@ -1905,6 +2019,7 @@ public final class ParlonsControl {
             l.addrs = new java.util.ArrayList<>(req.replyTo);
             l.failures.clear();   // a fresh address list: every address gets a clean slate
             l.seen = System.currentTimeMillis();
+            mWake.deviceSeen(key);   // awake: the wake quiet period ends
         }
     }
 
@@ -1925,10 +2040,33 @@ public final class ParlonsControl {
         push(event, null);
     }
 
+    /** The later of a message's own time and its arrival here (late-relay dual clock). */
+    static long newness(ChatEngine.Entry e) {
+        return Math.max(e.time, e.arrived);
+    }
+
     private void push(JSONObject event, String zExceptDeviceKey) {
         event.put("eid", java.util.UUID.randomUUID().toString());
         final byte[] bytes = event.toString().getBytes(StandardCharsets.UTF_8);
         final long now = System.currentTimeMillis();
+        final String kind = String.valueOf(event.get("type"));
+        // Devices that cannot be reached live but registered a wake path: a content-free
+        // APNs wake (messages and calls only - never a delivery tick).
+        if ("message".equals(kind) || "call".equals(kind)) {
+            for (DevicePairing.Device d : mPairing.authorized()) {
+                if (!d.canWake()) {
+                    continue;
+                }
+                if (zExceptDeviceKey != null && d.key.equalsIgnoreCase(zExceptDeviceKey)) {
+                    continue;
+                }
+                Live l = mLive.get(d.key);
+                boolean live = l != null && l.addrs != null && now - l.seen <= LIVE_MS;
+                if (!live) {
+                    mWake.wake(d.key, d.wakeProxy, d.apnsToken, d.apnsEnv, kind);
+                }
+            }
+        }
         for (java.util.Map.Entry<String, Live> en : mLive.entrySet()) {
             if (zExceptDeviceKey != null && en.getKey().equalsIgnoreCase(zExceptDeviceKey)) {
                 continue;
@@ -1940,7 +2078,9 @@ public final class ParlonsControl {
             // One pool task PER DEVICE: a dead device's blocking connects delay only itself.
             // Short socket leashes, and an address that failed PUSH_ADDR_FAILS times running is
             // skipped until the device's next RPC refreshes its list.
+            final String deviceKey = en.getKey();
             mPushPool.execute(() -> {
+                boolean anyDelivered = false;
                 for (String addr : l.addrs) {
                     Integer fails = l.failures.get(addr);
                     if (fails != null && fails >= PUSH_ADDR_FAILS) {
@@ -1953,8 +2093,17 @@ public final class ParlonsControl {
                                     public void onError(String m) { }
                                 }, 10_000, PUSH_CONNECT_MS, PUSH_READ_MS);
                         l.failures.remove(addr);
+                        anyDelivered = true;
                     } catch (Exception e) {
                         l.failures.merge(addr, 1, Integer::sum);
+                    }
+                }
+                // A "live" device whose every address is dead went to sleep without saying so
+                // (iOS killed it): fall back to the wake path.
+                if (!anyDelivered && ("message".equals(kind) || "call".equals(kind))) {
+                    DevicePairing.Device d = mPairing.device(deviceKey);
+                    if (d != null && d.canWake()) {
+                        mWake.wake(d.key, d.wakeProxy, d.apnsToken, d.apnsEnv, kind);
                     }
                 }
             });

@@ -272,6 +272,30 @@ public final class ParlonsRemote {
     public JSONObject registerPush() throws Exception {
         return rpc(ParlonsControl.M_PUSH_REG, new JSONObject());
     }
+    /** {@code live=false}: tell the account this device is going dark (wake it via APNs instead). */
+    public JSONObject registerPush(boolean zLive) throws Exception {
+        JSONObject p = new JSONObject();
+        if (!zLive) {
+            p.put("live", false);
+        }
+        return rpc(ParlonsControl.M_PUSH_REG, p);
+    }
+    /** Register (or clear with an empty token) this device's APNs wake token + chosen proxy. */
+    public JSONObject registerApns(String zToken, String zEnv, String zProxy) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("token", zToken == null ? "" : zToken);
+        p.put("env", zEnv == null ? "" : zEnv);
+        p.put("proxy", zProxy == null ? "" : zProxy);
+        return rpc(ParlonsControl.M_PUSH_APNS, p);
+    }
+    /** Cross-conversation entries newer than the cursor (one page; follow more/next). */
+    public JSONObject since(long zCursor, int zLimit, int zOffset) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("cursor", zCursor);
+        p.put("limit", zLimit);
+        p.put("offset", zOffset);
+        return rpc(ParlonsControl.M_CHAT_SINCE, p, 12_000);
+    }
 
     /** Relay one call signal (offer/answer/ice/bye/busy) to a peer, sent AS the account. */
     public JSONObject callSignal(String zPeer, String zCallId, String zKind,

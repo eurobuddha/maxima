@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+}
+
+// The Parlons wake proxy: a stateless HTTP service holding the publisher's APNs key. A Parlons
+// account POSTs {token, env, kind} when one of its iOS devices is asleep; the proxy sends a
+// content-free APNs alert ("New message") so the phone wakes and fetches the message end-to-end
+// from its own account. Nothing at rest, no content ever, rate-limited per token.
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+tasks.withType(JavaCompile).configureEach {
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+sourceSets {
+    test { java.srcDirs = ['src/junit/java'] }
+}
+
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Self-contained runnable wake proxy jar'
+    archiveBaseName = 'parlons-wake'
+    manifest {
+        attributes 'Main-Class': 'com.eurobuddha.maxima.wake.Main'
+    }
+    from sourceSets.main.output
+}
