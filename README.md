@@ -1,5 +1,10 @@
 # Maxima — decentralised information layer for Minima
 
+> **Just want to use Parlons?** Start at the user guide: [docs/guide/index.md](docs/guide/index.md)
+> (Android, iPhone, Mac, Windows, Linux, and running your own account with one command). The same
+> guide is published at the Parlons website under Get started. Everything below is for developers.
+
+
 An original, **wire-compatible** reimplementation of Minima's Maxima comms layer,
 built as a shared JVM core with two hosts: an always-on Android APK and a
 headless Linux/PC server.
