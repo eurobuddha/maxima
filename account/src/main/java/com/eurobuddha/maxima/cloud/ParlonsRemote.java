@@ -582,7 +582,41 @@ public final class ParlonsRemote {
     }
 
     public JSONObject contacts() throws Exception {
-        return rpc(ParlonsControl.M_CONTACTS, new JSONObject());
+        return paged(ParlonsControl.M_CONTACTS, "contacts");
+    }
+
+    /**
+     * Fetch every page of a paged list reply (see the node's M_CONTACTS / M_SUMMARIES): the
+     * node caps each page under the wire message ceiling and says "more"/"next"; older nodes
+     * send neither and the single reply stands. Pages are merged into one reply object.
+     */
+    private JSONObject paged(String zMethod, String zArrayKey) throws Exception {
+        JSONObject p = new JSONObject();
+        JSONObject first = rpc(zMethod, p);
+        if (!Boolean.TRUE.equals(first.get("ok")) || !Boolean.TRUE.equals(first.get("more"))) {
+            return first;
+        }
+        org.minima.utils.json.JSONArray all = new org.minima.utils.json.JSONArray();
+        Object a0 = first.get(zArrayKey);
+        if (a0 instanceof org.minima.utils.json.JSONArray) {
+            all.addAll((org.minima.utils.json.JSONArray) a0);
+        }
+        JSONObject page = first;
+        int guard = 0;
+        while (Boolean.TRUE.equals(page.get("more")) && guard++ < 100) {
+            p.put("offset", String.valueOf(page.get("next")));
+            page = rpc(zMethod, p);
+            if (!Boolean.TRUE.equals(page.get("ok"))) {
+                break;
+            }
+            Object a = page.get(zArrayKey);
+            if (a instanceof org.minima.utils.json.JSONArray) {
+                all.addAll((org.minima.utils.json.JSONArray) a);
+            }
+        }
+        first.put(zArrayKey, all);
+        first.put("more", false);
+        return first;
     }
 
     public JSONObject addContact(String zAddress) throws Exception {
@@ -592,7 +626,7 @@ public final class ParlonsRemote {
     }
 
     public JSONObject summaries() throws Exception {
-        return rpc(ParlonsControl.M_SUMMARIES, new JSONObject());
+        return paged(ParlonsControl.M_SUMMARIES, "summaries");
     }
 
     public JSONObject conversation(String zPeer) throws Exception {

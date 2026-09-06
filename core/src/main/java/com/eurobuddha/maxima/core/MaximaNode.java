@@ -1449,21 +1449,72 @@ public final class MaximaNode implements ChatPort {
     }
 
     /** Tell every known contact our current addresses. Call after a relay change. */
+    /** Contact refreshes run a few at a time, never one by one: 150 contacts x a 20 s
+     *  timeout each was a 50-minute serial loop. */
+    private final java.util.concurrent.ExecutorService mRefreshExec =
+            new java.util.concurrent.ThreadPoolExecutor(0, 4, 30, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.SynchronousQueue<>(),
+                    r -> {
+                        Thread t = new Thread(r, "maxima-refresh");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+    /** contact key -> epoch ms before which we do not try it again (exponential backoff after
+     *  a refresh in which none of its addresses accepted); cleared by any success. */
+    private final Map<String, Long> mRefreshNotBefore = new ConcurrentHashMap<>();
+    private final Map<String, Integer> mRefreshFailures = new ConcurrentHashMap<>();
+    private static final long REFRESH_BACKOFF_MIN_MS = 60_000L;
+    private static final long REFRESH_BACKOFF_MAX_MS = 6L * 3_600_000L;
+    /** One refresh round may not outlive this (the heartbeat calls the next). */
+    private static final long REFRESH_BUDGET_MS = 90_000L;
+
     public int refreshContacts() {
         publishToMls();
-        int ok = 0;
+        final java.util.concurrent.atomic.AtomicInteger ok = new java.util.concurrent.atomic.AtomicInteger();
+        final long now = System.currentTimeMillis();
+        List<java.util.concurrent.Future<?>> pending = new ArrayList<>();
         for (Contact c : mContacts.values()) {
-            for (String addr : c.addresses) {
-                try {
-                    introduce(addr, false);
-                    ok++;
-                    break;
-                } catch (Exception ignored) {
-                    // try the next address
+            final String key = Keys.norm(c.publicKey);
+            Long due = mRefreshNotBefore.get(key);
+            if (due != null && now < due) {
+                continue;   // backing off: its addresses were all dead last time
+            }
+            final Contact fc = c;
+            pending.add(mRefreshExec.submit(() -> {
+                boolean any = false;
+                for (String addr : fc.addresses) {
+                    try {
+                        introduce(addr, false);
+                        any = true;
+                        break;
+                    } catch (Exception ignored) {
+                        // try the next address
+                    }
                 }
+                if (any) {
+                    ok.incrementAndGet();
+                    mRefreshFailures.remove(key);
+                    mRefreshNotBefore.remove(key);
+                } else {
+                    int n = mRefreshFailures.merge(key, 1, Integer::sum);
+                    long wait = Math.min(REFRESH_BACKOFF_MAX_MS, REFRESH_BACKOFF_MIN_MS << Math.min(n, 12));
+                    mRefreshNotBefore.put(key, System.currentTimeMillis() + wait);
+                }
+            }));
+        }
+        long deadline = now + REFRESH_BUDGET_MS;
+        for (java.util.concurrent.Future<?> f : pending) {
+            long left = deadline - System.currentTimeMillis();
+            if (left <= 0) {
+                break;   // the rest finish on their own; the next round counts them
+            }
+            try {
+                f.get(left, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (Exception ignored) {
             }
         }
-        return ok;
+        return ok.get();
     }
 
     // ---------------------------------------------------------------

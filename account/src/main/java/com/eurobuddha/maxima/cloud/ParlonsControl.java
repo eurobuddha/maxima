@@ -108,7 +108,14 @@ public final class ParlonsControl {
     private static final class Live {
         volatile List<String> addrs;
         volatile long seen;
+        /** address -> consecutive push failures; an address failing PUSH_ADDR_FAILS times in a
+         *  row is skipped until the device's next RPC refreshes its address list. */
+        final java.util.Map<String, Integer> failures = new java.util.concurrent.ConcurrentHashMap<>();
     }
+    private static final int PUSH_ADDR_FAILS = 3;
+    /** Push socket leashes: a device that vanished behind NAT fails in seconds, not 40. */
+    private static final int PUSH_CONNECT_MS = 4_000;
+    private static final int PUSH_READ_MS = 6_000;
 
     private final java.util.Map<String, Live> mLive = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -145,11 +152,24 @@ public final class ParlonsControl {
             });
     /** Push fan-out: one task per device so one dead device can't stall the others. */
     private final java.util.concurrent.ExecutorService mPushPool =
-            java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
-                Thread t = new Thread(r, "parlons-push");
+            new java.util.concurrent.ThreadPoolExecutor(4, 16, 60, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.LinkedBlockingQueue<>(32),   // grows to 16 threads under load
+                    r -> {
+                        Thread t = new Thread(r, "parlons-push");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+    /** State ticks (sent / delivered / read) burst: one push per entry per window, not per tick. */
+    private final java.util.Map<String, JSONObject> mStateCoalesce = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicBoolean mStateFlushScheduled = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.ScheduledExecutorService mStateFlusher =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "parlons-push-state");
                 t.setDaemon(true);
                 return t;
             });
+    private static final long STATE_COALESCE_MS = 400;
 
     private static final class Upload {
         final java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
@@ -640,8 +660,19 @@ public final class ParlonsControl {
         // --- contacts ---
         zReg.register(M_CONTACTS, req -> {
             requireAuth(req);
+            // PAGED: a reply must fit one 256K wire message or it silently black-holes, which
+            // capped a contact list at ~378 entries. offset/limit page it (most recently seen
+            // first); "more"/"next" tell the client to fetch the rest. A client that sends
+            // nothing gets the first page, as before.
+            JSONObject in = parse(req);
+            int offset = intOf(in, "offset", 0);
+            int limit = Math.max(1, Math.min(PAGE_CONTACTS, intOf(in, "limit", PAGE_CONTACTS)));
+            java.util.List<Contact> all = new java.util.ArrayList<>(mNode.contacts());
+            all.sort((a, b) -> Long.compare(b.lastSeen, a.lastSeen));
             JSONArray arr = new JSONArray();
-            for (Contact c : mNode.contacts()) {
+            int end = Math.min(all.size(), offset + limit);
+            for (int i = Math.min(offset, all.size()); i < end; i++) {
+                Contact c = all.get(i);
                 JSONObject o = new JSONObject();
                 o.put("key", safe(c.publicKey));
                 o.put("name", safe(c.name));
@@ -651,6 +682,9 @@ public final class ParlonsControl {
             }
             JSONObject out = ok();
             out.put("contacts", arr);
+            out.put("total", all.size());
+            out.put("more", end < all.size());
+            out.put("next", end);
             return bytes(out);
         });
         zReg.register(M_CONTACT_ADD, req -> {
@@ -704,8 +738,14 @@ public final class ParlonsControl {
         // --- chat ---
         zReg.register(M_SUMMARIES, req -> {
             requireAuth(req);
+            // PAGED like contacts (see M_CONTACTS): ~264 conversations filled a wire message.
+            JSONObject in = parse(req);
+            int offset = intOf(in, "offset", 0);
+            int limit = Math.max(1, Math.min(PAGE_SUMMARIES, intOf(in, "limit", PAGE_SUMMARIES)));
+            java.util.List<ChatEngine.Summary> allSums = mChat.summaries();
+            int sEnd = Math.min(allSums.size(), offset + limit);
             JSONArray arr = new JSONArray();
-            for (ChatEngine.Summary s : mChat.summaries()) {
+            for (ChatEngine.Summary s : allSums.subList(Math.min(offset, allSums.size()), sEnd)) {
                 JSONObject o = new JSONObject();
                 o.put("peer", safe(s.conversation));
                 boolean isGrp = mChat.group(s.conversation) != null;
@@ -736,8 +776,9 @@ public final class ParlonsControl {
             for (Object o : arr) {
                 seen.add(String.valueOf(((JSONObject) o).get("peer")));
             }
-            for (com.eurobuddha.maxima.core.chat.Group g : mChat.groups()) {
-                if (seen.contains(g.id)) {
+            for (com.eurobuddha.maxima.core.chat.Group g : (offset == 0 ? mChat.groups()
+                    : java.util.Collections.<com.eurobuddha.maxima.core.chat.Group>emptyList())) {
+                if (seen.contains(g.id)) {   // empty groups ride the first page only
                     continue;
                 }
                 JSONObject o = new JSONObject();
@@ -752,6 +793,9 @@ public final class ParlonsControl {
             }
             JSONObject out = ok();
             out.put("summaries", arr);
+            out.put("total", allSums.size());
+            out.put("more", sEnd < allSums.size());
+            out.put("next", sEnd);
             return bytes(out);
         });
         zReg.register(M_CONVERSATION, req -> {
@@ -1781,6 +1825,7 @@ public final class ParlonsControl {
             String key = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
             Live l = mLive.computeIfAbsent(key, k -> new Live());
             l.addrs = new java.util.ArrayList<>(req.replyTo);
+            l.failures.clear();   // a fresh address list: every address gets a clean slate
             l.seen = System.currentTimeMillis();
         }
     }
@@ -1815,15 +1860,23 @@ public final class ParlonsControl {
                 continue;
             }
             // One pool task PER DEVICE: a dead device's blocking connects delay only itself.
+            // Short socket leashes, and an address that failed PUSH_ADDR_FAILS times running is
+            // skipped until the device's next RPC refreshes its list.
             mPushPool.execute(() -> {
                 for (String addr : l.addrs) {
+                    Integer fails = l.failures.get(addr);
+                    if (fails != null && fails >= PUSH_ADDR_FAILS) {
+                        continue;
+                    }
                     try {
                         mNode.rpc().call(addr, DEVICE_PUSH, bytes,
                                 new com.eurobuddha.maxima.core.rpc.RpcPeer.ResponseHandler() {
                                     public void onResponse(byte[] p) { }
                                     public void onError(String m) { }
-                                }, 10_000);
-                    } catch (Exception ignored) {
+                                }, 10_000, PUSH_CONNECT_MS, PUSH_READ_MS);
+                        l.failures.remove(addr);
+                    } catch (Exception e) {
+                        l.failures.merge(addr, 1, Integer::sum);
                     }
                 }
             });
@@ -1857,7 +1910,20 @@ public final class ParlonsControl {
         ev.put("peer", e.isGroup() ? e.groupId : e.peer);
         ev.put("id", safe(e.id));
         ev.put("state", safe(e.state));
-        push(ev);
+        // Coalesced: a group message ticks once per member; the devices only need the latest
+        // state per entry, STATE_COALESCE_MS after the first tick of a burst.
+        mStateCoalesce.put(safe(e.id), ev);
+        if (mStateFlushScheduled.compareAndSet(false, true)) {
+            mStateFlusher.schedule(() -> {
+                mStateFlushScheduled.set(false);
+                for (String id : new java.util.ArrayList<>(mStateCoalesce.keySet())) {
+                    JSONObject latest = mStateCoalesce.remove(id);
+                    if (latest != null) {
+                        push(latest);
+                    }
+                }
+            }, STATE_COALESCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
     }
 
     /**
@@ -2014,6 +2080,19 @@ public final class ParlonsControl {
             zJob.output = null;   // the device has the last page: release the text from the heap
         }
         return out;
+    }
+
+    /** Page sizes that keep a reply well under the 256K wire message. */
+    private static final int PAGE_CONTACTS = 250;
+    private static final int PAGE_SUMMARIES = 200;
+
+    private static int intOf(JSONObject zIn, String zKey, int zDefault) {
+        try {
+            String v = str(zIn, zKey);
+            return v.isEmpty() ? zDefault : Integer.parseInt(v.trim());
+        } catch (Exception e) {
+            return zDefault;
+        }
     }
 
     private static JSONObject ok() {

@@ -90,6 +90,15 @@ public final class RpcPeer {
      */
     public String call(String zPeerAddress, String zMethod, byte[] zPayload,
                        ResponseHandler zHandler, long zTimeoutMs) throws Exception {
+        return call(zPeerAddress, zMethod, zPayload, zHandler, zTimeoutMs,
+                MaximaSender.CONNECT_TIMEOUT_MS, MaximaSender.READ_TIMEOUT_MS);
+    }
+
+    /** As above with the SOCKET leashes for the request's own send - a push to a device that
+     *  vanished behind NAT should fail in seconds, not the default 20 s + 20 s. */
+    public String call(String zPeerAddress, String zMethod, byte[] zPayload,
+                       ResponseHandler zHandler, long zTimeoutMs, int zConnectMs, int zReadMs)
+            throws Exception {
 
         String id = newCorrelationId();
         RpcEnvelope env = RpcEnvelope.request(id, zMethod, mMyAddresses, zPayload);
@@ -97,13 +106,25 @@ public final class RpcPeer {
         mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod));
 
         try {
-            sendTo(zPeerAddress, env);
+            sendTo(zPeerAddress, env, zConnectMs, zReadMs);
         } catch (Exception e) {
             mPending.remove(id);
             throw e;
         }
         return id;
     }
+
+    /** Replies dial out on a BOUNDED pool: a thread per reply address per request had no
+     *  ceiling under a request flood. Falls back to the dispatching thread when saturated. */
+    private final java.util.concurrent.ExecutorService mReplyExec =
+            new java.util.concurrent.ThreadPoolExecutor(2, 8, 30, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.LinkedBlockingQueue<>(256),
+                    r -> {
+                        Thread t = new Thread(r, "rpc-reply");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
 
     public String call(String zPeerAddress, String zMethod, byte[] zPayload,
                        ResponseHandler zHandler) throws Exception {
@@ -148,7 +169,7 @@ public final class RpcPeer {
             //    a stalled reply deafened the whole node for the duration.
             final List<String> targets = new ArrayList<>(env.getReplyTo());
             for (final String addr : targets) {
-                Thread t = new Thread(() -> {
+                mReplyExec.execute(() -> {
                     try {
                         sendTo(addr, reply, REPLY_CONNECT_TIMEOUT_MS, REPLY_READ_TIMEOUT_MS);
                     } catch (Exception e) {
@@ -158,9 +179,7 @@ public final class RpcPeer {
                         System.out.println("[rpc] reply to " + addr + " failed: "
                                 + (e.getMessage() == null ? e.toString() : e.getMessage()));
                     }
-                }, "rpc-reply");
-                t.setDaemon(true);
-                t.start();
+                });
             }
             return true;
         }
