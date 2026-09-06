@@ -109,6 +109,23 @@ tasks.register('generateVectors', JavaExec) {
     args = [file("${rootDir}/fixtures/golden-vectors.json").absolutePath]
 }
 
+tasks.register('parlonsVectors', JavaExec) {
+    group = 'verification'
+    description = 'Dump the golden vectors the Swift port (Parlons Cloud for iOS) is gated on'
+    dependsOn 'parityClasses'
+    classpath = sourceSets.parity.runtimeClasspath
+    mainClass = 'com.eurobuddha.maxima.core.ParlonsVectorGen'
+    args = [file("${rootDir}/fixtures/parlons-vectors.json").absolutePath]
+}
+
+tasks.register('exportSwiftVectors', Copy) {
+    group = 'verification'
+    description = 'Copy both vector files into the ParlonsKit Swift package test fixtures'
+    from file("${rootDir}/fixtures/golden-vectors.json")
+    from file("${rootDir}/fixtures/parlons-vectors.json")
+    into file("${rootDir}/../support/parlons-ios/ParlonsKit/Tests/ParlonsKitTests/Fixtures")
+}
+
 check.dependsOn 'parityTest'
 check.dependsOn 'test'
 
