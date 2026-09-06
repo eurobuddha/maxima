@@ -143,3 +143,4 @@ jobs:
             desktop/build/jpackage/*.dmg
             desktop/build/jpackage/*.msi
             desktop/build/jpackage/*.deb
+            desktop/build/jpackage/SHA256SUMS
