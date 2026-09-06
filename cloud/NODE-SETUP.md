@@ -474,7 +474,7 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
-### Relay capacity per box (server 0.4.56, node 0.2.31, app 0.6.74)
+### Relay capacity per box (server 0.4.57, node 0.2.32, app 0.6.75)
 Three changes, each evaluated against the decentralization principles (all three are pure
 throughput: no new party, no new dependency, nothing an operator gains control of):
 - **Connections on virtual threads** where the JDK has them (21+: sally, megammr, maxlite,

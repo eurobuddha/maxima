@@ -94,10 +94,10 @@ public final class HostConnection implements Closeable {
     /**
      * Sends in flight over THIS connection, oldest first. The relay handles a connection's
      * frames in order and acks each one in order, so the n-th ack belongs to the n-th send:
-     * no correlation id is needed (the wire format has none). A send that timed out stays
-     * queued as a tombstone so its late ack cannot be mistaken for the next send's - and
-     * because a relay can silently drop a frame (its per-source flood cap), a timeout also
-     * closes the connection: the pool re-attaches and the ledger starts clean.
+     * no correlation id is needed (the wire format has none), and a relay acks EVERY message
+     * frame it reads (even one its flood cap discards). A send that timed out stays queued
+     * as a tombstone so its late ack cannot be mistaken for the next send's; a timeout on a
+     * relay that was silent throughout drops the link, and the pool re-attaches clean.
      */
     private final java.util.ArrayDeque<java.util.concurrent.CompletableFuture<MiniData>> mAckWaiters =
             new java.util.ArrayDeque<>();
@@ -143,12 +143,18 @@ public final class HostConnection implements Closeable {
             }
         }
         mAttachedSends.incrementAndGet();
+        long sentAt = System.currentTimeMillis();
         MiniData payload;
         try {
             payload = ack.get(zReadMs, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException te) {
-            // The ack ledger may be off by one from here (a dropped frame): start over.
-            breakLink();
+            // A relay that sent us NOTHING for the whole wait is a black hole: drop the link
+            // so the pool re-attaches. A relay that kept talking (a drain, pongs) is alive and
+            // merely behind - its ack for this send is still coming, in order, and the
+            // waiter stays queued so that ack lands on nobody rather than on the next send.
+            if (mLastInbound < sentAt) {
+                breakLink();
+            }
             return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);
         } catch (Exception e) {
             return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);

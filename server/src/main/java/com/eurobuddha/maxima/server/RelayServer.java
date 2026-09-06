@@ -488,13 +488,24 @@ public final class RelayServer {
             out = new DataOutputStream(zSocket.getOutputStream());
         }
 
-        synchronized void write(byte[] zBody) throws Exception {
-            writeStartedAt = System.currentTimeMillis();
+        /** Serialises writes to this socket. A lock, not a monitor: on JDK 21 a virtual
+         *  thread blocked in a socket write INSIDE synchronized pins its carrier thread, and a
+         *  few slow phones would then stall every other connection's scheduling. */
+        private final java.util.concurrent.locks.ReentrantLock writeLock =
+                new java.util.concurrent.locks.ReentrantLock();
+
+        void write(byte[] zBody) throws Exception {
+            writeLock.lock();
             try {
-                Frame.write(out, zBody);
-                lastWrite = System.currentTimeMillis();
+                writeStartedAt = System.currentTimeMillis();
+                try {
+                    Frame.write(out, zBody);
+                    lastWrite = System.currentTimeMillis();
+                } finally {
+                    writeStartedAt = 0;
+                }
             } finally {
-                writeStartedAt = 0;
+                writeLock.unlock();
             }
         }
 
@@ -858,7 +869,18 @@ public final class RelayServer {
                 // expensive work. The source IP of an established TCP connection
                 // cannot be rotated, which is exactly why it is the right key.
                 if (!allow(mFrameLimits, zConn.sourceIp, PER_SOURCE_FRAMES_PER_MIN)) {
-                    continue;   // silently drop; a flooding source gets nothing
+                    // Drop it. A flooding source gets no work done for it - but a MESSAGE
+                    // frame still gets a one-byte FAIL ack: a client sending over its attached
+                    // link matches acks to sends in order, and a silently swallowed send would
+                    // put every later ack off by one. The ack costs nothing; the silence did.
+                    if (Frame.typeOf(body) == Frame.MSG_MAXIMA_TXPOW) {
+                        try {
+                            zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+                        } catch (Exception e) {
+                            break;
+                        }
+                    }
+                    continue;
                 }
                 handleFrame(zConn, body);
             }

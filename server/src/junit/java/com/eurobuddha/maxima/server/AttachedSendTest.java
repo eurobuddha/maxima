@@ -184,6 +184,128 @@ public class AttachedSendTest {
         }
     }
 
+    /** A host that keeps TALKING (pongs) but is slow to ack: alive and behind, so the link is
+     *  kept - the ack will arrive in order and land on the tombstoned waiter, not the next send. */
+    @Test
+    public void aBusyButAliveHostKeepsTheLinkAndALateAckLandsOnNobody() throws Exception {
+        ServerSocket ss = new ServerSocket(0);
+        java.util.concurrent.atomic.AtomicReference<DataOutputStream> outRef = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread t = new Thread(() -> {
+            try (Socket s = ss.accept()) {
+                DataInputStream in = new DataInputStream(s.getInputStream());
+                DataOutputStream out = new DataOutputStream(s.getOutputStream());
+                Frame.readOrSkip(in, 65536);
+                synchronized (out) {
+                    Frame.write(out, Frame.body(Frame.MSG_GREETING, Greeting.commsOnly(PROTO, "", 0)));
+                }
+                outRef.set(out);
+                while (Frame.readOrSkip(in, 65536) != null) {
+                    // read everything, ack nothing here
+                }
+            } catch (Exception ignored) {
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        MaximaIdentity a = MaximaIdentity.fromPhrase(Bip39.generate(24));
+        HostConnection c = new HostConnection("127.0.0.1", ss.getLocalPort(), a.keyPair(), PROTO);
+        try {
+            c.attach(5000);
+            Collector sink = new Collector();
+            c.startReader(sink);
+            waitFor(() -> outRef.get() != null, 5000);
+            // The host chatters (pongs) the whole time the client waits.
+            Thread chatter = new Thread(() -> {
+                try {
+                    while (!Thread.currentThread().isInterrupted()) {
+                        DataOutputStream o = outRef.get();
+                        synchronized (o) {
+                            Frame.write(o, Frame.singlePong(Greeting.commsOnly(PROTO, "", 0)));
+                        }
+                        Thread.sleep(100);
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+            chatter.setDaemon(true);
+            chatter.start();
+            MaximaSender.Built built = MaximaSender.build(a.publicKey(), a.keyPair().getPrivate(),
+                    a.publicKey(), "chat", "x".getBytes(), System.currentTimeMillis());
+            MaximaSender.Result r = c.send(built.unit, built.msgid, 700);
+            assertEquals(-1, r.status);
+            assertTrue("the link is kept: the host is alive, just behind", c.isAttached());
+            assertEquals(0, sink.dead.get());
+            // The late ack for send #1 arrives now, then send #2's own ack: #2 must see ITS ack.
+            DataOutputStream o = outRef.get();
+            synchronized (o) {
+                Frame.write(o, Frame.ack(Frame.RESPONSE_UNKNOWN));   // the late one, for #1
+            }
+            Thread.sleep(200);
+            Thread acker = new Thread(() -> {
+                try {
+                    Thread.sleep(300);
+                    synchronized (o) {
+                        Frame.write(o, Frame.ack(Frame.RESPONSE_OK));   // #2's
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+            acker.start();
+            MaximaSender.Result r2 = c.send(built.unit, built.msgid, 3000);
+            assertEquals("send #2 got its own ack, not #1's late one", Frame.RESPONSE_OK, r2.status);
+            chatter.interrupt();
+        } finally {
+            c.close();
+            ss.close();
+        }
+    }
+
+    /** The relay's flood cap discards a frame - but a MESSAGE frame is still acked FAIL so an
+     *  attached sender's ledger stays aligned. */
+    @Test
+    public void aFloodCappedMessageFrameIsStillAckedSoTheLedgerStaysAligned() throws Exception {
+        int port = freePort();
+        RelayServer relay = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), port, PROTO);
+        relay.start();
+        try (Socket s = new Socket()) {
+            s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 2000);
+            s.setSoTimeout(3000);
+            DataOutputStream out = new DataOutputStream(s.getOutputStream());
+            DataInputStream in = new DataInputStream(s.getInputStream());
+            Frame.write(out, Frame.body(Frame.MSG_GREETING, Greeting.commsOnly(PROTO, "", 0)));
+            // Burn the per-source frame budget with cheap pings (each answered by a pong).
+            byte[] ping = Frame.singlePing();
+            for (int i = 0; i < 2100; i++) {
+                Frame.write(out, ping);
+            }
+            // Now a message frame: over the cap it is discarded - and still acked FAIL.
+            MaximaIdentity a = MaximaIdentity.fromPhrase(Bip39.generate(24));
+            MaximaSender.Built built = MaximaSender.build(a.publicKey(), a.keyPair().getPrivate(),
+                    a.publicKey(), "chat", "x".getBytes(), System.currentTimeMillis());
+            Frame.write(out, Frame.body(Frame.MSG_MAXIMA_TXPOW, built.unit));
+            boolean acked = false;
+            long deadline = System.currentTimeMillis() + 10000;
+            while (System.currentTimeMillis() < deadline) {
+                byte[] rx = Frame.readOrSkip(in, 1 << 20);
+                if (rx == null) {
+                    continue;
+                }
+                if (Frame.typeOf(rx) == Frame.MSG_PING) {
+                    byte[] after = new byte[rx.length - 1];
+                    System.arraycopy(rx, 1, after, 0, after.length);
+                    byte[] pb = com.eurobuddha.maxima.core.codec.Codec.deserialise(new MiniData(), after).getBytes();
+                    assertEquals(1, pb.length);
+                    assertEquals(Frame.RESPONSE_FAIL, pb[0] & 0xFF);
+                    acked = true;
+                    break;
+                }
+            }
+            assertTrue("the discarded message frame was still acked", acked);
+        } finally {
+            relay.stop();
+        }
+    }
+
     static void waitFor(java.util.function.BooleanSupplier zCond, long zMs) throws Exception {
         long deadline = System.currentTimeMillis() + zMs;
         while (!zCond.getAsBoolean()) {
