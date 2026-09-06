@@ -12,7 +12,7 @@ import java.nio.file.Paths;
  */
 public final class Main {
 
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = "0.1.1";
 
     public static void main(String[] args) throws Exception {
         int port = 8090;

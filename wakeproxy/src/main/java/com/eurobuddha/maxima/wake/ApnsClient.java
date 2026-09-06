@@ -29,6 +29,8 @@ public final class ApnsClient {
     public static final class Result {
         public final int status;
         public final String reason;
+        /** Which gateway gave the final answer: prod, sandbox, or one of them "(retried)". */
+        public String env = "";
         Result(int s, String r) { status = s; reason = r; }
         public boolean ok() { return status == 200; }
     }
@@ -57,8 +59,10 @@ public final class ApnsClient {
     public Result wake(String zToken, String zEnv, String zKind) throws Exception {
         boolean sandboxFirst = "sandbox".equalsIgnoreCase(zEnv);
         Result r = post(sandboxFirst ? mSandboxBase : mProdBase, zToken, zKind);
+        r.env = sandboxFirst ? "sandbox" : "prod";
         if (!r.ok() && "BadDeviceToken".equals(r.reason)) {
             r = post(sandboxFirst ? mProdBase : mSandboxBase, zToken, zKind);
+            r.env = (sandboxFirst ? "prod" : "sandbox") + "(retried)";
         }
         return r;
     }

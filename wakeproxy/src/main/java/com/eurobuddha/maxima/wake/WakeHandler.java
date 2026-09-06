@@ -69,7 +69,7 @@ public final class WakeHandler implements HttpHandler {
             mExec.execute(() -> {
                 try {
                     ApnsClient.Result r = mSender.wake(ftoken, fenv, fkind);
-                    mLog.accept("wake " + id + " " + fkind + " -> " + r.status + (r.reason.isEmpty() ? "" : " " + r.reason));
+                    mLog.accept("wake " + id + " " + fkind + " " + r.env + " -> " + r.status + (r.reason.isEmpty() ? "" : " " + r.reason));
                 } catch (Exception e) {
                     mLog.accept("wake " + id + " failed: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
                 }
