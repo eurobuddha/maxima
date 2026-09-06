@@ -474,6 +474,26 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### Bootstrap without a single operator (server 0.4.58, node 0.2.33, app 0.6.76, portal 0.2.21, desktop 1.5.56)
+The compiled-in relay list (`Bootstrap.RELAYS`) is now ONE seed source among several, never a
+requirement (`core/session/SeedRelays`): a client starts from (1) the relays its user added -
+typed, pasted, or scanned from a relay's QR - then (2) the relays it remembers (discovery's saved
+verified list, the phone's recent swarm), then (3) the compiled-in list, which the user can switch
+off or drop entries from. Every surface has the same controls: the app's Network → Manage hosts
+(scan a relay QR, share any host as a QR, "Use built-in relays" switch, built-in / yours labels),
+the desktop Network panel (paste a relay QR text, QR per host, the switch), the portal's Settings →
+"Relays this phone starts from" (for the DEVICE) and its node panel (for the ACCOUNT: QR text
+accepted, "Account uses the built-in relay list" switch), the account (`--no-builtin-relays` on
+parlons-cloud, `-Dparlons.account.builtin=false` on the node, `builtin` in `parlons.node.hosts`;
+persisted as `builtinrelays`). Switching the list off is refused while there is no relay of your
+own, so nobody strands themselves. A relay's share text is `parlons-relay:host:port[,host:port…]`
+- a prefix no contact or wallet address can collide with. The phone announces its endpoint to the
+relays IT knows, not to one operator's list. Decentralization: removes the last mandatory
+dependency on this operator's choices (principles 1, 2, 3, 5); a hostile seed is still
+verify-before-adopt (greeting must be Maxima) and resolves still need two agreeing relays; nothing
+is centralised, nothing new is hosted. Verify: `SeedRelaysTest`; on a phone: drop a built-in,
+switch the list off with one relay of your own, restart - it attaches to yours.
+
 ### Relay capacity per box (server 0.4.57, node 0.2.32, app 0.6.75)
 Three changes, each evaluated against the decentralization principles (all three are pure
 throughput: no new party, no new dependency, nothing an operator gains control of):

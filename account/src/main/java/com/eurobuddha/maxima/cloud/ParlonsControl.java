@@ -271,9 +271,13 @@ public final class ParlonsControl {
         /** Attached AND proven to relay to us (the self-addressed check-connect). */
         default boolean ownRelayVerified() { return false; }
         java.util.List<String> hosts();             // currently attached host:port list
-        java.util.List<String> configuredHosts();   // the persisted floor + extras
+        java.util.List<String> configuredHosts();   // the seeds (yours, then built-in if on) + attached
         boolean addHost(String zHostPort);          // runtime attach; returns accepted
         boolean removeHost(String zHostPort);       // runtime detach
+        /** The compiled-in relay list is one seed source among several: on or off. */
+        default boolean builtInRelays() { return true; }
+        /** Returns false when refused (switching off with no relay of your own configured). */
+        default boolean setBuiltInRelays(boolean zOn) { return false; }
         int mailboxHeld();
         int outboxDepth();
         boolean directlyReachable();
@@ -488,9 +492,11 @@ public final class ParlonsControl {
                     JSONObject o = new JSONObject();
                     o.put("host", h);
                     o.put("connected", active.contains(h));
+                    o.put("builtin", com.eurobuddha.maxima.core.session.SeedRelays.isBuiltIn(h));
                     hosts.add(o);
                 }
                 out.put("hosts", hosts);
+                out.put("builtin", nc.builtInRelays());
                 out.put("mailboxHeld", nc.mailboxHeld());
                 out.put("outbox", nc.outboxDepth());
                 out.put("directlyReachable", nc.directlyReachable());
@@ -521,17 +527,22 @@ public final class ParlonsControl {
             JSONObject in = parse(req);
             String add = str(in, "add").trim();
             String remove = str(in, "remove").trim();
+            if (in.containsKey("builtin")) {
+                boolean on = Boolean.parseBoolean(String.valueOf(in.get("builtin")));
+                if (!nc.setBuiltInRelays(on)) {
+                    return bytes(err("add a relay of your own first - the account must keep at least one seed"));
+                }
+            }
             if (!add.isEmpty()) {
-                int colon = add.lastIndexOf(':');
-                int port = -1;
-                if (colon > 0 && add.substring(0, colon).matches("[0-9A-Za-z.\\-]+")) {
-                    try { port = Integer.parseInt(add.substring(colon + 1)); } catch (Exception ignored) { }
+                // Typed host:port, a comma list, or the text of a relay's QR (parlons-relay:...).
+                java.util.List<String> hosts = com.eurobuddha.maxima.core.session.SeedRelays.parse(add);
+                if (hosts.isEmpty()) {
+                    return bytes(err("enter host:port, e.g. 45.77.246.226:9501, or scan a relay QR"));
                 }
-                if (port < 1 || port > 65535) {
-                    return bytes(err("enter host:port, e.g. 45.77.246.226:9501"));
+                for (String h : hosts) {
+                    nc.addHost(h);        // attach happens off-pump; log reflects "connecting"
+                    mNode.log("host add requested (connecting): " + h);
                 }
-                nc.addHost(add);          // attach happens off-pump; log reflects "connecting"
-                mNode.log("host add requested (connecting): " + add);
             }
             if (!remove.isEmpty()) {
                 nc.removeHost(remove);
@@ -543,10 +554,12 @@ public final class ParlonsControl {
                 JSONObject o = new JSONObject();
                 o.put("host", h);
                 o.put("connected", active.contains(h));
+                o.put("builtin", com.eurobuddha.maxima.core.session.SeedRelays.isBuiltIn(h));
                 hosts.add(o);
             }
             JSONObject out = ok();
             out.put("hosts", hosts);
+            out.put("builtin", nc.builtInRelays());
             return bytes(out);
         });
         zReg.register(M_NODE_MLS, req -> {

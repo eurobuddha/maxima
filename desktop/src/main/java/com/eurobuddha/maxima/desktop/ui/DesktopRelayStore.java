@@ -1,6 +1,6 @@
 package com.eurobuddha.maxima.desktop.ui;
 
-import com.eurobuddha.maxima.core.session.Bootstrap;
+import com.eurobuddha.maxima.core.session.SeedRelays;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -17,66 +17,122 @@ import java.util.Set;
  * list and by Auto-connect's candidate union.
  */
 public final class DesktopRelayStore {
-
+    /** Your own seeds, one host:port per line. (Older files also held the compiled-in entries:
+     *  those are filtered out on read so they stay governed by the switch.) */
     private final File file;
+    /** Compiled-in entries you dropped, one per line. */
+    private final File excludedFile;
+    /** Present with the text "off" when the compiled-in list is not to be used. */
+    private final File builtInFile;
 
     public DesktopRelayStore(File dataDir) {
         file = new File(dataDir, "relays.txt");
+        excludedFile = new File(dataDir, "relays-excluded.txt");
+        builtInFile = new File(dataDir, "relays-builtin.txt");
     }
 
-    public synchronized List<String> get() {
+    private static Set<String> lines(File f) {
         LinkedHashSet<String> out = new LinkedHashSet<>();
         try {
-            if (file.exists()) {
-                for (String line : Files.readAllLines(file.toPath(), StandardCharsets.UTF_8)) {
+            if (f.exists()) {
+                for (String line : Files.readAllLines(f.toPath(), StandardCharsets.UTF_8)) {
                     String h = line.trim();
                     if (isValid(h)) out.add(h);
                 }
             }
         } catch (Exception ignored) { }
-        if (out.isEmpty()) {
-            out.addAll(Bootstrap.RELAYS);   // floor
+        return out;
+    }
+
+    /** Relays YOU added. */
+    public synchronized List<String> userSeeds() {
+        List<String> out = new ArrayList<>();
+        for (String h : lines(file)) {
+            if (!SeedRelays.isBuiltIn(h)) out.add(h);
         }
-        return new ArrayList<>(out);
+        return out;
+    }
+
+    public synchronized Set<String> excluded() {
+        return lines(excludedFile);
+    }
+
+    public static boolean isBuiltIn(String hostPort) {
+        return SeedRelays.isBuiltIn(hostPort);
+    }
+
+    /** Whether the compiled-in list is used as a seed source at all (default: yes). */
+    public synchronized boolean builtInEnabled() {
+        try {
+            return !builtInFile.exists()
+                    || !"off".equalsIgnoreCase(new String(Files.readAllBytes(builtInFile.toPath()),
+                            StandardCharsets.UTF_8).trim());
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Refuses to switch OFF with no relay of your own configured. */
+    public synchronized boolean setBuiltInEnabled(boolean on) {
+        if (!on && userSeeds().isEmpty()) return false;
+        try {
+            if (on) {
+                Files.deleteIfExists(builtInFile.toPath());
+            } else {
+                Files.write(builtInFile.toPath(), "off".getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) { }
+        return true;
+    }
+
+    /** The seeds this desktop starts from: yours first, then the compiled-in list if on. */
+    public synchronized List<String> get() {
+        return SeedRelays.compose(userSeeds(), null, builtInEnabled(), excluded());
     }
 
     public synchronized void add(String hostPort) {
         if (!isValid(hostPort)) return;
-        Set<String> cur = new LinkedHashSet<>(get());
-        cur.add(hostPort.trim());
-        save(cur);
+        String hp = hostPort.trim();
+        if (isBuiltIn(hp)) {
+            Set<String> ex = excluded();
+            ex.remove(hp);
+            save(excludedFile, ex);
+            return;
+        }
+        Set<String> cur = new LinkedHashSet<>(userSeeds());
+        cur.add(hp);
+        save(file, cur);
     }
 
     public synchronized void remove(String hostPort) {
-        Set<String> cur = new LinkedHashSet<>(get());
-        cur.remove(hostPort);
-        save(cur);
+        String hp = hostPort == null ? "" : hostPort.trim();
+        if (isBuiltIn(hp)) {
+            Set<String> ex = excluded();
+            ex.add(hp);
+            save(excludedFile, ex);
+            return;
+        }
+        Set<String> cur = new LinkedHashSet<>(userSeeds());
+        cur.remove(hp);
+        save(file, cur);
     }
 
+    /** Back to the compiled-in list only. */
     public synchronized void reset() {
         try { Files.deleteIfExists(file.toPath()); } catch (Exception ignored) { }
+        try { Files.deleteIfExists(excludedFile.toPath()); } catch (Exception ignored) { }
+        try { Files.deleteIfExists(builtInFile.toPath()); } catch (Exception ignored) { }
     }
 
-    private void save(Set<String> hosts) {
+    private static void save(File f, Set<String> hosts) {
         try {
             StringBuilder sb = new StringBuilder();
             for (String h : hosts) sb.append(h).append('\n');
-            Files.write(file.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
+            Files.write(f.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception ignored) { }
     }
 
-    /** host:port with a plausible host and a 1–65535 port. */
     public static boolean isValid(String hp) {
-        if (hp == null) return false;
-        int c = hp.lastIndexOf(':');
-        if (c <= 0 || c == hp.length() - 1) return false;
-        String host = hp.substring(0, c).trim();
-        if (host.isEmpty()) return false;
-        try {
-            int p = Integer.parseInt(hp.substring(c + 1).trim());
-            return p > 0 && p < 65536;
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return SeedRelays.isValid(hp);
     }
 }

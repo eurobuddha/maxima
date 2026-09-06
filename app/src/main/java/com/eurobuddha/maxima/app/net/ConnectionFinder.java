@@ -80,7 +80,7 @@ public final class ConnectionFinder {
                 cands.addAll(node.pool().activeHosts());
                 cands.addAll(RelayStore.get(zCtx));
                 cands.addAll(SwarmStore.recent(zCtx));
-                cands.addAll(Bootstrap.RELAYS);
+                // (the compiled-in list is already inside RelayStore.get() when it is switched on)
 
                 post(zUi, () -> zCb.onStep("Finding the best relays…"));
                 List<String> reachable = probe(new ArrayList<>(cands));

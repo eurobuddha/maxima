@@ -359,12 +359,42 @@ public final class NetworkPage implements Page {
     // ---------------------------------------------------------------
 
     private void addRelay() {
-        final String hp = mNewRelay.getText().toString().trim();
-        if (!RelayStore.isValid(hp)) {
-            mAct.toast("Enter host:port, e.g. 31.125.188.214:8001");
+        addRelayText(mNewRelay.getText().toString());
+    }
+
+    /** Typed host:port, a comma list, or the text of a relay's QR: add them all, connect the first. */
+    private void addRelayText(String zText) {
+        java.util.List<String> hosts = com.eurobuddha.maxima.core.session.SeedRelays.parse(zText);
+        if (hosts.isEmpty()) {
+            mAct.toast("Enter host:port, e.g. 31.125.188.214:8001 - or scan a relay QR");
             return;
         }
-        connectHost(hp, false);
+        for (int i = 1; i < hosts.size(); i++) {
+            RelayStore.add(mAct, hosts.get(i));   // the rest are seeds from now on
+            EventLog.add("relay added: " + hosts.get(i));
+        }
+        connectHost(hosts.get(0), RelayStore.get(mAct).contains(hosts.get(0)));
+    }
+
+    /** Scan a relay's QR (parlons-relay:host:port,...) and add what it names. */
+    private void scanRelayQr() {
+        mAct.scanQr(text -> mView.post(() -> addRelayText(text)));
+    }
+
+    /** Show one relay as a QR another phone can scan, with the full text to copy. */
+    private void shareRelayQr(String host) {
+        String text = com.eurobuddha.maxima.core.session.SeedRelays.share(
+                java.util.Collections.singletonList(host));
+        LinearLayout body = new LinearLayout(mAct);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        android.widget.ImageView img = new android.widget.ImageView(mAct);
+        int px = k.dp(220);
+        img.setImageBitmap(Qr.encode(text, px));
+        body.addView(img, new LinearLayout.LayoutParams(px, px));
+        body.addView(k.sub("Anyone who scans this adds " + host + " to their relays."), k.mb(k.dp(8)));
+        body.addView(k.copyField("Share text", text, "Copied"));
+        k.sheet("Share relay", body);
     }
 
     /** Connect to (or add + connect to) an external host, with an up-front
@@ -445,18 +475,44 @@ public final class NetworkPage implements Page {
         LinearLayout body = new LinearLayout(mAct);
         body.setOrientation(LinearLayout.VERTICAL);
 
-        EditText add = k.field("Add a relay  host:port");
+        EditText add = k.field("Add a relay  host:port  (or paste a relay QR text)");
         body.addView(add, k.mb(k.dp(9)));
         TextView addBtn = k.primaryButton("Add & connect");
-        body.addView(addBtn, k.mb(k.dp(16)));
+        body.addView(addBtn, k.mb(k.dp(6)));
+        final BottomSheetDialog[] box = new BottomSheetDialog[1];
+        TextView scanBtn = k.ghostButton("Scan a relay QR");
+        scanBtn.setOnClickListener(v -> {
+            if (box[0] != null) {
+                box[0].dismiss();
+            }
+            scanRelayQr();
+        });
+        body.addView(scanBtn, k.mb(k.dp(16)));
+
+        // The compiled-in list is one seed source among several - never the only one.
+        boolean builtIn = RelayStore.builtInEnabled(mAct);
+        body.addView(k.switchRow("Use built-in relays",
+                builtIn ? "The relays shipped with the app, plus yours."
+                        : "Off: only relays you added or this phone remembers.",
+                builtIn, on -> {
+                    if (!RelayStore.setBuiltInEnabled(mAct, on)) {
+                        mAct.toast("Add a relay of your own first - the phone needs somewhere to start");
+                        if (box[0] != null) {
+                            box[0].dismiss();
+                        }
+                        manageHosts();
+                        return;
+                    }
+                    EventLog.add("built-in relay list " + (on ? "on" : "off"));
+                    render();
+                }));
 
         body.addView(k.sectionLabel("Configured hosts"));
         MaximaNode node = MaximaService.node();
         final List<String> active = node == null ? new java.util.ArrayList<>() : node.pool().activeHosts();
         List<String> hosts = RelayStore.get(mAct);
-        final BottomSheetDialog[] box = new BottomSheetDialog[1];
         if (hosts.isEmpty()) {
-            body.addView(k.sub("None configured."));
+            body.addView(k.sub("None configured - only relays this phone remembers will be used."));
         }
         for (String h : hosts) {
             body.addView(manageRow(h, active.contains(h), () -> {
@@ -475,13 +531,13 @@ public final class NetworkPage implements Page {
 
         box[0] = k.sheet("Manage hosts", body);
         addBtn.setOnClickListener(v -> {
-            String hp = add.getText().toString().trim();
-            if (!RelayStore.isValid(hp)) {
-                mAct.toast("Enter host:port");
+            String text = add.getText().toString().trim();
+            if (com.eurobuddha.maxima.core.session.SeedRelays.parse(text).isEmpty()) {
+                mAct.toast("Enter host:port, or paste a relay QR text");
                 return;
             }
             box[0].dismiss();
-            connectHost(hp, false);
+            addRelayText(text);
         });
         reset.setOnClickListener(v -> {
             RelayStore.reset(mAct);
@@ -505,7 +561,8 @@ public final class NetworkPage implements Page {
         h.setTextSize(12);
         h.setTextColor(k.col(R.color.ux_text));
         TextView st = new TextView(mAct);
-        st.setText(connected ? "Connected" : "Idle");
+        st.setText((connected ? "Connected" : "Idle")
+                + (RelayStore.isBuiltIn(host) ? " · built-in" : " · yours"));
         st.setTextSize(11);
         st.setTextColor(k.col(connected ? R.color.ux_success : R.color.ux_subtext));
         mid.addView(h);
@@ -526,6 +583,19 @@ public final class NetworkPage implements Page {
             });
             row.addView(conn);
         }
+
+        TextView qr = new TextView(mAct);
+        qr.setText("QR");
+        qr.setTextSize(12);
+        qr.setTypeface(Typeface.DEFAULT_BOLD);
+        qr.setTextColor(k.col(R.color.ux_accent));
+        qr.setPadding(k.dp(10), k.dp(6), k.dp(10), k.dp(6));
+        qr.setBackground(k.ripple());
+        qr.setOnClickListener(v -> {
+            dismiss.run();
+            shareRelayQr(host);
+        });
+        row.addView(qr);
 
         TextView rm = new TextView(mAct);
         rm.setText("Remove");

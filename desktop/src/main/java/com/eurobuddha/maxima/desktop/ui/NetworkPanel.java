@@ -167,12 +167,13 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         hostCard.add(k.vgap(8));
         DKit.HoverButton addBtn = k.primaryButton("Add & connect");
         addBtn.onClick(() -> {
-            String hp = add.getText().trim();
-            if (!DesktopRelayStore.isValid(hp)) {
-                javax.swing.JOptionPane.showMessageDialog(this, "Enter host:port, e.g. 31.125.188.214:9501");
+            java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(add.getText());
+            if (hs.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "Enter host:port, e.g. 31.125.188.214:9501 - or paste a relay QR text");
                 return;
             }
-            connectHost(hp);
+            connectHost(hs.get(0));
         });
         JPanel ar = rowX();
         ar.add(addBtn);
@@ -605,19 +606,41 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         JPanel hr = rowX();
         DKit.HoverButton addBtn = k.primaryButton("Add & connect");
         addBtn.onClick(() -> {
-            String hp = add.getText().trim();
-            if (!DesktopRelayStore.isValid(hp)) {
-                javax.swing.JOptionPane.showMessageDialog(this, "Enter host:port, e.g. 31.125.188.214:9501");
+            // Typed host:port, a comma list, or the text of a relay's QR (parlons-relay:...).
+            java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(add.getText());
+            if (hs.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "Enter host:port, e.g. 31.125.188.214:9501 - or paste a relay QR text");
                 return;
             }
-            node.relayStore().add(hp);
-            connectHost(hp);
+            for (String hp : hs) {
+                node.relayStore().add(hp);
+            }
+            connectHost(hs.get(0));
             add.setText("");
             mSig = "";
             refresh();
         });
         DKit.HoverButton reset = k.ghostButton("Reset to defaults");
         reset.onClick(() -> { node.relayStore().reset(); mSig = ""; refresh(); });
+        // The compiled-in list is one seed source among several - never the only one.
+        JPanel bi = rowX();
+        JLabel biLabel = k.sub(node.relayStore().builtInEnabled()
+                ? "Built-in relays: on (the list shipped with the app, plus yours)"
+                : "Built-in relays: off (only relays you added or this machine remembers)");
+        bi.add(biLabel);
+        bi.add(Box.createRigidArea(new Dimension(10, 0)));
+        bi.add(k.toggle(node.relayStore().builtInEnabled(), on -> {
+            if (!node.relayStore().setBuiltInEnabled(on)) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "Add a relay of your own first - this machine needs somewhere to start.");
+            }
+            mSig = "";
+            refresh();
+        }));
+        bi.add(Box.createHorizontalGlue());
+        hostCard.add(k.vgap(8));
+        hostCard.add(bi);
         hr.add(addBtn);
         hr.add(Box.createRigidArea(new Dimension(8, 0)));
         hr.add(reset);
@@ -747,6 +770,27 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         });
     }
 
+    /** One relay as a QR a phone can scan (its Network page adds it), plus the full text. */
+    private void shareRelayQr(String hostPort) {
+        String text = com.eurobuddha.maxima.core.session.SeedRelays.share(
+                java.util.Collections.singletonList(hostPort));
+        java.awt.image.BufferedImage img = DesktopQr.encode(text, 260, t.text.getRGB(), t.bg.getRGB());
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        if (img != null) {
+            JLabel pic = new JLabel(new javax.swing.ImageIcon(img));
+            pic.setAlignmentX(Component.CENTER_ALIGNMENT);
+            body.add(pic);
+        }
+        JTextField copy = new JTextField(text);
+        copy.setEditable(false);
+        copy.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+        body.add(Box.createRigidArea(new Dimension(0, 8)));
+        body.add(copy);
+        javax.swing.JOptionPane.showMessageDialog(this, body, "Share relay " + hostPort,
+                javax.swing.JOptionPane.PLAIN_MESSAGE);
+    }
+
     private void connectHost(String hp) {
         new Thread(() -> {
             try {
@@ -825,13 +869,18 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         dot.setFont(t.font(10f));
         dot.setForeground(connected ? t.success : DKit.alpha(t.subtext, 110));
         row.add(dot, BorderLayout.WEST);
-        JLabel h = new JLabel(hostPort);
+        JLabel h = new JLabel(hostPort + (DesktopRelayStore.isBuiltIn(hostPort) ? "   built-in" : "   yours"));
         h.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
         h.setForeground(t.text);
         row.add(h, BorderLayout.CENTER);
         JPanel actions = new JPanel();
         actions.setOpaque(false);
         actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
+        DKit.HoverButton qr = k.ghostButton("QR");
+        qr.setFont(t.semibold(11f));
+        qr.onClick(() -> shareRelayQr(hostPort));
+        actions.add(qr);
+        actions.add(Box.createRigidArea(new Dimension(6, 0)));
         if (!connected) {
             DKit.HoverButton c = k.ghostButton("Connect");
             c.setFont(t.semibold(11f));

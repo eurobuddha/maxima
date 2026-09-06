@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.32";
+    public static final String  NODE_VERSION = "0.2.33";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -336,6 +336,11 @@ public final class ParlonsNodeMain {
         String relays = System.getProperty("parlons.account.relays", "").trim();
         if (!relays.isEmpty()) {
             for (String r : relays.split(",")) if (!r.trim().isEmpty()) cfg.extraRelays.add(r.trim());
+        }
+        // -Dparlons.account.builtin=false: the compiled-in relay list is not used as a seed
+        // (the account then starts from parlons.account.relays + relays it remembers).
+        if ("false".equalsIgnoreCase(System.getProperty("parlons.account.builtin", "true"))) {
+            cfg.builtInRelays = false;
         }
         com.eurobuddha.maxima.cloud.AccountBackup.Source backup = new com.eurobuddha.maxima.cloud.AccountBackup.Source() {
             public String phrase() throws Exception { return identityPhrase(); }

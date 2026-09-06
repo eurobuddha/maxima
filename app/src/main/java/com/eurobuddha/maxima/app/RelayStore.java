@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,33 +39,21 @@ public final class RelayStore {
      * connection noise. Discovery finds real relays; it does not need seeding
      * with nodes that cannot serve.
      */
-    public static final List<String> DEFAULTS = Arrays.asList(
-            "95.179.179.181:9501",     // sally      - Amsterdam, NL
-            "65.109.31.226:9501",      // eurobuddha - Helsinki, FI
-            "45.77.246.226:9501",      // maxima     - Singapore, SG
-            "78.141.237.9:9501",       // openproject- London, GB
-            "45.77.57.24:9501",        // vigilance  - London, GB
-            "192.248.151.55:9501",     // megammr    - London, GB
-            "31.125.188.214:8001");    // the Pi     - residential, GB
+    /** The compiled-in seed list - ONE source among several (see SeedRelays), never the
+     *  only one: the user can drop entries from it or switch it off entirely. */
+    public static final List<String> DEFAULTS = com.eurobuddha.maxima.core.session.Bootstrap.RELAYS;
+    private static final String KEY_EXCLUDED = "relays_excluded";
+    private static final String KEY_BUILTIN = "relays_builtin";
 
     private RelayStore() {
     }
 
     /**
-     * The user-editable candidate list, with DEFAULTS as a permanent floor.
-     *
-     * DEFAULTS come first and are ALWAYS present: a stale or dead persisted set
-     * (e.g. an old build's hosts, or a relay that has since moved port) can never
-     * shadow the shipped fleet and strand the device with nothing live to seed
-     * discovery from. User additions follow, deduped.
-     */
-    /**
      * CLASSIC-ONLY EXPERIMENT SWITCH (dev-only, no UI): when the pref
      * "classic_only_hosts" holds a non-empty comma-separated host list, the
-     * fleet floor is dropped and ONLY those hosts are used - to demonstrate
+     * seeds are dropped and ONLY those hosts are used - to demonstrate
      * Parlons running on pure stock-Minima infrastructure. Set/cleared via
-     * adb: the pref lives in maxima_relays. Release users never touch it;
-     * the DEFAULTS floor is otherwise mandatory.
+     * adb: the pref lives in maxima_relays. Release users never touch it.
      */
     public static List<String> classicOnly(Context zCtx) {
         String s = prefs(zCtx).getString("classic_only_hosts", "");
@@ -81,47 +68,98 @@ public final class RelayStore {
         return out;
     }
 
+    /**
+     * The seeds this phone starts from: your own relays first, then the compiled-in list if it
+     * is switched on (minus any you dropped). Relays remembered from earlier runs and learned
+     * at runtime are layered on top by the service / the pool.
+     */
     public static List<String> get(Context zCtx) {
         List<String> classic = classicOnly(zCtx);
         if (!classic.isEmpty()) {
             return classic;
         }
-        Set<String> merged = new LinkedHashSet<>(DEFAULTS);
+        return com.eurobuddha.maxima.core.session.SeedRelays.compose(
+                userSeeds(zCtx), null, builtInEnabled(zCtx), excluded(zCtx));
+    }
+
+    /** Relays YOU added (typed, pasted or scanned). Older installs persisted the merged set,
+     *  built-ins included: those are filtered out here so they stay governed by the switch. */
+    public static List<String> userSeeds(Context zCtx) {
         Set<String> persisted = prefs(zCtx).getStringSet(KEY, null);
+        List<String> out = new ArrayList<>();
         if (persisted != null) {
-            merged.addAll(persisted);
+            for (String h : persisted) {
+                if (!DEFAULTS.contains(h) && isValid(h)) {
+                    out.add(h);
+                }
+            }
         }
-        return new ArrayList<>(merged);
+        return out;
+    }
+
+    /** Built-in entries the user dropped. */
+    public static Set<String> excluded(Context zCtx) {
+        Set<String> s = prefs(zCtx).getStringSet(KEY_EXCLUDED, null);
+        return s == null ? new LinkedHashSet<>() : new LinkedHashSet<>(s);
+    }
+
+    public static boolean isBuiltIn(String zHostPort) {
+        return zHostPort != null && DEFAULTS.contains(zHostPort.trim());
+    }
+
+    /** Whether the compiled-in list is used as a seed source at all (default: yes). */
+    public static boolean builtInEnabled(Context zCtx) {
+        return prefs(zCtx).getBoolean(KEY_BUILTIN, true);
+    }
+
+    /**
+     * Switch the compiled-in list on or off. Refuses to switch it OFF while you have no relay
+     * of your own and nothing remembered, because that would leave the phone with nowhere to
+     * start. Returns whether the change was applied.
+     */
+    public static boolean setBuiltInEnabled(Context zCtx, boolean zOn) {
+        if (!zOn && userSeeds(zCtx).isEmpty() && SwarmStore.recent(zCtx).isEmpty()) {
+            return false;
+        }
+        prefs(zCtx).edit().putBoolean(KEY_BUILTIN, zOn).apply();
+        return true;
     }
 
     public static void add(Context zCtx, String zHostPort) {
-        Set<String> s = new LinkedHashSet<>(get(zCtx));
-        s.add(zHostPort.trim());
+        String hp = zHostPort.trim();
+        if (isBuiltIn(hp)) {
+            // Re-adding a built-in you had dropped: un-drop it.
+            Set<String> ex = excluded(zCtx);
+            ex.remove(hp);
+            prefs(zCtx).edit().putStringSet(KEY_EXCLUDED, ex).apply();
+            return;
+        }
+        Set<String> s = new LinkedHashSet<>(userSeeds(zCtx));
+        s.add(hp);
         prefs(zCtx).edit().putStringSet(KEY, s).apply();
     }
 
     public static void remove(Context zCtx, String zHostPort) {
-        Set<String> s = new LinkedHashSet<>(get(zCtx));
-        s.remove(zHostPort.trim());
+        String hp = zHostPort.trim();
+        if (isBuiltIn(hp)) {
+            Set<String> ex = excluded(zCtx);
+            ex.add(hp);
+            prefs(zCtx).edit().putStringSet(KEY_EXCLUDED, ex).apply();
+            return;
+        }
+        Set<String> s = new LinkedHashSet<>(userSeeds(zCtx));
+        s.remove(hp);
         prefs(zCtx).edit().putStringSet(KEY, s).apply();
     }
 
+    /** Back to the compiled-in list only: your seeds, your drops and the switch are cleared. */
     public static void reset(Context zCtx) {
-        prefs(zCtx).edit().remove(KEY).apply();
+        prefs(zCtx).edit().remove(KEY).remove(KEY_EXCLUDED).remove(KEY_BUILTIN).apply();
     }
 
     /** "host:port" with a plausible port. */
     public static boolean isValid(String zHostPort) {
-        int c = zHostPort.lastIndexOf(':');
-        if (c <= 0 || c == zHostPort.length() - 1) {
-            return false;
-        }
-        try {
-            int p = Integer.parseInt(zHostPort.substring(c + 1).trim());
-            return p > 0 && p < 65536 && !zHostPort.substring(0, c).trim().isEmpty();
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return com.eurobuddha.maxima.core.session.SeedRelays.isValid(zHostPort);
     }
 
     private static SharedPreferences prefs(Context zCtx) {

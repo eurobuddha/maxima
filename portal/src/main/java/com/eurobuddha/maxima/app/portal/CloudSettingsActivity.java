@@ -28,6 +28,130 @@ import org.minima.utils.json.JSONObject;
  */
 public final class CloudSettingsActivity extends AppCompatActivity {
 
+    /** The next scanned QR lands here (a relay QR from the Relays sheet). */
+    private java.util.function.Consumer<String> mScanSink;
+    private final androidx.activity.result.ActivityResultLauncher<
+            com.journeyapps.barcodescanner.ScanOptions> mScanLauncher =
+            registerForActivityResult(new com.journeyapps.barcodescanner.ScanContract(), result -> {
+                java.util.function.Consumer<String> sink = mScanSink;
+                mScanSink = null;
+                if (result != null && result.getContents() != null && sink != null) {
+                    sink.accept(result.getContents());
+                }
+            });
+
+    private void scanRelayQr(java.util.function.Consumer<String> zSink) {
+        mScanSink = zSink;
+        com.journeyapps.barcodescanner.ScanOptions o = new com.journeyapps.barcodescanner.ScanOptions();
+        o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
+        o.setPrompt("Scan a relay QR");
+        o.setBeepEnabled(false);
+        o.setOrientationLocked(true);
+        mScanLauncher.launch(o);
+    }
+
+    /** The seed relays of THIS phone: list (yours / built-in), add, scan, drop, the switch. */
+    private void showRelays() {
+        final Context c = this;
+        LinearLayout body = new LinearLayout(c);
+        body.setOrientation(LinearLayout.VERTICAL);
+        int pad = PortalUi.dp(c, 16);
+        body.setPadding(pad, pad, pad, pad);
+        final android.app.AlertDialog[] dlg = new android.app.AlertDialog[1];
+
+        for (final String h : PortalRelayStore.get(c)) {
+            LinearLayout row = new LinearLayout(c);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView t = new TextView(c);
+            t.setText(h + (com.eurobuddha.maxima.core.session.SeedRelays.isBuiltIn(h)
+                    ? "  · built-in" : "  · yours"));
+            t.setTextColor(getColor(R.color.ux_text));
+            t.setTextSize(12);
+            t.setTypeface(android.graphics.Typeface.MONOSPACE);
+            row.addView(t, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            TextView rm = PortalUi.ghost(c, "Drop");
+            rm.setTextColor(getColor(R.color.ux_error));
+            rm.setOnClickListener(v -> {
+                PortalRelayStore.remove(c, h);
+                if (dlg[0] != null) dlg[0].dismiss();
+                showRelays();
+            });
+            row.addView(rm);
+            body.addView(row);
+        }
+        if (PortalRelayStore.get(c).isEmpty()) {
+            body.addView(PortalUi.label(c, "No relays configured."));
+        }
+
+        body.addView(PortalUi.gap(c, 10));
+        final android.widget.EditText add = new android.widget.EditText(c);
+        add.setHint("host:port, or paste a relay QR text");
+        add.setSingleLine(true);
+        add.setTextSize(13);
+        add.setTextColor(getColor(R.color.ux_text));
+        add.setHintTextColor(getColor(R.color.ux_subtext));
+        body.addView(add);
+        TextView addBtn = PortalUi.button(c, "Add");
+        addBtn.setOnClickListener(v -> {
+            java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(add.getText().toString());
+            if (hs.isEmpty()) {
+                android.widget.Toast.makeText(c, "Enter host:port, or paste a relay QR text",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            for (String h : hs) PortalRelayStore.add(c, h);
+            if (dlg[0] != null) dlg[0].dismiss();
+            showRelays();
+        });
+        body.addView(addBtn);
+        TextView scan = PortalUi.ghost(c, "Scan a relay QR");
+        scan.setOnClickListener(v -> {
+            if (dlg[0] != null) dlg[0].dismiss();
+            scanRelayQr(text -> {
+                java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(text);
+                if (hs.isEmpty()) {
+                    android.widget.Toast.makeText(c, "That QR is not a relay", android.widget.Toast.LENGTH_SHORT).show();
+                } else {
+                    for (String h : hs) PortalRelayStore.add(c, h);
+                    android.widget.Toast.makeText(c, "Added " + hs.size() + " relay(s)", android.widget.Toast.LENGTH_SHORT).show();
+                }
+                showRelays();
+            });
+        });
+        body.addView(scan);
+
+        body.addView(PortalUi.gap(c, 10));
+        LinearLayout sw = new LinearLayout(c);
+        sw.setOrientation(LinearLayout.HORIZONTAL);
+        sw.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView swLabel = PortalUi.label(c, "Use built-in relays (the list shipped with the app)");
+        sw.addView(swLabel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        androidx.appcompat.widget.SwitchCompat toggle = new androidx.appcompat.widget.SwitchCompat(c);
+        toggle.setChecked(PortalRelayStore.builtInEnabled(c));
+        toggle.setOnCheckedChangeListener((b, on) -> {
+            if (!PortalRelayStore.setBuiltInEnabled(c, on)) {
+                android.widget.Toast.makeText(c, "Add a relay of your own first - the phone needs somewhere to start",
+                        android.widget.Toast.LENGTH_LONG).show();
+                b.setChecked(true);
+            }
+        });
+        sw.addView(toggle);
+        body.addView(sw);
+        body.addView(PortalUi.label(c, "Changes apply on the next reconnect. Relays this phone has "
+                + "already learned from the network are kept either way."));
+
+        dlg[0] = new android.app.AlertDialog.Builder(this)
+                .setTitle("Relays this phone starts from")
+                .setView(body)
+                .setPositiveButton("Done", null)
+                .setNeutralButton("Reset", (d, w) -> {
+                    PortalRelayStore.reset(c);
+                    android.widget.Toast.makeText(c, "Back to the built-in list", android.widget.Toast.LENGTH_SHORT).show();
+                })
+                .show();
+    }
+
     private Switch mReceipts;
     private Switch mAppLock;
     private Switch mScreenShare;
@@ -239,6 +363,12 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         // --- this device ---
         body.addView(PortalUi.section(c, "This device"));
         LinearLayout dev = PortalUi.card(c);
+        TextView relays = PortalUi.title(c, "Relays this phone starts from");
+        relays.setOnClickListener(v -> showRelays());
+        dev.addView(relays);
+        dev.addView(PortalUi.label(c, "Where this phone first looks for your account. Add your "
+                + "own (type, paste, or scan a relay QR); the built-in list can be switched off."));
+        dev.addView(PortalUi.gap(c, 12));
         TextView notif = PortalUi.title(c, "Notification settings");
         notif.setOnClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

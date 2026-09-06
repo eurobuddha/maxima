@@ -86,6 +86,9 @@ public final class ParlonsCore {
          *  adds/removes mutate this from the node pump while boot/configuredHosts read it, so it
          *  is copy-on-write. */
         public List<String> extraRelays = new java.util.concurrent.CopyOnWriteArrayList<>();
+        /** Use the compiled-in relay list ({@code Bootstrap.RELAYS}) as one seed source. OFF
+         *  means: only the relays configured here (and learned at runtime). Persisted. */
+        public volatile boolean builtInRelays = true;
         /** Mesh peers the pool relay forwards resolve-misses to (host:port). */
         public List<String> meshPeers = new ArrayList<>();
         /** Media blob-shelf cap for the relay (MB, 0 = off). */
@@ -206,12 +209,26 @@ public final class ParlonsCore {
                 catch (Exception e) { return new java.util.ArrayList<>(); }
             }
             public java.util.List<String> configuredHosts() {
-                java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>(
-                        com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
-                all.addAll(mCfg.extraRelays);
-                // include anything currently attached that isn't in the floor (runtime adds)
+                java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>(seedRelays());
+                // include anything currently attached that isn't a seed (runtime adds, learned)
                 try { all.addAll(mNode.pool().activeHosts()); } catch (Exception ignored) { }
                 return new java.util.ArrayList<>(all);
+            }
+            public boolean builtInRelays() {
+                return mCfg.builtInRelays;
+            }
+            public boolean setBuiltInRelays(boolean zOn) {
+                if (!zOn && mCfg.extraRelays.isEmpty()) {
+                    return false;   // refuse to leave the account with no seed at all
+                }
+                mCfg.builtInRelays = zOn;
+                mSettings.setProperty("builtinrelays", Boolean.toString(zOn));
+                saveSettings();
+                if (zOn) {
+                    mNode.pool().addFloor(com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
+                }
+                log("built-in relay list " + (zOn ? "ON" : "OFF - seeds are your own relays only"));
+                return true;
             }
             public boolean addHost(String zHostPort) {
                 try {
@@ -344,9 +361,15 @@ public final class ParlonsCore {
         mStartedAt = System.currentTimeMillis();
         openAccountWallet();
 
-        // 1. Attach the client half to the fleet (bootstrap + configured extras).
-        LinkedHashSet<String> relays = new LinkedHashSet<>(Bootstrap.RELAYS);
-        relays.addAll(mCfg.extraRelays);
+        // 1. Attach the client half to the fleet: the operator's configured relays first, then
+        //    the compiled-in list only if it is still switched on (SeedRelays: one source among
+        //    several, never a requirement). Relays discovery saved from earlier runs are loaded
+        //    by setStore() and layered on top by the pool.
+        LinkedHashSet<String> relays = new LinkedHashSet<>(seedRelays());
+        if (relays.isEmpty()) {
+            log("WARNING: no seed relays configured and the built-in list is off - only relays "
+                    + "remembered from earlier runs can be reached");
+        }
         if (mCfg.ownRelay != null && !mCfg.ownRelay.isEmpty()) {
             mNode.setPreferredHost(mCfg.ownRelay);
             log("own relay (the cape) preferred: " + mCfg.ownRelay);
@@ -589,6 +612,16 @@ public final class ParlonsCore {
                 mCfg.extraRelays.add(t);
             }
         }
+        String builtIn = mSettings.getProperty("builtinrelays", "");
+        if (!builtIn.isEmpty()) {
+            mCfg.builtInRelays = Boolean.parseBoolean(builtIn);
+        }
+    }
+
+    /** The seeds this account starts from (see {@link com.eurobuddha.maxima.core.session.SeedRelays}). */
+    private java.util.List<String> seedRelays() {
+        return com.eurobuddha.maxima.core.session.SeedRelays.compose(
+                mCfg.extraRelays, null, mCfg.builtInRelays, null);
     }
 
     /** Write the current extra-relay set to settings so runtime host adds/removes survive restart. */

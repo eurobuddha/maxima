@@ -788,8 +788,12 @@ public final class MaximaService extends Service {
                                         String ep = sDirect.publicAddress();
                                         sGossip.setSelfEndpoint(ep);
                                         gnode.pool().setAdvertisedEndpoint(ep);
-                                        sGossip.announceNow(
-                                            com.eurobuddha.maxima.core.session.Bootstrap.RELAYS);
+                                        // Announce to the relays THIS phone knows (its seeds +
+                                        // the swarm it remembers), not to one operator's list.
+                                        java.util.LinkedHashSet<String> known =
+                                                new java.util.LinkedHashSet<>(RelayStore.get(MaximaService.this));
+                                        known.addAll(SwarmStore.recent(MaximaService.this));
+                                        sGossip.announceNow(new java.util.ArrayList<>(known));
                                     } else {
                                         sGossip.setSelfEndpoint(null);
                                     }

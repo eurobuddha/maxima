@@ -152,6 +152,8 @@ public final class CloudSession {
         }
         final int gen = sGen;
         r = new ParlonsRemote(deviceId(app));
+        // This phone's own seeds first; the compiled-in list only while it is switched on.
+        r.setSeedRelays(PortalRelayStore.get(app));
         try {
             r.connect(account(app), cached(app, liveKey(app)));
             // The push channel is part of a connection: install BEFORE publishing the remote, so

@@ -11,6 +11,7 @@ import org.minima.utils.json.parser.JSONParser;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,6 +35,15 @@ public final class ParlonsRemote {
     private volatile String mCloudMax = "";
     private volatile String mCloudLive = "";
     private ScheduledExecutorService mPump;
+    /** The relays this device starts from to find the account: the caller's seeds (its own,
+     *  remembered, and the compiled-in list if still on); {@code Bootstrap.RELAYS} by default. */
+    private volatile List<String> mSeedRelays = new ArrayList<>(Bootstrap.RELAYS);
+
+    public void setSeedRelays(List<String> zSeeds) {
+        if (zSeeds != null && !zSeeds.isEmpty()) {
+            mSeedRelays = new ArrayList<>(zSeeds);
+        }
+    }
 
     public ParlonsRemote(MaximaIdentity zDeviceIdentity) {
         mDeviceId = zDeviceIdentity;
@@ -60,7 +70,7 @@ public final class ParlonsRemote {
      */
     public void connect(String zCloudAddress, String zCachedLive) throws Exception {
         long t0 = System.currentTimeMillis();
-        int attached = mNode.start(new ArrayList<>(Bootstrap.RELAYS), 30_000);
+        int attached = mNode.start(new ArrayList<>(mSeedRelays), 30_000);
         long tAttach = System.currentTimeMillis();
         int waits = 0;
         for (int i = 0; i < 10 && mNode.rpc().myAddresses().isEmpty(); i++) {
@@ -392,6 +402,14 @@ public final class ParlonsRemote {
         JSONObject p = new JSONObject();
         if (zAdd != null) p.put("add", zAdd);
         if (zRemove != null) p.put("remove", zRemove);
+        return rpc(ParlonsControl.M_NODE_HOSTS, p);
+    }
+
+    /** Switch the account's use of the compiled-in relay list on or off (refused when off would
+     *  leave it with no seed). */
+    public JSONObject nodeHostsBuiltIn(boolean zOn) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("builtin", zOn);
         return rpc(ParlonsControl.M_NODE_HOSTS, p);
     }
 

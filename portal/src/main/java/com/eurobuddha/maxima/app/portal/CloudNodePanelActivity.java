@@ -219,12 +219,24 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         hc.addView(add);
         TextView addBtn = PortalUi.button(this, "Add & connect");
         addBtn.setOnClickListener(v -> {
+            // Typed host:port, a comma list, or the text of a relay's QR.
             String h = add.getText().toString().trim();
             if (!h.isEmpty()) {
                 hostOp(h, "");
             }
         });
         hc.addView(addBtn);
+        hc.addView(PortalUi.gap(this, 8));
+        LinearLayout sw = new LinearLayout(this);
+        sw.setOrientation(LinearLayout.HORIZONTAL);
+        sw.setGravity(Gravity.CENTER_VERTICAL);
+        sw.addView(PortalUi.label(this, "Account uses the built-in relay list"),
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        androidx.appcompat.widget.SwitchCompat toggle = new androidx.appcompat.widget.SwitchCompat(this);
+        toggle.setChecked(!mFigures.containsKey("builtin") || bool(mFigures, "builtin"));
+        toggle.setOnCheckedChangeListener((b, on) -> builtInOp(on));
+        sw.addView(toggle);
+        hc.addView(sw);
         mRoot.addView(hc);
 
         // --- MLS / location ---
@@ -311,6 +323,38 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         rlp.bottomMargin = PortalUi.dp(this, 24);
         refreshBtn.setLayoutParams(rlp);
         mRoot.addView(refreshBtn);
+    }
+
+    /** Switch the account's use of the compiled-in relay list; the account refuses OFF when it
+     *  would be left with no seed of its own. */
+    private void builtInOp(boolean on) {
+        CloudSession.connectInteractive(this, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                String err = null;
+                try {
+                    JSONObject res = r.nodeHostsBuiltIn(on);
+                    if (!bool(res, "ok")) {
+                        err = String.valueOf(res.get("error"));
+                    }
+                } catch (Exception e) {
+                    err = e.getMessage();
+                }
+                final String fe = err;
+                mMain.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (fe != null) {
+                        Toast.makeText(CloudNodePanelActivity.this, fe, Toast.LENGTH_LONG).show();
+                    }
+                    refresh(false);
+                });
+            }
+            public void err(String m) {
+                mMain.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    Toast.makeText(CloudNodePanelActivity.this, m, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
 
     private void hostOp(String add, String remove) {

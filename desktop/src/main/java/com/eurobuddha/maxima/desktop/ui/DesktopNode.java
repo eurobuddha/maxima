@@ -97,7 +97,7 @@ public final class DesktopNode {
                     hosts.add(h);
                     if (hosts.size() >= 2) break;
                 }
-                if (hosts.isEmpty()) {
+                if (hosts.isEmpty() && mRelayStore.builtInEnabled()) {
                     for (String h : Bootstrap.RELAYS) {
                         hosts.add(h);
                         if (hosts.size() >= 2) break;
@@ -393,9 +393,9 @@ public final class DesktopNode {
     /** Attach to relays (built-in) / confirm the classic engine is up, then pump. */
     public int start() {
         if (!mJar && mNode != null) {
-            java.util.LinkedHashSet<String> cands = new java.util.LinkedHashSet<>(mRelayStore.get());
-            cands.addAll(Bootstrap.RELAYS);
-            mNode.start(new java.util.ArrayList<>(cands), 30_000);
+            // The store composes the seeds (yours, then the compiled-in list only if it is on);
+            // relays remembered by discovery were loaded by setStore() and sit on top.
+            mNode.start(new java.util.ArrayList<>(mRelayStore.get()), 30_000);
         }
         // The classic engine connects to its hosts inside its own constructor.
         startPump();

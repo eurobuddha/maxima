@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.5.55";
+    public static final String APP_VERSION = "1.5.56";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -117,8 +117,11 @@ public final class DesktopMain {
 
         // 2. the outbound client that proves our reachability (and, later, gossips)
         mProbeClient = new MaximaNode(id, PROTOCOL, 1);
-        int attached = mProbeClient.start(Bootstrap.RELAYS, 30_000);
-        log("probe client attached to " + attached + " bootstrap relay(s)");
+        // Seeds: the operator's own relays first, the compiled-in list only while it is on.
+        final java.util.List<String> seeds =
+                new com.eurobuddha.maxima.desktop.ui.DesktopRelayStore(dataDir.toFile()).get();
+        int attached = mProbeClient.start(seeds, 30_000);
+        log("probe client attached to " + attached + " seed relay(s) of " + seeds.size());
         startPump(mProbeClient);
 
         // 3a. gossip: once proven reachable we announce ourselves to the fleet,
@@ -144,8 +147,8 @@ public final class DesktopMain {
                 mProbeClient.pool().setAdvertisedEndpoint(ipPort);
                 gossip.setSelfEndpoint(ipPort);
                 Thread announce = new Thread(() -> {
-                    int n = gossip.announceNow(Bootstrap.RELAYS);
-                    log("announced this relay to " + n + " bootstrap relay(s)");
+                    int n = gossip.announceNow(seeds);
+                    log("announced this relay to " + n + " seed relay(s)");
                 }, "maxima-announce");
                 announce.setDaemon(true);
                 announce.start();

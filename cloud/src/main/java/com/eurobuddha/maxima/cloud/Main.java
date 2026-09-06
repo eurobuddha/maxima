@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.28";
+    public static final String VERSION = "0.11.29";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -81,6 +81,9 @@ public final class Main {
                 case "--peers":
                     cfg.meshPeers = new java.util.concurrent.CopyOnWriteArrayList<>(
                             csv(strArg(args, ++i, "--peers")));
+                    break;
+                case "--no-builtin-relays":
+                    cfg.builtInRelays = false;   // seeds are --relays (and remembered relays) only
                     break;
                 case "--blobstore":
                     cfg.relayBlobMb = intArg(args, ++i, "--blobstore");
@@ -314,6 +317,8 @@ public final class Main {
         out.println("  --no-direct         disable direct reachability");
         out.println("  --host <ip>         public address to advertise    (default: say nothing)");
         out.println("  --relays <list>     extra fleet relays to attach to (comma-separated)");
+        out.println("  --no-builtin-relays do NOT use the compiled-in relay list as a seed source:");
+        out.println("                      only --relays / relays added from the panel (needs at least one)");
         out.println("  --peers <list>      mesh peers for the pool relay   (comma-separated; or MAXIMA_PEERS)");
         out.println("  --blobstore <MB>    relay media shelf size in MB    (default " + DEFAULT_BLOB_MB + ")");
         out.println("  --import-seed <f|prompt>  adopt an EXISTING 24-word phrase (fresh dir only)");
