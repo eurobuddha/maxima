@@ -168,6 +168,34 @@ public final class SeedRelays {
         return !any;
     }
 
+    /** What dropping a relay did. */
+    public enum Drop {
+        /** Dropped. */
+        DROPPED,
+        /** Dropped, and because it was the last seed while the compiled-in list was off, the
+         *  list is back on. */
+        DROPPED_BUILTIN_BACK_ON,
+        /** Refused: this compiled-in relay is the last seed of any kind - nothing would be left. */
+        REFUSED_LAST_SEED
+    }
+
+    /**
+     * Whether dropping compiled-in relay {@code zHostPort} would leave NO seed at all (no own
+     * relay, nothing remembered, no other compiled-in relay still in the list). A store refuses
+     * such a drop - the other half of the "never seedless" invariant, for the switch-ON case.
+     */
+    public static boolean droppingBuiltInLeavesNothing(Collection<String> zUserSeeds,
+                                                       Collection<String> zRemembered,
+                                                       Collection<String> zExcludedBuiltIn,
+                                                       String zHostPort) {
+        java.util.Set<String> ex = new java.util.HashSet<>();
+        if (zExcludedBuiltIn != null) {
+            ex.addAll(zExcludedBuiltIn);
+        }
+        ex.add(zHostPort == null ? "" : zHostPort.trim());
+        return compose(zUserSeeds, zRemembered, true, ex).isEmpty();
+    }
+
     /** Lower-cased, trimmed key for comparing user input against stored entries. */
     public static String norm(String zHostPort) {
         return zHostPort == null ? "" : zHostPort.trim().toLowerCase(Locale.ROOT);

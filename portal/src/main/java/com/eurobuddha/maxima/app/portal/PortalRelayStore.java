@@ -75,22 +75,25 @@ public final class PortalRelayStore {
 
     /** Drop a relay. True when that was the last seed while the compiled-in list was off: the
      *  list is switched back on, so this phone is never left with nowhere to start. */
-    public static boolean remove(Context zCtx, String zHostPort) {
+    public static SeedRelays.Drop remove(Context zCtx, String zHostPort) {
         String hp = zHostPort.trim();
         if (SeedRelays.isBuiltIn(hp)) {
             Set<String> ex = excluded(zCtx);
+            if (SeedRelays.droppingBuiltInLeavesNothing(userSeeds(zCtx), null, ex, hp)) {
+                return SeedRelays.Drop.REFUSED_LAST_SEED;
+            }
             ex.add(hp);
             prefs(zCtx).edit().putStringSet(KEY_EXCLUDED, ex).apply();
-            return false;
+            return SeedRelays.Drop.DROPPED;
         }
         Set<String> s = new LinkedHashSet<>(userSeeds(zCtx));
         s.remove(hp);
         prefs(zCtx).edit().putStringSet(KEY, s).apply();
         if (SeedRelays.builtInMustReturn(s, null, builtInEnabled(zCtx))) {
             prefs(zCtx).edit().putBoolean(KEY_BUILTIN, true).apply();
-            return true;
+            return SeedRelays.Drop.DROPPED_BUILTIN_BACK_ON;
         }
-        return false;
+        return SeedRelays.Drop.DROPPED;
     }
 
     public static void reset(Context zCtx) {

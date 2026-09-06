@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.32";
+    public static final String VERSION = "0.11.33";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -227,10 +227,17 @@ public final class Main {
                 chatRows += col.size();
             }
         }
+        int devices = 0;
+        try {
+            org.json.JSONArray auth = new org.json.JSONObject(b.devicesJson).optJSONArray("authorized");
+            devices = auth == null ? 0 : auth.length();
+        } catch (Exception ignored) {
+            // no or unreadable devices block: reported as 0
+        }
         System.out.println("Restored: " + (b.displayName.isEmpty() ? "(unnamed)" : b.displayName)
                 + " · " + b.contacts.size() + " contact(s) · " + b.keyUses.size()
                 + " key-use counter(s) (raise-only)"
-                + (b.hasAccount() ? " · paired devices, settings and " + chatRows
+                + (b.hasAccount() ? " · " + devices + " paired device(s), settings and " + chatRows
                         + " chat record(s) (portable account bundle)"
                         : " · (an older backup: contacts and identity only)"));
         System.out.println();

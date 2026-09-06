@@ -66,6 +66,20 @@ public class SeedRelaysTest {
     }
 
     @Test
+    public void theLastCompiledInRelayCannotBeDroppedIntoNothing() {
+        List<String> allButOne = new java.util.ArrayList<>(Bootstrap.RELAYS.subList(1, Bootstrap.RELAYS.size()));
+        String last = Bootstrap.RELAYS.get(0);
+        assertTrue("no own relay, nothing remembered, every other built-in dropped: refuse",
+                SeedRelays.droppingBuiltInLeavesNothing(null, null, allButOne, last));
+        assertFalse("an own relay remains", SeedRelays.droppingBuiltInLeavesNothing(
+                Collections.singletonList("mine:1"), null, allButOne, last));
+        assertFalse("another built-in remains", SeedRelays.droppingBuiltInLeavesNothing(
+                null, null, Collections.emptyList(), last));
+        assertFalse("a remembered relay remains", SeedRelays.droppingBuiltInLeavesNothing(
+                null, Collections.singletonList("seen:2"), allButOne, last));
+    }
+
+    @Test
     public void builtInMembershipIsExact() {
         assertTrue(SeedRelays.isBuiltIn(Bootstrap.RELAYS.get(2)));
         assertTrue(SeedRelays.isBuiltIn(" " + Bootstrap.RELAYS.get(2) + " "));

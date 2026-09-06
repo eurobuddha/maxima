@@ -73,7 +73,13 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             TextView rm = PortalUi.ghost(c, "Drop");
             rm.setTextColor(getColor(R.color.ux_error));
             rm.setOnClickListener(v -> {
-                if (PortalRelayStore.remove(c, h)) {
+                com.eurobuddha.maxima.core.session.SeedRelays.Drop d = PortalRelayStore.remove(c, h);
+                if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.REFUSED_LAST_SEED) {
+                    android.widget.Toast.makeText(c, "Keep at least one relay - add your own before dropping this one",
+                            android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.DROPPED_BUILTIN_BACK_ON) {
                     android.widget.Toast.makeText(c, "That was your last relay - the built-in list is back on",
                             android.widget.Toast.LENGTH_LONG).show();
                 }

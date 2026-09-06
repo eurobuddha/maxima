@@ -267,7 +267,14 @@ public final class RelayServer {
     public long forwardsStarted() {
         return mForwards.get();
     }
-    /** Forward fan-out runs in parallel here so a miss is answered inside the client's leash. */
+    /**
+     * Forward fan-out runs in parallel here so a miss is answered inside the client's leash.
+     * A dial abandoned by the 4.5 s answer budget still holds its thread for up to 5.5 s
+     * (socket connects are not interruptible), so under a burst of misses to dead peers the
+     * pool can fill; a dial that finds no thread is DISCARDED (one peer unasked for that miss)
+     * - it is never run on the asking client's connection thread, which is what caller-runs
+     * did and what would have stalled that client for the whole dial.
+     */
     private final java.util.concurrent.ExecutorService mForwardExec =
             new java.util.concurrent.ThreadPoolExecutor(0, 32, 30, java.util.concurrent.TimeUnit.SECONDS,
                     new java.util.concurrent.SynchronousQueue<>(),
@@ -276,7 +283,7 @@ public final class RelayServer {
                         t.setDaemon(true);
                         return t;
                     },
-                    new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+                    new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy());
     /**
      * Replication has its own small lane: it must not sit on the push pool (keep-alives and
      * drains would wait behind 3 × 5.5 s dials) nor on the forward pool (CallerRuns there

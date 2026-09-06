@@ -605,9 +605,13 @@ public final class NetworkPage implements Page {
         rm.setPadding(k.dp(10), k.dp(6), k.dp(10), k.dp(6));
         rm.setBackground(k.ripple());
         rm.setOnClickListener(v -> {
-            boolean restored = RelayStore.remove(mAct, host);
+            com.eurobuddha.maxima.core.session.SeedRelays.Drop d = RelayStore.remove(mAct, host);
+            if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.REFUSED_LAST_SEED) {
+                mAct.toast("Keep at least one relay - add your own before dropping this one");
+                return;
+            }
             EventLog.add("host removed: " + host);
-            mAct.toast(restored
+            mAct.toast(d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.DROPPED_BUILTIN_BACK_ON
                     ? "Removed " + host + " - that was your last relay, so the built-in list is back on"
                     : "Removed " + host);
             st.setText("Removed");

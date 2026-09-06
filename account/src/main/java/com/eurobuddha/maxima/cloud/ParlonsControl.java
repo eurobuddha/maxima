@@ -332,8 +332,24 @@ public final class ParlonsControl {
         mNft = zHost;
     }
 
-    /** Backup blobs (base64) being paged out to a device, newest last. */
+    /** Backup blobs (base64) being paged out to a device, newest last; each dies after
+     *  BACKUP_PAGES_TTL_MS whether or not the device came back for the rest. */
     private final java.util.LinkedHashMap<String, String> mBackupPages = new java.util.LinkedHashMap<>();
+    private final java.util.HashMap<String, Long> mBackupPagesAt = new java.util.HashMap<>();
+    static final long BACKUP_PAGES_TTL_MS = 10 * 60_000L;
+
+    /** Call with mBackupPages held. */
+    private void pruneBackupPages() {
+        long now = System.currentTimeMillis();
+        java.util.Iterator<java.util.Map.Entry<String, Long>> it = mBackupPagesAt.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<String, Long> e = it.next();
+            if (now - e.getValue() > BACKUP_PAGES_TTL_MS) {
+                mBackupPages.remove(e.getKey());
+                it.remove();
+            }
+        }
+    }
 
     private JSONObject backupPage(String zKey, String zB64, int zOffset) {
         JSONObject out = ok();
@@ -348,6 +364,7 @@ public final class ParlonsControl {
         if (!more) {
             synchronized (mBackupPages) {
                 mBackupPages.remove(zKey);   // the device has the last page
+                mBackupPagesAt.remove(zKey);
             }
         }
         return out;
@@ -1381,6 +1398,7 @@ public final class ParlonsControl {
             if (!key.isEmpty()) {
                 String b64;
                 synchronized (mBackupPages) {
+                    pruneBackupPages();
                     b64 = mBackupPages.get(key);
                 }
                 if (b64 == null) {
@@ -1404,11 +1422,14 @@ public final class ParlonsControl {
                 String k = new com.eurobuddha.maxima.core.codec.MiniData(
                         com.eurobuddha.maxima.core.crypto.MaximaCrypto.randomBytes(12)).to0xString();
                 synchronized (mBackupPages) {
+                    pruneBackupPages();
                     while (mBackupPages.size() >= 4) {   // a handful in flight at most
                         String oldest = mBackupPages.keySet().iterator().next();
                         mBackupPages.remove(oldest);
+                        mBackupPagesAt.remove(oldest);
                     }
                     mBackupPages.put(k, b64);
+                    mBackupPagesAt.put(k, System.currentTimeMillis());
                 }
                 mNode.log("encrypted backup exported to a paired device (" + blob.length + " bytes)");
                 return bytes(backupPage(k, b64, 0));

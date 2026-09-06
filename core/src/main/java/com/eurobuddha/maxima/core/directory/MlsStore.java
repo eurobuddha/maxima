@@ -196,7 +196,7 @@ public final class MlsStore {
             // Replicas may hold at most HALF the directory: a flood of (valid) replicas from
             // peers must never push this relay's OWN publishers out through the LRU cap. Over
             // the share, the least-recently-used replica makes room - never a local entry.
-            if (cur == null && mEntries.size() >= mMaxEntries / 2) {
+            if ((cur == null || !cur.replica) && mEntries.size() >= mMaxEntries / 2) {
                 int replicas = 0;
                 String oldestReplica = null;
                 for (Map.Entry<String, Entry> e : mEntries.entrySet()) {

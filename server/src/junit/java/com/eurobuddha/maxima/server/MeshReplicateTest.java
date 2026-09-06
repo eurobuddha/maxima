@@ -130,7 +130,7 @@ public class MeshReplicateTest {
     }
 
     @Test
-    public void replicasNeverEvictTheRelaysOwnPublishesThroughTheCap() {
+    public void replicasNeverEvictTheRelaysOwnPublishesThroughTheCap() throws Exception {
         MlsStore s = new MlsStore();
         s.setOpenResolve(true);
         s.setMaxEntries(4);   // replicas may hold at most 2
@@ -145,6 +145,14 @@ public class MeshReplicateTest {
         assertNotNull(s.peek("0xL2"));
         assertNull("the least-recently-used replica made room", s.peek("0xR1"));
         assertNotNull(s.peek("0xR3"));
+
+        // A replica taking over an EXPIRED local entry counts toward the share too.
+        s.put("0xL3", Collections.singletonList("l3@h:1"), Collections.emptyList(), pf, pp, ps, 1);
+        Thread.sleep(5);
+        assertTrue(s.putReplica("0xL3", "l3r@h:1", pf, pp, ps, 60_000));
+        assertNull("the older replica made room for it", s.peek("0xR2"));
+        assertNotNull(s.peek("0xL1"));
+        assertNotNull(s.peek("0xL2"));
     }
 
     @Test

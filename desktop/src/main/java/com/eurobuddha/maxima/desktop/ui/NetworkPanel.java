@@ -893,7 +893,13 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         DKit.HoverButton rm = k.dangerButton("Remove");
         rm.setFont(t.semibold(11f));
         rm.onClick(() -> {
-            if (node.relayStore().remove(hostPort)) {
+            com.eurobuddha.maxima.core.session.SeedRelays.Drop d = node.relayStore().remove(hostPort);
+            if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.REFUSED_LAST_SEED) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "Keep at least one relay - add your own before dropping this one.");
+                return;
+            }
+            if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.DROPPED_BUILTIN_BACK_ON) {
                 javax.swing.JOptionPane.showMessageDialog(this,
                         "That was your last relay, so the built-in list is back on.");
             }
