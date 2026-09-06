@@ -123,7 +123,7 @@ public final class Client {
                 JSONObject o = r.newCode();
                 if (!isOk(o)) { fail(o); break; }
                 System.out.println("new one-time pairing code minted on the account.");
-                String inv = waitLocalInvite(before, 8_000);
+                String inv = waitLocalInvite(before, 45_000);   // covers an account still attaching after a restart
                 if (inv != null) {
                     System.out.println("invite : " + inv);
                     System.out.println("(scan or paste it in the Parlons Cloud app; the code half works once)");
@@ -506,10 +506,15 @@ public final class Client {
     /** After newcode: the account rewrites pair-code.txt at once and invite.txt within seconds.
      *  Returns the first invite that differs from {@code zBefore} (the stale one is never handed out). */
     static String waitLocalInvite(String zBefore, long zMs) throws InterruptedException {
-        long until = System.currentTimeMillis() + zMs;
+        long start = System.currentTimeMillis(), until = start + zMs;
+        boolean said = false;
         while (System.currentTimeMillis() < until) {
             String inv = localInvite();
             if (inv != null && !inv.equals(zBefore)) return inv;
+            if (!said && System.currentTimeMillis() - start > 5_000) {
+                System.out.println("(waiting for the account to publish its address - a few seconds after a restart)");
+                said = true;
+            }
             Thread.sleep(300);
         }
         String inv = localInvite();
