@@ -218,6 +218,9 @@ public final class SearchActivity extends Activity {
         if (ChatPay.isPayment(zBody)) {
             return ChatPay.preview(zBody);
         }
+        if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(zBody)) {
+            return com.eurobuddha.maxima.core.chat.ChatContact.preview(zBody);
+        }
         if (ChatMedia.isMedia(zBody)) {
             String cap = ChatMedia.caption(zBody);
             // voice notes carry "duration|waveformhex" - hex is not content

@@ -125,6 +125,8 @@ public final class ChatsPage implements Page {
                     ? Names.contact(node, s.lastSender) + ": " : "");
             String body = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(s.lastBody)
                     ? com.eurobuddha.maxima.core.chat.ChatPay.preview(s.lastBody)
+                    : com.eurobuddha.maxima.core.chat.ChatContact.isCard(s.lastBody)
+                    ? com.eurobuddha.maxima.core.chat.ChatContact.preview(s.lastBody)
                     : com.eurobuddha.maxima.core.chat.ChatMedia.preview(s.lastBody);
             r.preview = who + oneLine(body);
             r.time = stamp(s.lastTime);

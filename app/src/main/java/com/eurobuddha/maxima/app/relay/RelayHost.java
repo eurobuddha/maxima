@@ -62,6 +62,39 @@ public final class RelayHost {
         return mState;
     }
 
+    /** "open" (a relay dialled us back on RELAY_PORT), "closed" (none could), "" (not tested yet). */
+    public String portProof() {
+        return mProof;
+    }
+    public long portProofAt() {
+        return mProofAt;
+    }
+    private volatile String mProof = "";
+    private volatile long mProofAt;
+    private Thread mProver;
+    private static final long PROVE_EVERY_MS = 20 * 60_000L;
+
+    /** Every 20 min while running: ask the attached relays to dial our public RELAY_PORT.
+     *  The only honest "reached from the internet" - a mapping or a rule proves nothing. */
+    private void startProver() {
+        if (mProver != null && mProver.isAlive()) {
+            return;
+        }
+        mProver = new Thread(() -> {
+            try { Thread.sleep(15_000); } catch (InterruptedException ie) { return; }
+            while (mState == State.RUNNING) {
+                boolean ok;
+                try { ok = mNode.provePortFromRelays(RELAY_PORT); } catch (Exception e) { ok = false; }
+                mProof = ok ? "open" : "closed";
+                mProofAt = System.currentTimeMillis();
+                EventLog.add("RELAY port " + RELAY_PORT + (ok ? " reached from the internet" : " NOT reached from the internet"));
+                try { Thread.sleep(PROVE_EVERY_MS); } catch (InterruptedException ie) { return; }
+            }
+        }, "relay-port-proof");
+        mProver.setDaemon(true);
+        mProver.start();
+    }
+
     public Blocker blocker() {
         return mBlocker;
     }
@@ -140,6 +173,8 @@ public final class RelayHost {
             mState = State.RUNNING;
             mDetail = "relaying for others on port " + RELAY_PORT;
             EventLog.add("RELAY started on " + RELAY_PORT);
+            mProof = "";
+            startProver();
         } catch (Exception e) {
             mRuntime = null;
             mState = State.OFF;

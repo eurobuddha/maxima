@@ -1911,6 +1911,48 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return "Sending…";
     }
 
+    /** A shared contact card: who, their full address (RULE 1: never shortened), and the hint. */
+    private CharSequence contactCardText(ChatEngine.Entry e) {
+        String name = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
+        String addr = com.eurobuddha.maxima.core.chat.ChatContact.address(e.body);
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+        String head = "👤 " + (name.isEmpty() ? "(no name)" : name) + "\nShared contact";
+        sb.append(head);
+        sb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 2, head.indexOf('\n'),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.append("\n\n").append(addr);
+        int a0 = sb.length() - addr.length();
+        sb.setSpan(new android.text.style.RelativeSizeSpan(0.8f), a0, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.setSpan(new android.text.style.TypefaceSpan("monospace"), a0, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.append("\n\nTap to add this contact");
+        return sb;
+    }
+
+    private void offerAddContact(ChatEngine.Entry e) {
+        final String name = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
+        final String addr = com.eurobuddha.maxima.core.chat.ChatContact.address(e.body);
+        if (addr.isEmpty()) {
+            toast("This card carries no address");
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Add " + (name.isEmpty() ? "this contact" : name) + "?")
+                .setMessage(addr)
+                .setPositiveButton("Add contact", (dlg, w) -> new Thread(() -> {
+                    com.eurobuddha.maxima.core.MaximaNode node = MaximaService.node();
+                    boolean ok = false;
+                    try { if (node != null) { node.introduce(addr, true); ok = true; } } catch (Exception ignored) { }
+                    final boolean fok = ok;
+                    runOnUiThread(() -> toast(fok ? "Introduction sent - they appear in Contacts once they answer" : "Could not add"));
+                }).start())
+                .setNeutralButton("Copy address", (dlg, w) -> {
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) { cm.setPrimaryClip(android.content.ClipData.newPlainText("Parlons address", addr)); toast("Address copied"); }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private void toast(String zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
     }
@@ -2080,6 +2122,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             showMessageMenu(e);
             return true;
         });
+        // A shared contact is the one bubble a tap acts on: offer to add them.
+        h.bubble.setOnClickListener(com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
+                ? v -> offerAddContact(e) : null);
+        h.bubble.setClickable(com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body) || h.bubble.isLongClickable());
         h.row.setGravity(e.mine ? Gravity.END : Gravity.START);
         // Tight within a cluster; a clear gap starting each new run.
         h.row.setPadding(dp(12), r.firstInCluster ? dp(7) : dp(1), dp(12), dp(1));
@@ -2115,7 +2161,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.who.setVisibility(View.GONE);
             }
 
-            if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
+            if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)) {
+                h.audio.setVisibility(View.GONE);
+                h.image.setVisibility(View.GONE);
+                h.image.setImageDrawable(null);
+                h.body.setVisibility(View.VISIBLE);
+                h.body.setText(contactCardText(e));
+            } else if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
                 String mime = com.eurobuddha.maxima.core.chat.ChatMedia.mime(e.body);
                 if (mime.startsWith("audio")) {
                     h.image.setVisibility(View.GONE);

@@ -153,8 +153,10 @@ public final class ChatNotifier {
                         .build();
                 people.put(e.sender, p);
             }
-            String line = ChatPay.isPayment(e.body)
-                    ? ChatPay.preview(e.body) : ChatMedia.preview(e.body);
+            String line = ChatPay.isPayment(e.body) ? ChatPay.preview(e.body)
+                    : com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
+                    ? com.eurobuddha.maxima.core.chat.ChatContact.preview(e.body)
+                    : ChatMedia.preview(e.body);
             style.addMessage(line, e.time, p);
         }
 

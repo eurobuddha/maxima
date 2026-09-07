@@ -292,6 +292,26 @@ public final class ContactsPage implements Page {
             body.addView(none);
         }
 
+        // Share this contact: the permanent address when we know their directory (it survives
+        // their relay changes), else the current one - copy it, hand it to any app, or send it
+        // to another contact as a card they can add with one tap.
+        final String share = c.shareAddress();
+        if (!share.isEmpty()) {
+            if (!share.equals(addr)) {
+                body.addView(copyField("Share address (permanent)", share, "Share address copied"));
+            }
+            LinearLayout shareRow = new LinearLayout(mAct);
+            shareRow.setOrientation(LinearLayout.HORIZONTAL);
+            TextView shareBtn = ghostButton("Share…");
+            shareBtn.setOnClickListener(v -> shareText(share, "Share " + c.name));
+            TextView sendBtn = ghostButton("Send to a contact…");
+            sendBtn.setOnClickListener(v -> showSendContactPicker(c, share));
+            LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, -2, 1f);
+            shareRow.addView(shareBtn, half);
+            shareRow.addView(sendBtn, half);
+            body.addView(shareRow, marginBottom(dp(4)));
+        }
+
         if (c.minimaAddress != null && !c.minimaAddress.isEmpty()) {
             body.addView(copyField("Payment address (MINIMA)", c.minimaAddress, "Payment address copied"));
         }
@@ -493,10 +513,57 @@ public final class ContactsPage implements Page {
     }
 
     private void shareText(String text) {
+        shareText(text, "Share your Parlons address");
+    }
+
+    private void shareText(String text, String title) {
         Intent i = new Intent(Intent.ACTION_SEND);
         i.setType("text/plain");
         i.putExtra(Intent.EXTRA_TEXT, text);
-        mAct.startActivity(Intent.createChooser(i, "Share your Parlons address"));
+        mAct.startActivity(Intent.createChooser(i, title));
+    }
+
+    /** Pick another contact and send them zWho as a contact card (ChatContact body kind). */
+    private void showSendContactPicker(final Contact zWho, final String zShare) {
+        com.eurobuddha.maxima.core.MaximaNode node = MaximaService.node();
+        if (node == null) {
+            mAct.toast("Not connected yet");
+            return;
+        }
+        LinearLayout body = new LinearLayout(mAct);
+        body.setOrientation(LinearLayout.VERTICAL);
+        int n = 0;
+        for (final Contact t : node.contacts()) {
+            if (t.publicKey == null || t.publicKey.equalsIgnoreCase(zWho.publicKey)) {
+                continue;
+            }
+            n++;
+            TextView row = ghostButton(t.name == null || t.name.isEmpty() ? t.publicKey : t.name);
+            row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+            body.addView(row);
+        }
+        if (n == 0) {
+            body.addView(sub("No one else to send it to yet."));
+        }
+        final BottomSheetDialog d = sheet("Send " + zWho.name + " to…", body);
+        int idx = 0;
+        for (final Contact t : node.contacts()) {
+            if (t.publicKey == null || t.publicKey.equalsIgnoreCase(zWho.publicKey)) {
+                continue;
+            }
+            final View row = body.getChildAt(idx++);
+            row.setOnClickListener(v -> {
+                d.dismiss();
+                final String card = com.eurobuddha.maxima.core.chat.ChatContact.wrap(zWho.publicKey, zWho.name, zShare);
+                new Thread(() -> {
+                    com.eurobuddha.maxima.core.chat.ChatEngine chat = MaximaService.chat();
+                    boolean ok = false;
+                    try { ok = chat != null && chat.send(t, card) != null; } catch (Exception ignored) { }
+                    final boolean fok = ok;
+                    mAct.runOnUiThread(() -> mAct.toast(fok ? "Contact sent to " + t.name : "Could not send"));
+                }).start();
+            });
+        }
     }
 
     // ---------------------------------------------------------------

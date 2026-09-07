@@ -543,6 +543,12 @@ public final class DirectReachability {
         return "ready";
     }
 
+    /** The router's address as text ("192.168.1.1"), "" when the platform does not say. */
+    public String gatewayIp() {
+        InetAddress g = gatewayHint();
+        return g == null ? "" : g.getHostAddress();
+    }
+
     /** The default-route gateway, where the platform will tell us. NAT-PMP needs it. */
     private InetAddress gatewayHint() {
         try {

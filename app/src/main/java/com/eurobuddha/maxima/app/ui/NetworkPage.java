@@ -55,6 +55,8 @@ public final class NetworkPage implements Page {
     private LinearLayout mContrib;
     private TextView mContribNote;
     private LinearLayout mDirect;
+    private LinearLayout mForward;
+    private String mPublicIp = "";
     private TextView mMlsText;
     private TextView mLog;
     private TextView mAutoBtn;
@@ -284,6 +286,7 @@ public final class NetworkPage implements Page {
 
         // ---- direct reachability ----
         renderDirect();
+        renderForward();
     }
 
     private void renderHostList(List<String> active) {
@@ -329,6 +332,67 @@ public final class NetworkPage implements Page {
             }
         }
         return n;
+    }
+
+    /** LAN address, router, public address and one line per port with what to forward and
+     *  whether it is reached - every value a copy field (RULE 1: whole, copyable). */
+    private void renderForward() {
+        if (mForward == null) {
+            return;
+        }
+        mForward.removeAllViews();
+        com.eurobuddha.maxima.app.direct.DirectReachability d = MaximaService.direct();
+        RelayHost rh = MaximaService.relay();
+        String lan = MaximaService.localIp();
+        String gw = d == null ? "" : d.gatewayIp();
+        String pub = mPublicIp;
+        if (pub.isEmpty() && d != null && !d.publicAddress().isEmpty()) {
+            String pa = d.publicAddress();
+            pub = pa.contains(":") ? pa.substring(0, pa.lastIndexOf(':')) : pa;
+        }
+        if (pub.isEmpty()) {
+            pub = ManualForward.publicIp(mAct);
+        }
+        if (pub.isEmpty()) {
+            detectPublicIp(ip -> { if (ip != null && !ip.isEmpty()) { mPublicIp = ip; mAct.runOnUiThread(this::renderForward); } });
+        }
+        mForward.addView(k.copyField("This phone (LAN)", lan.isEmpty() ? "—" : lan, "Copied"));
+        if (!gw.isEmpty()) {
+            LinearLayout gwRow = k.copyField("Your router", "http://" + gw + "/", "Router address copied");
+            mForward.addView(gwRow);
+            TextView open = k.ghostButton("Open the router's admin page");
+            open.setOnClickListener(v -> {
+                try { mAct.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("http://" + gw + "/"))); }
+                catch (Exception e) { mAct.toast("No browser"); }
+            });
+            mForward.addView(open);
+        }
+        mForward.addView(k.copyField("Your public address", pub.isEmpty() ? "finding it…" : pub, "Copied"));
+
+        boolean relayOn = rh != null && rh.state() == RelayHost.State.RUNNING;
+        String relayProof = rh == null ? "" : rh.portProof();
+        mForward.addView(k.kvPill("Relay port " + RelayHost.RELAY_PORT,
+                relayOn ? ("open".equals(relayProof) ? "Reached from the internet - others attach to your relay"
+                        : "closed".equals(relayProof) ? "Not reached yet: forward TCP " + RelayHost.RELAY_PORT + " to " + (lan.isEmpty() ? "this phone" : lan)
+                        : "Testing whether the internet reaches it…")
+                        : "Relay off - turn on Help the network on Wi-Fi + charging",
+                relayOn ? ("open".equals(relayProof) ? "open" : "closed".equals(relayProof) ? "closed" : "testing") : "off",
+                relayOn && "open".equals(relayProof) ? Kit.OK : Kit.NEUTRAL));
+        if (relayOn) {
+            mForward.addView(k.copyField("Router rule for the relay", "TCP " + RelayHost.RELAY_PORT + " → " + (lan.isEmpty() ? "this phone" : lan) + ":" + RelayHost.RELAY_PORT, "Rule copied"));
+        }
+        int directPort = ManualForward.enabled(mAct) ? ManualForward.port(mAct) : (d == null ? 0 : d.externalPort());
+        boolean advertised = d != null && d.state() == com.eurobuddha.maxima.app.direct.DirectReachability.State.ADVERTISED;
+        mForward.addView(k.kvPill("Direct port " + (directPort > 0 ? String.valueOf(directPort) : "(automatic)"),
+                advertised ? "Reached from the internet - contacts reach you without a relay"
+                        : d == null ? "starting…" : d.detail(),
+                advertised ? "open" : (d == null ? "—" : d.state().name().toLowerCase()),
+                advertised ? Kit.OK : Kit.NEUTRAL));
+        if (directPort > 0 && !advertised) {
+            mForward.addView(k.copyField("Router rule for direct reach", "TCP " + directPort + " → " + (lan.isEmpty() ? "this phone" : lan) + ":" + directPort, "Rule copied"));
+        }
+        mForward.addView(k.sub("Give this phone a fixed address in the router (a DHCP reservation for "
+                + (lan.isEmpty() ? "it" : lan) + ") so the rules keep pointing at it. A rule only helps while the phone is on Wi-Fi at home."));
     }
 
     private void renderDirect() {
@@ -1217,6 +1281,14 @@ public final class NetworkPage implements Page {
         mContrib.setOrientation(LinearLayout.VERTICAL);
         cCard.addView(mContrib);
         mBox.addView(cCard, k.mb(k.dp(4)));
+
+        // What to type into the router: this phone's address, the router, the ports.
+        mBox.addView(k.sectionLabel("This phone on your network · what to forward"));
+        LinearLayout fCard = k.card();
+        mForward = new LinearLayout(mAct);
+        mForward.setOrientation(LinearLayout.VERTICAL);
+        fCard.addView(mForward);
+        mBox.addView(fCard, k.mb(k.dp(4)));
 
         // Direct reachability (above Location service).
         mBox.addView(k.sectionLabel("Direct reachability · a public address when possible"));

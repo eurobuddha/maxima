@@ -1822,6 +1822,31 @@ public final class MaximaNode implements ChatPort {
     }
 
     /** Send an application message to an address, no reliability wrapper. */
+    /**
+     * Ask each attached relay to dial our public address on zPort and greet: true iff one answers
+     * OK. The same proof ReachabilityManager uses for the direct port, offered for any listener
+     * (the phone relay on 9535, a desktop relay) so a Network page can say "reached" honestly.
+     */
+    public boolean provePortFromRelays(int zPort) {
+        for (String hostPort : pool().activeHosts()) {
+            HostConnection c = pool().connection(hostPort);
+            String relayAddr = c == null ? null : c.getTheirMlsAddress();
+            if (relayAddr == null) {
+                continue;
+            }
+            try {
+                MaximaSender.Result r = sendRaw(relayAddr, com.eurobuddha.maxima.core.net.Probe.APPLICATION,
+                        com.eurobuddha.maxima.core.net.Probe.request(zPort));
+                if (r.isOk()) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+                // try the next relay
+            }
+        }
+        return false;
+    }
+
     public MaximaSender.Result sendRaw(String zAddress, String zApplication, byte[] zData)
             throws Exception {
         return sendRaw(zAddress, zApplication, zData,
