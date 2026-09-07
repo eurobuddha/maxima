@@ -487,6 +487,11 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### Mirror review fixes (node 0.2.57, cloud 0.11.58)
+Own-send mirror events now fire AFTER delivery, so the sibling's bubble arrives with sent/failed
+ticks instead of a queued placeholder; the per-device wake FALLBACK (all addresses dead) also skips
+own messages, as the primary wake loop already did.
+
 ### The dead Pi relay leaves the built-in list (node 0.2.56, cloud 0.11.57; iOS 0.1.10)
 `31.125.188.214:8001` ("the Pi") has been gone for weeks; the router rule now lands on a plain
 Minima node in Docker, which accepts TCP and never greets. It was still a built-in seed in

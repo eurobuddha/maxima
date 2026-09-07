@@ -2163,7 +2163,7 @@ public final class ParlonsControl {
                 }
                 // A "live" device whose every address is dead went to sleep without saying so
                 // (iOS killed it): fall back to the wake path.
-                if (!anyDelivered && ("message".equals(kind) || "call".equals(kind))) {
+                if (!anyDelivered && (("message".equals(kind) && !ownMessage) || "call".equals(kind))) {
                     DevicePairing.Device d = mPairing.device(deviceKey);
                     if (d != null && d.canWake()) {
                         mWake.wake(d.key, d.wakeProxy, d.apnsToken, d.apnsEnv, kind);

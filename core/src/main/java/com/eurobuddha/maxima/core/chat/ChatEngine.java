@@ -821,11 +821,11 @@ public final class ChatEngine {
                 Keys.norm(mNode.publicKeyHex()), zBody,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
-        fire(e);   // our own send too: sibling devices mirror it live (before, only inbound fired)
 
         ChatMessage cm = ChatMessage.text(id, zBody, e.time);
         boolean ok = deliver(zTo, cm);
         setState(e, ok ? Receipt.SENT : Receipt.FAILED);
+        fire(e);   // our own send, with its delivery state: sibling devices mirror it live
         return e;
     }
 
@@ -1001,7 +1001,7 @@ public final class ChatEngine {
                 Keys.norm(mNode.publicKeyHex()), body,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
-        fire(e);   // our own send too: sibling devices mirror it live (before, only inbound fired)
+        fire(e);
         return e;
     }
 
@@ -1036,10 +1036,10 @@ public final class ChatEngine {
                 Keys.norm(mNode.publicKeyHex()), body,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
-        fire(e);   // our own send too: sibling devices mirror it live (before, only inbound fired)
         ChatMessage cm = ChatMessage.payment(id, zAmount, zTokenId, zTokenName, zMemo, zTxid, e.time);
         boolean ok = deliver(zTo, cm);
         setState(e, ok ? Receipt.SENT : Receipt.FAILED);
+        fire(e);   // our own send, with its delivery state: sibling devices mirror it live
         return e;
     }
 
@@ -1060,11 +1060,11 @@ public final class ChatEngine {
         Entry e = new Entry(id, "", zGroupId, me, zBody,
                 System.currentTimeMillis(), true, Receipt.QUEUED);
         record(e);
-        fire(e);   // our own send too: sibling devices mirror it live (before, only inbound fired)
 
         ChatMessage cm = ChatMessage.groupText(id, zGroupId, zBody, e.time);
         int sent = fanOutGroup(g.others(me), cm, null);
         setState(e, sent > 0 ? Receipt.SENT : Receipt.FAILED);
+        fire(e);   // our own send, with its delivery state: sibling devices mirror it live
         return e;
     }
 
