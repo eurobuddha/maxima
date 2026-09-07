@@ -40,10 +40,18 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.50";
+    public static final String  NODE_VERSION = "0.2.51";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
-    private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
+    /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
+     *  Minima P2P port: one public port, as classic Maxima does). Resolved once the P2P port is known. */
+    private static final String RELAY_PORT_PROP = System.getProperty("parlons.relay.port", "9501").trim();
+    private static final boolean RELAY_SHARED = "shared".equalsIgnoreCase(RELAY_PORT_PROP);
+    private static int RELAY_PORT = RELAY_SHARED ? 0 : parseIntOr(RELAY_PORT_PROP, 9501);
+
+    private static int parseIntOr(String zText, int zDefault) {
+        try { return Integer.parseInt(zText); } catch (Exception e) { return zDefault; }
+    }
     private static final String PROTOCOL   = "1.0.48";
     private static final int    RELAY_RATE = 600;
 
@@ -63,8 +71,8 @@ public final class ParlonsNodeMain {
         out.println("  -Dparlons.node.megammr=true      keep the MegaMMR (wallet gateway needs it; 3 GB heap)");
         out.println("  -Dparlons.node.rpc=false         loopback admin RPC (needed for wallet resync / the vault)");
         out.println("  -Dparlons.node.args=\"…\"         Minima's own flags, e.g. \"-host 1.2.3.4 -archive\"");
-        out.println("  -Dparlons.relay.port=9501        the Maxima relay (public); 0 = no relay (a desktop that does not");
-        out.println("                                    contribute); -Dparlons.relay.peers=h:p,… mesh peers");
+        out.println("  -Dparlons.relay.port=9501        the Maxima relay (public); 0 = no relay; shared = the relay rides the");
+        out.println("                                    Minima P2P port (ONE public port, as classic Maxima); -Dparlons.relay.peers=h:p,… mesh");
         out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
         out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
         out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
@@ -138,6 +146,9 @@ public final class ParlonsNodeMain {
         String portProp = System.getProperty("parlons.node.port");
         if (portProp != null && !portProp.trim().isEmpty()) {
             GeneralParams.MINIMA_PORT = Integer.parseInt(portProp.trim());
+        }
+        if (RELAY_SHARED) {
+            RELAY_PORT = GeneralParams.MINIMA_PORT;   // the relay names itself by the P2P port
         }
         GeneralParams.MDSFILE_PORT    = GeneralParams.MINIMA_PORT + 2;
         GeneralParams.MDSCOMMAND_PORT = GeneralParams.MINIMA_PORT + 3;
@@ -231,6 +242,19 @@ public final class ParlonsNodeMain {
                 relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
                         capeHost, relayDir);
                 relay.setPool(true);   // a VPS node is always-on + public => a permanent-anchor host
+                if (RELAY_SHARED) {
+                    // One public port: the embedded node's P2P listener hands us every connection
+                    // that greets as a Parlons client (org.minima…NIOHandoff), greeting included.
+                    relay.setShared(true);
+                    final RelayRuntime shared = relay;
+                    org.minima.system.network.minima.NIOHandoff.HANDLER = (ch, greeting, leftover, ip) -> {
+                        com.eurobuddha.maxima.server.RelayServer srv = shared.server();
+                        if (srv == null) { try { ch.close(); } catch (Exception ignored) { } return; }
+                        srv.admit(ch.socket(), greeting, leftover);
+                    };
+                    System.out.println("[parlons-node] Maxima cape rides the P2P port " + RELAY_PORT
+                            + " (one public port): Parlons clients are handed over by their greeting");
+                }
                 // Capacity knobs, same names as maxima-server.jar's flags: -Dparlons.relay.maxconn
                 // (connections held; default 512) and -Dmaxima.relay.shed (soft client target).
                 int maxConn = Integer.getInteger("parlons.relay.maxconn", 0);

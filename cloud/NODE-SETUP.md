@@ -474,6 +474,29 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### One public port: the relay rides the Minima P2P port (node 0.2.51, server 0.4.63, cloud 0.11.52; fork 4fc6e7e)
+A Parlons Node listened on TWO public ports - the Minima P2P port and the Maxima relay port
+(9501 fleet / 12501 in minimaCore) - so a home user had to forward a second port for one app; the
+fleet never noticed because VPS boxes open both. Classic Minima needs one: Maxima rides the P2P
+connection (`Mx…@ip:9001`), and our relay and phones already speak that wire (same Greeting, same
+NIO framing, MAXIMA_CTRL 9 / MAXIMA_TXPOW 10). Now `-Dparlons.relay.port=shared` runs the relay
+with no listener of its own: every greeting our side sends carries `"parlons":"1"` (classic ignores
+it), and the fork's P2P layer (`org.minima…NIOHandoff`, commit 4fc6e7e on eurobuddha/minima-core:
+`NIOMessage` greeting branch → `NIOServer.detachForHandoff` → the handler; incoming only; no
+handler registered = a plain node) hands such a connection - greeting frame and any buffered
+bytes included - to `RelayServer.admit(socket, greeting, leftover)`, which replays them in front
+of the socket stream and serves the client exactly as before. The relay names itself by the P2P
+port (gossip, peer lists, mesh, MLS, mailbox and the account's own-relay adoption unchanged),
+and the reachability proof now checks the port the user already forwarded. `node/libs/
+minima-node.jar` is built reproducibly by `node/build-minima-node.sh` (javac --release 11 over
+the fork). Fleet boxes keep their explicit 9501 for now (the default is unchanged); minimaCore
+0.16.29 passes `shared` when contributing and drops its second router mapping. Decentralization:
+a home node is a first-class relay on the one port it already opens (principles 1, 3, 5); nothing
+new is hosted. Verify: `RelaySharedModeTest` (marker; a handed-over greeting answered with the
+relay's greeting + MLS offer); live on a copy of the owner's node: cape rides 12101, a parlons-cloud
+account attached to 127.0.0.1:12101 through the hand-off with its route registered and verified
+while the node kept its chain peers.
+
 ### A desktop node's own relay is adopted late, with proof (node 0.2.50, cloud 0.11.51)
 Seen on the owner's minimaCore (contributing, cape up, 6 inbound Minima peers): the permanent
 address still ended in a fleet relay. Two causes, both live-proven on a copy of that node: (1) at

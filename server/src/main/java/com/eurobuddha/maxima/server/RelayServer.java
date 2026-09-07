@@ -418,6 +418,18 @@ public final class RelayServer {
 
     private volatile boolean mRunning;
     private ServerSocket mServer;
+    /** Shared mode: no socket of our own - the host's Minima P2P listener hands us the
+     *  connections that greet as Parlons clients (one public port). Everything else is as
+     *  when we listen ourselves: peers gossip, mesh, directory, mailbox, maintenance. */
+    private volatile boolean mShared;
+
+    public void setShared(boolean zShared) {
+        mShared = zShared;
+    }
+
+    public boolean isShared() {
+        return mShared;
+    }
 
     /** Per-identity rate limit. PoW is never verified, so this must be real. */
     private final Map<String, RateLimit> mLimits = new ConcurrentHashMap<>();
@@ -496,10 +508,18 @@ public final class RelayServer {
         volatile long shedAt;
 
         Conn(Socket zSocket) throws Exception {
+            this(zSocket, null);
+        }
+
+        /** {@code zPrefix}: bytes another listener already read from this socket (shared mode),
+         *  replayed before the socket's own stream. */
+        Conn(Socket zSocket, byte[] zPrefix) throws Exception {
             socket = zSocket;
             sourceIp = zSocket.getInetAddress() == null
                     ? "?" : zSocket.getInetAddress().getHostAddress();
-            in = new DataInputStream(zSocket.getInputStream());
+            java.io.InputStream raw = zSocket.getInputStream();
+            in = new DataInputStream(zPrefix == null || zPrefix.length == 0 ? raw
+                    : new java.io.SequenceInputStream(new java.io.ByteArrayInputStream(zPrefix), raw));
             out = new DataOutputStream(zSocket.getOutputStream());
         }
 
@@ -701,13 +721,44 @@ public final class RelayServer {
     }
 
     public void start() throws Exception {
+        mRunning = true;
+        if (mShared) {
+            log("shared mode: connections arrive through the node's P2P port " + mPort
+                    + " (no listener of our own); " + threadMode() + " threads, cap " + mMaxConnections);
+            return;
+        }
         mServer = new ServerSocket();
         mServer.setReuseAddress(true);
         mServer.bind(new InetSocketAddress("0.0.0.0", mPort));
-        mRunning = true;
         log("connections on " + threadMode() + " threads, cap " + mMaxConnections);
         startAcceptThread();
     }
+
+    /**
+     * Admit a connection another listener accepted for us (shared mode): {@code zFirstFrame} is the
+     * frame body that listener already consumed (the client's greeting) and {@code zLeftover} any
+     * bytes it had buffered after it. Both are replayed in front of the socket's stream so the
+     * usual read loop sees exactly what a client sent.
+     */
+    public void admit(Socket zSocket, byte[] zFirstFrame, byte[] zLeftover) {
+        byte[] prefix;
+        try {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            if (zFirstFrame != null && zFirstFrame.length > 0) {
+                Frame.write(new DataOutputStream(bos), zFirstFrame);
+            }
+            if (zLeftover != null) {
+                bos.write(zLeftover);
+            }
+            prefix = bos.toByteArray();
+        } catch (Exception e) {
+            try { zSocket.close(); } catch (Exception ignored) { }
+            return;
+        }
+        admit(zSocket, prefix);
+    }
+
+    /** True while the accept loop is alive - or, in shared mode, while the relay runs. */
 
     private void startAcceptThread() {
         Thread accept = new Thread(this::acceptLoop, "relay-accept");
@@ -716,9 +767,12 @@ public final class RelayServer {
         accept.start();
     }
 
-    /** True while the accept loop is alive. A relay whose accept thread has died is still
-     *  "active" to systemd and still serving its existing clients - it just admits nobody. */
+    /** A relay whose accept thread has died is still "active" to systemd and still serving its
+     *  existing clients - it just admits nobody. */
     public boolean acceptAlive() {
+        if (mShared) {
+            return mRunning;
+        }
         Thread a = mAcceptThread;
         return a != null && a.isAlive();
     }
@@ -766,12 +820,16 @@ public final class RelayServer {
     }
 
     private void admit(Socket zSocket) {
+        admit(zSocket, null);
+    }
+
+    private void admit(Socket zSocket, byte[] zPrefix) {
         Conn c = null;
         boolean counted = false;
         try {
             zSocket.setTcpNoDelay(true);
             zSocket.setKeepAlive(true);
-            c = new Conn(zSocket);
+            c = new Conn(zSocket, zPrefix);
 
             // Admission control BEFORE we spend a thread. Relaying is
             // free and PoW is never verified, so an unbounded accept

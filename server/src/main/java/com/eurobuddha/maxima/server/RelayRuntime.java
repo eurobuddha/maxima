@@ -216,8 +216,16 @@ public final class RelayRuntime {
      * stops it on quit). Throws {@link java.net.BindException} if the port is
      * taken, which the CLI turns into a friendly message.
      */
+    /** Shared mode (see {@link RelayServer#setShared}): the host's P2P listener feeds us. */
+    private boolean mShared;
+
+    public void setShared(boolean zShared) {
+        mShared = zShared;
+    }
+
     public void start() throws Exception {
         RelayServer relay = new RelayServer(mIdentity, mPort, mProtocol, mPool);
+        relay.setShared(mShared);
         relay.setRateLimit(mRate);
         if (mMaxConnections > 0) {
             relay.setMaxConnections(mMaxConnections);

@@ -164,7 +164,10 @@ public final class Greeting implements Streamable {
             peers.append('"').append(zPeers.get(i)).append('"');
         }
         peers.append(']');
-        String json = "{\"welcome\":\"Maxima\""
+        // "parlons":"1" marks every greeting OUR side sends: a Parlons Node whose relay rides its
+        // Minima P2P port hands such a connection to the relay (the fork's NIOHandoff); classic and
+        // every older peer ignore the key like any other extra-data field.
+        String json = "{\"welcome\":\"Maxima\",\"parlons\":\"1\""
                 + (known ? ",\"host\":\"" + zHost + "\"" : "")
                 + ",\"port\":\"" + zPort + "\""
                 + (zCapacity > 0 ? ",\"cap\":\"" + zCapacity + "\"" : "")
