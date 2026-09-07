@@ -493,7 +493,15 @@
   }
 
   // ---------- Node page ----------
+  let nodeTimer = null;
   async function renderNode() {
+    // Live figures: the relay learns its address and proves its reach minutes after start, so the
+    // page re-reads itself every 15 s while it is the one showing (never while a field is focused).
+    clearInterval(nodeTimer);
+    nodeTimer = setInterval(() => { if (S.route === 'node' && !document.querySelector('#page input:focus')) renderNodeBody(); else if (S.route !== 'node') clearInterval(nodeTimer); }, 15000);
+    return renderNodeBody();
+  }
+  async function renderNodeBody() {
     const page = $('page'); page.innerHTML = '';
     const body = el('<div class="pagebody"></div>'); page.appendChild(body);
     let st = {}, fig = {};
