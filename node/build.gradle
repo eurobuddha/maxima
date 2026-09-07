@@ -26,6 +26,8 @@ dependencies {
     implementation 'com.h2database:h2:2.4.240'
     implementation 'org.bouncycastle:bcpkix-jdk15on:1.69'
     implementation 'mysql:mysql-connector-java:8.0.26'
+    // Rhino: the MDS service.js runner (fork re-import, node 0.2.59)
+    implementation 'org.mozilla:rhino:1.7.14'
 
     // Parlons Maxima cape (clean-room) + relay.
     implementation project(':core')
@@ -35,6 +37,12 @@ dependencies {
     implementation project(':account')
 
     implementation 'org.json:json:20231013'
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+test {
+    useJUnit()
 }
 
 application {

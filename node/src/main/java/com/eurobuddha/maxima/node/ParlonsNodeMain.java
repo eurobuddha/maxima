@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.58";
+    public static final String  NODE_VERSION = "0.2.59";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -71,6 +71,12 @@ public final class ParlonsNodeMain {
         out.println("  -Dparlons.node.megammr=true      keep the MegaMMR (wallet gateway needs it; 3 GB heap)");
         out.println("  -Dparlons.node.rpc=false         loopback admin RPC (needed for wallet resync / the vault)");
         out.println("  -Dparlons.node.args=\"…\"         Minima's own flags, e.g. \"-host 1.2.3.4 -archive\"");
+        out.println("  -Dparlons.node.conf=<file>       key=value lines of Minima flags read before the args (a 0600 file is");
+        out.println("                                    where a secret such as mdspassword belongs - never on argv)");
+        out.println("  -Dparlons.mds=true               serve MDS (MiniHUB + MiniDapps) on https://127.0.0.1:<p2p+2>/ - the password");
+        out.println("                                    comes from the conf file (mdspassword=…) or is generated; `mds` prints it");
+        out.println("  -Dparlons.mds.bind=127.0.0.1     the interface MDS listens on; 0.0.0.0 exposes MiniHUB to the network -");
+        out.println("                                    only ever behind your own TLS + firewall");
         out.println("  -Dparlons.relay.port=9501        the Maxima relay (public); 0 = no relay; shared = the relay rides the");
         out.println("                                    Minima P2P port (ONE public port, as classic Maxima); -Dparlons.relay.peers=h:p,… mesh");
         out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
@@ -190,6 +196,18 @@ public final class ParlonsNodeMain {
         if (flags) {
             System.out.println("[parlons-node] minima flags: " + MinimaFlags.applied);
         }
+        // MDS - the MiniDAPP System (fork re-import, node 0.2.59): -Dparlons.mds=true > Minima -mdsenable.
+        // Loopback-bound unless -Dparlons.mds.bind says otherwise: MiniHUB is a full wallet UI behind one
+        // password, so a VPS must never have it on a public interface (the same rule as AdminRpc).
+        String mdsProp = System.getProperty("parlons.mds", "").trim();
+        if (!mdsProp.isEmpty()) {
+            GeneralParams.MDS_ENABLED = Boolean.parseBoolean(mdsProp);
+        }
+        GeneralParams.MDS_BIND_HOST = System.getProperty("parlons.mds.bind", "127.0.0.1").trim();
+        if (GeneralParams.MDS_BIND_HOST.equals("*") || GeneralParams.MDS_BIND_HOST.equals("0.0.0.0")) {
+            GeneralParams.MDS_BIND_HOST = "";
+        }
+        boolean mds = GeneralParams.MDS_ENABLED;
         // Fixed default 9585 to match ops/deploy-parlons-node.sh + cloud/NODE-SETUP.md (one value
         // everywhere beats a node-port-relative offset that the docs would then contradict).
         int gatewayPort = Integer.getInteger("parlons.gateway.port", 9585);
@@ -202,13 +220,30 @@ public final class ParlonsNodeMain {
                 + GlobalParams.getFullMicroVersion() + " at " + GeneralParams.DATA_FOLDER
                 + " (p2p " + GeneralParams.MINIMA_PORT + ", megammr " + megammr + ", admin rpc "
                 + (rpc ? "127.0.0.1:" + GeneralParams.RPC_PORT + " (loopback-bound)" : "off") + ")");
+        if (mds) {
+            String host = GeneralParams.MDS_BIND_HOST.isEmpty() ? "0.0.0.0 (EVERY interface - put TLS + a firewall in front)" : GeneralParams.MDS_BIND_HOST;
+            System.out.println("[parlons-node] MDS on " + (GeneralParams.MDS_NOSSL ? "http" : "https") + "://" + host + ":"
+                    + GeneralParams.MDSFILE_PORT + "/ (password " + (GeneralParams.MDS_PASSWORD.isEmpty() ? "generated - run `mds` to read it" : "from the conf file") + ")");
+        }
 
         // --- boot the full node in-process (Main is a MessageProcessor; spawns its own threads) ---
         final Main main = new Main();
 
         // --- operator admin RPC: loopback-bound by construction (see AdminRpc) ---
         if (rpc) {
-            AdminRpc admin = AdminRpc.start(GeneralParams.RPC_PORT);
+            AdminRpc admin;
+            try {
+                admin = AdminRpc.start(GeneralParams.RPC_PORT);
+            } catch (Exception e) {
+                // Before 0.2.59 this exception killed the main thread only: the Minima node kept
+                // running with no admin RPC, no cape and no account - an orphan the host app could
+                // neither reach nor stop cleanly. A port clash is fatal, and says so.
+                System.err.println("[parlons-node] REFUSING to run: admin rpc port 127.0.0.1:" + GeneralParams.RPC_PORT
+                        + " cannot be bound (" + e + ") - another node on this port? stopping the embedded node");
+                try { main.shutdown(); } catch (Throwable ignored) { }
+                System.exit(2);
+                return;
+            }
             System.out.println("[parlons-node] admin rpc up on 127.0.0.1:" + admin.port()
                     + " (loopback only; every node command; never proxy this)");
         }

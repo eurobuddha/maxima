@@ -487,6 +487,27 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### MDS is back in the fork: MiniHUB + MiniDapps served by the Parlons Node (node 0.2.59; fork 9dc9d61)
+The `minima-core` fork the node embeds never had MDS (it comes from spartacusrex's lean 1.1.x line);
+`system/mds`, `commands/mds`, `database/minidapps`, `utils/ssl`, `HTTPSServer`, Rhino 1.7.14 and the
+hub assets are now ported from upstream Minima 1.0.46.8 (hublogin, mdsjs, MiniHUB 0.24.4, publicmds and
+the Pending dapp only - the other 32 default dapps are not bundled; a host app installs what it wants
+from a store, and the log says so in ONE line). `-Dparlons.mds=true` (or Minima's `-mdsenable`) serves
+MiniHUB on `https://<bind>:<p2p+2>/`; **the bind host is 127.0.0.1 unless `-Dparlons.mds.bind` says
+otherwise** (`0.0.0.0` = every interface - only ever behind your own TLS + firewall; the same rule as
+the admin RPC, because MiniHUB is a full wallet UI behind one password). The self-signed keystore is
+generated only when MDS is on with SSL. The password reaches the node through
+`-Dparlons.node.conf=<0600 file>` with `mdspassword=…` (the file's key=value lines are Minima flags
+read BEFORE `-Dparlons.node.args`, through the same exclusion filter; the boot log masks the value),
+or is generated and read back with `mds`. A dapp installed `trust:read` that runs a WRITE command
+gets `pending:true` + `pendinguid` exactly as on a stock node (`checkpending`, Pending dapp). Also:
+a failed admin-RPC bind is now fatal (before, the main thread died and the Minima node ran on
+headless with no cape/account - an unreachable orphan). Verified on a fresh identity: hub login page
+over https on p2p+2 bound to 127.0.0.1 only, `mds` returns the conf password, the Terminal IDE zip
+installs and its index.html + mds.js serve, a read dapp's `send` goes pending, panel/gateway/relay/
+account all up, `quit` shuts MDS and its DB down cleanly. Decentralization: nothing new on the wire;
+MDS is a local service of the node the operator already runs.
+
 ### Share a contact; the Node page says exactly what to forward (node 0.2.58, cloud 0.11.59)
 **Contacts** now travel between people: a contact card is a message BODY kind next to media and
 payments (`core/chat/ChatContact`: U+0001 c U+0001 key U+0001 name U+0001 address, the address being

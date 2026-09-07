@@ -34,9 +34,11 @@ import org.minima.system.params.ParamConfigurer;
  *   <li>{@code -daemon -noshutdownhook -jnlp -help}: stdin / exit / shutdown-hook behaviour the merged
  *       JVM owns itself.</li>
  * </ul>
- * The MDS flags are accepted but do nothing — this fork has no MDS package — and say so at boot.
- * {@code -conf <file>} is expanded here (each {@code key=value} line becomes a flag) so its contents
- * go through the same filter.
+ * {@code -conf <file>} (inside the args) and {@code -Dparlons.node.conf=<file>} are expanded here (each
+ * {@code key=value} line becomes a flag) so their contents go through the same filter. That file is
+ * how a secret reaches the node without riding argv: a host app writes {@code mdspassword=…} into a
+ * 0600 file and points the node at it (node 0.2.59; the MDS flags are live since the fork re-imported
+ * MDS - see ParlonsNodeMain's {@code -Dparlons.mds}).
  */
 final class MinimaFlags {
 
@@ -55,9 +57,6 @@ final class MinimaFlags {
         String proc = "stdin / exit / shutdown-hook behaviour that the merged Parlons Node JVM owns itself";
         for (String k : new String[]{"daemon", "noshutdownhook", "jnlp", "help"}) EXCLUDED.put(k, proc);
     }
-
-    private static final List<String> MDS = Arrays.asList("mdsenable", "mdspassword", "mdsinit",
-            "mdswrite", "nosslmds", "publicmds", "publicmdsuid", "nodefaultminidapps");
 
     /** The flags actually handed to Minima (for the boot log). */
     static String applied = "";
@@ -82,19 +81,23 @@ final class MinimaFlags {
             String env = System.getenv("PARLONS_NODE_ARGS");
             raw = env == null ? "" : env;
         }
-        List<String> args = expandConf(tokenise(raw));
+        List<String> tokens = tokenise(raw);
+        // -Dparlons.node.conf=<file>: a key=value file read FIRST, so a value on the args line wins.
+        String conf = System.getProperty("parlons.node.conf", "").trim();
+        if (!conf.isEmpty()) {
+            tokens.add(0, conf);
+            tokens.add(0, "-conf");
+        }
+        List<String> args = expandConf(tokens);
         if (args.isEmpty()) {
             return false;
         }
         List<String> refused = new ArrayList<>();
-        List<String> dead = new ArrayList<>();
         for (String a : args) {
             if (!a.startsWith("-")) continue;
             String key = a.replaceFirst("^-+", "").toLowerCase(Locale.ROOT);
             if (EXCLUDED.containsKey(key)) {
                 refused.add("  " + a + "\n      " + EXCLUDED.get(key));
-            } else if (MDS.contains(key)) {
-                dead.add(a);
             }
         }
         if (!refused.isEmpty()) {
@@ -103,10 +106,6 @@ final class MinimaFlags {
             System.err.println("[parlons-node] every other Minima flag passes straight through (-Dparlons.node.args / PARLONS_NODE_ARGS)");
             System.exit(2);
         }
-        if (!dead.isEmpty()) {
-            System.out.println("[parlons-node] WARNING: " + String.join(" ", dead)
-                    + " — this node has no MDS (the fork strips it); the flag is accepted but does nothing");
-        }
         try {
             new ParamConfigurer().usingProgramArgs(args.toArray(new String[0])).configure();
         } catch (ParamConfigurer.UnknownArgumentException ex) {
@@ -114,9 +113,28 @@ final class MinimaFlags {
                     + " (not a Minima flag — run stock minima.jar -help for the list)");
             System.exit(2);
         }
-        applied = String.join(" ", args);
+        applied = redacted(args);
         appliedList = args;
         return true;
+    }
+
+    private static final List<String> SECRET_VALUES = Arrays.asList("mdspassword");
+
+    /** The applied flags for the boot log, with secret values (mdspassword) masked. */
+    static String redacted(List<String> zArgs) {
+        StringBuilder sb = new StringBuilder();
+        boolean mask = false;
+        for (String a : zArgs) {
+            if (sb.length() > 0) sb.append(' ');
+            if (mask && !a.startsWith("-")) {
+                sb.append("****");
+                mask = false;
+                continue;
+            }
+            sb.append(a);
+            mask = a.startsWith("-") && SECRET_VALUES.contains(a.replaceFirst("^-+", "").toLowerCase(Locale.ROOT));
+        }
+        return sb.toString();
     }
 
     /** Shell-style split: whitespace separates, single/double quotes group, backslash escapes. */
@@ -147,8 +165,9 @@ final class MinimaFlags {
     }
 
     /** {@code -conf FILE} → the file's {@code key=value} lines as {@code -key value} flags, in place,
-     *  so they are filtered like everything else (Minima's own conf-file step is never used). */
-    private static List<String> expandConf(List<String> zArgs) {
+     *  so they are filtered like everything else (Minima's own conf-file step is never used). A bare
+     *  {@code key} line is a boolean flag ({@code mdsenable}). */
+    static List<String> expandConf(List<String> zArgs) {
         List<String> out = new ArrayList<>();
         for (int i = 0; i < zArgs.size(); i++) {
             String a = zArgs.get(i);
