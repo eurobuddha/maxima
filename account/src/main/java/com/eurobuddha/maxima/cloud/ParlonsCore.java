@@ -65,6 +65,7 @@ public final class ParlonsCore {
     private ScheduledExecutorService mMaint;
     private ReachabilityManager mReach;
     private RelayRuntime mRelay;
+    private ParlonsLocal mLocal;
     private volatile boolean mRunning;
     private volatile long mStartedAt;
 
@@ -97,7 +98,13 @@ public final class ParlonsCore {
         public int relayBlobMb = 1024;
         /** Operator-log prefix: "parlons-cloud" standalone, "parlons-node" inside a Parlons Node. */
         public String logTag = "parlons-cloud";
+        /** The LOCAL web panel + API ({@link ParlonsLocal}) on 127.0.0.1:port; 0 = none. */
+        public int panelPort = 0;
     }
+
+    /** This host's local device key (32 random bytes, hex, 0600): the panel's identity to the
+     *  account. Delete it (and restart) to re-enable a panel that was revoked from a phone. */
+    public static final String LOCAL_KEY_FILE = "local-device.key";
 
     /**
      * @param zWallet the host's wallet (cloud: key-#1000 signer + gateway; node: the node's own)
@@ -417,21 +424,72 @@ public final class ParlonsCore {
         //    reads over ssh (never logged — it gates account access).
         mPairing.ensureBootstrapCode();
 
+        // 6. The local web panel + API (this box only), as a local device of the account.
+        if (mCfg.panelPort > 0) {
+            startLocal(mCfg.panelPort);
+        }
+
         int hosts = connectedCount();
         log("started: identity " + mIdentity.mxIdentity());   // RULE 1: full identity, never truncated
         log("attached to " + hosts + " relay(s); permanent address " + safePermanent());
-        if (mPairing.authorizedCount() == 0) {
+        if (mPairing.remoteCount() == 0) {
             log("NO devices paired yet. To pair your first device, read the one-time code:");
             log("    cat " + mPairing.codeFile());
             log("  then enter it in the app pointed at this account's address above.");
         } else {
-            log(mPairing.authorizedCount() + " device(s) paired.");
+            log(mPairing.remoteCount() + " device(s) paired.");
         }
         return hosts;
     }
 
     public DevicePairing pairing() {
         return mPairing;
+    }
+
+    /** The local web panel, or null when none is configured / it could not bind. */
+    public ParlonsLocal local() {
+        return mLocal;
+    }
+
+    /**
+     * Stand up {@link ParlonsLocal}: mint (once) the host's local device key, authorize it as a
+     * local device, bind the loopback server, and route the control channel's push events into
+     * it. A bind failure is logged, never fatal - the account works without its panel.
+     */
+    private void startLocal(int zPort) {
+        try {
+            Path keyFile = mDataDir.resolve(LOCAL_KEY_FILE);
+            byte[] key;
+            boolean fresh = false;
+            if (java.nio.file.Files.isRegularFile(keyFile)) {
+                key = new com.eurobuddha.maxima.core.codec.MiniData(
+                        new String(java.nio.file.Files.readAllBytes(keyFile), java.nio.charset.StandardCharsets.UTF_8).trim())
+                        .getBytes();
+            } else {
+                key = new byte[32];
+                new java.security.SecureRandom().nextBytes(key);
+                AccountFiles.writePrivate(keyFile, (new com.eurobuddha.maxima.core.codec.MiniData(key).to0xString() + "\n")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                fresh = true;
+            }
+            String host;
+            try { host = java.net.InetAddress.getLocalHost().getHostName(); }
+            catch (Exception e) { host = ""; }
+            String label = "this computer" + (host.isEmpty() ? "" : " (" + host + ")");
+            if (!mPairing.authorizeLocal(key, label, fresh)) {
+                log("web panel: this computer's access was REVOKED from a paired device; the panel will say so."
+                        + " To re-enable it: delete " + keyFile + " and restart.");
+            }
+            ParlonsLocal local = new ParlonsLocal(mNode.services(), key, mDataDir, zPort,
+                    () -> mNode.permanentAddress(), mPairing, mMedia, this::log);
+            local.start();
+            mLocal = local;
+            mControl.setLocalSink(local.sink());
+            mControl.setPanelSource(local::newTicketUrl);
+        } catch (Exception e) {
+            mLocal = null;
+            log("web panel could NOT start on 127.0.0.1:" + zPort + ": " + e.getMessage());
+        }
     }
 
     private void startRelay() {
@@ -763,6 +821,7 @@ public final class ParlonsCore {
         if (mMaint != null) {
             mMaint.shutdownNow();
         }
+        try { if (mLocal != null) mLocal.stop(); } catch (Exception ignored) { }
         try { if (mReach != null) mReach.shutdown(); } catch (Exception ignored) { }
         try { if (mRelay != null && !mExternalRelay) mRelay.stop(); } catch (Exception ignored) { }
         try { mChat.close(); } catch (Exception ignored) { }

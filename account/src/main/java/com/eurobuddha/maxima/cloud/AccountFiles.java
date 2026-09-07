@@ -15,12 +15,17 @@ import java.util.function.Supplier;
  *       pairing code from {@code pair-code.txt}, rewritten whenever a fresh code is minted. One QR
  *       of it pairs a phone. Owner-only mode, like the code file.</li>
  * </ul>
+ * Beside them, when the account runs its local web panel ({@link ParlonsLocal}): {@code panel.txt}
+ * (the panel's loopback URL) and {@code panel-ticket.txt} (a one-time link that signs a browser
+ * in; the account writes the next one as soon as it is used).
  */
 public final class AccountFiles {
 
     public static final String ACCOUNT_FILE = "account.txt";
     public static final String INVITE_FILE = "invite.txt";
     public static final String CODE_FILE = "pair-code.txt";
+    public static final String PANEL_FILE = ParlonsLocal.PANEL_FILE;
+    public static final String TICKET_FILE = ParlonsLocal.TICKET_FILE;
 
     private AccountFiles() {
     }

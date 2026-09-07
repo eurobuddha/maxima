@@ -218,6 +218,7 @@ public final class Tenants {
         final java.util.Map<Path, ParlonsCore> cores = new java.util.LinkedHashMap<>();
         final java.util.Map<Path, Long> failedAt = new java.util.HashMap<>();
         RelayRuntime shared;
+        int nextPanelSlot = 0;
 
         Host(Path zDir, ParlonsCore.Config zBase, char[] zUnlock) {
             dir = zDir; base = zBase; unlock = zUnlock;
@@ -234,6 +235,10 @@ public final class Tenants {
                 cfg.relayPort = 0;    // one relay per host, shared below
                 cfg.directPort = 0;   // one Tier-2 listener per host (the first tenant's)
             }
+            // Each tenant's local panel on its own loopback port: --panel-port, +1, +2 … in start
+            // order (0 = no panels). The operator opens a tenant's panel through an ssh tunnel with
+            // the one-time link in that tenant's panel-ticket.txt.
+            cfg.panelPort = base.panelPort <= 0 ? 0 : base.panelPort + nextPanelSlot++;
             AccountWallet wallet = new CloudAccountWallet(id, zTenant);
             AccountBackup.Source backup = new AccountBackup.Source() {
                 public String phrase() { return phrase; }
@@ -340,6 +345,7 @@ public final class Tenants {
         c.meshPeers = new ArrayList<>(b.meshPeers);
         c.relayBlobMb = b.relayBlobMb;
         c.logTag = b.logTag;
+        c.panelPort = b.panelPort;
         return c;
     }
 

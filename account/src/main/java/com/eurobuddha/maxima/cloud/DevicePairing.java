@@ -50,6 +50,10 @@ public final class DevicePairing {
         public volatile String apnsEnv = "";
         public volatile String wakeProxy = "";
         public volatile long apnsUpdated;
+        /** A LOCAL device: the account host's own panel/UI, authorized without a code because it
+         *  runs inside the same process (its key never travels the network, and it has no reply
+         *  address, so it is never pushed to). Shown as "this computer"; revocable like any other. */
+        public volatile boolean local;
         Device(String key, String label, long pairedAt) {
             this.key = key;
             this.label = label;
@@ -104,6 +108,18 @@ public final class DevicePairing {
         return mAuthorized.size();
     }
 
+    /** Authorized devices that are NOT the host's own local panel: the phones and CLIs. First-run
+     *  onboarding ("no device paired yet, here is a code") is about these. */
+    public synchronized int remoteCount() {
+        int n = 0;
+        for (Device d : mAuthorized.values()) {
+            if (!d.local) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     public synchronized List<Device> authorized() {
         return new ArrayList<>(mAuthorized.values());
     }
@@ -152,6 +168,41 @@ public final class DevicePairing {
         return true;
     }
 
+    /**
+     * Authorize the host's OWN local device (the web panel / a desktop app's Parlons tab) with no
+     * code and no approver: the caller is in-process, so possession of the key file IS the
+     * authorization. Idempotent for an already-authorized key; a key that was REVOKED from a
+     * paired device stays revoked (returns false) - the operator re-enables it by deleting the
+     * key file so a fresh key is minted.
+     */
+    public synchronized boolean authorizeLocal(byte[] zKey, String zLabel, boolean zNewKey) {
+        String key = hex(zKey);
+        Device d = mAuthorized.get(key);
+        if (d != null) {
+            if (!d.local) {
+                d.local = true;
+                save();
+            }
+            return true;
+        }
+        if (!zNewKey) {
+            return false;   // a known key that is no longer authorized: it was revoked on purpose
+        }
+        Device dev = new Device(key, (zLabel == null || zLabel.isEmpty()) ? "this computer" : zLabel,
+                System.currentTimeMillis());
+        dev.local = true;
+        mAuthorized.put(key, dev);
+        mPending.remove(key);
+        save();
+        return true;
+    }
+
+    /** True when this key is an authorized LOCAL device (see {@link #authorizeLocal}). */
+    public synchronized boolean isLocal(String zKeyHex) {
+        Device d = mAuthorized.get(normalizeHex(zKeyHex));
+        return d != null && d.local;
+    }
+
     /** An authorized device revokes a device (authorized or pending). Identity is untouched. */
     public synchronized boolean revoke(byte[] zRevokerKeyDer, String zTargetKeyHex) {
         if (!isAuthorized(zRevokerKeyDer)) {
@@ -176,7 +227,7 @@ public final class DevicePairing {
 
     /** Ensure a bootstrap code exists while no device is paired (first-run onboarding). */
     public synchronized void ensureBootstrapCode() {
-        if (mAuthorized.isEmpty() && currentCode() == null) {
+        if (remoteCount() == 0 && currentCode() == null) {
             writeCode(randomCode());
         }
     }
@@ -279,6 +330,7 @@ public final class DevicePairing {
                     long at = d.get("pairedAt") == null ? 0L
                             : Long.parseLong(String.valueOf(d.get("pairedAt")));
                     Device dev = new Device(key, label, at);
+                    dev.local = Boolean.TRUE.equals(d.get("local"));
                     Object apns = d.get("apns");
                     if (apns instanceof JSONObject) {
                         JSONObject a = (JSONObject) apns;
@@ -312,6 +364,9 @@ public final class DevicePairing {
                 o.put("key", d.key);
                 o.put("label", d.label);
                 o.put("pairedAt", d.pairedAt);
+                if (d.local) {
+                    o.put("local", true);
+                }
                 if (!d.apnsToken.isEmpty() || !d.wakeProxy.isEmpty()) {
                     JSONObject a = new JSONObject();
                     a.put("token", d.apnsToken);

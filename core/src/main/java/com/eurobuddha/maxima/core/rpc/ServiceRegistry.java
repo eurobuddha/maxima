@@ -67,6 +67,22 @@ public final class ServiceRegistry {
     public static final int MAX_REPLY_BYTES =
             com.eurobuddha.maxima.core.msg.MaximaPackage.MAX_SIZE - 8192;
 
+    /**
+     * In-process dispatch for a LOCAL caller (the account's own web panel, a host's UI): the
+     * handler's reply bytes straight back, no envelope and no {@link #MAX_REPLY_BYTES} ceiling -
+     * that ceiling exists because a reply must fit one Maxima package on the wire, and a reply
+     * that never leaves the process has no wire. Throws what the handler threw (an unknown
+     * method is an {@link IllegalArgumentException}); the caller renders the error itself.
+     */
+    public byte[] dispatchLocal(Request zRequest) throws Exception {
+        Handler h = mHandlers.get(zRequest.method);
+        if (h == null) {
+            throw new IllegalArgumentException("no such method: " + zRequest.method);
+        }
+        byte[] out = h.handle(zRequest);
+        return out == null ? new byte[0] : out;
+    }
+
     public RpcEnvelope dispatch(String zId, Request zRequest) {
         Handler h = mHandlers.get(zRequest.method);
         if (h == null) {

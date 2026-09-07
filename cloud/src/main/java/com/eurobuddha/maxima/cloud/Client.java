@@ -73,6 +73,17 @@ public final class Client {
             return;
         }
 
+        if ("panel".equals(cmd)) {
+            // Same machine as the account: its panel-ticket.txt holds an unused one-time link
+            // (owner-only file - reading it IS the authorization). Otherwise ask over the
+            // paired channel below.
+            String url = localPanelTicket();
+            if (url != null) {
+                printPanel(url);
+                return;
+            }
+        }
+
         if (!Files.exists(cloudFile)) {
             System.err.println("No account set. Run: parlons connect <account MAX#>");
             System.exit(2);
@@ -131,6 +142,12 @@ public final class Client {
                     System.out.println("read it on the account's machine:  cat <data>/invite.txt");
                     System.out.println("(or <data>/pair-code.txt for the code alone)");
                 }
+                break;
+            }
+            case "panel": {
+                JSONObject o = r.panelTicket();
+                if (!isOk(o)) { fail(o); break; }
+                printPanel(String.valueOf(o.get("url")));
                 break;
             }
             case "invite": {
@@ -503,6 +520,33 @@ public final class Client {
         return null;
     }
 
+    /** The unused one-time panel link from the local account's panel-ticket.txt, or null. */
+    static String localPanelTicket() {
+        try {
+            Path f = localAccountDir().resolve(AccountFiles.TICKET_FILE);
+            if (Files.isRegularFile(f)) {
+                String s = new String(Files.readAllBytes(f), java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (s.startsWith("http://127.0.0.1:")) return s;
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
+
+    /** Print the panel link (whole - it is meant to be pasted) and open it when a desktop is here. */
+    static void printPanel(String zUrl) {
+        System.out.println("open this in a browser on the account's machine (the link works once):");
+        System.out.println("  " + zUrl);
+        System.out.println("(on a server: ssh -L 9587:127.0.0.1:9587 user@box first, then open it here)");
+        if (System.getenv("DISPLAY") != null || System.getProperty("os.name", "").startsWith("Mac")) {
+            try {
+                String opener = System.getProperty("os.name", "").startsWith("Mac") ? "open" : "xdg-open";
+                new ProcessBuilder(opener, zUrl).redirectErrorStream(true).start();
+            } catch (Exception ignored) {
+                // no opener: the link is printed above
+            }
+        }
+    }
+
     /** After newcode: the account rewrites pair-code.txt at once and invite.txt within seconds.
      *  Returns the first invite that differs from {@code zBefore} (the stale one is never handed out). */
     static String waitLocalInvite(String zBefore, long zMs) throws InterruptedException {
@@ -531,6 +575,7 @@ public final class Client {
         System.out.println("  devices                list paired / pending devices");
         System.out.println("  newcode                mint a fresh one-time pairing code (prints the invite when local)");
         System.out.println("  invite                 print MAX#…?code=… for the app to scan (account on this machine)");
+        System.out.println("  panel                  open the account's web panel in a browser (one-time link)");
         System.out.println("  approve <key>          approve a pending device");
         System.out.println("  revoke <key>           revoke a device");
         System.out.println("  status                 node status (uptime, relays, mesh, devices)");

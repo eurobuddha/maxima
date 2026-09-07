@@ -81,6 +81,9 @@ public final class ParlonsControl {
     public static final String M_NFT_NEWCOL   = "parlons.nft.newcollection";
     public static final String M_NFT_LIST     = "parlons.nft.list";
     public static final String M_NFT_DELETE   = "parlons.nft.delete";
+    /** A paired device asks for a one-time URL that opens the account's LOCAL web panel (on the
+     *  machine the account runs on): the {@code parlons panel} CLI command. */
+    public static final String M_PANEL_TICKET = "parlons.panel.ticket";
 
     /**
      * The VPS-node telemetry the account control channel can't read from {@link MaximaNode} alone —
@@ -235,6 +238,25 @@ public final class ParlonsControl {
     }
 
     /** Wire the node telemetry source. Set before the node starts serving requests. */
+    /** The account's LOCAL event feed (its web panel): every event the paired devices are pushed
+     *  is handed here first, in-process. Null = no local consumer. */
+    private volatile java.util.function.Consumer<JSONObject> mLocalSink;
+
+    public void setLocalSink(java.util.function.Consumer<JSONObject> zSink) {
+        mLocalSink = zSink;
+    }
+
+    /** Mints one-time panel URLs (see {@link ParlonsLocal}); null when no panel is running. */
+    public interface PanelSource {
+        String ticketUrl();
+    }
+
+    private volatile PanelSource mPanel;
+
+    public void setPanelSource(PanelSource zPanel) {
+        mPanel = zPanel;
+    }
+
     public void setStatusSource(StatusSource zSource) {
         mStatus = zSource;
     }
@@ -481,6 +503,9 @@ public final class ParlonsControl {
                 o.put("key", d.key);
                 o.put("label", d.label);
                 o.put("pairedAt", d.pairedAt);
+                if (d.local) {
+                    o.put("local", true);   // the host's own panel - no network address, never pushed to
+                }
                 auth.add(o);
             }
             JSONArray pend = new JSONArray();
@@ -490,6 +515,18 @@ public final class ParlonsControl {
             JSONObject out = ok();
             out.put("authorized", auth);
             out.put("pending", pend);
+            return bytes(out);
+        });
+
+        zReg.register(M_PANEL_TICKET, req -> {
+            requireAuth(req);
+            PanelSource p = mPanel;
+            String url = p == null ? null : p.ticketUrl();
+            if (url == null || url.isEmpty()) {
+                return bytes(err("no web panel is running on this account (start it with a panel port)"));
+            }
+            JSONObject out = ok();
+            out.put("url", url);   // loopback on the account's machine; the ticket works once
             return bytes(out);
         });
 
@@ -2061,6 +2098,11 @@ public final class ParlonsControl {
 
     private void push(JSONObject event, String zExceptDeviceKey) {
         event.put("eid", java.util.UUID.randomUUID().toString());
+        // The local panel first: in-process, never blocks (the sink queues), sees every event.
+        java.util.function.Consumer<JSONObject> sink = mLocalSink;
+        if (sink != null) {
+            try { sink.accept(event); } catch (Exception ignored) { }
+        }
         final byte[] bytes = event.toString().getBytes(StandardCharsets.UTF_8);
         final long now = System.currentTimeMillis();
         final String kind = String.valueOf(event.get("type"));

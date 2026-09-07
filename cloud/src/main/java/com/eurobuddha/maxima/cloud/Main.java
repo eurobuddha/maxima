@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.42";
+    public static final String VERSION = "0.11.43";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -36,6 +36,7 @@ public final class Main {
         cfg.relayPort = DEFAULT_RELAY_PORT;
         cfg.directPort = DEFAULT_DIRECT_PORT;
         cfg.relayBlobMb = DEFAULT_BLOB_MB;
+        cfg.panelPort = ParlonsLocal.DEFAULT_PORT;
 
         String importSeedArg = null;
         String restoreArg = null;
@@ -111,6 +112,12 @@ public final class Main {
                     break;
                 case "--no-direct":
                     cfg.directPort = 0;
+                    break;
+                case "--panel-port":
+                    cfg.panelPort = intArg(args, ++i, "--panel-port");
+                    break;
+                case "--no-panel":
+                    cfg.panelPort = 0;
                     break;
                 default:
                     System.err.println("Unknown option: " + a);
@@ -292,6 +299,8 @@ public final class Main {
                 ? ("pool host on port " + cfg.relayPort) : "off (--no-relay)"));
         System.out.println("  direct   : " + (cfg.directPort > 0
                 ? ("Tier-2 reachability on port " + cfg.directPort) : "off"));
+        System.out.println("  panel    : " + (cfg.panelPort > 0
+                ? ("web panel on http://127.0.0.1:" + cfg.panelPort + "/ (this machine only)") : "off (--no-panel)"));
 
         // The cloud wallet: key-#1000 signer over the seed + the remote MegaMMR gateway; the
         // .pbk backup reads the phrase from seed.txt and the file-backed Winternitz counters.
@@ -318,6 +327,10 @@ public final class Main {
         System.out.println("  Pair a device: " + dir.resolve(AccountFiles.INVITE_FILE) + " holds the invite");
         System.out.println("  (address + one-time code in one line; " + dir.resolve(AccountFiles.ACCOUNT_FILE)
                 + " holds the address alone).");
+        if (core.local() != null) {
+            System.out.println("  Web panel: open the one-time link in " + dir.resolve(AccountFiles.TICKET_FILE)
+                    + " in a browser on this machine (or run: parlons panel).");
+        }
         System.out.println();
 
         // Block forever; all work runs on the maintenance/reader threads.
@@ -374,6 +387,9 @@ public final class Main {
         out.println("  --no-relay          run the account WITHOUT a pool relay");
         out.println("  --direct-port <n>   Tier-2 direct reachability port (default " + DEFAULT_DIRECT_PORT + ")");
         out.println("  --no-direct         disable direct reachability");
+        out.println("  --panel-port <n>    the local web panel + API on 127.0.0.1 (default " + ParlonsLocal.DEFAULT_PORT + ");");
+        out.println("                      open it with the one-time link in <data>/panel-ticket.txt, or: parlons panel");
+        out.println("  --no-panel          run without the local web panel");
         out.println("  --host <ip>         public address to advertise    (default: say nothing)");
         out.println("  --relays <list>     extra fleet relays to attach to (comma-separated)");
         out.println("  --no-builtin-relays do NOT use the compiled-in relay list as a seed source:");

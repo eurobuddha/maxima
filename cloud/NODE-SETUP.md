@@ -474,6 +474,38 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### The account's local web panel + API (cloud 0.11.43, node 0.2.44)
+Every account host (parlons-cloud, a tenants host, a Parlons Node) now serves a LOCAL web panel
+and JSON API on `127.0.0.1` (`ParlonsLocal`; cloud `--panel-port 9587` / `--no-panel`, node
+`-Dparlons.panel.port=9587`, `0` = off; a tenants host gives each tenant its own port from
+`--panel-port` upwards). This is the one interface every desktop and headless box shares: the
+node apps (minimaCore Desktop, minimaDesk) embed it, a server operator opens it through an ssh
+tunnel, and it is what a person with a Parlons Node on their own desktop uses when no phone is
+paired. How it works: a browser signs in with a ONE-TIME ticket - the account keeps one unused
+link in `<data>/panel-ticket.txt` (owner-only mode; reading the file is the authorization) and
+mints the next as soon as it is used; a paired device can also ask for a 60 s link
+(`parlons.panel.ticket`; the `parlons panel` CLI command uses the file when it is on the same box,
+the paired channel otherwise). The ticket becomes an HttpOnly SameSite=Strict session cookie and
+the page is served from that same origin; every request also passes a `Host` check (DNS rebinding)
+and an `Origin` check, and API calls must be JSON POSTs. To the account the panel is a LOCAL DEVICE
+(`DevicePairing.authorizeLocal`, key in `<data>/local-device.key`, listed as "this computer",
+revocable from any phone - to re-enable a revoked panel delete the key file and restart): every
+call goes through the same `ServiceRegistry` handlers a phone reaches, as that device
+(`dispatchLocal`, no 256K wire cap), so every `requireAuth` path stays honest; the device has no
+reply address, so it is never pushed to - instead the control channel hands every push event to
+the panel's server-sent-events stream (`/events`). Allow-list, not deny-list: chats, contacts,
+groups, devices/pairing, node status/log/figures/hosts/MLS, settings, name, media. NOT from the
+panel: the seed, the backup, wallet sends, payments, the node console, NFT hosting - a cookie on a
+desktop is weaker than a phone in your hand; those stay on paired phones and the CLI.
+Decentralization: nothing new is hosted or centralised (the panel is loopback, served by the
+account itself); it makes running your own account usable without a phone (principles 1, 3, 5);
+risk: a local-machine attacker with the owner's file access already holds the seed, so the ticket
+file adds no new exposure; mitigation: one-time tickets, strict cookie, host/origin checks,
+allow-list. Optional and replaceable: `--no-panel`. Verify: `ParlonsLocalTest` (ticket once,
+cookie, allow-list, origin/host refusal, uncapped reply, SSE); live: start parlons-cloud, open the
+link from `panel-ticket.txt`, see name/address/devices, mint a pairing code, watch a message arrive
+on `/events`.
+
 ### Hosted accounts for people without a server (cloud 0.11.39)
 An iPhone cannot hold an account, so a person with no server needs one hosted. `parlons-cloud
 --tenants <dir>` now hot-adds: a new `<dir>/<name>/` folder starts within 5 s (no restart for the

@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.43";
+    public static final String  NODE_VERSION = "0.2.44";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -68,6 +68,8 @@ public final class ParlonsNodeMain {
         out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
         out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
         out.println("  -Dparlons.account=true           run the Parlons account layer;  -Dparlons.account.name=<name>");
+        out.println("  -Dparlons.panel.port=9587        the account's web panel + API on 127.0.0.1 (0 = off); open it with");
+        out.println("                                    the one-time link in <data>/panel-ticket.txt (ssh tunnel on a server)");
         out.println("  -Dparlons.node.passphrase.file=<f>  unlock a password-locked node (or PARLONS_NODE_PASSPHRASE)");
         out.println("  -Dparlons.restore=<bundle.pbk>   restore a portable account bundle into a FRESH data dir, then exit");
         out.println();
@@ -373,6 +375,7 @@ public final class ParlonsNodeMain {
         cfg.logTag = "parlons-node";
         cfg.relayPort = 0;                                   // the cape is the relay
         cfg.directPort = Integer.getInteger("parlons.account.direct", 0);
+        cfg.panelPort = Integer.getInteger("parlons.panel.port", com.eurobuddha.maxima.cloud.ParlonsLocal.DEFAULT_PORT);
         cfg.publicHost = System.getProperty("parlons.relay.host", "");
         // The node's OWN cape is its public door: attach to it first, advertise it first, anchor
         // the permanent address on it. Public host = -Dparlons.relay.host, else what the Minima
@@ -428,8 +431,8 @@ public final class ParlonsNodeMain {
         com.eurobuddha.maxima.cloud.AccountFiles.startRefresher(core.pairing().codeFile().getParent(),
                 () -> core.node().permanentAddress(), 3_000);
         System.out.println("[parlons-node] account up: attached to " + hosts + " relay(s), "
-                + core.pairing().authorizedCount() + " paired device(s)"
-                + (core.pairing().authorizedCount() == 0
+                + core.pairing().remoteCount() + " paired device(s)"
+                + (core.pairing().remoteCount() == 0
                     ? " — pair the first one with the code in " + core.pairing().codeFile() : ""));
         return core;
     }

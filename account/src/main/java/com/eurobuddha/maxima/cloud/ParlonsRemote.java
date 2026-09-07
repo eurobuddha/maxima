@@ -644,6 +644,11 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_PAIR_NEWCODE, new JSONObject());
     }
 
+    /** A one-time URL (60 s) that opens the account's LOCAL web panel on the account's machine. */
+    public JSONObject panelTicket() throws Exception {
+        return rpc(ParlonsControl.M_PANEL_TICKET, new JSONObject());
+    }
+
     public JSONObject contacts() throws Exception {
         return paged(ParlonsControl.M_CONTACTS, "contacts");
     }
