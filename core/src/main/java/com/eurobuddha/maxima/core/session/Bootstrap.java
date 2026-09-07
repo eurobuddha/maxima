@@ -30,6 +30,5 @@ public final class Bootstrap {
             "45.77.246.226:9501",      // maxima      - Singapore, SG
             "78.141.237.9:9501",       // openproject - London, GB
             "45.77.57.24:9501",        // vigilance   - London, GB
-            "192.248.151.55:9501",     // megammr     - London, GB
-            "31.125.188.214:8001");    // the Pi      - residential, GB
+            "192.248.151.55:9501");     // megammr     - London, GB
 }

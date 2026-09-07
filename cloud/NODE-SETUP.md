@@ -487,6 +487,16 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### The dead Pi relay leaves the built-in list (node 0.2.56, cloud 0.11.57; iOS 0.1.10)
+`31.125.188.214:8001` ("the Pi") has been gone for weeks; the router rule now lands on a plain
+Minima node in Docker, which accepts TCP and never greets. It was still a built-in seed in
+`core/session/Bootstrap.java` and in the iOS `Bootstrap.relays`, and the fleet gossips it as a peer.
+The Java pool rejected it (no greeting), the iOS pool held its socket for the whole attach budget
+and once kept it as one of its two "relays". Removed from both lists; the iOS pool now caps the
+greeting wait at 8 s and cools a non-greeting host down at once. (The same iOS build fixes the real
+"connecting… forever" bug: its `withTimeout` waited for a reply that could never come.) The fleet
+relays keep gossiping the entry until they are rolled; clients now shrug it off.
+
 ### Your own sends mirror to every device live (node 0.2.55, cloud 0.11.56)
 A message typed on the phone reached its destination but the desktop panel of the same account only
 showed it on the next reload of that conversation, and the other way round: `ChatEngine` fired its
