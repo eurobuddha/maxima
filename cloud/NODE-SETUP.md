@@ -474,6 +474,15 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### The panel runs in a real browser: external script + pairing QR (cloud 0.11.48, node 0.2.47)
+The placeholder panel's script was inline, which its own Content-Security-Policy (`default-src
+'self'`, no `'unsafe-inline'` for scripts) blocks in any browser - it worked under curl only. The
+script now ships as `panel/app.js` (same origin) and the page renders the pairing invite as a QR
+(`panel/qr.js`, the MIT qrcode-generator the desktop apps already vendor), so a phone pairs by
+scanning the desktop. Verified inside minimaCore Desktop 0.16.24's Parlons tab (a hardened
+`<webview>` on the loopback panel): signed in through the one-time link, name/address/devices
+rendered, "New pairing code" mints and shows the QR. No policy change: the CSP stays as strict.
+
 ### A desktop node becomes the account: custom phrases, relay-off, clean quit (node 0.2.45, cloud 0.11.46)
 Three things the minimaCore Desktop gate (the Parlons Node jar booted on a COPY of a real
 minimaCore data folder, 2026-09-07) proved necessary before a desktop app can run the Parlons
