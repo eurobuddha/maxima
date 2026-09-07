@@ -487,6 +487,16 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### A node that shuts itself down ends the JVM (node 0.2.62)
+`megammrsync action:resync`, `restore` and `reset` finish with Minima's own shutdown ("please restart").
+Minima.main exits the JVM there; the Parlons Node never ran it, so after a wallet resync issued over the
+admin RPC the cape/gateway/account lingered on a dead chain spraying NullPointerExceptions (seen from
+minimaDesk's carry-over, 2026-09-08). A watchdog now exits 0 through the shutdown hook once
+`Main.getInstance()` is gone, exactly like `quit`; systemd / the host app restarts a whole node.
+Carry-over recipe for host apps: write `identity.txt` (the classic phrase) BEFORE first boot, then
+`megammrsync action:resync host:<fleet MegaMMR node> phrase:"…" anyphrase:true keyuses:<max uses + 2>`;
+the Pi 31.125.188.214 has no MegaMMR - use megammr 192.248.151.55:9101 / eurobuddha 65.109.31.226:9101.
+
 ### `-mdsbind` in the Minima flags is honoured (node 0.2.61)
 Review fix: the loopback default for MDS applied even when the operator had set Minima's own `-mdsbind`
 in `-Dparlons.node.args` / the conf file. Now: `-Dparlons.mds.bind` > `-mdsbind` > `127.0.0.1`.

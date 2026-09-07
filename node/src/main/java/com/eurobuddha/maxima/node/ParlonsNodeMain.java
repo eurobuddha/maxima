@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.61";
+    public static final String  NODE_VERSION = "0.2.62";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -445,6 +445,24 @@ public final class ParlonsNodeMain {
             try { if (rl != null) rl.stop(); } catch (Throwable ignored) {}
             try { main.shutdown(); } catch (Throwable ignored) {}
         }));
+
+        // --- the embedded node shut ITSELF down (megammrsync / restore / reset end with Minima's own
+        // shutdown + "please restart"): Minima.main would have exited the JVM; this jar never runs it,
+        // so the cape, gateway and account lingered on a dead chain, spraying NullPointerExceptions
+        // (seen live 2026-09-08 after a wallet resync from a host app). Exit like `quit` does, through
+        // the shutdown hook, so the host restarts a whole node. (0.2.62) ---
+        Thread selfStop = new Thread(() -> {
+            boolean seen = false;
+            while (true) {
+                try { Thread.sleep(2_000); } catch (InterruptedException ie) { return; }
+                if (Main.getInstance() != null) { seen = true; continue; }
+                if (!seen) continue;   // still booting
+                System.out.println("[parlons-node] the embedded node shut itself down (resync / restore / reset) - exiting so the host can restart it");
+                System.exit(0);
+            }
+        }, "parlons-node-selfstop");
+        selfStop.setDaemon(true);
+        selfStop.start();
 
         // --- heartbeat: report chain height + subsystem liveness via the in-process command API ---
         new Thread(() -> {
