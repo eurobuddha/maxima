@@ -339,6 +339,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private static String searchable(String zBody) {
         if (zBody == null) return "";
         if (ChatPay.isPayment(zBody)) return ChatPay.preview(zBody);
+        if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(zBody)) return com.eurobuddha.maxima.core.chat.ChatContact.preview(zBody);
         if (ChatMedia.isMedia(zBody)) {
             String cap = ChatMedia.caption(zBody);
             int bar = cap.indexOf('|');    // voice notes: "duration|waveformhex"
@@ -916,6 +917,35 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     }
                 });
             }
+        } else if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)) {
+            // A shared contact: who, their full address, one action.
+            final String cname = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
+            final String caddr = com.eurobuddha.maxima.core.chat.ChatContact.address(e.body);
+            JLabel head = new JLabel("👤 " + (cname.isEmpty() ? "(no name)" : cname));
+            head.setFont(t.semibold(14f));
+            head.setForeground(fg);
+            head.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(head);
+            JLabel kind = new JLabel("Shared contact");
+            kind.setFont(t.font(11f));
+            kind.setForeground(DKit.alpha(fg, 200));
+            kind.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(kind);
+            JTextArea addrA = new JTextArea(caddr);
+            addrA.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 11));
+            addrA.setForeground(DKit.alpha(fg, 220));
+            addrA.setOpaque(false);
+            addrA.setEditable(false);
+            addrA.setLineWrap(true);
+            addrA.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.add(addrA);
+            DKit.HoverButton add = k.ghostButton("Add contact");
+            add.setAlignmentX(Component.LEFT_ALIGNMENT);
+            add.onClick(() -> new Thread(() -> {
+                com.eurobuddha.maxima.core.MaximaNode n = node.node();
+                try { if (n != null) n.introduce(caddr, true); } catch (Exception ignored) { }
+            }, "add-shared-contact").start());
+            b.add(add);
         } else {
             JTextArea body = new JTextArea(e.body);
             body.setFont(t.font(13.5f));
@@ -971,7 +1001,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
         boolean media = ChatMedia.isMedia(e.body);
         boolean pay = ChatPay.isPayment(e.body);
-        if (!media && !pay) {
+        boolean card = com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body);
+        if (card) {
+            javax.swing.JMenuItem ca = new javax.swing.JMenuItem("Copy contact address");
+            ca.addActionListener(a -> clip(com.eurobuddha.maxima.core.chat.ChatContact.address(e.body)));
+            m.add(ca);
+        }
+        if (!media && !pay && !card) {
             javax.swing.JMenuItem copy = new javax.swing.JMenuItem("Copy text");
             copy.addActionListener(a -> clip(e.body));
             m.add(copy);

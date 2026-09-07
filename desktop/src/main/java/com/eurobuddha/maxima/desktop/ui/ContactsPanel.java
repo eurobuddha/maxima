@@ -186,6 +186,32 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mList.repaint();
     }
 
+    /** Pick another contact and send them zWho as a contact card (ChatContact body kind). */
+    private void showSendContactPicker(final Contact zWho, final String zShare) {
+        JPanel body = new JPanel();
+        body.setOpaque(false);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        final JDialog[] holder = new JDialog[1];
+        int n = 0;
+        for (final Contact t : node.port().contacts()) {
+            if (t.publicKey == null || t.publicKey.equalsIgnoreCase(zWho.publicKey)) continue;
+            n++;
+            DKit.HoverButton row = k.ghostButton(displayName(t));
+            row.setAlignmentX(Component.LEFT_ALIGNMENT);
+            row.onClick(() -> {
+                if (holder[0] != null) holder[0].dispose();
+                final String card = com.eurobuddha.maxima.core.chat.ChatContact.wrap(zWho.publicKey, zWho.name, zShare);
+                new Thread(() -> {
+                    try { node.chat().send(t, card); } catch (Exception ignored) { }
+                }, "send-contact-card").start();
+            });
+            body.add(row);
+            body.add(k.vgap(4));
+        }
+        if (n == 0) body.add(k.sub("No one else to send it to yet."));
+        holder[0] = dialog("Send " + displayName(zWho) + " to…", body, 360);
+    }
+
     private List<Contact> filtered(List<Contact> all) {
         String q = mQuery.trim().toLowerCase();
         if (q.isEmpty()) return all;
@@ -382,6 +408,29 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                 }
             }
         }
+        // Share this contact: the permanent address when we know their directory (it survives
+        // their relay changes), else the current one; and send it to another contact as a card.
+        final String share = c.shareAddress();
+        final DKit.HoverButton sendTo = k.ghostButton("Send to a contact…");
+        if (!share.isEmpty()) {
+            if (!share.equals(addr)) {
+                body.add(k.vgap(6));
+                body.add(k.copyField("share address (permanent)", share, false));
+            }
+            body.add(k.vgap(6));
+            JPanel sr = new JPanel();
+            sr.setOpaque(false);
+            sr.setLayout(new BoxLayout(sr, BoxLayout.X_AXIS));
+            sr.setAlignmentX(Component.LEFT_ALIGNMENT);
+            DKit.HoverButton copyShare = k.ghostButton("Copy share address");
+            copyShare.onClick(() -> java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new java.awt.datatransfer.StringSelection(share), null));
+            sr.add(copyShare);
+            sr.add(k.hgap(8));
+            sr.add(sendTo);
+            sr.add(Box.createHorizontalGlue());
+            body.add(sr);
+        }
         if (c.minimaAddress != null && !c.minimaAddress.isEmpty()) {
             body.add(k.vgap(6));
             body.add(k.copyField("payment address (MINIMA)", c.minimaAddress, false));
@@ -404,6 +453,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
         JDialog d = dialog(displayName(c), body, 420);
         msg.onClick(() -> { d.dispose(); window.openChat(c.publicKey); });
+        sendTo.onClick(() -> { d.dispose(); showSendContactPicker(c, share); });
         remove.onClick(() -> {
             com.eurobuddha.maxima.core.MaximaNode n = node.node();
             if (n != null) n.removeContact(c.publicKey);
