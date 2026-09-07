@@ -474,6 +474,19 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### The in-process relay is reached over loopback; the internet's reach is proven by the node (node 0.2.52, cloud 0.11.53)
+On the owner's network the account could not attach to its own relay by public address (no hairpin:
+a TCP connect to one's own public IP from inside timed out) while the internet reached the port
+(Minima: 2 incoming peers) - so "Your relay" said unreachable while it was not. Two changes:
+`DialAlias` (core) lets the node dial `127.0.0.1:port` whenever its own public `host:port` is
+wanted (pool attach, probes, sends), while the pool key and the directory anchor stay the public
+address; and in shared mode the proof of reachability is the node's own verdict - an incoming
+chain connection on that very port from a public address - instead of the pool's dial-back
+(which over loopback proves nothing about the internet). `ownRelayState` is owned by the
+adoption loop once it runs, so the panel cannot show "verified" on a loopback dial-back. The
+fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
+node copy: attached over loopback, route registered on the in-process relay, state honest.
+
 ### One public port: the relay rides the Minima P2P port (node 0.2.51, server 0.4.63, cloud 0.11.52; fork 4fc6e7e)
 A Parlons Node listened on TWO public ports - the Minima P2P port and the Maxima relay port
 (9501 fleet / 12501 in minimaCore) - so a home user had to forward a second port for one app; the

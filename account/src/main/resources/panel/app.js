@@ -517,8 +517,8 @@
     const relayLine = rs === 'off' ? 'Off. Turn on Contribute in the node app to run a relay for the network.'
       : rs === 'nohost' ? 'Running, but this machine does not know its public address yet - it learns it from its peers a few minutes after start; the account adopts the relay then.'
       : rs === 'verified' ? 'Reachable from the internet ✓ - your contacts reach you through it and it anchors your permanent address.'
-      : rs === 'unreachable' ? 'Running, but NOT reachable from the internet: the router must forward TCP port ' + esc(String(fig.ownRelay || '').split(':').pop()) + ' to this machine. Until then the fleet anchors your address.'
-      : rs === 'attached' ? 'Attached; proving it is reachable from outside…' : 'Attaching…';
+      : rs === 'unreachable' ? 'Running, but no connection from the internet has reached port ' + esc(String(fig.ownRelay || '').split(':').pop()) + ' yet: the router must forward that TCP port to this machine. Until then the fleet anchors your address (checked again every 10 minutes).'
+      : rs === 'attached' ? 'Attached; waiting for the first connection from the internet to prove the port is open…' : 'Attaching…';
     body.appendChild(el('<div class="card"><div class="ctitle2">Your relay</div>'
       + '<div class="metric"><span class="k">Address</span><span class="v mono">' + esc(fig.ownRelay || (st.relayOn ? '(public address not known yet)' : '—')) + '</span></div>'
       + '<div class="metric"><span class="k">State</span><span class="v"><span class="spill' + (rs === 'verified' ? ' ok' : rs === 'unreachable' ? ' bad' : '') + '"><span class="dot"></span>' + esc(rs === 'nohost' ? 'no public address yet' : rs) + '</span></span></div>'

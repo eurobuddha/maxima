@@ -255,6 +255,12 @@ public final class MaximaNode implements ChatPort {
         return mIdentity;
     }
 
+    /** Dial {@code zActual} whenever {@code zHostPort} is wanted - our own relay over loopback,
+     *  known to the world by its public address (see {@link com.eurobuddha.maxima.core.net.DialAlias}). */
+    public void setDialAlias(String zHostPort, String zActual) {
+        com.eurobuddha.maxima.core.net.DialAlias.set(zHostPort, zActual);
+    }
+
     /** Prefer one host (a node's own public cape): attached first, advertised first, never
      *  evicted by merit. See {@link HostPool#setPreferred}. */
     public void setPreferredHost(String zHostPort) {

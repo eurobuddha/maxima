@@ -217,8 +217,15 @@ public final class ParlonsCore {
             public String ownRelayState() {
                 String o = ownRelay();
                 if (o.isEmpty()) return relayRunning() ? "nohost" : "off";
+                // A late adoption owns the verdict: its proof is the one that counts (an
+                // in-process relay is always "verified" by the pool's dial-back over loopback,
+                // which says nothing about the internet). A relay configured up front (a fleet
+                // box) is judged by that dial-back, as before.
+                if (mOwnRelayAdopting) {
+                    if ("verified".equals(mOwnRelayState) || "unreachable".equals(mOwnRelayState)) return mOwnRelayState;
+                    return ownRelayAttached() ? "attached" : "attaching";
+                }
                 if (ownRelayVerified()) return "verified";
-                if ("unreachable".equals(mOwnRelayState)) return "unreachable";
                 return ownRelayAttached() ? "attached" : "attaching";
             }
             public java.util.List<String> hosts() {
@@ -461,6 +468,8 @@ public final class ParlonsCore {
         return mOwnRelayState;
     }
     private volatile String mOwnRelayState = "off";
+    /** True once adoptOwnRelay runs: its proof loop, not the pool's dial-back, decides the state. */
+    private volatile boolean mOwnRelayAdopting;
 
     /**
      * The host's OWN relay became known AFTER start (a desktop learns its public address from its
@@ -470,14 +479,30 @@ public final class ParlonsCore {
      * fleet and the panel says why.
      */
     public boolean adoptOwnRelay(String zHostPort) {
+        return adoptOwnRelay(zHostPort, null, null);
+    }
+
+    /**
+     * @param zDialActual  where THIS process reaches the relay ("127.0.0.1:port" when the relay is
+     *                     in-process: home routers rarely hairpin); null = dial the public address
+     * @param zOutsideOpen the host's own proof that the port is reached from the internet (a node
+     *                     with inbound chain peers on that very port); null = the pool's dial-back
+     */
+    public boolean adoptOwnRelay(String zHostPort, String zDialActual,
+                                 java.util.function.Supplier<Boolean> zOutsideOpen) {
         final String own = zHostPort == null ? "" : zHostPort.trim();
         if (own.isEmpty() || own.equals(mCfg.ownRelay)) {
             return false;
         }
         mCfg.ownRelay = own;
         mOwnRelayState = "attaching";
+        mOwnRelayAdopting = true;
+        if (zDialActual != null && !zDialActual.isEmpty()) {
+            mNode.setDialAlias(own, zDialActual);
+        }
         mNode.setPreferredHost(own);
-        log("own relay (the cape) learned late: " + own + " - attaching, then proving it reachable");
+        log("own relay (the cape) learned late: " + own + (zDialActual == null ? "" : " (reached here via " + zDialActual + ")")
+                + " - attaching, then proving it reachable from outside");
         mHostExec.execute(() -> {
             // Prove, then adopt; if the proof does not come (router port closed), say so and keep
             // trying every 10 minutes - the port may be opened later without a restart.
@@ -487,7 +512,8 @@ public final class ParlonsCore {
                 while (mRunning && System.currentTimeMillis() < until) {
                     boolean attached;
                     try { attached = mNode.pool().activeHosts().contains(own); } catch (Exception e) { attached = false; }
-                    if (attached && mNode.isHostVerified(own)) {
+                    boolean outside = zOutsideOpen == null ? mNode.isHostVerified(own) : Boolean.TRUE.equals(zOutsideOpen.get());
+                    if (attached && outside) {
                         String perm = mNode.adoptMlsOf(own);
                         mOwnRelayState = "verified";
                         log("own relay verified reachable from outside: permanent address now anchored on it"
@@ -501,8 +527,9 @@ public final class ParlonsCore {
                 }
                 mOwnRelayState = "unreachable";
                 if (round == 0) {
-                    log("own relay " + own + " is up but NOT reachable from outside (no dial-back in 4 min):"
-                            + " the router must forward TCP " + own.substring(own.lastIndexOf(':') + 1)
+                    log("own relay " + own + " is up but NOT reached from outside yet"
+                            + (zOutsideOpen == null ? " (no dial-back in 4 min)" : " (no incoming connection on that port in 4 min)")
+                            + ": the router must forward TCP " + own.substring(own.lastIndexOf(':') + 1)
                             + " to this machine; the permanent address stays anchored on the fleet until then"
                             + " (checked again every 10 minutes)");
                 }

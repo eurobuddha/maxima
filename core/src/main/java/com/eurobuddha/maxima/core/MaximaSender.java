@@ -225,7 +225,7 @@ public final class MaximaSender {
         byte[] body = Frame.body(Frame.MSG_MAXIMA_TXPOW, zUnit);
 
         try (Socket sock = new Socket()) {
-            sock.connect(new InetSocketAddress(zHost, zPort), zConnectTimeoutMs);
+            sock.connect(com.eurobuddha.maxima.core.net.DialAlias.resolve(zHost, zPort), zConnectTimeoutMs);
             sock.setSoTimeout(zReadTimeoutMs);
             sock.setTcpNoDelay(true);
 

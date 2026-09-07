@@ -261,7 +261,7 @@ public final class HostConnection implements Closeable {
      */
     public void attach(int zTimeoutMs) throws Exception {
         mSocket = new Socket();
-        mSocket.connect(new InetSocketAddress(mHost, mPort), zTimeoutMs);
+        mSocket.connect(DialAlias.resolve(mHost, mPort), zTimeoutMs);
         mSocket.setSoTimeout(zTimeoutMs);
         mSocket.setTcpNoDelay(true);
         mSocket.setKeepAlive(true);

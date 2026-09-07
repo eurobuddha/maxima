@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.51";
+    public static final String  NODE_VERSION = "0.2.52";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -355,7 +355,15 @@ public final class ParlonsNodeMain {
                             com.eurobuddha.maxima.cloud.ParlonsCore account = accountHolder.get();
                             System.out.println("[parlons-node] public address learned from peers: " + det
                                     + " - the cape now names itself " + own + (account == null ? "" : "; the account adopts it"));
-                            if (account != null) account.adoptOwnRelay(own);
+                            if (account != null) {
+                                if (RELAY_SHARED) {
+                                    // In-process relay: reach it over loopback (no hairpin needed); the world
+                                    // reaches it on the P2P port - and the node KNOWS when it does.
+                                    account.adoptOwnRelay(own, "127.0.0.1:" + RELAY_PORT, ParlonsNodeMain::portReachedFromOutside);
+                                } else {
+                                    account.adoptOwnRelay(own);
+                                }
+                            }
                             return;
                         }
                     }, "parlons-node-learn-host");
@@ -495,6 +503,33 @@ public final class ParlonsNodeMain {
                 + (core.pairing().remoteCount() == 0
                     ? " — pair the first one with the code in " + core.pairing().codeFile() : ""));
         return core;
+    }
+
+    /** Has the internet reached the node's P2P port? Minima's own verdict: inbound peers on it
+     *  (self-dials excluded - a node that reaches itself only hairpins), or its accepting flag. */
+    static boolean portReachedFromOutside() {
+        try {
+            org.minima.utils.json.JSONObject net = NodeWallet.response(NodeWallet.run("network"));
+            Object details = net.get("details");
+            Object p2p = details instanceof org.minima.utils.json.JSONObject
+                    ? ((org.minima.utils.json.JSONObject) details).get("p2p") : null;
+            if (!(p2p instanceof org.minima.utils.json.JSONObject)) return false;
+            org.minima.utils.json.JSONObject j = (org.minima.utils.json.JSONObject) p2p;
+            String self = String.valueOf(j.getOrDefault("address", ""));
+            String selfIp = self.contains(":") ? self.substring(0, self.lastIndexOf(':')) : self;
+            int inbound = 0;
+            Object conns = net.get("connections");
+            if (conns instanceof org.minima.utils.json.JSONArray) {
+                for (Object o : (org.minima.utils.json.JSONArray) conns) {
+                    if (!(o instanceof org.minima.utils.json.JSONObject)) continue;
+                    org.minima.utils.json.JSONObject c = (org.minima.utils.json.JSONObject) o;
+                    if (Boolean.TRUE.equals(c.get("incoming")) && !selfIp.equals(String.valueOf(c.get("host")))) inbound++;
+                }
+            }
+            return inbound > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** The host the embedded Minima node detected for itself ({@code status} → network.host). */

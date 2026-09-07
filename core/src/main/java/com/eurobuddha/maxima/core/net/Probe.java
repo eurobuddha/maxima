@@ -93,7 +93,7 @@ public final class Probe {
             // TCP handshake and then goes silent blocks for connect+read, not
             // 2x a single figure. The read budget is the shorter one - a real
             // endpoint greets immediately.
-            s.connect(new InetSocketAddress(zHost, zPort), zConnectMs);
+            s.connect(DialAlias.resolve(zHost, zPort), zConnectMs);
             s.setSoTimeout(zReadMs);
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
