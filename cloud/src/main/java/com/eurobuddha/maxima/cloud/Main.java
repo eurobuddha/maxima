@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.43";
+    public static final String VERSION = "0.11.44";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -45,6 +45,7 @@ public final class Main {
         String tenantNewName = null;
         String unlockArg = null;
         boolean encryptSeeds = false;
+        String walletSpec = null;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -119,6 +120,9 @@ public final class Main {
                 case "--no-panel":
                     cfg.panelPort = 0;
                     break;
+                case "--wallet":
+                    walletSpec = strArg(args, ++i, "--wallet");
+                    break;
                 default:
                     System.err.println("Unknown option: " + a);
                     System.err.println();
@@ -158,7 +162,7 @@ public final class Main {
                 Tenants.run(Paths.get(tenantsArg), cfg, unlock);
                 return;
             }
-            run(Paths.get(data), cfg);
+            run(Paths.get(data), cfg, walletSpec);
         } catch (BindException be) {
             System.err.println();
             System.err.println("ERROR: relay port " + cfg.relayPort + " is already in use.");
@@ -268,7 +272,7 @@ public final class Main {
         System.out.println("  the same, and the fleet's replicated directory resolves it here.");
     }
 
-    private static void run(Path dir, ParlonsCore.Config cfg) throws Exception {
+    private static void run(Path dir, ParlonsCore.Config cfg, String zWalletSpec) throws Exception {
         // Seed resolution (0600, atomic) is shared with the relay.
         RelayRuntime.Seed seed = RelayRuntime.loadOrCreateSeed(dir);
         if (!seed.created) {
@@ -302,13 +306,25 @@ public final class Main {
         System.out.println("  panel    : " + (cfg.panelPort > 0
                 ? ("web panel on http://127.0.0.1:" + cfg.panelPort + "/ (this machine only)") : "off (--no-panel)"));
 
-        // The cloud wallet: key-#1000 signer over the seed + the remote MegaMMR gateway; the
-        // .pbk backup reads the phrase from seed.txt and the file-backed Winternitz counters.
-        AccountWallet wallet = new CloudAccountWallet(id, dir);
+        // The wallet. Default: the cloud wallet, a key-#1000 signer over the seed + the remote
+        // MegaMMR gateway (the .pbk backup then carries the file-backed Winternitz counters).
+        // --wallet rpc:<port>: a Minima node already running on this machine is the wallet
+        // (the account holds the identity only; the node signs) - the sidecar shape a desktop
+        // node app uses. Its key counter is the node's, so the backup carries none.
+        final RpcAccountWallet rpcWallet = RpcAccountWallet.fromSpec(zWalletSpec, dir);
+        if (zWalletSpec != null && rpcWallet == null) {
+            System.err.println("ERROR: --wallet takes rpc:<port>[:<secret-file>]");
+            System.exit(2);
+        }
+        AccountWallet wallet = rpcWallet != null ? rpcWallet : new CloudAccountWallet(id, dir);
+        System.out.println("  wallet   : " + (rpcWallet != null
+                ? "the Minima node at " + rpcWallet.baseUrl() + " (it signs; the account holds the identity only)"
+                : "the account's own key-#1000 signer over its seed"));
         AccountBackup.Source backup = new AccountBackup.Source() {
             public String phrase() throws Exception { return CloudBackupManager.readPhrase(dir); }
             public java.util.Map<String, Integer> keyUses() {
-                return CloudKeyUses.exportAll(new java.io.File(dir.toFile(), "wallet"));
+                return rpcWallet != null ? new java.util.LinkedHashMap<>()
+                        : CloudKeyUses.exportAll(new java.io.File(dir.toFile(), "wallet"));
             }
         };
         ParlonsCore core = new ParlonsCore(id, dir, cfg, wallet, backup);
@@ -390,6 +406,10 @@ public final class Main {
         out.println("  --panel-port <n>    the local web panel + API on 127.0.0.1 (default " + ParlonsLocal.DEFAULT_PORT + ");");
         out.println("                      open it with the one-time link in <data>/panel-ticket.txt, or: parlons panel");
         out.println("  --no-panel          run without the local web panel");
+        out.println("  --wallet rpc:<port>[:<secret-file>]  use the Minima node ALREADY RUNNING on this machine as");
+        out.println("                      the wallet, over its loopback RPC (the node signs; the account keeps the");
+        out.println("                      identity only). The file holds the node's -rpcpassword. Default: the");
+        out.println("                      account's own signer over its seed");
         out.println("  --host <ip>         public address to advertise    (default: say nothing)");
         out.println("  --relays <list>     extra fleet relays to attach to (comma-separated)");
         out.println("  --no-builtin-relays do NOT use the compiled-in relay list as a seed source:");

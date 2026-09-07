@@ -474,6 +474,23 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### A running Minima node as the account's wallet (cloud 0.11.44)
+`parlons-cloud --wallet rpc:<port>[:<secret-file>]` makes a Minima node ALREADY running on the
+same machine the account's wallet, over the node's loopback RPC (`RpcAccountWallet`; HTTP Basic
+with the node's `-rpcpassword` read from the file). The account then holds the identity only; the
+node holds the seed, signs and broadcasts - one seed, one signer, the same shape as the Parlons
+Node's in-process wallet, reached over HTTP. This is the sidecar an app like minimaDesk runs
+beside its classic node (the node's phrase is imported once with `--import-seed` for the
+identity; its wallet is never re-derived by the account, so the single-holder rule holds). Same
+contract as the node wallet: the receive address is the node's default address, the key counter
+is the node's (readable, never raised), `build` has already broadcast, no resync from here. The
+RPC port stays loopback and the password stays in a 0600 file; nothing new is exposed.
+Decentralization: no new party (the node is the user's own), optional (default wallet unchanged),
+replaceable (any node with RPC). Verify: `RpcAccountWalletTest` (spec, Basic auth, address/uses,
+safe rejection, command-injection refusal, whole-command URL encoding); live: with a node's RPC
+enabled, start parlons-cloud with `--wallet rpc:<port>:<file>` and read "account wallet ready:
+Mx…" (the node's own address) in its log.
+
 ### The account's local web panel + API (cloud 0.11.43, node 0.2.44)
 Every account host (parlons-cloud, a tenants host, a Parlons Node) now serves a LOCAL web panel
 and JSON API on `127.0.0.1` (`ParlonsLocal`; cloud `--panel-port 9587` / `--no-panel`, node
