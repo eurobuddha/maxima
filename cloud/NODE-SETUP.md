@@ -474,6 +474,22 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### The panel IS the Parlons app (cloud 0.11.50, node 0.2.49)
+The 0.11.49 panel was a generic web chat; the rule is the phone app pixel for pixel. Rebuilt from
+`app/src/main/res`: the `ux_*` colour tokens (light + night), every drawable radius (card 14, button
+10, field 12, search 22, composer pill 24, badge 11, FAB 18, send circle), Manrope in the app's five
+weights (bundled, same origin), the app's vector icons ported path for path (`icons.js` - no font
+glyphs), `Avatars.colour` ported exactly (Java hashCode of the whole key → 30 muted hues), the home
+app bar ("Parlons!" + version + "Powered by Maxima", status pill with the host count, theme / search
+/ more) with the tab strip, the Chats page rows (46 px avatar, monospace time, unread badge, FAB),
+the chat screen (app bar with presence subtitle, doodle wallpaper, 3-8-8-8 / 8-3-8-8 bubbles,
+monospace meta with ✓ ✓✓ ✗ ⋯, day pills Today / Yesterday / weekday / date, image 220, voice-note
+row with waveform, composer pill with emoji / attach / camera and the send circle), and the card
+vocabulary for Contacts (identity card, add, live search, contact sheet), Devices, Node and
+Settings, with the app's bottom sheets and switches. Wide windows show the phone's Chats page on
+the left and the phone's chat screen on the right; under 720 px one column like the phone. Verified
+against S23 captures of the same screens (light + dark) in headless Chrome at 360 and 1240 px.
+
 ### The Parlons panel: a real chat window on every account host (cloud 0.11.49, node 0.2.48)
 `panel/` is now the full account interface, not a placeholder: Chats (summaries, unread, search,
 new group), the conversation (bubbles, ticks, day separators, older-on-scroll, photos and voice

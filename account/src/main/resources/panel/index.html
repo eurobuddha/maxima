@@ -8,36 +8,34 @@
 </head>
 <body>
 <div class="app" id="app">
-  <header class="top">
-    <div class="brand">Parlons <span class="me" id="meName"></span></div>
-    <nav class="nav">
+  <section class="phone" id="phone">
+    <header class="bar">
+      <div class="titles">
+        <div class="titlerow"><span class="title">Parlons!</span><span class="ver" id="ver"></span></div>
+        <div class="credit">Powered by Maxima</div>
+      </div>
+      <div class="hpill"><span class="dot" id="dot"></span><span class="ptext" id="state">starting…</span></div>
+      <button class="ibtn" id="btnTheme" title="Theme"></button>
+      <button class="ibtn" id="btnSearch" title="Search"></button>
+      <button class="ibtn narrow" id="btnMore" title="More"></button>
+    </header>
+    <nav class="tabs" id="tabs">
       <button data-route="chats" class="on">Chats</button>
       <button data-route="contacts">Contacts</button>
       <button data-route="devices">Devices</button>
       <button data-route="node">Node</button>
       <button data-route="settings">Settings</button>
     </nav>
-    <div class="state" id="state">connecting…</div>
-  </header>
-  <div class="body" id="body">
-    <aside class="list" id="list">
-      <div class="listhead">
-        <input id="search" type="search" placeholder="Search chats and messages" autocomplete="off">
-        <button id="newGroup" class="ghost" title="New group">+ Group</button>
-      </div>
-      <div id="listItems" class="items"></div>
-    </aside>
-    <main class="pane" id="pane">
-      <div class="empty" id="paneEmpty">
-        <div class="emptyTitle">Your account is up.</div>
-        <div class="emptyText">Pick a conversation, or add someone in Contacts.</div>
-      </div>
-    </main>
-  </div>
+    <div class="page" id="page"></div>
+  </section>
+  <section class="chatpane" id="chatpane">
+    <div class="ground" id="ground"><div class="groundText">Pick a conversation.</div></div>
+  </section>
   <div class="banner" id="banner" hidden></div>
   <div class="toast" id="toast" hidden></div>
 </div>
 <script src="qr.js"></script>
+<script src="icons.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

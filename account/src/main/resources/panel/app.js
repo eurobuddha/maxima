@@ -1,6 +1,6 @@
-// Parlons panel - the account's own chat window, served same-origin by ParlonsLocal.
-// Every call is POST /api/<method> with the session cookie; live events arrive on /events (SSE).
-// No framework, no build step; the page's CSP allows no inline script.
+// Parlons panel - the Parlons phone app, rendered as it is, over the account's local API.
+// Left: the phone (home app bar, tab strip, pages). Right (wide windows): the chat screen. Every call is
+// POST /api/<method> with the session cookie; live events on /events (SSE). No framework, no inline script.
 (function () {
   'use strict';
 
@@ -8,52 +8,78 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
-  const MEDIA_MARK = 'm';
+  const MEDIA_MARK = '\u0001m\u0001';   // core ChatMedia: SOH-fenced 'm', then mime SOH ref SOH caption
+  const ic = window.icon;
 
   async function api(method, body) {
-    const r = await fetch('/api/' + method, {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {})
-    });
-    if (r.status === 401) { setState('signed out - open the panel with a fresh link', true); throw new Error('signed out'); }
+    const r = await fetch('/api/' + method, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    if (r.status === 401) { setState('signed out', 'bad'); throw new Error('Signed out - open the panel with a fresh link'); }
     const j = await r.json().catch(() => ({ ok: false, error: 'bad reply' }));
     if (j && j.ok === false) throw new Error(j.error || method + ' failed');
     return j;
   }
   async function apiGet(name) {
     const r = await fetch('/api/' + name, { credentials: 'same-origin' });
-    if (r.status === 401) { setState('signed out - open the panel with a fresh link', true); throw new Error('signed out'); }
+    if (r.status === 401) { setState('signed out', 'bad'); throw new Error('Signed out'); }
     return r.json();
   }
-
   let toastTimer = null;
   function toast(msg, kind) {
     const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind === 'err' ? ' err' : ''); t.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'err' ? 5000 : 2500);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'err' ? 5000 : 2400);
   }
-  function setState(text, bad) { const s = $('state'); s.textContent = text; s.className = 'state' + (bad ? ' bad' : ''); }
-
-  function when(ms) {
+  function setState(text, kind) {
+    $('state').textContent = text;
+    const p = $('state').parentElement; p.className = 'hpill' + (kind === 'ok' ? ' ok' : kind === 'bad' ? ' bad' : '');
+  }
+  const pad2 = (n) => (n < 10 ? '0' : '') + n;
+  function hhmm(ms) { const d = new Date(Number(ms)); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  function dayStart(ms) { const d = new Date(Number(ms)); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  // ChatActivity.dayLabel: Today / Yesterday / weekday (< 7 days) / "7 Sep 2026"
+  function dayLabel(ms) {
+    const days = Math.round((dayStart(Date.now()) - dayStart(ms)) / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    const d = new Date(Number(ms));
+    if (days > 1 && days < 7) return DAYS[d.getDay()];
+    return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  // the list's time column: HH:mm today, else "30 Aug"
+  function listTime(ms) {
     if (!ms) return '';
-    const d = new Date(Number(ms)), now = new Date();
-    const same = d.toDateString() === now.toDateString();
-    return same ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const d = new Date(Number(ms));
+    return dayStart(ms) === dayStart(Date.now()) ? hhmm(ms) : d.getDate() + ' ' + MONTHS[d.getMonth()];
   }
-  function dayOf(ms) { return new Date(Number(ms)).toDateString(); }
+  // Presence.of: online < 30 min, then last seen Nm / Nh / Nd ago
+  function presence(lastSeen) {
+    if (!lastSeen) return '';
+    const d = Date.now() - Number(lastSeen);
+    if (d < 30 * 60000) return 'online';
+    const m = Math.floor(d / 60000); if (m < 60) return 'last seen ' + m + 'm ago';
+    const h = Math.floor(m / 60); if (h < 24) return 'last seen ' + h + 'h ago';
+    return 'last seen ' + Math.floor(h / 24) + 'd ago';
+  }
+  // Avatars.colour, ported exactly: Java String.hashCode of the WHOLE key → floorMod 30 → muted HSL
+  function javaHash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; return h; }
+  function avatarColour(key) {
+    const v = key ? javaHash(String(key)) : 0;
+    const idx = ((v % 30) + 30) % 30;
+    const hue = idx * 12, sat = 0.32 + (idx % 3) * 0.03, light = 0.42 + (idx % 2) * 0.03;
+    return 'hsl(' + hue + ',' + Math.round(sat * 100) + '%,' + Math.round(light * 100) + '%)';
+  }
   function initial(name) { const s = String(name || '').trim(); return s ? s[0].toUpperCase() : '?'; }
-  function shortKeyName(k) { return k; }   // identifiers are always shown whole
+  function avatar(key, name, size) { return '<div class="av ' + (size || 'l') + '" style="background:' + avatarColour(key) + '">' + esc(initial(name)) + '</div>'; }
 
-  // ---------- media bodies (core ChatMedia): m mime  ref  caption ----------
+  // ---------- media bodies (core ChatMedia) ----------
   function parseMedia(body) {
     if (!body || !body.startsWith(MEDIA_MARK)) return null;
     const rest = body.slice(MEDIA_MARK.length);
-    const a = rest.indexOf(''); if (a < 0) return null;
-    const mime = rest.slice(0, a);
+    const a = rest.indexOf('\u0001'); if (a < 0) return null;
     const rest2 = rest.slice(a + 1);
-    const b = rest2.indexOf(''); if (b < 0) return null;
-    return { mime, ref: rest2.slice(0, b), caption: rest2.slice(b + 1) };
+    const b = rest2.indexOf('\u0001'); if (b < 0) return null;
+    return { mime: rest.slice(0, a), ref: rest2.slice(0, b), caption: rest2.slice(b + 1) };
   }
   function manifestJson(ref) {
     if (!ref.startsWith('mx1:')) return null;
@@ -76,141 +102,177 @@
   }
 
   // ---------- state ----------
-  const S = {
-    me: { name: '', permanent: '', primary: '' },
-    summaries: [],
-    open: null,            // peer key of the open conversation
-    openIsGroup: false,
-    openName: '',
-    msgs: [],              // entries of the open conversation, ascending time
-    route: 'chats',
-    lastEvent: 0,          // newest event time seen (for chat.since after a reconnect)
-    contacts: [],
-    search: ''
-  };
+  const S = { me: { name: '', permanent: '', primary: '' }, version: '', summaries: [], contacts: [], open: null, openIsGroup: false, openName: '', msgs: [], route: 'chats', lastEvent: 0, search: '', showSearch: false };
+
+  // ---------- theme (the app's theme button: system → light → dark) ----------
+  function applyTheme() {
+    const t = localStorage.getItem('parlons.theme') || 'system';
+    if (t === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
+  }
+  $('btnTheme').innerHTML = ic('theme');
+  $('btnTheme').addEventListener('click', () => {
+    const t = localStorage.getItem('parlons.theme') || 'system';
+    const next = t === 'system' ? 'light' : t === 'light' ? 'dark' : 'system';
+    localStorage.setItem('parlons.theme', next); applyTheme(); toast(next === 'system' ? 'Theme follows the system' : next === 'light' ? 'Light theme' : 'Dark theme');
+  });
+  applyTheme();
+  $('btnSearch').innerHTML = ic('search');
+  $('btnSearch').addEventListener('click', () => { S.showSearch = !S.showSearch; if (S.route !== 'chats') go('#chats'); else renderChats(); setTimeout(() => { const f = $('search'); if (f) f.focus(); }, 50); });
+  $('btnMore').innerHTML = ic('more');
+  $('btnMore').addEventListener('click', () => sheet('<div class="h">Parlons</div><div class="sub">Signed in as this computer, a local device of the account.</div>'
+    + '<button class="btn ghost full" id="shBrowser">Open in a browser</button><button class="btn ghost full" id="shOut">Sign out</button>', (sh) => {
+      sh.querySelector('#shBrowser').addEventListener('click', async () => { try { const r = await api('ticket'); window.open(r.url, '_blank'); } catch (e) { toast(e.message, 'err'); } closeSheet(); });
+      sh.querySelector('#shOut').addEventListener('click', async () => { try { await api('logout'); } catch (e) {} location.reload(); });
+    }));
+
+  // ---------- bottom sheets (the app's sheet vocabulary) ----------
+  function sheet(html, wire) {
+    closeSheet();
+    const back = el('<div class="sheetback" id="sheet"><div class="sheet"><div class="grip"></div>' + html + '</div></div>');
+    back.addEventListener('click', (e) => { if (e.target === back) closeSheet(); });
+    document.body.appendChild(back);
+    if (wire) wire(back);
+    return back;
+  }
+  function closeSheet() { const s = $('sheet'); if (s) s.remove(); }
 
   // ---------- routing ----------
   function go(hash) { location.hash = hash; }
   window.addEventListener('hashchange', render);
-  document.querySelectorAll('.nav button').forEach((b) => b.addEventListener('click', () => go('#' + b.dataset.route)));
-
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => go('#' + b.dataset.route)));
   function render() {
     const h = location.hash.replace(/^#/, '') || 'chats';
     const [route, arg] = h.split('/');
-    S.route = route;
-    document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('on', b.dataset.route === (route === 'chat' ? 'chats' : route)));
-    $('list').hidden = !(route === 'chats' || route === 'chat');
-    $('app').classList.toggle('open', route !== 'chats');
-    if (route === 'chat' && arg) { openChat(decodeURIComponent(arg)); }
-    else if (route === 'contacts') { S.open = null; renderContacts(); }
-    else if (route === 'devices') { S.open = null; renderDevices(); }
-    else if (route === 'node') { S.open = null; renderNode(); }
-    else if (route === 'settings') { S.open = null; renderSettings(); }
-    else { S.open = null; renderEmpty(); renderList(); }
+    if (route === 'chat' && arg) { openChat(decodeURIComponent(arg)); if (S.route !== 'chats') { S.route = 'chats'; renderChats(); } setTab('chats'); return; }
+    S.route = route; setTab(route);
+    $('app').classList.remove('chat');
+    if (route === 'contacts') renderContacts();
+    else if (route === 'devices') renderDevices();
+    else if (route === 'node') renderNode();
+    else if (route === 'settings') renderSettings();
+    else renderChats();
   }
-  function renderEmpty() {
-    $('pane').innerHTML = '';
-    $('pane').appendChild(el('<div class="empty"><div class="emptyTitle">Your account is up.</div><div class="emptyText">Pick a conversation, or add someone in Contacts.</div></div>'));
-  }
+  function setTab(route) { document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.route === route)); }
 
-  // ---------- chats list ----------
+  // ---------- Chats page ----------
   async function loadSummaries() {
     const r = await api('chat.summaries', { offset: 0, limit: 100 });
-    S.summaries = r.summaries || [];
-    S.summaries.sort((a, b) => Number(b.time || 0) - Number(a.time || 0));
-    renderList();
+    S.summaries = (r.summaries || []).sort((a, b) => Number(b.time || 0) - Number(a.time || 0));
+    if (S.route === 'chats') renderChats();
   }
-  function renderList() {
-    const box = $('listItems');
+  function renderChats() {
+    const page = $('page'); page.innerHTML = '';
+    if (S.showSearch || S.search) {
+      const f = el('<input class="search" id="search" type="search" placeholder="Search chats" autocomplete="off" value="' + esc(S.search) + '">');
+      let t = null; f.addEventListener('input', () => { S.search = f.value; clearTimeout(t); t = setTimeout(renderChatsList, 200); });
+      page.appendChild(f);
+    }
+    page.appendChild(el('<div class="convs" id="convs"></div>'));
+    const fab = el('<button class="fab" id="fab" title="New group">' + ic('newchat') + '</button>');
+    fab.addEventListener('click', newGroup);
+    page.appendChild(fab);
+    renderChatsList();
+  }
+  function renderChatsList() {
+    const box = $('convs'); if (!box) return;
     box.innerHTML = '';
     const q = S.search.trim().toLowerCase();
     let rows = S.summaries;
-    if (q) rows = rows.filter((s) => (s.name || '').toLowerCase().includes(q) || (s.last || '').toLowerCase().includes(q) || (s.peer || '').toLowerCase().includes(q));
-    if (!rows.length) {
-      box.appendChild(el('<div class="empty small">' + (q ? 'Nothing matches.' : 'No conversations yet. Add a contact and say hello.') + '</div>'));
-    }
+    if (q) rows = rows.filter((s) => (s.name || '').toLowerCase().includes(q) || (s.last || '').toLowerCase().includes(q));
+    if (!rows.length) box.appendChild(el('<div class="emptyPage">' + (q ? 'Nothing matches.' : 'No chats yet.<br>Add a contact and say hello.') + '</div>'));
     for (const s of rows) {
-      const unread = s.peer === S.open ? 0 : Number(s.unread || 0);   // the open chat is read by definition
-      const lastText = s.group && s.lastName && !s.lastMine ? s.lastName + ': ' + preview(s.last || '') : (s.lastMine ? 'You: ' : '') + preview(s.last || '');
-      const item = el('<div class="item' + (S.open === s.peer ? ' on' : '') + '">'
-        + '<div class="avatar">' + esc(initial(s.name)) + '</div>'
-        + '<div class="meta"><div class="row1"><span class="name">' + esc(s.name || s.peer) + (s.group ? ' <span class="muted small">group</span>' : '') + '</span><span class="time">' + esc(when(s.time)) + '</span></div>'
-        + '<div class="row2"><span class="last">' + esc(lastText) + '</span>' + (unread ? '<span class="badge">' + unread + '</span>' : '') + '</div></div></div>');
-      item.addEventListener('click', () => go('#chat/' + encodeURIComponent(s.peer)));
-      box.appendChild(item);
+      const unread = s.peer === S.open ? 0 : Number(s.unread || 0);
+      const last = s.last ? (s.group && s.lastName && !s.lastMine ? s.lastName + ': ' : (s.lastMine ? 'You: ' : '')) + preview(s.last) : 'no messages yet';
+      const row = el('<div class="conv' + (S.open === s.peer ? ' on' : '') + '">' + avatar(s.peer, s.name, 'l')
+        + '<div class="mid"><div class="name">' + esc(s.name || s.peer) + '</div><div class="prev">' + esc(last) + '</div></div>'
+        + '<div class="right"><div class="time">' + esc(listTime(s.time)) + '</div>' + (unread ? '<div class="badge">' + unread + '</div>' : '') + '</div></div>');
+      row.addEventListener('click', () => go('#chat/' + encodeURIComponent(s.peer)));
+      box.appendChild(row);
     }
     if (q) searchMessages(q, box);
   }
-  let searchTimer = null;
-  $('search').addEventListener('input', () => { S.search = $('search').value; clearTimeout(searchTimer); searchTimer = setTimeout(renderList, 250); });
   async function searchMessages(q, box) {
     try {
       const r = await api('chat.search', { q });
-      const msgs = r.messages || [];
-      if (!msgs.length || S.search.trim().toLowerCase() !== q) return;
-      box.appendChild(el('<div class="sectionTitle">Messages</div>'));
-      for (const m of msgs) {
-        const item = el('<div class="item"><div class="avatar">' + esc(initial(m.name)) + '</div><div class="meta"><div class="row1"><span class="name">' + esc(m.name) + '</span><span class="time">' + esc(when(m.time)) + '</span></div><div class="row2"><span class="last">' + esc((m.mine ? 'You: ' : '') + m.body) + '</span></div></div></div>');
-        item.addEventListener('click', () => go('#chat/' + encodeURIComponent(m.peer)));
-        box.appendChild(item);
+      if (S.search.trim().toLowerCase() !== q) return;
+      for (const m of (r.messages || [])) {
+        const row = el('<div class="conv">' + avatar(m.peer, m.name, 'l') + '<div class="mid"><div class="name">' + esc(m.name) + '</div><div class="prev">' + esc((m.mine ? 'You: ' : '') + m.body) + '</div></div><div class="right"><div class="time">' + esc(listTime(m.time)) + '</div></div></div>');
+        row.addEventListener('click', () => go('#chat/' + encodeURIComponent(m.peer)));
+        box.appendChild(row);
       }
-    } catch (e) { /* search is best-effort */ }
+    } catch (e) { /* best effort */ }
   }
-
-  // ---------- new group ----------
-  $('newGroup').addEventListener('click', async () => {
-    S.open = null;
-    const pane = $('pane'); pane.innerHTML = '';
+  async function newGroup() {
     let contacts = [];
     try { contacts = (await api('contacts.list', { offset: 0, limit: 200 })).contacts || []; } catch (e) { toast(e.message, 'err'); return; }
-    const card = el('<div class="screen"><div class="card"><h2>New group</h2><div class="rowline"><input id="gName" placeholder="Group name"></div><div class="pick" id="gPick"></div><div class="rowline"><button class="primary" id="gCreate">Create group</button><span class="muted small">Up to 12 members including you.</span></div></div></div>');
-    const pick = card.querySelector('#gPick');
-    if (!contacts.length) pick.appendChild(el('<div class="muted">No contacts yet.</div>'));
-    for (const c of contacts) pick.appendChild(el('<label><input type="checkbox" value="' + esc(c.key) + '"> ' + esc(c.name || c.key) + '</label>'));
-    card.querySelector('#gCreate').addEventListener('click', async () => {
-      const name = card.querySelector('#gName').value.trim();
-      const members = [...pick.querySelectorAll('input:checked')].map((i) => i.value);
-      if (!name || !members.length) { toast('A name and at least one member', 'err'); return; }
-      try { await api('group.create', { name, members }); toast('Group created'); await loadSummaries(); go('#chats'); }
-      catch (e) { toast(e.message, 'err'); }
+    const picks = contacts.map((c) => '<label><input type="checkbox" value="' + esc(c.key) + '"> ' + esc(c.name || c.key) + '</label>').join('') || '<div class="sub">No contacts yet.</div>';
+    sheet('<div class="h">New group</div><div class="sub">Up to 12 members including you.</div><div class="frow"><input class="field" id="gName" placeholder="Group name"></div><div class="pick">' + picks + '</div><button class="btn full" id="gCreate">Create group</button>', (sh) => {
+      sh.querySelector('#gCreate').addEventListener('click', async () => {
+        const name = sh.querySelector('#gName').value.trim(), members = [...sh.querySelectorAll('input:checked')].map((i) => i.value);
+        if (!name || !members.length) { toast('A name and at least one member', 'err'); return; }
+        try { await api('group.create', { name, members }); closeSheet(); toast('Group created'); await loadSummaries(); } catch (e) { toast(e.message, 'err'); }
+      });
     });
-    pane.appendChild(card);
-    $('app').classList.add('open');
-  });
+  }
 
-  // ---------- conversation ----------
-  let openSeq = 0;
+  // ---------- the chat screen ----------
+  let openSeq = 0, olderBusy = false, olderDone = false;
   async function openChat(peer) {
     const seq = ++openSeq;
-    S.open = peer;
+    S.open = peer; olderDone = false;
     const sum = S.summaries.find((s) => s.peer === peer);
     S.openIsGroup = !!(sum && sum.group);
     S.openName = (sum && sum.name) || peer;
-    renderList();
-    const pane = $('pane');
-    pane.innerHTML = '';
-    pane.appendChild(el('<div class="chatHead"><button class="ghost back" id="back">‹</button><div class="avatar">' + esc(initial(S.openName)) + '</div><div style="flex:1;min-width:0"><div class="name">' + esc(S.openName) + '</div><div class="sub" id="chatSub"></div></div><button class="ghost" id="chatInfo" title="Details">ⓘ</button></div>'));
+    renderChatsList();
+    $('app').classList.add('chat');
+    const pane = $('chatpane'); pane.innerHTML = '';
+    pane.appendChild(el('<div class="cbar"><button class="ibtn back" id="back">' + ic('back') + '</button>' + avatar(peer, S.openName, 'm')
+      + '<div class="titles"><div class="ctitle">' + esc(S.openName) + '</div><div class="csub" id="csub"></div></div>'
+      + '<button class="ibtn" id="cTheme">' + ic('theme') + '</button><button class="ibtn" id="cVideo">' + ic('videocall') + '</button><button class="ibtn" id="cCall">' + ic('call') + '</button><button class="ibtn narrow" id="cMore">' + ic('more') + '</button></div>'));
     pane.appendChild(el('<div class="msgs" id="msgs"></div>'));
-    pane.appendChild(el('<div class="compose"><input type="file" id="photoFile" accept="image/*" hidden><button class="ghost" id="photoBtn" title="Send a photo">📷</button><textarea id="draft" rows="1" placeholder="Message"></textarea><button class="primary" id="sendBtn">Send</button></div><div class="err" id="sendErr" hidden></div>'));
-    $('back').addEventListener('click', () => go('#chats'));
-    $('chatInfo').addEventListener('click', () => S.openIsGroup ? groupInfo(peer) : contactInfo(peer));
+    pane.appendChild(el('<div class="composer"><div class="ipill"><button class="ibtn" id="emojiBtn" title="Emoji">' + ic('emoji') + '</button><textarea id="draft" rows="1" placeholder="Message"></textarea>'
+      + '<input type="file" id="attachFile" hidden><button class="ibtn" id="attachBtn" title="Attach">' + ic('attach') + '</button><input type="file" id="photoFile" accept="image/*" hidden><button class="ibtn" id="photoBtn" title="Photo">' + ic('camera') + '</button></div>'
+      + '<button class="sendbtn" id="sendBtn" title="Send">' + ic('send') + '</button></div><div class="senderr" id="sendErr" hidden></div>'));
+    $('back').addEventListener('click', () => { S.open = null; $('app').classList.remove('chat'); renderChatsList(); history.replaceState(null, '', '#chats'); });
+    $('cTheme').addEventListener('click', () => $('btnTheme').click());
+    $('cVideo').addEventListener('click', () => showBanner('Video calls ring on your phone - open Parlons there to call ' + S.openName, 5000));
+    $('cCall').addEventListener('click', () => showBanner('Calls ring on your phone - open Parlons there to call ' + S.openName, 5000));
+    $('cMore').addEventListener('click', () => S.openIsGroup ? groupInfo(peer) : contactInfo(peer));
     $('sendBtn').addEventListener('click', sendDraft);
+    $('emojiBtn').addEventListener('click', () => { const d = $('draft'); d.focus(); });
     $('draft').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } });
-    $('draft').addEventListener('input', () => { const t = $('draft'); t.style.height = 'auto'; t.style.height = Math.min(160, t.scrollHeight) + 'px'; });
+    $('draft').addEventListener('input', () => { const t = $('draft'); t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; });
     $('photoBtn').addEventListener('click', () => $('photoFile').click());
-    $('photoFile').addEventListener('change', () => { const f = $('photoFile').files[0]; if (f) sendPhoto(f); $('photoFile').value = ''; });
+    $('photoFile').addEventListener('change', () => { const f = $('photoFile').files[0]; if (f) sendFile(f, true); $('photoFile').value = ''; });
+    $('attachBtn').addEventListener('click', () => $('attachFile').click());
+    $('attachFile').addEventListener('change', () => { const f = $('attachFile').files[0]; if (f) sendFile(f, false); $('attachFile').value = ''; });
     $('draft').focus();
+    subtitle(peer);
     try {
       const r = await api('chat.conversation', { peer, limit: 100 });
       if (seq !== openSeq) return;
       S.msgs = (r.messages || []).slice().sort((a, b) => Number(a.time) - Number(b.time));
       renderMsgs(true);
       api('chat.markread', { peer }).catch(() => {});
-      const s = S.summaries.find((x) => x.peer === peer); if (s) { s.unread = 0; renderList(); }
+      const s = S.summaries.find((x) => x.peer === peer); if (s) { s.unread = 0; renderChatsList(); }
     } catch (e) { toast(e.message, 'err'); }
-    $('msgs').addEventListener('scroll', () => { if ($('msgs').scrollTop < 40) loadOlder(peer); });
+    const box = $('msgs');
+    box.addEventListener('scroll', () => { if (box.scrollTop < 40) loadOlder(peer); toBottomBtn(); });
   }
-  let olderBusy = false, olderDone = false;
+  async function subtitle(peer) {
+    const sub = $('csub'); if (!sub) return;
+    try {
+      if (S.openIsGroup) { const g = await api('group.info', { id: peer }); sub.textContent = (g.members || []).length + ' member(s)' + (g.iAmAdmin ? '  ·  you are an admin' : ''); }
+      else { const c = await api('contacts.info', { key: peer }); const p = presence(c.lastSeen); sub.textContent = p || (c.address ? 'not reached yet' : 'no address yet'); sub.classList.toggle('online', p === 'online'); }
+    } catch (e) { sub.textContent = S.openIsGroup ? '' : 'not in your contacts'; }
+  }
+  function toBottomBtn() {
+    const box = $('msgs'); if (!box) return;
+    const far = box.scrollHeight - box.scrollTop - box.clientHeight > 300;
+    let b = $('toBottom');
+    if (far && !b) { b = el('<button class="tobottom" id="toBottom">' + ic('arrowdown') + '</button>'); b.addEventListener('click', () => { box.scrollTop = box.scrollHeight; }); $('chatpane').appendChild(b); }
+    if (!far && b) b.remove();
+  }
   async function loadOlder(peer) {
     if (olderBusy || olderDone || !S.msgs.length) return;
     olderBusy = true;
@@ -219,50 +281,66 @@
       const more = (r.messages || []).slice().sort((a, b) => Number(a.time) - Number(b.time));
       if (!more.length) { olderDone = true; return; }
       const box = $('msgs'), before = box.scrollHeight;
-      S.msgs = more.concat(S.msgs);
-      renderMsgs(false);
-      box.scrollTop = box.scrollHeight - before;
-    } catch (e) { /* keep what we have */ }
-    finally { olderBusy = false; }
+      S.msgs = more.concat(S.msgs); renderMsgs(false); box.scrollTop = box.scrollHeight - before;
+    } catch (e) { } finally { olderBusy = false; }
   }
-  function tick(state) {
-    if (state === 'read') return '<span class="tick read">✓✓</span>';
-    if (state === 'delivered') return '<span class="tick">✓✓</span>';
-    if (state === 'sent') return '<span class="tick">✓</span>';
-    if (state === 'failed') return '<span class="tick" title="not delivered">!</span>';
-    return '<span class="tick">…</span>';
+  // ChatActivity.ticks: ✗ failed · ✓✓ read (tick_read colour) · ✓✓ delivered · ✓ sent · ⋯ pending
+  function ticks(state) {
+    if (state === 'failed') return '✗';
+    if (state === 'read') return '<span class="read">✓✓</span>';
+    if (state === 'delivered') return '✓✓';
+    if (state === 'sent') return '✓';
+    return '⋯';
   }
+  function waveBars(hex) { const out = []; for (let i = 0; i < hex.length; i++) out.push(parseInt(hex[i], 16) / 15); return out; }
   function bubbleHtml(e) {
-    const mine = !!e.mine;
-    const m = parseMedia(e.body || '');
+    const mine = !!e.mine, m = parseMedia(e.body || '');
     let inner = '';
     if (S.openIsGroup && !mine && e.sname) inner += '<div class="sname">' + esc(e.sname) + '</div>';
     if (m) {
       const url = mediaUrl(m);
-      if (m.mime.startsWith('image/') && url) inner += '<img loading="lazy" alt="photo" src="' + esc(url) + '">';
-      else if (m.mime.startsWith('audio/') && url) inner += '<audio controls preload="none" src="' + esc(url) + '"></audio>';
-      else if (url) inner += '<a href="' + esc(url) + '" download>' + esc(preview(e.body)) + '</a>';
-      else inner += esc(preview(e.body));
-      let cap = m.caption; if (m.mime.startsWith('audio/') && cap.indexOf('|') >= 0) cap = cap.slice(0, cap.indexOf('|'));
-      if (cap && !m.mime.startsWith('audio/')) inner += '<div class="cap">' + esc(cap) + '</div>';
-    } else {
-      inner += esc(e.body || '');
-    }
-    let foot = '<span>' + esc(when(e.time)) + '</span>';
-    if (mine) foot += (S.openIsGroup && e.delivered != null ? '<span title="delivered to">' + esc(e.delivered) + '</span>' : '') + tick(e.state);
-    return '<div class="msg ' + (mine ? 'mine' : 'theirs') + '" data-id="' + esc(e.id) + '"><div class="bubble">' + inner + '<div class="foot">' + foot + '</div></div></div>';
+      if (m.mime.startsWith('image/') && url) inner += '<img class="pic" loading="lazy" alt="photo" src="' + esc(url) + '">';
+      else if (m.mime.startsWith('audio/') && url) {
+        const parts = m.caption.split('|');
+        inner += '<div class="audio" data-src="' + esc(url) + '"><button class="play" title="Play">' + ic('play') + '</button><div class="wave"><canvas data-wave="' + esc(parts[1] || '') + '"></canvas><div class="atime">' + esc(parts[0] || '') + '</div></div></div>';
+      } else if (url) inner += '<div class="body"><a href="' + esc(url) + '" download>' + esc(preview(e.body)) + '</a></div>';
+      else inner += '<div class="body">' + esc(preview(e.body)) + '</div>';
+      if (m.caption && !m.mime.startsWith('audio/')) inner += '<div class="body">' + esc(m.caption) + '</div>';
+    } else inner += '<div class="body">' + esc(e.body || '') + '</div>';
+    let meta = hhmm(e.time);
+    if (mine) meta += ' ' + (S.openIsGroup && e.delivered != null && e.state !== 'read' ? e.delivered + ' ' : '') + ticks(e.state);
+    return '<div class="mrow ' + (mine ? 'mine' : 'theirs') + '" data-id="' + esc(e.id) + '"><div class="bubble">' + inner + '<div class="meta">' + meta + '</div></div></div>';
   }
   function renderMsgs(scrollToEnd) {
     const box = $('msgs'); if (!box) return;
     const atEnd = scrollToEnd || (box.scrollHeight - box.scrollTop - box.clientHeight < 80);
     let html = '', lastDay = '';
     for (const e of S.msgs) {
-      const d = dayOf(e.time);
-      if (d !== lastDay) { html += '<div class="daysep">' + esc(new Date(Number(e.time)).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })) + '</div>'; lastDay = d; }
+      const d = dayStart(e.time);
+      if (d !== lastDay) { html += '<div class="daypill"><span>' + esc(dayLabel(e.time)) + '</span></div>'; lastDay = d; }
       html += bubbleHtml(e);
     }
     box.innerHTML = html;
+    box.querySelectorAll('canvas[data-wave]').forEach(drawWave);
+    box.querySelectorAll('.audio').forEach(wireAudio);
+    box.querySelectorAll('img.pic').forEach((img) => img.addEventListener('click', () => { const v = el('<div class="viewer"><img src="' + esc(img.src) + '"></div>'); v.addEventListener('click', () => v.remove()); document.body.appendChild(v); }));
     if (atEnd) box.scrollTop = box.scrollHeight;
+    toBottomBtn();
+  }
+  function drawWave(c) {
+    const bars = waveBars(c.dataset.wave || ''); const n = Math.max(bars.length, 24);
+    const dpr = window.devicePixelRatio || 1; const w = c.clientWidth || 160, h = 26;
+    c.width = w * dpr; c.height = h * dpr;
+    const g = c.getContext('2d'); g.scale(dpr, dpr); g.fillStyle = getComputedStyle(c).color;
+    const bw = w / n;
+    for (let i = 0; i < n; i++) { const v = bars.length ? bars[i % bars.length] : 0.3; const bh = Math.max(3, v * h); g.fillRect(i * bw + bw * 0.2, (h - bh) / 2, bw * 0.6, bh); }
+  }
+  function wireAudio(row) {
+    let a = null;
+    row.querySelector('.play').addEventListener('click', () => {
+      if (!a) { a = new Audio(row.dataset.src); a.addEventListener('ended', () => { row.querySelector('.play').innerHTML = ic('play'); }); }
+      if (a.paused) { a.play(); row.querySelector('.play').innerHTML = ic('pause'); } else { a.pause(); row.querySelector('.play').innerHTML = ic('play'); }
+    });
   }
   function upsertMsg(e) {
     const i = S.msgs.findIndex((x) => x.id === e.id);
@@ -276,266 +354,237 @@
     $('draft').value = ''; $('draft').style.height = 'auto';
     const local = { id: 'local-' + Date.now() + Math.random().toString(36).slice(2), body, mine: true, time: Date.now(), state: 'sending' };
     S.msgs.push(local); renderMsgs(true);
-    try {
-      await api('chat.send', { peer, body });
-      await reloadOpenTail(peer);
-    } catch (e) { local.state = 'failed'; renderMsgs(false); showSendErr(e.message); }
+    try { await api('chat.send', { peer, body }); await reloadOpenTail(peer); }
+    catch (e) { local.state = 'failed'; renderMsgs(false); showSendErr(e.message); }
   }
   function showSendErr(msg) { const b = $('sendErr'); if (!b) return; b.textContent = msg; b.hidden = false; setTimeout(() => { b.hidden = true; }, 6000); }
   async function reloadOpenTail(peer) {
     const r = await api('chat.conversation', { peer, limit: 30 });
-    const tail = (r.messages || []);
-    // Drop optimistic placeholders the account now has for real: same text, or any media of ours
-    // newer than the placeholder (a photo's stored body differs from the local data: preview).
-    S.msgs = S.msgs.filter((m) => !String(m.id).startsWith('local-')
-      || !tail.some((t) => t.mine && (t.body === m.body || (parseMedia(m.body) && parseMedia(t.body) && Number(t.time) >= Number(m.time) - 60000))));
+    const tail = r.messages || [];
+    S.msgs = S.msgs.filter((m) => !String(m.id).startsWith('local-') || !tail.some((t) => t.mine && (t.body === m.body || (parseMedia(m.body) && parseMedia(t.body) && Number(t.time) >= Number(m.time) - 60000))));
     for (const t of tail) { const i = S.msgs.findIndex((x) => x.id === t.id); if (i >= 0) S.msgs[i] = t; else S.msgs.push(t); }
     S.msgs.sort((a, b) => Number(a.time) - Number(b.time));
     renderMsgs(true);
   }
-  async function sendPhoto(file) {
+  async function sendFile(file, asPhoto) {
     const peer = S.open; if (!peer) return;
-    let blob = file, mime = file.type || 'image/jpeg';
-    try {
-      const bmp = await createImageBitmap(file);
-      const max = 1600, scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
-      const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-      blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85)); mime = 'image/jpeg';
-    } catch (e) { /* not decodable as an image here: send as is */ }
+    let blob = file, mime = file.type || 'application/octet-stream';
+    if (asPhoto || mime.startsWith('image/')) {
+      try {
+        const bmp = await createImageBitmap(file);
+        const max = 1600, scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+        blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85)); mime = 'image/jpeg';
+      } catch (e) { /* not an image after all: send as is */ }
+    }
     const bytes = new Uint8Array(await blob.arrayBuffer());
     if (bytes.length > 16 * 1024 * 1024) { showSendErr('Too big: 16 MB is the most a message can carry'); return; }
-    const local = { id: 'local-' + Date.now(), body: MEDIA_MARK + mime + 'data:' + mime + ';base64,' + b64(bytes) + '', mine: true, time: Date.now(), state: 'sending' };
+    const caption = mime.startsWith('image/') ? '' : (file.name || '');
+    const local = { id: 'local-' + Date.now(), body: MEDIA_MARK + mime + '\u0001data:' + mime + ';base64,' + b64(bytes) + '\u0001' + caption, mine: true, time: Date.now(), state: 'sending' };
     S.msgs.push(local); renderMsgs(true);
-    const tid = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    const CH = 48 * 1024;
+    const tid = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), CH = 48 * 1024;
     try {
       for (let off = 0; off < bytes.length; off += CH) {
         const last = off + CH >= bytes.length;
         const p = { tid, off, data: b64(bytes.subarray(off, Math.min(bytes.length, off + CH))), last };
-        if (last) { p.peer = peer; p.group = S.openIsGroup; p.mime = mime; p.caption = ''; }
+        if (last) { p.peer = peer; p.group = S.openIsGroup; p.mime = mime; p.caption = caption; }
         await api('media.up', p);
       }
-      toast('Photo sent - publishing to the relays');
       setTimeout(() => reloadOpenTail(peer).catch(() => {}), 2500);
       setTimeout(() => reloadOpenTail(peer).catch(() => {}), 12000);
     } catch (e) { local.state = 'failed'; renderMsgs(false); showSendErr(e.message); }
   }
   function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 
+  // ---------- contact / group sheets ----------
   async function contactInfo(key) {
-    let c;
-    try { c = await api('contacts.info', { key }); } catch (e) { toast(e.message, 'err'); return; }
-    const pane = $('pane'); pane.innerHTML = '';
-    const card = el('<div class="screen"><button class="ghost" id="ciBack">‹ Back to the chat</button><div class="card"><h2>Contact</h2><div class="kv">'
-      + '<span class="k">Name</span><span class="v"><input id="ciName" value="' + esc(c.name || '') + '"> <button id="ciRename">Rename</button></span>'
-      + '<span class="k">Key</span><span class="v mono">' + esc(c.key || key) + '</span>'
-      + '<span class="k">Address</span><span class="v mono">' + esc(c.address || '') + '</span>'
-      + '<span class="k">Last seen</span><span class="v">' + esc(when(c.lastSeen)) + '</span>'
-      + '</div><div class="rowline"><button id="ciResolve">Re-resolve their address</button><button class="danger" id="ciRemove">Remove contact</button></div></div></div>');
-    card.querySelector('#ciBack').addEventListener('click', () => openChat(key));
-    card.querySelector('#ciRename').addEventListener('click', async () => { try { await api('contacts.rename', { key, name: card.querySelector('#ciName').value.trim() }); toast('Renamed'); await loadSummaries(); } catch (e) { toast(e.message, 'err'); } });
-    card.querySelector('#ciResolve').addEventListener('click', async () => { try { const r = await api('contacts.resolve', { key }); toast(r.updated ? 'Address refreshed' : 'No fresher record'); } catch (e) { toast(e.message, 'err'); } });
-    card.querySelector('#ciRemove').addEventListener('click', async () => { if (!confirm('Remove this contact?')) return; try { await api('contacts.remove', { key }); toast('Removed'); await loadSummaries(); go('#chats'); } catch (e) { toast(e.message, 'err'); } });
-    pane.appendChild(card);
+    let c; try { c = await api('contacts.info', { key }); } catch (e) { toast(e.message, 'err'); return; }
+    sheet('<div style="display:flex;align-items:center;gap:12px">' + avatar(key, c.name, 'l') + '<div><div class="h">' + esc(c.name || '(no name)') + '</div><div class="sub">' + esc(presence(c.lastSeen) || 'not reached yet') + '</div></div></div>'
+      + '<div class="inner"><div class="sub">Key</div><div class="mono whole">' + esc(c.key || key) + '</div></div>'
+      + '<div class="inner"><div class="sub">Address</div><div class="mono whole">' + esc(c.address || '') + '</div></div>'
+      + '<div class="frow"><input class="field" id="ciName" value="' + esc(c.name || '') + '" placeholder="Name"><button class="btn sm" id="ciRename">Rename</button></div>'
+      + '<button class="btn ghost full" id="ciChat">Open chat</button><button class="btn ghost full" id="ciResolve">Re-resolve their address</button><button class="btn ghost full danger" id="ciRemove">Remove contact</button>', (sh) => {
+        sh.querySelector('#ciChat').addEventListener('click', () => { closeSheet(); go('#chat/' + encodeURIComponent(key)); });
+        sh.querySelector('#ciRename').addEventListener('click', async () => { try { await api('contacts.rename', { key, name: sh.querySelector('#ciName').value.trim() }); toast('Renamed'); closeSheet(); await loadSummaries(); if (S.route === 'contacts') renderContacts(); if (S.open === key) openChat(key); } catch (e) { toast(e.message, 'err'); } });
+        sh.querySelector('#ciResolve').addEventListener('click', async () => { try { const r = await api('contacts.resolve', { key }); toast(r.updated ? 'Address refreshed' : 'No fresher record'); } catch (e) { toast(e.message, 'err'); } });
+        sh.querySelector('#ciRemove').addEventListener('click', async () => { if (!confirm('Remove this contact?')) return; try { await api('contacts.remove', { key }); closeSheet(); toast('Removed'); await loadSummaries(); if (S.open === key) $('back').click(); if (S.route === 'contacts') renderContacts(); } catch (e) { toast(e.message, 'err'); } });
+      });
   }
   async function groupInfo(id) {
-    let g;
-    try { g = await api('group.info', { id }); } catch (e) { toast(e.message, 'err'); return; }
-    const pane = $('pane'); pane.innerHTML = '';
-    const rows = (g.members || []).map((m) => '<tr><td>' + esc(m.name || '') + (m.me ? ' (you)' : '') + (m.admin ? ' · admin' : '') + '</td><td class="mono">' + esc(m.key) + '</td></tr>').join('');
-    const card = el('<div class="screen"><button class="ghost" id="giBack">‹ Back to the chat</button><div class="card"><h2>Group</h2><div class="rowline"><input id="giName" value="' + esc(g.name || '') + '"' + (g.iAmAdmin ? '' : ' disabled') + '>' + (g.iAmAdmin ? '<button id="giRename">Rename</button>' : '<span class="muted small">Only an admin can change the group.</span>') + '</div><table class="t">' + rows + '</table></div></div>');
-    card.querySelector('#giBack').addEventListener('click', () => openChat(id));
-    const rn = card.querySelector('#giRename');
-    if (rn) rn.addEventListener('click', async () => { try { await api('group.update', { id, name: card.querySelector('#giName').value.trim() }); toast('Renamed'); await loadSummaries(); } catch (e) { toast(e.message, 'err'); } });
-    pane.appendChild(card);
+    let g; try { g = await api('group.info', { id }); } catch (e) { toast(e.message, 'err'); return; }
+    const rows = (g.members || []).map((m) => '<div class="rowitem">' + avatar(m.key, m.name, 's') + '<div class="mid"><div class="n">' + esc(m.name || '') + (m.me ? ' (you)' : '') + (m.admin ? ' · admin' : '') + '</div><div class="s mono">' + esc(m.key) + '</div></div></div>').join('');
+    sheet('<div class="h">' + esc(g.name || '') + '</div><div class="sub">' + (g.members || []).length + ' member(s)</div>'
+      + (g.iAmAdmin ? '<div class="frow"><input class="field" id="giName" value="' + esc(g.name || '') + '"><button class="btn sm" id="giRename">Rename</button></div>' : '<div class="sub">Only an admin can change the group.</div>')
+      + '<div style="margin-top:8px">' + rows + '</div>', (sh) => {
+        const rn = sh.querySelector('#giRename');
+        if (rn) rn.addEventListener('click', async () => { try { await api('group.update', { id, name: sh.querySelector('#giName').value.trim() }); toast('Renamed'); closeSheet(); await loadSummaries(); openChat(id); } catch (e) { toast(e.message, 'err'); } });
+      });
   }
 
-  // ---------- contacts ----------
+  // ---------- Contacts page (page_contacts: identity card, search, rows) ----------
   async function renderContacts() {
-    const pane = $('pane'); pane.innerHTML = '';
-    const screen = el('<div class="screen"></div>');
-    pane.appendChild(screen);
-    const add = el('<div class="card"><h2>Add a contact</h2><div class="rowline"><input id="addAddr" placeholder="Paste their address (MAX#… or Mx…)"><button class="primary" id="addBtn">Add</button></div><div class="muted small">They get an introduction; the chat opens once they accept.</div></div>');
-    add.querySelector('#addBtn').addEventListener('click', async () => {
-      const address = add.querySelector('#addAddr').value.trim(); if (!address) return;
-      try { await api('contacts.add', { address }); toast('Introduction sent'); add.querySelector('#addAddr').value = ''; setTimeout(renderContacts, 1500); } catch (e) { toast(e.message, 'err'); }
-    });
-    screen.appendChild(add);
-    const mine = el('<div class="card"><h2>My address</h2><div class="muted small">Share it; it never changes.</div><div class="qr" id="myQr"></div><div class="mono whole" id="myAddr">' + esc(S.me.permanent) + '</div><div class="rowline"><button id="copyAddr">Copy address</button></div></div>');
-    mine.querySelector('#copyAddr').addEventListener('click', () => copy(S.me.permanent));
-    screen.appendChild(mine);
-    drawQr(mine.querySelector('#myQr'), S.me.permanent);
-    const list = el('<div class="card"><h2>Contacts</h2><table class="t" id="cTable"></table></div>');
-    screen.appendChild(list);
-    try {
-      const r = await api('contacts.list', { offset: 0, limit: 200 });
-      S.contacts = r.contacts || [];
-      const t = list.querySelector('#cTable');
-      if (!S.contacts.length) t.innerHTML = '<tr><td class="muted">No contacts yet.</td></tr>';
-      for (const c of S.contacts) {
-        const tr = el('<tr><td>' + esc(c.name || '(no name)') + '<br><span class="muted small">' + esc(when(c.lastSeen)) + '</span></td><td><span class="mono">' + esc(c.key) + '</span><div class="rowline"><button class="small" data-act="chat">Chat</button><button class="small" data-act="info">Details</button></div></td></tr>');
-        tr.querySelector('[data-act=chat]').addEventListener('click', () => go('#chat/' + encodeURIComponent(c.key)));
-        tr.querySelector('[data-act=info]').addEventListener('click', () => { S.open = c.key; contactInfo(c.key); });
-        t.appendChild(tr);
+    const page = $('page'); page.innerHTML = '';
+    const body = el('<div class="pagebody"></div>'); page.appendChild(body);
+    const idc = el('<div class="card"><div style="display:flex;align-items:center;gap:12px">' + avatar(S.me.permanent, S.me.name, 'l') + '<div style="flex:1;min-width:0"><div class="h">' + esc(S.me.name || 'Your account') + '</div><div class="sub">Your address never changes. Share it as a QR or copy it.</div></div></div>'
+      + '<div class="frow"><button class="btn sm" id="myQrBtn">' + ic('qr') + 'Show QR</button><button class="btn ghost sm" id="myCopy">' + ic('copy') + 'Copy address</button></div><div class="qr" id="myQr" hidden></div></div>');
+    idc.querySelector('#myCopy').addEventListener('click', () => copy(S.me.permanent));
+    idc.querySelector('#myQrBtn').addEventListener('click', () => { const q = idc.querySelector('#myQr'); q.hidden = !q.hidden; if (!q.hidden) drawQr(q, S.me.permanent); });
+    body.appendChild(idc);
+    const add = el('<div class="card"><div class="h">Add a contact</div><div class="sub">Paste their address (MAX#… or Mx…). They get an introduction; the chat opens once they accept.</div><div class="frow"><input class="field" id="addAddr" placeholder="Paste an address"><button class="btn sm" id="addBtn">' + ic('personadd') + 'Add</button></div></div>');
+    add.querySelector('#addBtn').addEventListener('click', async () => { const address = add.querySelector('#addAddr').value.trim(); if (!address) return; try { await api('contacts.add', { address }); toast('Introduction sent'); add.querySelector('#addAddr').value = ''; setTimeout(renderContacts, 1500); } catch (e) { toast(e.message, 'err'); } });
+    body.appendChild(add);
+    const list = el('<div class="card"><input class="field" id="cSearch" placeholder="Search contacts" style="margin-bottom:6px"><div id="cRows"></div></div>');
+    body.appendChild(list);
+    try { S.contacts = (await api('contacts.list', { offset: 0, limit: 200 })).contacts || []; } catch (e) { toast(e.message, 'err'); }
+    const draw = () => {
+      const q = list.querySelector('#cSearch').value.trim().toLowerCase();
+      const rows = list.querySelector('#cRows'); rows.innerHTML = '';
+      const cs = S.contacts.filter((c) => !q || (c.name || '').toLowerCase().includes(q) || (c.key || '').toLowerCase().includes(q));
+      if (!cs.length) rows.innerHTML = '<div class="sub">' + (q ? 'Nothing matches.' : 'No contacts yet.') + '</div>';
+      for (const c of cs) {
+        const p = presence(c.lastSeen);
+        const r = el('<div class="rowitem" style="cursor:pointer">' + avatar(c.key, c.name, 'm') + '<div class="mid"><div class="n">' + esc(c.name || '(no name)') + '</div><div class="s">' + esc(p || 'not reached yet') + '</div></div>' + (p === 'online' ? '<span class="spill ok"><span class="dot"></span>online</span>' : '') + '</div>');
+        r.addEventListener('click', () => contactInfo(c.key));
+        rows.appendChild(r);
       }
-    } catch (e) { toast(e.message, 'err'); }
+    };
+    list.querySelector('#cSearch').addEventListener('input', draw); draw();
   }
-  function drawQr(host, text) {
-    if (!text) { host.textContent = ''; return; }
-    try { const q = qrcode(0, 'M'); q.addData(text); q.make(); host.innerHTML = q.createImgTag(3, 0); } catch (e) { host.textContent = ''; }
-  }
+  function drawQr(host, text) { if (!text) { host.textContent = ''; return; } try { const q = qrcode(0, 'M'); q.addData(text); q.make(); host.innerHTML = q.createImgTag(3, 0); } catch (e) { host.textContent = ''; } }
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); toast('Copied'); }
     catch (e) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied'); }
   }
 
-  // ---------- devices ----------
+  // ---------- Devices page ----------
   async function renderDevices() {
-    const pane = $('pane'); pane.innerHTML = '';
-    const screen = el('<div class="screen"></div>'); pane.appendChild(screen);
-    const pair = el('<div class="card"><h2>Pair a phone</h2><p class="muted small" id="invText">No pairing code is outstanding.</p><div class="qr" id="invQr"></div><div class="mono whole" id="invTxt"></div><div class="rowline"><button class="primary" id="newCode">New pairing code</button><button id="copyInv" hidden>Copy invite</button></div></div>');
-    screen.appendChild(pair);
-    const devs = el('<div class="card"><h2>Devices</h2><table class="t" id="devTable"></table></div>');
-    screen.appendChild(devs);
+    const page = $('page'); page.innerHTML = '';
+    const body = el('<div class="pagebody"></div>'); page.appendChild(body);
+    const pair = el('<div class="card"><div class="h">Pair a phone</div><div class="sub" id="invText">No pairing code is outstanding.</div><div class="qr" id="invQr" hidden></div><div class="mono whole" id="invTxt" style="font-size:11px;margin-top:6px"></div><div class="frow"><button class="btn sm" id="newCode">New pairing code</button><button class="btn ghost sm" id="copyInv" hidden>' + ic('copy') + 'Copy invite</button></div></div>');
+    body.appendChild(pair);
+    const devs = el('<div class="card"><div class="h">Devices</div><div id="devRows"></div></div>'); body.appendChild(devs);
     async function refreshInvite() {
       try {
         const inv = await apiGet('invite');
-        if (inv.invite) {
-          pair.querySelector('#invText').textContent = 'Scan this with the Parlons app on your phone, or paste the text (the code half works once):';
-          drawQr(pair.querySelector('#invQr'), inv.invite);
-          pair.querySelector('#invTxt').textContent = inv.invite;
-          pair.querySelector('#copyInv').hidden = false;
-          pair.querySelector('#copyInv').onclick = () => copy(inv.invite);
-        } else {
-          pair.querySelector('#invText').textContent = 'No pairing code is outstanding.';
-          pair.querySelector('#invQr').innerHTML = ''; pair.querySelector('#invTxt').textContent = ''; pair.querySelector('#copyInv').hidden = true;
-        }
-      } catch (e) { /* shown on the next refresh */ }
+        const q = pair.querySelector('#invQr');
+        if (inv.invite) { pair.querySelector('#invText').textContent = 'Scan this with the Parlons app on your phone, or paste the text. The code half works once.'; q.hidden = false; drawQr(q, inv.invite); pair.querySelector('#invTxt').textContent = inv.invite; pair.querySelector('#copyInv').hidden = false; pair.querySelector('#copyInv').onclick = () => copy(inv.invite); }
+        else { pair.querySelector('#invText').textContent = 'No pairing code is outstanding.'; q.hidden = true; pair.querySelector('#invTxt').textContent = ''; pair.querySelector('#copyInv').hidden = true; }
+      } catch (e) { }
     }
     async function refreshDevices() {
       try {
-        const d = await api('pair.list');
-        const t = devs.querySelector('#devTable'); t.innerHTML = '';
+        const d = await api('pair.list'); const rows = devs.querySelector('#devRows'); rows.innerHTML = '';
         for (const dev of (d.authorized || [])) {
-          const tr = el('<tr><td>' + (dev.local ? 'this computer' : 'paired') + '</td><td>' + esc(dev.label) + '<br><span class="mono">' + esc(dev.key) + '</span><div class="rowline"><button class="danger small" data-k="' + esc(dev.key) + '">Revoke</button></div></td></tr>');
-          tr.querySelector('button').addEventListener('click', async () => { if (!confirm('Revoke this device? It loses access to the account.')) return; try { await api('pair.revoke', { device: dev.key }); toast('Revoked'); refreshDevices(); } catch (e) { toast(e.message, 'err'); } });
-          t.appendChild(tr);
+          const r = el('<div class="rowitem"><div class="mid"><div class="n">' + esc(dev.label) + (dev.local ? ' <span class="spill">this computer</span>' : '') + '</div><div class="s mono">' + esc(dev.key) + '</div></div><button class="btn ghost sm danger">Revoke</button></div>');
+          r.querySelector('button').addEventListener('click', async () => { if (!confirm('Revoke this device? It loses access to the account.')) return; try { await api('pair.revoke', { device: dev.key }); toast('Revoked'); refreshDevices(); } catch (e) { toast(e.message, 'err'); } });
+          rows.appendChild(r);
         }
         for (const k of (d.pending || [])) {
-          const tr = el('<tr><td>waiting</td><td><span class="mono">' + esc(k) + '</span><div class="rowline"><button class="primary small">Approve</button></div></td></tr>');
-          tr.querySelector('button').addEventListener('click', async () => { try { await api('pair.approve', { device: k }); toast('Approved'); refreshDevices(); } catch (e) { toast(e.message, 'err'); } });
-          t.appendChild(tr);
+          const r = el('<div class="rowitem"><div class="mid"><div class="n">Waiting for approval</div><div class="s mono">' + esc(k) + '</div></div><button class="btn sm">Approve</button></div>');
+          r.querySelector('button').addEventListener('click', async () => { try { await api('pair.approve', { device: k }); toast('Approved'); refreshDevices(); } catch (e) { toast(e.message, 'err'); } });
+          rows.appendChild(r);
         }
-        if (!t.children.length) t.innerHTML = '<tr><td class="muted">none</td></tr>';
+        if (!rows.children.length) rows.innerHTML = '<div class="sub">none</div>';
       } catch (e) { toast(e.message, 'err'); }
     }
     pair.querySelector('#newCode').addEventListener('click', async () => { try { await api('pair.newcode'); toast('New code minted'); setTimeout(refreshInvite, 900); } catch (e) { toast(e.message, 'err'); } });
     refreshInvite(); refreshDevices();
   }
 
-  // ---------- node ----------
+  // ---------- Node page ----------
   async function renderNode() {
-    const pane = $('pane'); pane.innerHTML = '';
-    const screen = el('<div class="screen"></div>'); pane.appendChild(screen);
+    const page = $('page'); page.innerHTML = '';
+    const body = el('<div class="pagebody"></div>'); page.appendChild(body);
     let st = {}, fig = {};
     try { st = await api('node.status'); } catch (e) { toast(e.message, 'err'); }
-    try { fig = await api('node.figures'); } catch (e) { /* cloud without figures */ }
+    try { fig = await api('node.figures'); } catch (e) { }
     const up = Number(st.uptime || 0), h = Math.floor(up / 3600000), m = Math.floor((up % 3600000) / 60000);
-    screen.appendChild(el('<div class="card"><h2>Account</h2><div class="kv">'
-      + '<span class="k">Name</span><span class="v">' + esc(st.name) + '</span>'
-      + '<span class="k">Version</span><span class="v">' + esc(st.version) + '</span>'
-      + '<span class="k">Up</span><span class="v">' + h + ' h ' + m + ' min</span>'
-      + '<span class="k">Relays attached</span><span class="v">' + esc(st.hosts) + '</span>'
-      + '<span class="k">Own relay</span><span class="v">' + (st.relayOn ? 'on' : 'off') + (fig.ownRelay ? ' · ' + esc(fig.ownRelay) + (fig.ownRelayVerified ? ' ✓' : '') : '') + '</span>'
-      + '<span class="k">Mesh peers</span><span class="v">' + esc(st.meshPeers) + '</span>'
-      + '<span class="k">Paired devices</span><span class="v">' + esc(st.pairedDevices) + '</span>'
-      + '<span class="k">Permanent address</span><span class="v mono">' + esc(st.permanent) + '</span>'
-      + (fig.directAddress ? '<span class="k">Direct address</span><span class="v mono">' + esc(fig.directAddress) + '</span>' : '')
-      + '<span class="k">Mailbox / outbox</span><span class="v">' + esc(fig.mailboxHeld == null ? '' : fig.mailboxHeld) + ' / ' + esc(fig.outbox == null ? '' : fig.outbox) + '</span>'
-      + '</div></div>'));
-    const hosts = el('<div class="card"><h2>Relays</h2><table class="t" id="hostTable"></table><div class="rowline"><input id="hostAdd" placeholder="host:port to attach, or a relay QR text"><button id="hostAddBtn">Add</button></div><label class="rowline"><input type="checkbox" id="builtin"' + (fig.builtin ? ' checked' : '') + '> Use the built-in relay list as one seed source</label></div>');
-    const ht = hosts.querySelector('#hostTable');
+    const anchor = (st.permanent || '').split('@').pop();
+    body.appendChild(el('<div class="card"><div class="ctitle2">Account</div>'
+      + '<div class="metric"><span class="k">Name</span><span class="v">' + esc(st.name) + '</span></div>'
+      + '<div class="metric"><span class="k">Version</span><span class="v">' + esc(st.version) + '</span></div>'
+      + '<div class="metric"><span class="k">Up</span><span class="v">' + h + ' h ' + m + ' min</span></div>'
+      + '<div class="metric"><span class="k">Relays attached</span><span class="v">' + esc(st.hosts) + '</span></div>'
+      + '<div class="metric"><span class="k">Own relay</span><span class="v">' + (st.relayOn ? 'on' : 'off') + (fig.ownRelay ? ' · ' + esc(fig.ownRelay) + (fig.ownRelayVerified ? ' ✓' : '') : '') + '</span></div>'
+      + '<div class="metric"><span class="k">Mesh peers</span><span class="v">' + esc(st.meshPeers) + '</span></div>'
+      + '<div class="metric"><span class="k">Paired devices</span><span class="v">' + esc(st.pairedDevices) + '</span></div>'
+      + '<div class="metric"><span class="k">Mailbox / outbox</span><span class="v">' + esc(fig.mailboxHeld == null ? '' : fig.mailboxHeld) + ' / ' + esc(fig.outbox == null ? '' : fig.outbox) + '</span></div>'
+      + '<div class="inner"><div class="sub">Permanent address · reaches you through relay ' + esc(anchor) + ' (the directory anchor); your own relay takes over when you contribute</div><div class="mono whole" style="font-size:11px;margin-top:4px">' + esc(st.permanent) + '</div></div>'
+      + (fig.directAddress ? '<div class="inner"><div class="sub">Direct address</div><div class="mono whole" style="font-size:11px">' + esc(fig.directAddress) + '</div></div>' : '') + '</div>'));
+    const hosts = el('<div class="card"><div class="ctitle2">Relays</div><div id="hostRows"></div><div class="frow"><input class="field" id="hostAdd" placeholder="host:port, or a relay QR text"><button class="btn sm" id="hostAddBtn">Add</button></div><div class="sw"><div class="lbl">Use the built-in relay list<small>One seed source among several; switch it off once you have relays of your own.</small></div><button class="switch' + (fig.builtin ? ' on' : '') + '" id="builtin"></button></div></div>');
+    const hr = hosts.querySelector('#hostRows');
     for (const hh of (fig.hosts || [])) {
-      const tr = el('<tr><td>' + (hh.connected ? '● connected' : '○ not attached') + '</td><td><span class="mono">' + esc(hh.host) + '</span>' + (hh.builtin ? ' <span class="muted small">built-in</span>' : ' <button class="small danger" data-h="' + esc(hh.host) + '">Remove</button>') + '</td></tr>');
-      const rb = tr.querySelector('button'); if (rb) rb.addEventListener('click', async () => { try { await api('node.hosts', { remove: hh.host }); toast('Detached'); renderNode(); } catch (e) { toast(e.message, 'err'); } });
-      ht.appendChild(tr);
+      const r = el('<div class="rowitem"><span class="spill' + (hh.connected ? ' ok' : '') + '"><span class="dot"></span>' + (hh.connected ? 'connected' : 'not attached') + '</span><div class="mid"><div class="s mono">' + esc(hh.host) + '</div></div>' + (hh.builtin ? '<span class="spill">built-in</span>' : '<button class="btn ghost sm danger">Remove</button>') + '</div>');
+      const rb = r.querySelector('button'); if (rb) rb.addEventListener('click', async () => { try { await api('node.hosts', { remove: hh.host }); toast('Detached'); renderNode(); } catch (e) { toast(e.message, 'err'); } });
+      hr.appendChild(r);
     }
     hosts.querySelector('#hostAddBtn').addEventListener('click', async () => { const v = hosts.querySelector('#hostAdd').value.trim(); if (!v) return; try { await api('node.hosts', { add: v }); toast('Connecting…'); setTimeout(renderNode, 1500); } catch (e) { toast(e.message, 'err'); } });
-    hosts.querySelector('#builtin').addEventListener('change', async (ev) => { try { await api('node.hosts', { builtin: ev.target.checked }); toast(ev.target.checked ? 'Built-in list on' : 'Built-in list off'); } catch (e) { toast(e.message, 'err'); renderNode(); } });
-    screen.appendChild(hosts);
-    const mls = el('<div class="card"><h2>Directory anchor</h2><div class="muted small">Where your permanent address resolves. Pinning keeps it on one relay you trust; clear lets the account pick.</div><div class="rowline"><button id="mlsPin">Pin the best attached relay</button><button id="mlsClear">Clear pin</button><button id="mlsRepub">Republish now</button></div><div class="mono whole" id="mlsInfo"></div></div>');
+    hosts.querySelector('#builtin').addEventListener('click', async (ev) => { const on = !ev.currentTarget.classList.contains('on'); try { await api('node.hosts', { builtin: on }); ev.currentTarget.classList.toggle('on', on); toast(on ? 'Built-in list on' : 'Built-in list off'); } catch (e) { toast(e.message, 'err'); } });
+    body.appendChild(hosts);
+    const mls = el('<div class="card"><div class="ctitle2">Directory anchor</div><div class="sub">Where your permanent address resolves. Pin it to one relay you trust, or let the account choose.</div><div class="frow"><button class="btn ghost sm" id="mlsPin">Pin best relay</button><button class="btn ghost sm" id="mlsClear">Clear</button><button class="btn ghost sm" id="mlsRepub">Republish</button></div><div class="mono whole" id="mlsInfo" style="font-size:11px;margin-top:6px"></div></div>');
     async function mlsDo(action) { try { const r = await api('node.mls', { action }); mls.querySelector('#mlsInfo').textContent = (r.pinned ? 'pinned: ' : 'auto: ') + (r.mls || ''); toast('Done'); } catch (e) { toast(e.message, 'err'); } }
-    mls.querySelector('#mlsPin').addEventListener('click', () => mlsDo('pin'));
-    mls.querySelector('#mlsClear').addEventListener('click', () => mlsDo('clear'));
-    mls.querySelector('#mlsRepub').addEventListener('click', () => mlsDo('republish'));
-    screen.appendChild(mls);
-    const log = el('<div class="card"><h2>Log</h2><div class="log" id="nodeLog">…</div><div class="rowline"><button id="logRefresh">Refresh</button><button id="logClear">Clear</button></div></div>');
+    mls.querySelector('#mlsPin').addEventListener('click', () => mlsDo('pin')); mls.querySelector('#mlsClear').addEventListener('click', () => mlsDo('clear')); mls.querySelector('#mlsRepub').addEventListener('click', () => mlsDo('republish'));
+    body.appendChild(mls);
+    const log = el('<div class="card"><div class="ctitle2">Log</div><div class="log" id="nodeLog">…</div><div class="frow"><button class="btn ghost sm" id="logRefresh">Refresh</button><button class="btn ghost sm" id="logClear">Clear</button></div></div>');
     async function loadLog(clear) { try { const r = await api('node.log', clear ? { clear: true } : {}); log.querySelector('#nodeLog').textContent = (r.lines || []).join('\n') || '(empty)'; } catch (e) { toast(e.message, 'err'); } }
-    log.querySelector('#logRefresh').addEventListener('click', () => loadLog(false));
-    log.querySelector('#logClear').addEventListener('click', () => loadLog(true));
-    screen.appendChild(log);
-    loadLog(false);
+    log.querySelector('#logRefresh').addEventListener('click', () => loadLog(false)); log.querySelector('#logClear').addEventListener('click', () => loadLog(true));
+    body.appendChild(log); loadLog(false);
   }
 
-  // ---------- settings ----------
+  // ---------- Settings page ----------
   async function renderSettings() {
-    const pane = $('pane'); pane.innerHTML = '';
-    const screen = el('<div class="screen"></div>'); pane.appendChild(screen);
-    let s = {};
-    try { s = await api('settings.get'); } catch (e) { /* defaults */ }
-    const name = el('<div class="card"><h2>Your name</h2><div class="muted small">What your contacts see.</div><div class="rowline"><input id="setName" value="' + esc(S.me.name) + '"><button class="primary" id="saveName">Save</button></div></div>');
-    name.querySelector('#saveName').addEventListener('click', async () => { const v = name.querySelector('#setName').value.trim(); if (!v) return; try { await api('identity.setname', { name: v }); S.me.name = v; $('meName').textContent = v; toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
-    screen.appendChild(name);
-    const rr = el('<div class="card"><h2>Privacy</h2><label class="rowline"><input type="checkbox" id="rr"' + (s.readReceipts ? ' checked' : '') + '> Send read receipts (your contacts see when you have read their messages)</label></div>');
-    rr.querySelector('#rr').addEventListener('change', async (ev) => { try { await api('settings.set', { readReceipts: ev.target.checked }); toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
-    screen.appendChild(rr);
-    const ab = el('<div class="card"><h2>This panel</h2><div class="muted small">Signed in as this computer, a local device of the account. The seed, the wallet and the node console stay on your paired phones and the command line.</div><div class="rowline"><button id="openBrowser">Open in a browser</button><button id="signOut">Sign out</button></div><div class="mono whole" id="ticketOut"></div></div>');
-    ab.querySelector('#openBrowser').addEventListener('click', async () => { try { const r = await api('ticket'); ab.querySelector('#ticketOut').textContent = r.url; try { window.open(r.url, '_blank'); } catch (e) {} } catch (e) { toast(e.message, 'err'); } });
+    const page = $('page'); page.innerHTML = '';
+    const body = el('<div class="pagebody"></div>'); page.appendChild(body);
+    let s = {}; try { s = await api('settings.get'); } catch (e) { }
+    const name = el('<div class="card"><div class="ctitle2">Profile</div><div class="h">Your name</div><div class="sub">What your contacts see.</div><div class="frow"><input class="field" id="setName" value="' + esc(S.me.name) + '"><button class="btn sm" id="saveName">Save</button></div></div>');
+    name.querySelector('#saveName').addEventListener('click', async () => { const v = name.querySelector('#setName').value.trim(); if (!v) return; try { await api('identity.setname', { name: v }); S.me.name = v; toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
+    body.appendChild(name);
+    const priv = el('<div class="card"><div class="ctitle2">Privacy</div><div class="sw"><div class="lbl">Read receipts<small>Your contacts see when you have read their messages.</small></div><button class="switch' + (s.readReceipts ? ' on' : '') + '" id="rr"></button></div></div>');
+    priv.querySelector('#rr').addEventListener('click', async (ev) => { const on = !ev.currentTarget.classList.contains('on'); try { await api('settings.set', { readReceipts: on }); ev.currentTarget.classList.toggle('on', on); toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
+    body.appendChild(priv);
+    const th = el('<div class="card"><div class="ctitle2">Appearance</div><div class="sub">Theme follows the button in the top bar: system, light, dark.</div></div>');
+    body.appendChild(th);
+    const ab = el('<div class="card"><div class="ctitle2">This panel</div><div class="sub">Signed in as this computer, a local device of the account. The seed, the wallet and the node console stay on your paired phones and the command line.</div><div class="frow"><button class="btn ghost sm" id="openBrowser">Open in a browser</button><button class="btn ghost sm" id="signOut">Sign out</button></div><div class="sub" style="margin-top:10px">Parlons ' + esc(S.version) + ' · Powered by Maxima</div></div>');
+    ab.querySelector('#openBrowser').addEventListener('click', async () => { try { const r = await api('ticket'); window.open(r.url, '_blank'); } catch (e) { toast(e.message, 'err'); } });
     ab.querySelector('#signOut').addEventListener('click', async () => { try { await api('logout'); } catch (e) {} location.reload(); });
-    screen.appendChild(ab);
+    body.appendChild(ab);
+  }
+
+  async function refreshPill() {
+    try { const st = await api('node.status'); S.version = st.version || ''; $('ver').textContent = S.version ? 'v' + S.version : ''; const n = Number(st.hosts || 0); setState(n + (n === 1 ? ' host' : ' hosts'), n > 0 ? 'ok' : 'bad'); }
+    catch (e) { setState('connected', 'ok'); }
   }
 
   // ---------- live events ----------
-  let es = null, reconnectTimer = null;
+  let es = null;
   function listen() {
     if (es) { try { es.close(); } catch (e) {} }
     es = new EventSource('/events');
-    es.addEventListener('hello', () => { setState('connected'); catchUp(); });
-    es.addEventListener('push', (ev) => {
-      let e; try { e = JSON.parse(ev.data); } catch (x) { return; }
-      handleEvent(e);
-    });
-    es.onerror = () => { setState('reconnecting…', true); };
+    es.addEventListener('hello', () => { refreshPill(); catchUp(); });
+    es.addEventListener('push', (ev) => { let e; try { e = JSON.parse(ev.data); } catch (x) { return; } handleEvent(e); });
+    es.onerror = () => { setState('reconnecting…', 'bad'); };
   }
   async function catchUp() {
     if (!S.lastEvent) { await loadSummaries().catch(() => {}); return; }
-    try {
-      const r = await api('chat.since', { cursor: S.lastEvent, limit: 100 });
-      for (const e of (r.entries || r.messages || [])) if (S.open && (e.peer === S.open || e.groupId === S.open)) upsertMsg(e);
-    } catch (e) { /* summaries below cover it */ }
+    try { const r = await api('chat.since', { cursor: S.lastEvent, limit: 100 }); for (const e of (r.entries || [])) if (S.open && e.peer === S.open) upsertMsg(e); } catch (e) { }
     await loadSummaries().catch(() => {});
   }
   function handleEvent(e) {
     if (e.time) S.lastEvent = Math.max(S.lastEvent, Number(e.time));
     if (e.type === 'message') {
-      const conv = e.peer;
-      if (S.open === conv) {
-        upsertMsg({ id: e.id, body: e.body, mine: false, sender: e.sender, sname: e.sname, time: e.time, state: '' });
-        api('chat.markread', { peer: conv }).catch(() => {});
-      }
+      if (S.open === e.peer) { upsertMsg({ id: e.id, body: e.body, mine: false, sender: e.sender, sname: e.sname, time: e.time, state: '' }); api('chat.markread', { peer: e.peer }).catch(() => {}); }
       loadSummaries().catch(() => {});
-      if (document.hidden || S.open !== conv) notify(e);
+      if (document.hidden || S.open !== e.peer) notify(e);
     } else if (e.type === 'state') {
       if (S.open === e.peer) { const m = S.msgs.find((x) => x.id === e.id); if (m) { m.state = e.state; renderMsgs(false); } }
     } else if (e.type === 'call') {
       if (e.kind === 'offer') showBanner((e.name || 'Someone') + ' is calling - answer on your phone', 30000);
       else if (e.kind === 'taken' || e.kind === 'bye') hideBanner();
-    } else if (e.type === 'walletfail') {
-      toast('Payment failed: ' + (e.error || ''), 'err');
     }
   }
-  function showBanner(text, ms) { const b = $('banner'); b.textContent = text; b.hidden = false; if (ms) setTimeout(hideBanner, ms); }
+  let bannerTimer = null;
+  function showBanner(text, ms) { const b = $('banner'); b.textContent = text; b.hidden = false; clearTimeout(bannerTimer); if (ms) bannerTimer = setTimeout(hideBanner, ms); }
   function hideBanner() { $('banner').hidden = true; }
   function notify(e) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -547,9 +596,8 @@
     try {
       const p = await api('ping');
       S.me = { name: p.name || '', permanent: p.permanent || '', primary: p.primary || '' };
-      $('meName').textContent = S.me.name;
-      setState('connected');
-    } catch (e) { setState('cannot reach the account', true); return; }
+      await refreshPill();
+    } catch (e) { setState('no account', 'bad'); return; }
     await loadSummaries().catch((e) => toast(e.message, 'err'));
     if ('Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch (e) {} }
     listen();
