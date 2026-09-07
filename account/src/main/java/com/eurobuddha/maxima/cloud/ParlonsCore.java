@@ -300,6 +300,16 @@ public final class ParlonsCore {
             public String directAddress() {
                 try { return mNode.directAddress(); } catch (Exception e) { return ""; }
             }
+            public String publicIp() { NetworkInfo n = mNetworkInfo; return n == null ? "" : n.publicIp(); }
+            public int relayPort() { NetworkInfo n = mNetworkInfo; return n == null ? 0 : n.relayPort(); }
+            public Boolean portOpen() {
+                NetworkInfo n = mNetworkInfo;
+                if (n != null) { return n.portOpen(); }
+                String o = ownRelay();
+                if (o.isEmpty()) { return null; }
+                String st = ParlonsCore.this.ownRelayState();
+                return "verified".equals(st) ? Boolean.TRUE : "unreachable".equals(st) ? Boolean.FALSE : null;
+            }
             public java.util.List<String> meshPeers() {
                 return new java.util.ArrayList<>(mCfg.meshPeers);
             }
@@ -468,6 +478,17 @@ public final class ParlonsCore {
         return mOwnRelayState;
     }
     private volatile String mOwnRelayState = "off";
+
+    /** The host process's network facts for the Node page (a Parlons Node knows its P2P port and
+     *  whether the internet has reached it; the cloud has none of this). */
+    public interface NetworkInfo {
+        String publicIp();
+        int relayPort();
+        /** true/false when known, null while unknown. */
+        Boolean portOpen();
+    }
+    private volatile NetworkInfo mNetworkInfo;
+    public void setNetworkInfo(NetworkInfo zInfo) { mNetworkInfo = zInfo; }
     /** True once adoptOwnRelay runs: its proof loop, not the pool's dial-back, decides the state. */
     private volatile boolean mOwnRelayAdopting;
     /** Bumped per adoption: an older proof loop (the address changed under it) stops and stays quiet. */

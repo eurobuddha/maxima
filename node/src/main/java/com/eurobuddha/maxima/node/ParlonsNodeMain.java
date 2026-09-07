@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.57";
+    public static final String  NODE_VERSION = "0.2.58";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -334,6 +334,19 @@ public final class ParlonsNodeMain {
                 if (Boolean.parseBoolean(System.getProperty("parlons.account", "true"))) {
                     try {
                         accountHolder.set(startAccount(identity, dataFolder, relay));
+                        final boolean relayOn = relay != null;
+                        accountHolder.get().setNetworkInfo(new com.eurobuddha.maxima.cloud.ParlonsCore.NetworkInfo() {
+                            public String publicIp() { String h = detectedPublicHost(); return isPublicHost(h) ? h : ""; }
+                            public int relayPort() { return relayOn ? RELAY_PORT : 0; }
+                            public Boolean portOpen() {
+                                if (!relayOn) { return null; }
+                                // Shared port: the node's own inbound public peers are the proof. Own port: the
+                                // pool's dial-back verdict (verified / unreachable), unknown while attaching.
+                                if (RELAY_SHARED) { return portReachedFromOutside() ? Boolean.TRUE : null; }
+                                String st = accountHolder.get().ownRelayState();
+                                return "verified".equals(st) ? Boolean.TRUE : "unreachable".equals(st) ? Boolean.FALSE : null;
+                            }
+                        });
                     } catch (Throwable at) {
                         System.out.println("[parlons-node] account layer FAILED to start: " + at);
                         at.printStackTrace();

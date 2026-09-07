@@ -9,6 +9,16 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const MEDIA_MARK = '\u0001m\u0001';   // core ChatMedia: SOH-fenced 'm', then mime SOH ref SOH caption
+  const CONTACT_MARK = '\u0001c\u0001'; // core ChatContact: SOH-fenced 'c', then key SOH name SOH address
+  function parseContact(body) {
+    if (!body || !body.startsWith(CONTACT_MARK)) return null;
+    const rest = body.slice(CONTACT_MARK.length);
+    const a = rest.indexOf('\u0001'); if (a < 0) return null;
+    const rest2 = rest.slice(a + 1);
+    const b = rest2.indexOf('\u0001'); if (b < 0) return null;
+    return { key: rest.slice(0, a), name: rest2.slice(0, b), address: rest2.slice(b + 1) };
+  }
+  function wrapContact(key, name, address) { const clean = (x) => String(x || '').split('\u0001').join(''); return CONTACT_MARK + clean(key) + '\u0001' + clean(name) + '\u0001' + clean(address); }
   const ic = window.icon;
 
   async function api(method, body) {
@@ -93,6 +103,8 @@
     return j ? '/media?m=' + encodeURIComponent(j) : '';
   }
   function preview(body) {
+    const c = parseContact(body);
+    if (c) return '👤 Contact: ' + (c.name || '(no name)');
     const m = parseMedia(body);
     if (!m) return body;
     const kind = m.mime.startsWith('video') ? '🎥 Video' : m.mime.startsWith('audio') ? '🎤 Voice note' : '📷 Photo';
@@ -306,6 +318,11 @@
       } else if (url) inner += '<div class="body"><a href="' + esc(url) + '" download>' + esc(preview(e.body)) + '</a></div>';
       else inner += '<div class="body">' + esc(preview(e.body)) + '</div>';
       if (m.caption && !m.mime.startsWith('audio/')) inner += '<div class="body">' + esc(m.caption) + '</div>';
+    } else if (parseContact(e.body || '')) {
+      const c = parseContact(e.body);
+      inner += '<div class="ccard"><div class="cchead">' + avatar(c.key, c.name, 'm') + '<div><div class="ccname">' + esc(c.name || '(no name)') + '</div><div class="sub">Shared contact</div></div></div>'
+        + '<div class="mono whole ccaddr">' + esc(c.address) + '</div>'
+        + '<div class="ccbtns"><button class="btn sm ccadd" data-addr="' + esc(c.address) + '" data-name="' + esc(c.name) + '">Add contact</button><button class="btn sm ghost cccopy" data-addr="' + esc(c.address) + '">Copy</button></div></div>';
     } else inner += '<div class="body">' + esc(e.body || '') + '</div>';
     let meta = hhmm(e.time);
     if (mine) meta += ' ' + (S.openIsGroup && e.delivered != null && e.state !== 'read' ? e.delivered + ' ' : '') + ticks(e.state);
@@ -323,6 +340,12 @@
     box.innerHTML = html;
     box.querySelectorAll('canvas[data-wave]').forEach(drawWave);
     box.querySelectorAll('.audio').forEach(wireAudio);
+    box.querySelectorAll('.ccadd').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await api('contacts.add', { address: b.dataset.addr }); toast('Contact added' + (b.dataset.name ? ': ' + b.dataset.name : '')); await loadSummaries(); }
+      catch (e) { toast(e.message, 'err'); b.disabled = false; }
+    }));
+    box.querySelectorAll('.cccopy').forEach((b) => b.addEventListener('click', () => copy(b.dataset.addr)));
     box.querySelectorAll('img.pic').forEach((img) => img.addEventListener('click', () => { const v = el('<div class="viewer"><img src="' + esc(img.src) + '"></div>'); v.addEventListener('click', () => v.remove()); document.body.appendChild(v); }));
     if (atEnd) box.scrollTop = box.scrollHeight;
     toBottomBtn();
@@ -398,14 +421,33 @@
   function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 
   // ---------- contact / group sheets ----------
+  // Pick one conversation/contact (not the one being shared) and send it a body.
+  async function pickContactAndSend(body, exceptKey) {
+    let list = (S.summaries || []).map((x) => ({ peer: x.peer, name: x.name, group: !!x.group }));
+    try { const r = await api('contacts.list', { offset: 0, limit: 200 }); for (const c of (r.contacts || [])) if (!list.some((x) => x.peer === c.key)) list.push({ peer: c.key, name: c.name, group: false }); } catch (e) { }
+    list = list.filter((x) => x.peer !== exceptKey);
+    if (!list.length) { toast('No one else to send it to yet', 'err'); return; }
+    let html = '<div class="h">Send contact to…</div>';
+    for (const x of list) html += '<div class="conv pick" data-peer="' + esc(x.peer) + '">' + avatar(x.peer, x.name, 'm') + '<div class="mid"><div class="name">' + esc(x.name || x.peer) + '</div>' + (x.group ? '<div class="prev">Group</div>' : '') + '</div></div>';
+    sheet(html, (sh) => {
+      sh.querySelectorAll('.pick').forEach((row) => row.addEventListener('click', async () => {
+        const peer = row.dataset.peer; closeSheet();
+        try { await api('chat.send', { peer, body }); toast('Contact sent'); } catch (e) { toast(e.message, 'err'); }
+      }));
+    });
+  }
   async function contactInfo(key) {
     let c; try { c = await api('contacts.info', { key }); } catch (e) { toast(e.message, 'err'); return; }
     sheet('<div style="display:flex;align-items:center;gap:12px">' + avatar(key, c.name, 'l') + '<div><div class="h">' + esc(c.name || '(no name)') + '</div><div class="sub">' + esc(presence(c.lastSeen) || 'not reached yet') + '</div></div></div>'
       + '<div class="inner"><div class="sub">Key</div><div class="mono whole">' + esc(c.key || key) + '</div></div>'
       + '<div class="inner"><div class="sub">Address</div><div class="mono whole">' + esc(c.address || '') + '</div></div>'
       + '<div class="frow"><input class="field" id="ciName" value="' + esc(c.name || '') + '" placeholder="Name"><button class="btn sm" id="ciRename">Rename</button></div>'
+      + '<div class="inner"><div class="sub">Share this contact</div><div class="mono whole" style="font-size:11px">' + esc(c.share || c.address || '') + '</div>'
+      + '<div class="frow" style="margin-top:8px"><button class="btn sm" id="ciCopy">Copy address</button><button class="btn sm ghost" id="ciSend">Send to a contact…</button></div></div>'
       + '<button class="btn ghost full" id="ciChat">Open chat</button><button class="btn ghost full" id="ciResolve">Re-resolve their address</button><button class="btn ghost full danger" id="ciRemove">Remove contact</button>', (sh) => {
         sh.querySelector('#ciChat').addEventListener('click', () => { closeSheet(); go('#chat/' + encodeURIComponent(key)); });
+        sh.querySelector('#ciCopy').addEventListener('click', () => copy(c.share || c.address || ''));
+        sh.querySelector('#ciSend').addEventListener('click', () => { closeSheet(); pickContactAndSend(wrapContact(c.key || key, c.name || '', c.share || c.address || ''), key); });
         sh.querySelector('#ciRename').addEventListener('click', async () => { try { await api('contacts.rename', { key, name: sh.querySelector('#ciName').value.trim() }); toast('Renamed'); closeSheet(); await loadSummaries(); if (S.route === 'contacts') renderContacts(); if (S.open === key) openChat(key); } catch (e) { toast(e.message, 'err'); } });
         sh.querySelector('#ciResolve').addEventListener('click', async () => { try { const r = await api('contacts.resolve', { key }); toast(r.updated ? 'Address refreshed' : 'No fresher record'); } catch (e) { toast(e.message, 'err'); } });
         sh.querySelector('#ciRemove').addEventListener('click', async () => { if (!confirm('Remove this contact?')) return; try { await api('contacts.remove', { key }); closeSheet(); toast('Removed'); await loadSummaries(); if (S.open === key) $('back').click(); if (S.route === 'contacts') renderContacts(); } catch (e) { toast(e.message, 'err'); } });
@@ -533,6 +575,23 @@
       + '<div class="metric"><span class="k">Connections</span><span class="v">' + esc(fig.relayConnections == null ? '—' : fig.relayConnections) + '</span></div>'
       + '<div class="metric"><span class="k">Relayed / stored</span><span class="v">' + esc(fig.relayRelayed == null ? '—' : fig.relayRelayed) + ' / ' + esc(fig.relayStored == null ? '—' : fig.relayStored) + '</span></div>'
       + '<div class="sub" style="margin-top:8px">' + relayLine + '</div></div>'));
+    // Port forwarding: exactly what to type into the router, and whether it worked.
+    if (rs !== 'off' && fig.relayPort) {
+      const open = fig.portOpen === 'true' ? true : fig.portOpen === 'false' ? false : null;
+      const verdict = open === true ? '<span class="spill ok"><span class="dot"></span>Reached from the internet ✓</span>'
+        : open === false ? '<span class="spill bad"><span class="dot"></span>Not reached yet - forward TCP ' + esc(fig.relayPort) + ' to ' + esc(fig.lanIp || 'this computer') + '</span>'
+        : '<span class="spill"><span class="dot"></span>Waiting for the first connection from the internet…</span>';
+      body.appendChild(el('<div class="card"><div class="ctitle2">Port forwarding</div>'
+        + '<div class="sub">Your contacts reach this relay through your router. One rule, once:</div>'
+        + '<div class="metric"><span class="k">Protocol</span><span class="v">TCP</span></div>'
+        + '<div class="metric"><span class="k">External port</span><span class="v mono">' + esc(fig.relayPort) + '</span></div>'
+        + '<div class="metric"><span class="k">Internal port</span><span class="v mono">' + esc(fig.relayPort) + '</span></div>'
+        + '<div class="metric"><span class="k">Send to</span><span class="v mono">' + esc(fig.lanIp || '(this computer)') + '</span></div>'
+        + (fig.gatewayIp ? '<div class="metric"><span class="k">Your router</span><span class="v"><a class="mono" href="http://' + esc(fig.gatewayIp) + '/" target="_blank" rel="noopener">http://' + esc(fig.gatewayIp) + '/</a></span></div>' : '')
+        + (fig.publicIp ? '<div class="metric"><span class="k">Your public address</span><span class="v mono">' + esc(fig.publicIp) + ':' + esc(fig.relayPort) + '</span></div>' : '')
+        + '<div style="margin-top:8px">' + verdict + '</div>'
+        + '<div class="sub" style="margin-top:8px">Give this computer a fixed address in the router (a DHCP reservation for ' + esc(fig.lanIp || 'it') + ') so the rule keeps pointing at it. Nothing else to open: chat, calls and your relay all ride this one port.</div></div>'));
+    }
     const hosts = el('<div class="card"><div class="ctitle2">Relays</div><div id="hostRows"></div><div class="frow"><input class="field" id="hostAdd" placeholder="host:port, or a relay QR text"><button class="btn sm" id="hostAddBtn">Add</button></div><div class="sw"><div class="lbl">Use the built-in relay list<small>One seed source among several; switch it off once you have relays of your own.</small></div><button class="switch' + (fig.builtin ? ' on' : '') + '" id="builtin"></button></div></div>');
     const hr = hosts.querySelector('#hostRows');
     for (const hh of (fig.hosts || [])) {

@@ -487,6 +487,21 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### Share a contact; the Node page says exactly what to forward (node 0.2.58, cloud 0.11.59)
+**Contacts** now travel between people: a contact card is a message BODY kind next to media and
+payments (`core/chat/ChatContact`: U+0001 c U+0001 key U+0001 name U+0001 address, the address being
+`Contact.shareAddress()` = the permanent `MAX#<key>#<mls>` when we know their directory, else their
+current address). `contacts.list`/`contacts.info` return that `share` string; the panel's contact
+sheet has Copy address and Send to a contact…, a received card renders with Add contact / Copy, list
+previews say "Contact: name". No new RPC, no wire change: `chat.send` carries the body as before.
+**Port forwarding**: `node.figures` gains `lanIp`, `gatewayIp` (core/net/LocalAddress: interfaces +
+`ip route` / `route -n get default`), `publicIp` (learned from peers), `relayPort` and `portOpen`
+(true/false/"" = the node's inbound-public-peer proof in shared mode, the dial-back verdict otherwise;
+`ParlonsCore.NetworkInfo` set by the node). The panel's Node page shows a Port forwarding card:
+TCP, external/internal port, "Send to <LAN IP>", the router's admin link, the public address and
+the verdict, plus the DHCP-reservation advice - the same block minimaCore Desktop's Node tab had.
+Decentralization: nothing new on the wire; a card is text a recipient chooses to act on.
+
 ### Mirror review fixes (node 0.2.57, cloud 0.11.58)
 Own-send mirror events now fire AFTER delivery, so the sibling's bubble arrives with sent/failed
 ticks instead of a queued placeholder; the per-device wake FALLBACK (all addresses dead) also skips

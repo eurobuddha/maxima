@@ -328,6 +328,17 @@ public final class ParlonsControl {
         boolean directlyReachable();
         String directAddress();
         java.util.List<String> meshPeers();
+        // What a person types into their router (the Node page's port-forwarding block).
+        /** This machine's LAN address, "" if none. */
+        default String lanIp() { return com.eurobuddha.maxima.core.net.LocalAddress.siteLocalIp(); }
+        /** The router's address ("192.168.1.1"), "" if unknown. */
+        default String gatewayIp() { return com.eurobuddha.maxima.core.net.LocalAddress.defaultGateway(); }
+        /** The public address the node learned from its peers, "" until known. */
+        default String publicIp() { return ""; }
+        /** The TCP port the router must forward to lanIp for the relay; 0 when the relay is off. */
+        default int relayPort() { return 0; }
+        /** true/false once known (an incoming connection from a public peer, or the dial-back); null = not known yet. */
+        default Boolean portOpen() { return null; }
         // relay stats (0 if the relay is off)
         int relayConnections();
         long relayRelayed();
@@ -614,6 +625,13 @@ public final class ParlonsControl {
                 out.put("relayRelayed", nc.relayRelayed());
                 out.put("relayStored", nc.relayStored());
                 out.put("contacts", mNode.contacts().size());
+                // Port-forwarding facts (the Node page tells the user exactly what to type)
+                out.put("lanIp", safe(nc.lanIp()));
+                out.put("gatewayIp", safe(nc.gatewayIp()));
+                out.put("publicIp", safe(nc.publicIp()));
+                out.put("relayPort", nc.relayPort());
+                Boolean open = nc.portOpen();
+                out.put("portOpen", open == null ? "" : open.toString());
             }
             return bytes(out);
         });
@@ -789,6 +807,7 @@ public final class ParlonsControl {
                 o.put("key", safe(c.publicKey));
                 o.put("name", safe(c.name));
                 o.put("address", safe(c.primaryAddress()));
+                o.put("share", safe(c.shareAddress()));   // what another person pastes into Add contact
                 o.put("lastSeen", c.lastSeen);
                 arr.add(o);
             }
@@ -872,6 +891,8 @@ public final class ParlonsControl {
                 String last = safe(s.lastBody);
                 if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(last)) {
                     last = com.eurobuddha.maxima.core.chat.ChatMedia.preview(last);
+                } else if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(last)) {
+                    last = com.eurobuddha.maxima.core.chat.ChatContact.preview(last);
                 } else if (last.length() > 200) {
                     last = last.substring(0, 200);
                 }
@@ -1181,6 +1202,7 @@ public final class ParlonsControl {
             JSONObject out = ok();
             out.put("key", safe(c.publicKey));
             out.put("name", safe(c.name));
+            out.put("share", safe(c.shareAddress()));   // what another person pastes into Add contact
             out.put("lastSeen", c.lastSeen);
             out.put("kind", safe(c.kind));
             out.put("classic", c.isClassic());
@@ -2307,6 +2329,9 @@ public final class ParlonsControl {
         }
         if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(zBody)) {
             return com.eurobuddha.maxima.core.chat.ChatPay.preview(zBody);
+        }
+        if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(zBody)) {
+            return com.eurobuddha.maxima.core.chat.ChatContact.preview(zBody);
         }
         if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(zBody)) {
             String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(zBody);

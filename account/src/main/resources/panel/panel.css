@@ -194,3 +194,10 @@ a { color: inherit; }
 .toast.err { background: var(--error); color: #fff; }
 .viewer { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: grid; place-items: center; z-index: 10; cursor: zoom-out; }
 .viewer img { max-width: 96vw; max-height: 96vh; }
+
+/* shared-contact card in a bubble */
+.ccard { min-width: 220px; }
+.cchead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ccname { font-weight: 700; }
+.ccaddr { font-size: 11px; opacity: .85; margin: 4px 0 8px; }
+.ccbtns { display: flex; gap: 8px; }

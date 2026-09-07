@@ -52,6 +52,19 @@ public final class Contact {
     }
 
     /**
+     * The string another person pastes into "Add contact" to reach this contact: their permanent
+     * {@code MAX#<key>#<mls>} when we know their directory (it survives their relay changes), else
+     * their current address. Empty only for a contact we cannot reach at all.
+     */
+    public String shareAddress() {
+        if (mls != null && !mls.isEmpty() && publicKey != null && !publicKey.isEmpty()) {
+            return "MAX#" + publicKey + "#" + mls;
+        }
+        String p = primaryAddress();
+        return p == null ? "" : p;
+    }
+
+    /**
      * Replace the known address set.
      * A multi-homed peer sends several; a classic peer sends exactly one.
      */
