@@ -11,6 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * outside world connects fine. The logical address stays the pool key and the directory anchor
  * ({@code Mx…@public:port}); only the socket goes elsewhere. Empty by default: nothing changes.
  */
+/*
+ * Process-global on purpose: an in-process relay is "this process" for EVERY account the JVM
+ * hosts (a --tenants host as much as a single node), so one alias table serves them all.
+ */
 public final class DialAlias {
 
     private static final Map<String, String> ALIASES = new ConcurrentHashMap<>();

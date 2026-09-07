@@ -470,6 +470,8 @@ public final class ParlonsCore {
     private volatile String mOwnRelayState = "off";
     /** True once adoptOwnRelay runs: its proof loop, not the pool's dial-back, decides the state. */
     private volatile boolean mOwnRelayAdopting;
+    /** Bumped per adoption: an older proof loop (the address changed under it) stops and stays quiet. */
+    private final java.util.concurrent.atomic.AtomicInteger mOwnRelayGeneration = new java.util.concurrent.atomic.AtomicInteger();
 
     /**
      * The host's OWN relay became known AFTER start (a desktop learns its public address from its
@@ -494,9 +496,14 @@ public final class ParlonsCore {
         if (own.isEmpty() || own.equals(mCfg.ownRelay)) {
             return false;
         }
+        final String previous = mCfg.ownRelay == null ? "" : mCfg.ownRelay;
+        final int generation = mOwnRelayGeneration.incrementAndGet();
         mCfg.ownRelay = own;
         mOwnRelayState = "attaching";
         mOwnRelayAdopting = true;
+        if (!previous.isEmpty()) {
+            mNode.setDialAlias(previous, null);   // the old address no longer means "this process"
+        }
         if (zDialActual != null && !zDialActual.isEmpty()) {
             mNode.setDialAlias(own, zDialActual);
         }
@@ -506,10 +513,10 @@ public final class ParlonsCore {
         mHostExec.execute(() -> {
             // Prove, then adopt; if the proof does not come (router port closed), say so and keep
             // trying every 10 minutes - the port may be opened later without a restart.
-            for (int round = 0; mRunning; round++) {
+            for (int round = 0; mRunning && generation == mOwnRelayGeneration.get(); round++) {
                 try { mNode.pool().attachOne(own, 20_000); } catch (Exception ignored) { }
                 long until = System.currentTimeMillis() + 4 * 60_000L;
-                while (mRunning && System.currentTimeMillis() < until) {
+                while (mRunning && generation == mOwnRelayGeneration.get() && System.currentTimeMillis() < until) {
                     boolean attached;
                     try { attached = mNode.pool().activeHosts().contains(own); } catch (Exception e) { attached = false; }
                     boolean outside = zOutsideOpen == null ? mNode.isHostVerified(own) : Boolean.TRUE.equals(zOutsideOpen.get());
@@ -524,6 +531,9 @@ public final class ParlonsCore {
                     }
                     mOwnRelayState = attached ? "attached" : "attaching";
                     try { Thread.sleep(15_000); } catch (InterruptedException ie) { return; }
+                }
+                if (generation != mOwnRelayGeneration.get()) {
+                    return;   // superseded by a newer adoption - it owns the state now
                 }
                 mOwnRelayState = "unreachable";
                 if (round == 0) {

@@ -487,6 +487,32 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### One-port review fixes: the hand-off runs on the selector thread; proof from public peers only (node 0.2.54, cloud 0.11.55; fork 9eac0b3)
+A code review of the one-port change set found four things worth fixing before minimaCore ships it
+as the default. (1) The fork detached a connection from the NIOMessage worker while the selector
+thread still owned the same `NIOClient`: a narrow window could either leave the selector thread in a
+BLOCKING read on a relay client's socket (every chain connection on the node stalls) or flip the
+read buffer twice (wrong leftover bytes). `NIOServer.detachForHandoff` now queues the request and
+the selector thread itself cancels the key, `selectNow()`s it out, drains the buffer and switches the
+channel to blocking; a `handedOff` flag keeps every NIO close path off the socket. (2) A greeting or
+first frame arriving in the same TCP segment as further frames: those frames were already posted as
+chain messages and lost to the relay. `NIOClient.handleRead` now holds every complete frame after
+the first from an un-greeted incoming client while a handler is registered; a hand-off replays them
+in order in front of the leftover, and a chain peer's valid greeting releases them. Proven on the
+gate copy with a greeting + ping pipelined in ONE segment: both answered by the relay. (3) The
+reachability proof counted any incoming chain peer that was not the node itself, so a LAN node, a
+container or a VPN peer at 10.x "proved" the router forwards the port: now only PUBLIC peers count.
+(4) A second adoption (dynamic IP changed) started a second proof loop beside the first, both
+writing the state, the old loopback alias never cleared, and the learn thread had stopped after its
+first success: adoptions carry a generation, an older loop stops when superseded, the previous
+alias is cleared, and the node keeps watching its public address every 10 minutes and re-adopts on
+change. Decentralization: gain = the one-port relay is safe under load and cannot stall the chain
+node it rides; preservation = no new party, no new port, the proof is stricter (fewer false
+"verified"); risk = a stricter proof means a node whose only inbound peers are on the LAN stays
+"unreachable" (correct: the internet cannot reach it); mitigation = the Node page says so and the
+address stays anchored on the fleet; optional/replaceable = unchanged (`-Dparlons.relay.port=<n>`
+still runs the classic second port).
+
 ### One public port: the relay rides the Minima P2P port (node 0.2.51, server 0.4.63, cloud 0.11.52; fork 4fc6e7e)
 A Parlons Node listened on TWO public ports - the Minima P2P port and the Maxima relay port
 (9501 fleet / 12501 in minimaCore) - so a home user had to forward a second port for one app; the

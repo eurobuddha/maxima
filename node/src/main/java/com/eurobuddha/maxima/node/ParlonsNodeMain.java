@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.53";
+    public static final String  NODE_VERSION = "0.2.54";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -346,10 +346,14 @@ public final class ParlonsNodeMain {
                 final RelayRuntime capeRef = relay;
                 if (capeRef != null && System.getProperty("parlons.relay.host", "").trim().isEmpty()) {
                     Thread learn = new Thread(() -> {
+                        String learned = "";
                         for (int i = 0; ; i++) {
-                            try { Thread.sleep(i < 60 ? 30_000 : 600_000); } catch (InterruptedException ie) { return; }
+                            // every 30 s until the first public address, then every 10 min - a home
+                            // connection's address CHANGES (dynamic IP); the cape must follow it
+                            try { Thread.sleep(learned.isEmpty() && i < 60 ? 30_000 : 600_000); } catch (InterruptedException ie) { return; }
                             String det = detectedPublicHost();
-                            if (!isPublicHost(det)) continue;
+                            if (!isPublicHost(det) || det.equals(learned)) continue;
+                            learned = det;
                             String own = det + ":" + RELAY_PORT;
                             try { if (capeRef.server() != null) capeRef.server().setPublicHost(det); } catch (Throwable ignored) { }
                             com.eurobuddha.maxima.cloud.ParlonsCore account = accountHolder.get();
@@ -364,7 +368,6 @@ public final class ParlonsNodeMain {
                                     account.adoptOwnRelay(own);
                                 }
                             }
-                            return;
                         }
                     }, "parlons-node-learn-host");
                     learn.setDaemon(true);
@@ -506,7 +509,8 @@ public final class ParlonsNodeMain {
     }
 
     /** Has the internet reached the node's P2P port? Minima's own verdict: inbound peers on it
-     *  (self-dials excluded - a node that reaches itself only hairpins), or its accepting flag. */
+     *  from PUBLIC addresses (self-dials excluded - a node that reaches itself only hairpins;
+     *  private/LAN peers excluded - they say nothing about the router). */
     static boolean portReachedFromOutside() {
         try {
             org.minima.utils.json.JSONObject net = NodeWallet.response(NodeWallet.run("network"));
@@ -523,7 +527,10 @@ public final class ParlonsNodeMain {
                 for (Object o : (org.minima.utils.json.JSONArray) conns) {
                     if (!(o instanceof org.minima.utils.json.JSONObject)) continue;
                     org.minima.utils.json.JSONObject c = (org.minima.utils.json.JSONObject) o;
-                    if (Boolean.TRUE.equals(c.get("incoming")) && !selfIp.equals(String.valueOf(c.get("host")))) inbound++;
+                    String host = String.valueOf(c.get("host"));
+                    // Only a PUBLIC peer proves the internet reaches this port: a LAN node, a
+                    // container or a VPN peer at 10.x reaches it without any router forwarding.
+                    if (Boolean.TRUE.equals(c.get("incoming")) && !selfIp.equals(host) && isPublicHost(host)) inbound++;
                 }
             }
             return inbound > 0;
