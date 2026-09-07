@@ -501,17 +501,30 @@
     try { fig = await api('node.figures'); } catch (e) { }
     const up = Number(st.uptime || 0), h = Math.floor(up / 3600000), m = Math.floor((up % 3600000) / 60000);
     const anchor = (st.permanent || '').split('@').pop();
+    const ownAnchor = !!fig.ownRelay && anchor === fig.ownRelay;
     body.appendChild(el('<div class="card"><div class="ctitle2">Account</div>'
       + '<div class="metric"><span class="k">Name</span><span class="v">' + esc(st.name) + '</span></div>'
       + '<div class="metric"><span class="k">Version</span><span class="v">' + esc(st.version) + '</span></div>'
       + '<div class="metric"><span class="k">Up</span><span class="v">' + h + ' h ' + m + ' min</span></div>'
       + '<div class="metric"><span class="k">Relays attached</span><span class="v">' + esc(st.hosts) + '</span></div>'
-      + '<div class="metric"><span class="k">Own relay</span><span class="v">' + (st.relayOn ? 'on' : 'off') + (fig.ownRelay ? ' · ' + esc(fig.ownRelay) + (fig.ownRelayVerified ? ' ✓' : '') : '') + '</span></div>'
       + '<div class="metric"><span class="k">Mesh peers</span><span class="v">' + esc(st.meshPeers) + '</span></div>'
       + '<div class="metric"><span class="k">Paired devices</span><span class="v">' + esc(st.pairedDevices) + '</span></div>'
       + '<div class="metric"><span class="k">Mailbox / outbox</span><span class="v">' + esc(fig.mailboxHeld == null ? '' : fig.mailboxHeld) + ' / ' + esc(fig.outbox == null ? '' : fig.outbox) + '</span></div>'
-      + '<div class="inner"><div class="sub">Permanent address · reaches you through relay ' + esc(anchor) + ' (the directory anchor); your own relay takes over when you contribute</div><div class="mono whole" style="font-size:11px;margin-top:4px">' + esc(st.permanent) + '</div></div>'
+      + '<div class="inner"><div class="sub">Permanent address' + (ownAnchor ? ' · anchored on your own relay' : ' · anchored on relay ' + esc(anchor) + ', a fleet directory that resolves this address for your contacts (not your machine)') + '</div><div class="mono whole" style="font-size:11px;margin-top:4px">' + esc(st.permanent) + '</div></div>'
       + (fig.directAddress ? '<div class="inner"><div class="sub">Direct address</div><div class="mono whole" style="font-size:11px">' + esc(fig.directAddress) + '</div></div>' : '') + '</div>'));
+    // Your own relay (the cape): what it is, whether the world can reach it, what it carries.
+    const rs = fig.ownRelayState || (st.relayOn ? 'nohost' : 'off');
+    const relayLine = rs === 'off' ? 'Off. Turn on Contribute in the node app to run a relay for the network.'
+      : rs === 'nohost' ? 'Running, but this machine does not know its public address yet - it learns it from its peers a few minutes after start; the account adopts the relay then.'
+      : rs === 'verified' ? 'Reachable from the internet ✓ - your contacts reach you through it and it anchors your permanent address.'
+      : rs === 'unreachable' ? 'Running, but NOT reachable from the internet: the router must forward TCP port ' + esc(String(fig.ownRelay || '').split(':').pop()) + ' to this machine. Until then the fleet anchors your address.'
+      : rs === 'attached' ? 'Attached; proving it is reachable from outside…' : 'Attaching…';
+    body.appendChild(el('<div class="card"><div class="ctitle2">Your relay</div>'
+      + '<div class="metric"><span class="k">Address</span><span class="v mono">' + esc(fig.ownRelay || (st.relayOn ? '(public address not known yet)' : '—')) + '</span></div>'
+      + '<div class="metric"><span class="k">State</span><span class="v"><span class="spill' + (rs === 'verified' ? ' ok' : rs === 'unreachable' ? ' bad' : '') + '"><span class="dot"></span>' + esc(rs === 'nohost' ? 'no public address yet' : rs) + '</span></span></div>'
+      + '<div class="metric"><span class="k">Connections</span><span class="v">' + esc(fig.relayConnections == null ? '—' : fig.relayConnections) + '</span></div>'
+      + '<div class="metric"><span class="k">Relayed / stored</span><span class="v">' + esc(fig.relayRelayed == null ? '—' : fig.relayRelayed) + ' / ' + esc(fig.relayStored == null ? '—' : fig.relayStored) + '</span></div>'
+      + '<div class="sub" style="margin-top:8px">' + relayLine + '</div></div>'));
     const hosts = el('<div class="card"><div class="ctitle2">Relays</div><div id="hostRows"></div><div class="frow"><input class="field" id="hostAdd" placeholder="host:port, or a relay QR text"><button class="btn sm" id="hostAddBtn">Add</button></div><div class="sw"><div class="lbl">Use the built-in relay list<small>One seed source among several; switch it off once you have relays of your own.</small></div><button class="switch' + (fig.builtin ? ' on' : '') + '" id="builtin"></button></div></div>');
     const hr = hosts.querySelector('#hostRows');
     for (const hh of (fig.hosts || [])) {

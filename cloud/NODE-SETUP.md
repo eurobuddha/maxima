@@ -474,6 +474,25 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### A desktop node's own relay is adopted late, with proof (node 0.2.50, cloud 0.11.51)
+Seen on the owner's minimaCore (contributing, cape up, 6 inbound Minima peers): the permanent
+address still ended in a fleet relay. Two causes, both live-proven on a copy of that node: (1) at
+cape/account start the node only knows its LAN address (`status → network.host` = 192.168.1.247),
+so the cape was never named and `ownRelay` stayed empty for the life of the process; (2) the
+public address the node learns from its peers minutes later lives in `network → details.p2p.address`
+(31.125.188.214:12101), which nothing read - a VPS reports the same host in both, which is why the
+fleet never showed it. Now: `detectedPublicHost()` reads the p2p address first; a learn thread
+polls every 30 s (then every 10 min) until the host is public, names the cape
+(`RelayServer.setPublicHost`) and hands it to the account; `ParlonsCore.adoptOwnRelay` prefers it,
+attaches, and moves the permanent address's anchor onto it ONLY once the pool has dial-back-verified
+it (`MaximaNode.adoptMlsOf`, previous anchor retained as the old MLS, republished); without that
+proof it reports `unreachable` ("the router must forward TCP <port>"), keeps the fleet anchor, and
+retries every 10 minutes. `node.figures.ownRelayState` (off / nohost / attaching / attached /
+verified / unreachable) drives the panel's "Your relay" card, and the anchor line only claims
+"your own relay" when it is. Decentralization: a home node becomes a real anchor for its own
+identity the moment its port is open, with no operator step (principles 1, 3). Verify: the gate
+run above (learned 31.125.188.214, adopted, honestly `unreachable` on an unforwarded test port).
+
 ### The panel IS the Parlons app (cloud 0.11.50, node 0.2.49)
 The 0.11.49 panel was a generic web chat; the rule is the phone app pixel for pixel. Rebuilt from
 `app/src/main/res`: the `ux_*` colour tokens (light + night), every drawable radius (card 14, button

@@ -567,6 +567,30 @@ public final class MaximaNode implements ChatPort {
     }
 
     /**
+     * Adopt one attached host's directory as our anchor NOW, outside the 12 h rotation - for a
+     * node whose OWN relay came up (or learned its public address) after the account had
+     * already anchored on a fleet relay. The previous anchor is retained as the old MLS so
+     * contacts holding it still resolve us. Returns the new permanent address, or "" when the
+     * host is not attached or offers no directory (nothing changes then).
+     */
+    public synchronized String adoptMlsOf(String zHostPort) {
+        if (!mStaticMls.isEmpty()) {
+            return permanentAddress();   // pinned by the operator: their choice stands
+        }
+        HostConnection c = mPool.connection(zHostPort);
+        String m = c == null ? null : c.getTheirMlsAddress();
+        if (m == null || m.isEmpty()) {
+            return "";
+        }
+        if (!m.equals(mCurrentMls)) {
+            mOldMls = mCurrentMls;
+            mCurrentMls = m;
+            mLastMlsRotate = System.currentTimeMillis();
+        }
+        return permanentAddress();
+    }
+
+    /**
      * Choose and rotate our MLS server on the reference's schedule. Candidate =
      * the pinned static MLS, else the first MLS a host offers. We adopt the first
      * candidate immediately, but ROTATE to a different one only when the current

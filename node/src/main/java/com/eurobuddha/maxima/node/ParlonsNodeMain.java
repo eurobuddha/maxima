@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.49";
+    public static final String  NODE_VERSION = "0.2.50";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -315,6 +315,29 @@ public final class ParlonsNodeMain {
                         at.printStackTrace();
                     }
                 }
+                // A desktop learns its public address from its peers MINUTES after boot, so at cape
+                // start the detected host is empty or private and the cape stays nameless with the
+                // account anchored on a fleet relay - forever, until 0.2.49. Keep asking the node;
+                // the moment the host is public, name the cape and hand it to the account.
+                final RelayRuntime capeRef = relay;
+                if (capeRef != null && System.getProperty("parlons.relay.host", "").trim().isEmpty()) {
+                    Thread learn = new Thread(() -> {
+                        for (int i = 0; ; i++) {
+                            try { Thread.sleep(i < 60 ? 30_000 : 600_000); } catch (InterruptedException ie) { return; }
+                            String det = detectedPublicHost();
+                            if (!isPublicHost(det)) continue;
+                            String own = det + ":" + RELAY_PORT;
+                            try { if (capeRef.server() != null) capeRef.server().setPublicHost(det); } catch (Throwable ignored) { }
+                            com.eurobuddha.maxima.cloud.ParlonsCore account = accountHolder.get();
+                            System.out.println("[parlons-node] public address learned from peers: " + det
+                                    + " - the cape now names itself " + own + (account == null ? "" : "; the account adopts it"));
+                            if (account != null) account.adoptOwnRelay(own);
+                            return;
+                        }
+                    }, "parlons-node-learn-host");
+                    learn.setDaemon(true);
+                    learn.start();
+                }
             } catch (Throwable t) {
                 System.out.println("[parlons-node] Maxima cape FAILED to start: " + t);
                 t.printStackTrace();
@@ -452,6 +475,25 @@ public final class ParlonsNodeMain {
 
     /** The host the embedded Minima node detected for itself ({@code status} → network.host). */
     private static String detectedPublicHost() {
+        // The address the node LEARNED FROM ITS PEERS (network → details.p2p.address, "ip:port") is
+        // the public one; `status` → network.host stays the interface address, which on a desktop
+        // behind NAT is the LAN address (seen live: host 192.168.1.247 while p2p.address was
+        // 31.125.188.214:12101). A VPS reports the same in both, which is why this went unnoticed.
+        try {
+            org.minima.utils.json.JSONObject net = NodeWallet.response(NodeWallet.run("network"));
+            Object details = net.get("details");
+            Object p2p = details instanceof org.minima.utils.json.JSONObject
+                    ? ((org.minima.utils.json.JSONObject) details).get("p2p") : null;
+            if (p2p instanceof org.minima.utils.json.JSONObject) {
+                String addr = String.valueOf(((org.minima.utils.json.JSONObject) p2p).getOrDefault("address", "")).trim();
+                int colon = addr.lastIndexOf(':');
+                String host = colon > 0 && !addr.contains("]") ? addr.substring(0, colon) : addr;
+                if (isPublicHost(host)) {
+                    return host;
+                }
+            }
+        } catch (Exception ignored) {
+        }
         try {
             org.minima.utils.json.JSONObject st = NodeWallet.response(NodeWallet.run("status"));
             Object net = st.get("network");

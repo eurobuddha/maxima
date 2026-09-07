@@ -214,6 +214,13 @@ public final class ParlonsCore {
                 String o = ownRelay();
                 return !o.isEmpty() && ownRelayAttached() && mNode.isHostVerified(o);
             }
+            public String ownRelayState() {
+                String o = ownRelay();
+                if (o.isEmpty()) return relayRunning() ? "nohost" : "off";
+                if (ownRelayVerified()) return "verified";
+                if ("unreachable".equals(mOwnRelayState)) return "unreachable";
+                return ownRelayAttached() ? "attached" : "attaching";
+            }
             public java.util.List<String> hosts() {
                 try { return mNode.pool().activeHosts(); }
                 catch (Exception e) { return new java.util.ArrayList<>(); }
@@ -401,6 +408,7 @@ public final class ParlonsCore {
         }
         if (mCfg.ownRelay != null && !mCfg.ownRelay.isEmpty()) {
             mNode.setPreferredHost(mCfg.ownRelay);
+            mOwnRelayState = "attaching";
             log("own relay (the cape) preferred: " + mCfg.ownRelay);
         }
         mNode.start(new ArrayList<>(relays), 30_000);
@@ -444,6 +452,64 @@ public final class ParlonsCore {
 
     public DevicePairing pairing() {
         return mPairing;
+    }
+
+    /** "off" (no relay of our own), "attaching", "attached" (not yet proven reachable from outside),
+     *  "verified" (contacts reach us through it; it anchors the permanent address), or
+     *  "unreachable" (up, but the dial-back never came - the router port is not open). */
+    public String ownRelayState() {
+        return mOwnRelayState;
+    }
+    private volatile String mOwnRelayState = "off";
+
+    /**
+     * The host's OWN relay became known AFTER start (a desktop learns its public address from its
+     * peers minutes after boot; the cape was up all along). Prefer it, attach to it, and once the
+     * pool has dial-back-verified it - the only proof contacts can reach it - move the permanent
+     * address's anchor onto it, republish, and say so. Without that proof the anchor stays on the
+     * fleet and the panel says why.
+     */
+    public boolean adoptOwnRelay(String zHostPort) {
+        final String own = zHostPort == null ? "" : zHostPort.trim();
+        if (own.isEmpty() || own.equals(mCfg.ownRelay)) {
+            return false;
+        }
+        mCfg.ownRelay = own;
+        mOwnRelayState = "attaching";
+        mNode.setPreferredHost(own);
+        log("own relay (the cape) learned late: " + own + " - attaching, then proving it reachable");
+        mHostExec.execute(() -> {
+            // Prove, then adopt; if the proof does not come (router port closed), say so and keep
+            // trying every 10 minutes - the port may be opened later without a restart.
+            for (int round = 0; mRunning; round++) {
+                try { mNode.pool().attachOne(own, 20_000); } catch (Exception ignored) { }
+                long until = System.currentTimeMillis() + 4 * 60_000L;
+                while (mRunning && System.currentTimeMillis() < until) {
+                    boolean attached;
+                    try { attached = mNode.pool().activeHosts().contains(own); } catch (Exception e) { attached = false; }
+                    if (attached && mNode.isHostVerified(own)) {
+                        String perm = mNode.adoptMlsOf(own);
+                        mOwnRelayState = "verified";
+                        log("own relay verified reachable from outside: permanent address now anchored on it"
+                                + (perm.isEmpty() ? "" : " - " + perm));
+                        try { mNode.publishToMls(); } catch (Exception ignored) { }
+                        try { mNode.refreshContacts(); } catch (Exception ignored) { }
+                        return;
+                    }
+                    mOwnRelayState = attached ? "attached" : "attaching";
+                    try { Thread.sleep(15_000); } catch (InterruptedException ie) { return; }
+                }
+                mOwnRelayState = "unreachable";
+                if (round == 0) {
+                    log("own relay " + own + " is up but NOT reachable from outside (no dial-back in 4 min):"
+                            + " the router must forward TCP " + own.substring(own.lastIndexOf(':') + 1)
+                            + " to this machine; the permanent address stays anchored on the fleet until then"
+                            + " (checked again every 10 minutes)");
+                }
+                try { Thread.sleep(10 * 60_000L); } catch (InterruptedException ie) { return; }
+            }
+        });
+        return true;
     }
 
     /** The local web panel, or null when none is configured / it could not bind. */
