@@ -890,8 +890,10 @@ public final class ParlonsCore {
             public void onMessage(ChatEngine.Entry e) {
                 if (!e.mine) {
                     log("message from " + shortPeer(e) + ": " + preview(e.body));
-                    mControl.pushMessage(e);
                 }
+                // Inbound AND our own sends: a message typed on one device (or the panel) must
+                // appear on every other device of the account at once, not on its next reload.
+                mControl.pushMessage(e);
             }
             public void onStateChanged(ChatEngine.Entry e) {
                 mControl.pushState(e);

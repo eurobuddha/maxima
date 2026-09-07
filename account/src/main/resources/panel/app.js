@@ -594,9 +594,14 @@
   function handleEvent(e) {
     if (e.time) S.lastEvent = Math.max(S.lastEvent, Number(e.time));
     if (e.type === 'message') {
-      if (S.open === e.peer) { upsertMsg({ id: e.id, body: e.body, mine: false, sender: e.sender, sname: e.sname, time: e.time, state: '' }); api('chat.markread', { peer: e.peer }).catch(() => {}); }
+      const mine = !!e.mine;   // sent from another device of this account (or this panel itself)
+      if (S.open === e.peer) {
+        if (mine) S.msgs = S.msgs.filter((m) => !String(m.id).startsWith('local-') || m.body !== e.body);   // our optimistic echo, if this panel sent it
+        upsertMsg({ id: e.id, body: e.body, mine, sender: e.sender, sname: e.sname, time: e.time, state: mine ? (e.state || '') : '' });
+        if (!mine) api('chat.markread', { peer: e.peer }).catch(() => {});
+      }
       loadSummaries().catch(() => {});
-      if (document.hidden || S.open !== e.peer) notify(e);
+      if (!mine && (document.hidden || S.open !== e.peer)) notify(e);
     } else if (e.type === 'state') {
       if (S.open === e.peer) { const m = S.msgs.find((x) => x.id === e.id); if (m) { m.state = e.state; renderMsgs(false); } }
     } else if (e.type === 'call') {

@@ -487,6 +487,19 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### Your own sends mirror to every device live (node 0.2.55, cloud 0.11.56)
+A message typed on the phone reached its destination but the desktop panel of the same account only
+showed it on the next reload of that conversation, and the other way round: `ChatEngine` fired its
+listener for INBOUND entries only, so the account pushed "message" events for inbound only; the
+delivery-tick events for the outgoing entry did reach the sibling devices, which ignored them for a
+bubble they did not have. Now `ChatEngine` fires the listener for our own sends too (text, group,
+media, payments), the account pushes them with `mine:true` + the current state, the panel renders
+such an event as our own bubble (no mark-read, no notification, and it replaces this panel's own
+optimistic echo), and the phone already re-reads the open conversation on any event. No APNs wake
+for an own message - a sleeping device reads it on its catch-up. The Android app and the Swing
+desktop already tolerated own entries in their listeners (checked). Decentralization: nothing
+changes on the wire; this is account-internal fan-out between the devices of one identity.
+
 ### One-port review fixes: the hand-off runs on the selector thread; proof from public peers only (node 0.2.54, cloud 0.11.55; fork 9eac0b3)
 A code review of the one-port change set found four things worth fixing before minimaCore ships it
 as the default. (1) The fork detached a connection from the NIOMessage worker while the selector

@@ -2111,7 +2111,10 @@ public final class ParlonsControl {
         final String kind = String.valueOf(event.get("type"));
         // Devices that cannot be reached live but registered a wake path: a content-free
         // APNs wake (messages and calls only - never a delivery tick).
-        if ("message".equals(kind) || "call".equals(kind)) {
+        // (never for our own message: a device asleep does not need waking to learn what
+        // another device of ours just sent - it reads it on its next catch-up)
+        boolean ownMessage = "message".equals(kind) && Boolean.TRUE.equals(event.get("mine"));
+        if (("message".equals(kind) && !ownMessage) || "call".equals(kind)) {
             for (DevicePairing.Device d : mPairing.authorized()) {
                 if (!d.canWake()) {
                     continue;
@@ -2170,7 +2173,7 @@ public final class ParlonsControl {
         }
     }
 
-    /** New inbound message on the account → tell every live device NOW (instant chat + notification). */
+    /** New message on the account, inbound OR sent from one of our devices → tell every live device NOW. */
     public void pushMessage(ChatEngine.Entry e) {
         JSONObject ev = new JSONObject();
         ev.put("type", "message");
@@ -2187,6 +2190,8 @@ public final class ParlonsControl {
         ev.put("body", safe(e.body));
         ev.put("id", safe(e.id));
         ev.put("time", e.time);
+        ev.put("mine", e.mine);            // sent from one of OUR devices: render as our bubble
+        ev.put("state", safe(e.state));    // its ticks so far
         push(ev);
     }
 
