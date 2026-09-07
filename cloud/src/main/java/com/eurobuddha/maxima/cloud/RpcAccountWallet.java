@@ -28,9 +28,12 @@ import java.util.function.Consumer;
  * RPC password. Commands go as {@code GET /<url-encoded command>} - the shape the desktop apps'
  * own RPC client uses - and the node's JSON comes straight back.
  *
- * <p>Same contract as the node wallet: the address is the node's default address (a migrated
- * cloud account gets a NEW receive address), the key-use counter belongs to the node (readable,
- * never raised from here), and {@link #build} has already broadcast.
+ * <p>Same contract as the node wallet: the address is one of the node's default addresses (a
+ * migrated cloud account gets a NEW receive address), the key-use counter belongs to the node
+ * (readable, never raised from here), and {@link #build} has already broadcast. A classic node's
+ * {@code getaddress} hands out a DIFFERENT one of its 64 default addresses on every call (seen
+ * live on 1.0.49.4), so the first one is PINNED in {@code <data>/rpc-address.txt} and re-verified
+ * with {@code scripts} on every open: contacts keep seeing one receive address across restarts.
  */
 public final class RpcAccountWallet implements AccountWallet {
 
@@ -79,18 +82,49 @@ public final class RpcAccountWallet implements AccountWallet {
         return mBase;
     }
 
+    static final String ADDRESS_FILE = "rpc-address.txt";
+
     @Override public void open() throws Exception {
+        // 1. A pinned address from an earlier run, if the node still owns it.
+        Path pin = mDataDir.resolve(ADDRESS_FILE);
+        String pinned = "";
+        try {
+            if (Files.isRegularFile(pin)) {
+                pinned = new String(Files.readAllBytes(pin), StandardCharsets.UTF_8).trim();
+            }
+        } catch (Exception ignored) {
+        }
+        if (pinned.matches("Mx[0-9A-Z]+")) {
+            try {
+                JSONObject top = cmd("scripts address:" + pinned);
+                JSONObject resp = response(top);
+                if (Boolean.TRUE.equals(top.get("status")) && Boolean.TRUE.equals(resp.get("default"))
+                        && pinned.equals(str(resp, "miniaddress"))) {
+                    adopt(resp);
+                    return;
+                }
+            } catch (Exception e) {
+                throw new Exception("could not verify the pinned address " + pinned + " with the node: " + e.getMessage());
+            }
+            // the node no longer knows it (a resynced node, another data dir): pick afresh below
+        }
+        // 2. One of the node's default addresses, then pin it.
         JSONObject top = cmd("getaddress");
         if (!Boolean.TRUE.equals(top.get("status"))) {
             throw new Exception("node refused getaddress: " + top.getOrDefault("error", top));
         }
         JSONObject resp = response(top);
-        mHex = str(resp, "address");
-        mMx = str(resp, "miniaddress");
-        mScript = str(resp, "script");
+        adopt(resp);
         if (mMx.isEmpty()) {
             throw new Exception("node returned no default address");
         }
+        Files.write(pin, (mMx + "\n").getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void adopt(JSONObject zResp) {
+        mHex = str(zResp, "address");
+        mMx = str(zResp, "miniaddress");
+        mScript = str(zResp, "script");
     }
 
     @Override public boolean isOpen() { return !mMx.isEmpty(); }

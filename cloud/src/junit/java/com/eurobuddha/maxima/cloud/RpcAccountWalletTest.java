@@ -29,6 +29,8 @@ public class RpcAccountWalletTest {
     private final List<String> commands = new ArrayList<>();
     private final List<String> auths = new ArrayList<>();
     private volatile boolean refuseSend;
+    private volatile int getaddressCalls;
+    private volatile boolean forgetPinned;
 
     @Before
     public void up() throws Exception {
@@ -39,8 +41,16 @@ public class RpcAccountWalletTest {
             auths.add(ex.getRequestHeaders().getFirst("Authorization"));
             String body;
             if (cmd.equals("getaddress")) {
+                // a classic node rotates through its default addresses: first call MxAAAA, then others
+                String a = getaddressCalls++ == 0 ? "AAAA" : "ROT" + getaddressCalls;
                 body = "{\"command\":\"getaddress\",\"status\":true,\"response\":{\"script\":\"RETURN SIGNEDBY(0xPUB1)\","
-                        + "\"address\":\"0xAAAA\",\"miniaddress\":\"MxAAAA\"}}";
+                        + "\"address\":\"0x" + a + "\",\"miniaddress\":\"Mx" + a + "\"}}";
+            } else if (cmd.startsWith("scripts address:")) {
+                String a = cmd.substring("scripts address:".length());
+                body = a.equals("MxAAAA") && !forgetPinned
+                        ? "{\"status\":true,\"response\":{\"script\":\"RETURN SIGNEDBY(0xPUB1)\",\"address\":\"0xAAAA\","
+                          + "\"miniaddress\":\"MxAAAA\",\"default\":true,\"publickey\":\"0xPUB1\"}}"
+                        : "{\"status\":false,\"error\":\"unknown\"}";
             } else if (cmd.equals("keys")) {
                 body = "{\"status\":true,\"response\":{\"keys\":[{\"publickey\":\"0xOTHER\",\"uses\":9},"
                         + "{\"publickey\":\"0xPUB1\",\"uses\":42}]}}";
@@ -63,7 +73,10 @@ public class RpcAccountWalletTest {
     }
 
     private RpcAccountWallet wallet(String secretFileContents) throws Exception {
-        Path dir = Files.createTempDirectory("parlons-rpcwallet");
+        return wallet(secretFileContents, Files.createTempDirectory("parlons-rpcwallet"));
+    }
+
+    private RpcAccountWallet wallet(String secretFileContents, Path dir) throws Exception {
         String spec = "rpc:" + node.getAddress().getPort();
         if (secretFileContents != null) {
             Path f = dir.resolve("rpc-secret.txt");
@@ -107,6 +120,27 @@ public class RpcAccountWalletTest {
             w.raiseUsesTo(100);
             fail("the node owns its counter");
         } catch (UnsupportedOperationException expected) { }
+    }
+
+    @Test
+    public void theFirstDefaultAddressIsPinnedAcrossOpens() throws Exception {
+        Path dir = Files.createTempDirectory("parlons-rpcwallet");
+        RpcAccountWallet w = wallet(null, dir);
+        w.open();
+        assertEquals("MxAAAA", w.mxAddress());
+        assertEquals("MxAAAA", new String(Files.readAllBytes(dir.resolve(RpcAccountWallet.ADDRESS_FILE)), StandardCharsets.UTF_8).trim());
+        RpcAccountWallet again = wallet(null, dir);
+        again.open();
+        assertEquals("the pin wins over a rotating getaddress", "MxAAAA", again.mxAddress());
+        assertEquals("0xAAAA", again.hexAddress());
+        assertTrue(commands.get(commands.size() - 1).startsWith("scripts address:MxAAAA"));
+        assertEquals("getaddress asked once only", 1, getaddressCalls);
+        // the node no longer owns the pinned address (resynced): a fresh one is taken and pinned
+        forgetPinned = true;
+        RpcAccountWallet fresh = wallet(null, dir);
+        fresh.open();
+        assertEquals("MxROT2", fresh.mxAddress());
+        assertEquals("MxROT2", new String(Files.readAllBytes(dir.resolve(RpcAccountWallet.ADDRESS_FILE)), StandardCharsets.UTF_8).trim());
     }
 
     @Test
