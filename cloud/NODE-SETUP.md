@@ -474,6 +474,22 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### The Parlons panel: a real chat window on every account host (cloud 0.11.49, node 0.2.48)
+`panel/` is now the full account interface, not a placeholder: Chats (summaries, unread, search,
+new group), the conversation (bubbles, ticks, day separators, older-on-scroll, photos and voice
+notes through `/media`, send text, send a photo resized client-side and uploaded in 48 KB
+`media.up` chunks - the phones' protocol), Contacts (add, my address + QR, rename/resolve/remove,
+details), Devices (the pairing QR, approve, revoke), Node (status, relays with add/remove/built-in
+switch, directory anchor pin/clear/republish, log), Settings (name, read receipts, open in a
+browser, sign out). Live through `/events` with `chat.since` catch-up on reconnect; a call rings a
+banner ("answer on your phone" - no WebRTC in the panel yet). `/open?ticket=…&to=chat/<key>` lands
+in a chat (a desktop app opening from a notification). Same allow-list as before - no seed, wallet,
+payments or console from a cookie. Verified with two accounts on one Mac in headless Chrome:
+text both ways within a second, live receive with the chat open, ticks sent → delivered, a photo
+from the panel published to the relay shelves, rendered back through `/media` and received on the
+other account; every screen screenshotted at 1240 px and 600 px. Decentralization: unchanged (the
+panel is served by the account itself on loopback).
+
 ### The panel runs in a real browser: external script + pairing QR (cloud 0.11.48, node 0.2.47)
 The placeholder panel's script was inline, which its own Content-Security-Policy (`default-src
 'self'`, no `'unsafe-inline'` for scripts) blocks in any browser - it worked under curl only. The

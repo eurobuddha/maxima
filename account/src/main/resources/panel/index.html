@@ -4,61 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Parlons</title>
-<style>
-  :root { color-scheme: light dark; --ink:#1a1a1a; --mute:#6b6b6b; --line:#d9d9d9; --bg:#fafafa; --card:#fff; }
-  @media (prefers-color-scheme: dark) { :root { --ink:#ececec; --mute:#9a9a9a; --line:#333; --bg:#111; --card:#1b1b1b; } }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display:flex; align-items:baseline; gap:1em; padding:1em 1.5em; border-bottom:1px solid var(--line); }
-  header h1 { font-size:1.1em; margin:0; letter-spacing:.02em; }
-  header .state { color:var(--mute); font-size:.9em; }
-  main { max-width:64em; margin:0 auto; padding:1.5em; display:grid; gap:1.5em; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1em 1.25em; }
-  h2 { font-size:.8em; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); margin:0 0 .6em; }
-  code, pre { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
-  .addr { overflow-wrap:anywhere; }
-  button { font:inherit; padding:.45em .9em; border:1px solid var(--ink); background:transparent; color:var(--ink); border-radius:10px; cursor:pointer; }
-  button:hover { background:var(--ink); color:var(--bg); }
-  table { border-collapse:collapse; width:100%; }
-  td { padding:.35em 0; border-top:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere; }
-  td:first-child { white-space:nowrap; padding-right:1em; color:var(--mute); }
-  #events { max-height:16em; overflow:auto; }
-  .muted { color:var(--mute); }
-  .qr { background:#fff; padding:10px; border-radius:10px; width:fit-content; margin:.6em 0; }
-  .qr:empty { display:none; }
-  .qr img { display:block; image-rendering:pixelated; }
-</style>
+<link rel="stylesheet" href="panel.css">
 </head>
 <body>
-<header>
-  <h1>Parlons</h1>
-  <span class="state" id="state">connecting…</span>
-</header>
-<main>
-  <section>
-    <h2>This account</h2>
-    <table>
-      <tr><td>Name</td><td id="name">…</td></tr>
-      <tr><td>Address</td><td class="addr" id="address">…</td></tr>
-      <tr><td>Version</td><td id="version">…</td></tr>
-    </table>
-  </section>
-  <section>
-    <h2>Pair a phone</h2>
-    <p id="inviteText" class="muted">No pairing code is outstanding.</p>
-    <div id="inviteQr" class="qr"></div>
-    <pre id="invite"></pre>
-    <p><button id="newcode">New pairing code</button></p>
-  </section>
-  <section>
-    <h2>Devices</h2>
-    <table id="devices"><tr><td class="muted">…</td></tr></table>
-  </section>
-  <section>
-    <h2>Live events</h2>
-    <pre id="events" class="muted">(messages, delivery ticks and calls appear here as they happen)</pre>
-  </section>
-</main>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">Parlons <span class="me" id="meName"></span></div>
+    <nav class="nav">
+      <button data-route="chats" class="on">Chats</button>
+      <button data-route="contacts">Contacts</button>
+      <button data-route="devices">Devices</button>
+      <button data-route="node">Node</button>
+      <button data-route="settings">Settings</button>
+    </nav>
+    <div class="state" id="state">connecting…</div>
+  </header>
+  <div class="body" id="body">
+    <aside class="list" id="list">
+      <div class="listhead">
+        <input id="search" type="search" placeholder="Search chats and messages" autocomplete="off">
+        <button id="newGroup" class="ghost" title="New group">+ Group</button>
+      </div>
+      <div id="listItems" class="items"></div>
+    </aside>
+    <main class="pane" id="pane">
+      <div class="empty" id="paneEmpty">
+        <div class="emptyTitle">Your account is up.</div>
+        <div class="emptyText">Pick a conversation, or add someone in Contacts.</div>
+      </div>
+    </main>
+  </div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+</div>
 <script src="qr.js"></script>
 <script src="app.js"></script>
 </body>

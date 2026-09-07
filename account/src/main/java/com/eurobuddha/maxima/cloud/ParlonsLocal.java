@@ -261,7 +261,11 @@ public final class ParlonsLocal {
         mSessions.put(session, System.currentTimeMillis());
         ex.getResponseHeaders().add("Set-Cookie", COOKIE + "=" + session
                 + "; Path=/; HttpOnly; SameSite=Strict");
-        ex.getResponseHeaders().set("Location", "/");
+        // Optional landing route (a desktop app opening straight into a chat): a hash only,
+        // limited to route characters, so nothing else can be injected into the redirect.
+        String to = q.get("to");
+        String hash = to == null || !to.matches("[A-Za-z0-9/%._~-]{1,600}") ? "" : "#" + to;
+        ex.getResponseHeaders().set("Location", "/" + hash);
         ex.getResponseHeaders().set("Cache-Control", "no-store");
         ex.sendResponseHeaders(302, -1);
         ex.close();
@@ -461,6 +465,9 @@ public final class ParlonsLocal {
             return;
         }
         String mime = manifest.mime == null || manifest.mime.isEmpty() ? "application/octet-stream" : manifest.mime;
+        String ext = mime.startsWith("image/jpeg") ? "jpg" : mime.startsWith("image/png") ? "png" : mime.startsWith("image/") ? "img"
+                : mime.startsWith("audio/") ? "m4a" : mime.startsWith("video/") ? "mp4" : "bin";
+        ex.getResponseHeaders().set("Content-Disposition", "inline; filename=\"parlons-media." + ext + "\"");
         ex.getResponseHeaders().set("Content-Type", mime);
         ex.getResponseHeaders().set("Cache-Control", "private, max-age=3600");
         ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
