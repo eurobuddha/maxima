@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.60";
+    public static final String  NODE_VERSION = "0.2.61";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -203,7 +203,13 @@ public final class ParlonsNodeMain {
         if (!mdsProp.isEmpty()) {
             GeneralParams.MDS_ENABLED = Boolean.parseBoolean(mdsProp);
         }
-        GeneralParams.MDS_BIND_HOST = System.getProperty("parlons.mds.bind", "127.0.0.1").trim();
+        // Precedence (0.2.61): -Dparlons.mds.bind > Minima's own -mdsbind (in the args / conf file) > 127.0.0.1.
+        String bindProp = System.getProperty("parlons.mds.bind");
+        if (bindProp != null && !bindProp.trim().isEmpty()) {
+            GeneralParams.MDS_BIND_HOST = bindProp.trim();
+        } else if (!(flags && MinimaFlags.has("mdsbind"))) {
+            GeneralParams.MDS_BIND_HOST = "127.0.0.1";
+        }
         if (GeneralParams.MDS_BIND_HOST.equals("*") || GeneralParams.MDS_BIND_HOST.equals("0.0.0.0")) {
             GeneralParams.MDS_BIND_HOST = "";
         }

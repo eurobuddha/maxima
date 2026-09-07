@@ -487,6 +487,10 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### `-mdsbind` in the Minima flags is honoured (node 0.2.61)
+Review fix: the loopback default for MDS applied even when the operator had set Minima's own `-mdsbind`
+in `-Dparlons.node.args` / the conf file. Now: `-Dparlons.mds.bind` > `-mdsbind` > `127.0.0.1`.
+
 ### A dead admin RPC is fatal, whatever killed it (node 0.2.60)
 0.2.59 made a failed admin-RPC bind fatal, but caught `Exception` only: a JRE jlinked without the
 `jdk.httpserver` module throws `NoClassDefFoundError` at the same line (seen from minimaDesk's bundled
