@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.59";
+    public static final String  NODE_VERSION = "0.2.60";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -234,12 +234,13 @@ public final class ParlonsNodeMain {
             AdminRpc admin;
             try {
                 admin = AdminRpc.start(GeneralParams.RPC_PORT);
-            } catch (Exception e) {
-                // Before 0.2.59 this exception killed the main thread only: the Minima node kept
-                // running with no admin RPC, no cape and no account - an orphan the host app could
-                // neither reach nor stop cleanly. A port clash is fatal, and says so.
-                System.err.println("[parlons-node] REFUSING to run: admin rpc port 127.0.0.1:" + GeneralParams.RPC_PORT
-                        + " cannot be bound (" + e + ") - another node on this port? stopping the embedded node");
+            } catch (Throwable e) {
+                // Before 0.2.59 this killed the main thread only: the Minima node kept running with no
+                // admin RPC, no cape and no account - an orphan the host app could neither reach nor
+                // stop cleanly. Throwable, not Exception (0.2.60): a JRE jlinked without jdk.httpserver
+                // throws NoClassDefFoundError here, and that must be just as fatal as a port clash.
+                System.err.println("[parlons-node] REFUSING to run: admin rpc on 127.0.0.1:" + GeneralParams.RPC_PORT
+                        + " cannot start (" + e + ") - another node on this port, or a JRE without the jdk.httpserver module? stopping the embedded node");
                 try { main.shutdown(); } catch (Throwable ignored) { }
                 System.exit(2);
                 return;

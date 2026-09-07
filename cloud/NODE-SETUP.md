@@ -487,6 +487,12 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### A dead admin RPC is fatal, whatever killed it (node 0.2.60)
+0.2.59 made a failed admin-RPC bind fatal, but caught `Exception` only: a JRE jlinked without the
+`jdk.httpserver` module throws `NoClassDefFoundError` at the same line (seen from minimaDesk's bundled
+JRE), and the node ran on headless again. Now `Throwable`; the message names both causes (port clash,
+missing module). Host apps: jlink with `--add-modules java.se,jdk.unsupported,jdk.httpserver`.
+
 ### MDS is back in the fork: MiniHUB + MiniDapps served by the Parlons Node (node 0.2.59; fork 9dc9d61)
 The `minima-core` fork the node embeds never had MDS (it comes from spartacusrex's lean 1.1.x line);
 `system/mds`, `commands/mds`, `database/minidapps`, `utils/ssl`, `HTTPSServer`, Rhino 1.7.14 and the
