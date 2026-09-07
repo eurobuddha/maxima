@@ -24,6 +24,28 @@ public class Bip39Test {
             "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
             "abandon", "abandon", "abandon", "abandon", "abandon", "about");
 
+    /** A node stores a custom (-seed / -anyseed) phrase verbatim and hashes THAT; a BIP39 phrase is
+     *  stored cleaned + uppercase. Verified live on a minimaCore 1.1.2.3 vault (2026-09-07). */
+    @Test
+    public void nodeSeedRuleMatchesTheNodeForBothKindsOfPhrase() {
+        String bip = String.join(" ", ABANDON);
+        assertEquals(Bip39.toSeed(bip), Bip39.toNodeSeed(bip));
+        assertEquals("lower/upper BIP39 are one phrase", Bip39.toNodeSeed(bip), Bip39.toNodeSeed(bip.toUpperCase()));
+        String custom = "amsterdamdreams478720264787";
+        assertFalse(Bip39.isBip39(custom));
+        assertTrue(Bip39.isBip39(bip));
+        MiniData raw = new MiniData(com.eurobuddha.maxima.core.crypto.Hashes.sha3(
+                new com.eurobuddha.maxima.core.codec.MiniString(custom).getData()));
+        assertEquals("custom phrase: SHA3 of the text verbatim", raw, Bip39.toNodeSeed(custom));
+        assertNotEquals("NOT of its uppercase", Bip39.toNodeSeed(custom), Bip39.toNodeSeed(custom.toUpperCase()));
+        // an identity file may hold the seed hex itself
+        MaximaIdentity fromHex = MaximaIdentity.fromNodeSecret(raw.to0xString());
+        assertEquals(MaximaIdentity.fromNodePhrase(custom).seed(), fromHex.seed());
+        assertTrue(MaximaIdentity.isSeedHex(raw.to0xString()));
+        assertFalse(MaximaIdentity.isSeedHex(custom));
+        assertEquals(MaximaIdentity.fromPhrase(bip).seed(), MaximaIdentity.fromNodeSecret(bip).seed());
+    }
+
     @Test
     public void wordlistIs2048() {
         assertEquals(2048, Bip39.words().size());

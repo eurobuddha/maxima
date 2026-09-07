@@ -77,6 +77,19 @@ final class AdminRpc {
         try {
             JSONObject res = CommandRunner.getRunner().runSingleCommand(command);
             out = res.toString();
+            // Minima's `quit` stops the node's own threads but never exits the JVM (Minima.main did
+            // that, and this jar does not run it): the cape, gateway and account would linger with
+            // no chain under them. A desktop app stops its node with `quit` and expects the process
+            // to end - so end it, through the shutdown hook, once the reply has left.
+            if ("quit".equals(command.split("\\s+", 2)[0].toLowerCase())) {
+                Thread exit = new Thread(() -> {
+                    try { Thread.sleep(800); } catch (InterruptedException ignored) { }
+                    System.out.println("[parlons-node] quit: node stopped - exiting");
+                    System.exit(0);
+                }, "parlons-admin-quit");
+                exit.setDaemon(true);
+                exit.start();
+            }
         } catch (Throwable t) {
             code = 500;
             JSONObject err = new JSONObject();

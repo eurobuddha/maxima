@@ -474,6 +474,28 @@ line: `dirrep=sent/stored`. Decentralization: no new trusted party — a relay c
 forge; copies go to random peers, not a designated set. Verify: `MeshReplicateTest`; live: stop a
 node for 2 min and resolve its MAX# via another relay.
 
+### A desktop node becomes the account: custom phrases, relay-off, clean quit (node 0.2.45, cloud 0.11.46)
+Three things the minimaCore Desktop gate (the Parlons Node jar booted on a COPY of a real
+minimaCore data folder, 2026-09-07) proved necessary before a desktop app can run the Parlons
+Node as its node. (1) **Identity from any Minima phrase.** A node created with a custom
+`-seed`/`-anyseed` phrase is not BIP39, and the cape died on "Unknown BIP39 word". Minima's rule
+is SHA3-256 of the phrase exactly as stored (BIP39 phrases are stored cleaned + UPPERCASE; a
+custom phrase verbatim - verified against a live vault): `Bip39.toNodeSeed` /
+`MaximaIdentity.fromNodePhrase`. On first boot the node takes the vault's own `seed` as
+authoritative and pins the phrase to `identity.txt` when the rule reproduces it, else the seed
+hex (`identity.txt` may now hold either; so may a cloud `seed.txt`, and `--import-seed` accepts a
+custom phrase or a seed hex). (2) **`-Dparlons.relay.port=0` = no cape**: the account attaches to
+the fleet like parlons-cloud (a desktop that is not contributing must not listen on 9501). (3)
+**`quit` ends the process**: Minima's `quit` stopped the chain but this JVM lingered with a
+capeless account on top; the admin RPC now exits after the reply so a desktop app's stop is 3 s,
+not a 12 s SIGTERM. Also (4) the node's account wallet address is PINNED (`wallet-address.txt`,
+re-verified with `scripts`): the node's `getaddress` rotates through its default addresses and
+the address shared with every contact changed on each restart. Decentralization: nothing new
+hosted; a node with no cape is a smaller contributor by the user's own switch (principle 5); the
+account still needs no operator. Verify: `Bip39Test.nodeSeedRuleMatchesTheNodeForBothKindsOfPhrase`;
+live: the gate runs above (data folder reused in place, 67 existing scripts, chain at tip, panel
+up, quit in 3 s, same address across two boots).
+
 ### A running Minima node as the account's wallet (cloud 0.11.44)
 `parlons-cloud --wallet rpc:<port>[:<secret-file>]` makes a Minima node ALREADY running on the
 same machine the account's wallet, over the node's loopback RPC (`RpcAccountWallet`; HTTP Basic

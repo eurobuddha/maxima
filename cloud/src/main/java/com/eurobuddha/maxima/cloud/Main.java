@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.45";
+    public static final String VERSION = "0.11.46";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -200,10 +200,19 @@ public final class Main {
             phrase = new String(java.nio.file.Files.readAllBytes(Paths.get(zSource)),
                     java.nio.charset.StandardCharsets.UTF_8);
         }
-        phrase = com.eurobuddha.maxima.core.identity.Bip39.cleanSeedPhrase(phrase);
-        if (!com.eurobuddha.maxima.core.identity.Bip39.checksumValid(
-                java.util.Arrays.asList(phrase.split(" ")))) {
-            System.out.println("note: no valid BIP39 checksum — normal for a Minima-node phrase.");
+        phrase = phrase.trim();
+        if (MaximaIdentity.isSeedHex(phrase)) {
+            System.out.println("note: a seed hex (a node vault's `seed`) - adopted exactly.");
+        } else if (com.eurobuddha.maxima.core.identity.Bip39.isBip39(phrase)) {
+            phrase = com.eurobuddha.maxima.core.identity.Bip39.cleanSeedPhrase(phrase);
+            if (!com.eurobuddha.maxima.core.identity.Bip39.checksumValid(
+                    java.util.Arrays.asList(phrase.split(" ")))) {
+                System.out.println("note: no valid BIP39 checksum — normal for a Minima-node phrase.");
+            }
+        } else {
+            // A custom Minima -seed/-anyseed phrase: the node hashes it verbatim (Bip39.toNodeSeed).
+            System.out.println("note: not BIP39 words - taken as a custom Minima phrase, exactly as written."
+                    + " If the node's vault shows a different seed, import that seed hex instead.");
         }
         java.nio.file.Files.createDirectories(dir);
         try {
@@ -293,7 +302,8 @@ public final class Main {
             System.out.println();
         }
 
-        MaximaIdentity id = MaximaIdentity.fromPhrase(seed.phrase);
+        // seed.txt holds BIP39 words (generated here), or an imported node phrase / seed hex.
+        MaximaIdentity id = MaximaIdentity.fromNodeSecret(seed.phrase);
 
         System.out.println("Parlons Cloud " + VERSION + " starting");
         System.out.println("  data     : " + dir);

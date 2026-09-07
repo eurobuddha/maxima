@@ -49,10 +49,35 @@ final class NodeAccountWallet implements AccountWallet {
         }
     }
 
+    /** The account's receive address, pinned: the node's {@code getaddress} hands out a DIFFERENT
+     *  one of its default addresses on every call, so without a pin the account's address (shared
+     *  with every contact) changed on each restart. Re-verified with {@code scripts} on open. */
+    static final String ADDRESS_FILE = "wallet-address.txt";
+
     @Override public void open() throws Exception {
+        Path pin = mDataDir.resolve(ADDRESS_FILE);
+        String pinned = "";
+        try {
+            if (Files.isRegularFile(pin)) {
+                pinned = new String(Files.readAllBytes(pin), StandardCharsets.UTF_8).trim();
+            }
+        } catch (Exception ignored) {
+        }
+        if (pinned.matches("Mx[0-9A-Z]+")) {
+            JSONObject top = NodeWallet.run("scripts address:" + pinned);
+            JSONObject resp = NodeWallet.response(top);
+            if (Boolean.TRUE.equals(top.get("status")) && Boolean.TRUE.equals(resp.get("default"))
+                    && pinned.equals(String.valueOf(resp.get("miniaddress")))) {
+                mScript = String.valueOf(resp.getOrDefault("script", ""));
+                mAddress = new NodeWallet.Address(String.valueOf(resp.get("address")), pinned);
+                return;
+            }
+            // the node no longer owns it (resynced to another phrase): pick afresh below
+        }
         JSONObject resp = NodeWallet.response(NodeWallet.run("getaddress"));
         mScript = String.valueOf(resp.getOrDefault("script", ""));
-        mAddress = NodeWallet.defaultAddress();
+        mAddress = new NodeWallet.Address(String.valueOf(resp.get("address")), String.valueOf(resp.get("miniaddress")));
+        Files.write(pin, (mAddress.mini + "\n").getBytes(StandardCharsets.UTF_8));
     }
 
     @Override public boolean isOpen() { return mAddress != null; }

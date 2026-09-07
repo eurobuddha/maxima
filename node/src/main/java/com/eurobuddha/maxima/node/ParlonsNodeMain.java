@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.44";
+    public static final String  NODE_VERSION = "0.2.45";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     private static final int    RELAY_PORT = Integer.getInteger("parlons.relay.port", 9501);
@@ -63,7 +63,8 @@ public final class ParlonsNodeMain {
         out.println("  -Dparlons.node.megammr=true      keep the MegaMMR (wallet gateway needs it; 3 GB heap)");
         out.println("  -Dparlons.node.rpc=false         loopback admin RPC (needed for wallet resync / the vault)");
         out.println("  -Dparlons.node.args=\"…\"         Minima's own flags, e.g. \"-host 1.2.3.4 -archive\"");
-        out.println("  -Dparlons.relay.port=9501        the Maxima relay (public); -Dparlons.relay.peers=h:p,… mesh peers");
+        out.println("  -Dparlons.relay.port=9501        the Maxima relay (public); 0 = no relay (a desktop that does not");
+        out.println("                                    contribute); -Dparlons.relay.peers=h:p,… mesh peers");
         out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
         out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
         out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
@@ -213,6 +214,8 @@ public final class ParlonsNodeMain {
                 // deriveMaximaIdentityFromNode() only returns once the node wallet is initialised
                 // (vault succeeded) — so past this line the wallet is provably up.
                 MaximaIdentity identity = deriveMaximaIdentityFromNode();
+                RelayRuntime relay = null;
+                if (RELAY_PORT > 0) {
                 Path relayDir = new File(dataFolder, "relay").toPath();
                 // The cape's public host: -Dparlons.relay.host, else what the Minima node detected
                 // for itself (its peers see our NAT'd address too - the Pi has no public interface
@@ -225,7 +228,7 @@ public final class ParlonsNodeMain {
                         capeHost = det;
                     }
                 }
-                RelayRuntime relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
+                relay = new RelayRuntime(identity, RELAY_PORT, PROTOCOL, RELAY_RATE,
                         capeHost, relayDir);
                 relay.setPool(true);   // a VPS node is always-on + public => a permanent-anchor host
                 // Capacity knobs, same names as maxima-server.jar's flags: -Dparlons.relay.maxconn
@@ -260,6 +263,12 @@ public final class ParlonsNodeMain {
                 System.out.println("[parlons-node] Maxima cape up on port " + RELAY_PORT
                         + " — identity " + identity.mxIdentity()
                         + " (derived from the node seed; one seed drives both)");
+                } else {
+                    // A desktop that is not contributing: no public relay, the account attaches to
+                    // the fleet like parlons-cloud does. -Dparlons.relay.port=<n> turns the cape on.
+                    System.out.println("[parlons-node] Maxima cape OFF (-Dparlons.relay.port=0) — identity "
+                            + identity.mxIdentity() + "; the account rides the fleet's relays");
+                }
 
                 // The account wallet IS the node's own wallet (M2).
                 NodeWallet.Address acct = NodeWallet.defaultAddress();
@@ -282,7 +291,7 @@ public final class ParlonsNodeMain {
                     // Advertise the gateway in the cape's greeting so phones that discover this
                     // relay discover its wallet gateway too. Only a MegaMMR node can serve the
                     // wallet's megammr:true reads, and only a public TLS front is reachable.
-                    if (GeneralParams.IS_MEGAMMR && !publicBase.isEmpty() && relay.server() != null) {
+                    if (GeneralParams.IS_MEGAMMR && !publicBase.isEmpty() && relay != null && relay.server() != null) {
                         relay.server().setGateway(publicBase + "/cmd", gw.token());
                         System.out.println("[parlons-node] wallet gateway advertised to phones: "
                                 + publicBase + "/cmd");
@@ -373,7 +382,7 @@ public final class ParlonsNodeMain {
         com.eurobuddha.maxima.cloud.ParlonsCore.Config cfg = new com.eurobuddha.maxima.cloud.ParlonsCore.Config();
         cfg.version = NODE_VERSION;
         cfg.logTag = "parlons-node";
-        cfg.relayPort = 0;                                   // the cape is the relay
+        cfg.relayPort = 0;                                   // the cape is the relay (or there is none)
         cfg.directPort = Integer.getInteger("parlons.account.direct", 0);
         cfg.panelPort = Integer.getInteger("parlons.panel.port", com.eurobuddha.maxima.cloud.ParlonsLocal.DEFAULT_PORT);
         cfg.publicHost = System.getProperty("parlons.relay.host", "");
@@ -381,7 +390,9 @@ public final class ParlonsNodeMain {
         // the permanent address on it. Public host = -Dparlons.relay.host, else what the Minima
         // node detected for itself; a private/loopback host is useless to contacts, so skip.
         String ownHost = cfg.publicHost.isEmpty() ? detectedPublicHost() : cfg.publicHost;
-        if (isPublicHost(ownHost)) {
+        if (zRelay == null) {
+            System.out.println("[parlons-node] own relay: none (cape off) - the account attaches to the fleet");
+        } else if (isPublicHost(ownHost)) {
             cfg.ownRelay = ownHost + ":" + RELAY_PORT;
             System.out.println("[parlons-node] own relay: " + cfg.ownRelay + " (preferred + advertised first)");
         } else {
@@ -409,7 +420,9 @@ public final class ParlonsNodeMain {
         };
         com.eurobuddha.maxima.cloud.ParlonsCore core = new com.eurobuddha.maxima.cloud.ParlonsCore(
                 zIdentity, zDataFolder.toPath(), cfg, new NodeAccountWallet(zDataFolder), backup);
-        core.useExternalRelay(zRelay);
+        if (zRelay != null) {
+            core.useExternalRelay(zRelay);
+        }
         // The Terminal IDE on a paired device: any node command, run on the console lane.
         core.control().setNodeConsole(NodeWallet::run);
         // NFT hosting from the wallet on a paired device (upload over the paired channel).
@@ -560,22 +573,36 @@ public final class ParlonsNodeMain {
         // contacts — the phone's "resync wallet, keep identity" model. Delete the file to re-pin.
         File pin = new File(sDataFolder, "identity.txt");
         if (pin.isFile()) {
-            String phrase = new String(java.nio.file.Files.readAllBytes(pin.toPath()),
+            String secret = new String(java.nio.file.Files.readAllBytes(pin.toPath()),
                     java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (!phrase.isEmpty()) {
-                System.out.println("[parlons-node] identity: pinned (identity.txt)");
-                return MaximaIdentity.fromPhrase(Arrays.asList(phrase.split("\\s+")));
+            if (!secret.isEmpty()) {
+                System.out.println("[parlons-node] identity: pinned (identity.txt"
+                        + (MaximaIdentity.isSeedHex(secret) ? ", seed hex" : "") + ")");
+                return MaximaIdentity.fromNodeSecret(secret);
             }
         }
-        String vaultPhrase = readVaultPhraseWhenReady();
-        MaximaIdentity id = MaximaIdentity.fromPhrase(Arrays.asList(vaultPhrase.split("\\s+")));
+        // The vault's OWN seed is authoritative (a node with a custom -seed phrase hashes the phrase
+        // verbatim, not as BIP39 - see Bip39.toNodeSeed). Pin the phrase when our rule reproduces
+        // that seed (so backups show words), else pin the seed hex itself.
+        JSONObject vault = readVaultWhenReady();
+        String vaultPhrase = String.valueOf(vault.get("phrase")).trim();
+        String vaultSeed = vault.get("seed") == null ? "" : String.valueOf(vault.get("seed")).trim();
+        MaximaIdentity id = MaximaIdentity.isSeedHex(vaultSeed)
+                ? MaximaIdentity.fromSeed(new com.eurobuddha.maxima.core.codec.MiniData(vaultSeed))
+                : MaximaIdentity.fromNodePhrase(vaultPhrase);
+        boolean phraseReproduces = MaximaIdentity.fromNodePhrase(vaultPhrase).seed().equals(id.seed());
+        String pinned = phraseReproduces ? vaultPhrase : id.seed().to0xString();
+        if (!phraseReproduces) {
+            System.out.println("[parlons-node] identity: the node's phrase is a custom one that our phrase rule"
+                    + " cannot reproduce - pinning the vault's seed hex instead (backups show the hex)");
+        }
         try {
             java.nio.file.Path pp = pin.toPath();
             try {
                 java.nio.file.Files.createFile(pp, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
                         java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
             } catch (Exception nonPosix) { }
-            java.nio.file.Files.write(pp, vaultPhrase.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            java.nio.file.Files.write(pp, pinned.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             System.out.println("[parlons-node] identity: pinned from the vault into identity.txt "
                     + "(wallet resyncs no longer change the identity)");
         } catch (Exception e) {
@@ -587,9 +614,9 @@ public final class ParlonsNodeMain {
     private static File sDataFolder;
     private static NftStore sNft;
 
-    /** The vault phrase once the node's wallet is up (waits up to 120 s; unlocks a
+    /** The vault (phrase + seed) once the node's wallet is up (waits up to 120 s; unlocks a
      *  password-locked node once). Returned to the caller, held nowhere else. */
-    private static String readVaultPhraseWhenReady() throws Exception {
+    private static JSONObject readVaultWhenReady() throws Exception {
         boolean unlockTried = false;
         for (int i = 0; i < 60; i++) {
             try {
@@ -605,7 +632,7 @@ public final class ParlonsNodeMain {
                     }
                     if (phrase instanceof String && !((String) phrase).isEmpty()
                             && !Boolean.TRUE.equals(locked)) {
-                        return ((String) phrase).trim();
+                        return (JSONObject) resp;
                     }
                 }
             } catch (Throwable ignored) {

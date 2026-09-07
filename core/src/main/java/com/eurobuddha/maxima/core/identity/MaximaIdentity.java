@@ -55,6 +55,27 @@ public final class MaximaIdentity {
         return new MaximaIdentity(zSeed);
     }
 
+    /** From a phrase exactly as a Minima node stores it: BIP39 words or a custom phrase
+     *  ({@link Bip39#toNodeSeed}). */
+    public static MaximaIdentity fromNodePhrase(String zPhrase) {
+        return new MaximaIdentity(Bip39.toNodeSeed(zPhrase));
+    }
+
+    /** What an identity/seed file may hold: a 32-byte seed as {@code 0x}-hex (exact, from a node's
+     *  vault), else a phrase ({@link #fromNodePhrase}). */
+    public static MaximaIdentity fromNodeSecret(String zSecret) {
+        String s = zSecret == null ? "" : zSecret.trim();
+        if (isSeedHex(s)) {
+            return new MaximaIdentity(new MiniData(s));
+        }
+        return fromNodePhrase(s);
+    }
+
+    /** True for a 32-byte seed written as 0x-hex. */
+    public static boolean isSeedHex(String zSecret) {
+        return zSecret != null && zSecret.trim().matches("0[xX][0-9A-Fa-f]{64}");
+    }
+
     /** Generate a fresh checksummed 24-word phrase and the identity for it. */
     public static Created create() {
         List<String> words = Bip39.generate(24);

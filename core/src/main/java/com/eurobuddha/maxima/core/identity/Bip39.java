@@ -250,6 +250,32 @@ public final class Bip39 {
         return toSeed(String.join(" ", zWords));
     }
 
+    /** True when every word is (a prefix of) a BIP39 word - what {@link #cleanSeedPhrase} accepts. */
+    public static boolean isBip39(String zPhrase) {
+        try {
+            cleanSeedPhrase(zPhrase);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * THE seed a Minima node holds for a phrase EXACTLY as the node stores it - {@code BIP39.
+     * convertStringToSeed}: SHA3-256 of the phrase bytes. A node stores a BIP39 phrase cleaned and
+     * UPPERCASE (so this equals {@link #toSeed}), but a custom {@code -seed}/{@code -anyseed} phrase
+     * is stored VERBATIM (seen live: a one-word phrase whose vault seed was SHA3 of the raw text,
+     * not of its uppercase). A phrase of BIP39 words is always taken as BIP39; a custom phrase that
+     * happens to be all BIP39 words is the one ambiguous case - callers with the node's own seed
+     * hex (the vault) should prefer it.
+     */
+    public static MiniData toNodeSeed(String zPhrase) {
+        if (isBip39(zPhrase)) {
+            return toSeed(zPhrase);
+        }
+        return new MiniData(Hashes.sha3(new MiniString(zPhrase).getData()));
+    }
+
     /** The canonical UPPERCASE space-joined form a node would store. */
     public static String canonical(List<String> zWords) {
         return cleanSeedPhrase(String.join(" ", zWords));

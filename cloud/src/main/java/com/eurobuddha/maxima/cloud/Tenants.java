@@ -226,7 +226,7 @@ public final class Tenants {
 
         void start(Path zTenant) throws Exception {
             final String phrase = phraseFor(zTenant, unlock);
-            MaximaIdentity id = MaximaIdentity.fromPhrase(phrase);
+            MaximaIdentity id = MaximaIdentity.fromNodeSecret(phrase);
             ParlonsCore.Config cfg = copy(base);
             cfg.logTag = "parlons-cloud/" + zTenant.getFileName();
             cfg.displayName = null;   // each account keeps its own stored name
