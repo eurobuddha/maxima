@@ -487,6 +487,13 @@ adoption loop once it runs, so the panel cannot show "verified" on a loopback di
 fleet's up-front-configured relays keep the dial-back judgement. Verify: gate run on the owner's
 node copy: attached over loopback, route registered on the in-process relay, state honest.
 
+### Host-app switching between a classic node and a Parlons Node: key uses both ways (minimaDesk 0.7.23)
+Two nodes, one wallet (same phrase): the host reads the highest per-key `uses` (m) of the node it is
+stopping and, when m rose since the last switch, sets every key of the node it starts to m + 1 - fork:
+`keys action:createallkeys keyuses:N`; classic jar: its own `megammrsync … phrase keyuses:N` against a
+fleet MegaMMR node (proven: classic 1.0.49 syncs from the fork's MegaMMR at 192.248.151.55:9101). The
+classic megammrsync applies `keyuses` before the MegaMMR fetch, so a failed fetch never lowers a counter.
+
 ### A node that shuts itself down ends the JVM (node 0.2.62)
 `megammrsync action:resync`, `restore` and `reset` finish with Minima's own shutdown ("please restart").
 Minima.main exits the JVM there; the Parlons Node never ran it, so after a wallet resync issued over the
