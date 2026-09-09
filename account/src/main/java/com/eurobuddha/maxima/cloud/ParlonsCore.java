@@ -189,10 +189,9 @@ public final class ParlonsCore {
             public int uses() {
                 return mWalletOpen ? mWallet.uses() : -1;
             }
-            public void raiseUsesTo(int zTo) {
-                if (mWalletOpen) {
-                    try { mWallet.raiseUsesTo(zTo); } catch (Exception e) { log("key-uses raise refused: " + e.getMessage()); }
-                }
+            public void raiseUsesTo(int zTo) throws Exception {
+                if (!mWalletOpen) throw new IllegalStateException("wallet still opening");
+                mWallet.raiseUsesTo(zTo);
             }
             public String walletScript() {
                 return mWalletOpen ? mWallet.script() : "";

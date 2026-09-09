@@ -280,12 +280,22 @@ public final class ParlonsControl {
         boolean ready();                   // false until the wallet is open (payments refused)
         String walletError();              // "" unless the wallet failed to open
         int uses();                        // key uses so far (-1 if wallet not open)
-        void raiseUsesTo(int zTo);         // raise-only counter adjust
+        void raiseUsesTo(int zTo) throws Exception; // success only after persistence
         String walletScript();             // the account address's spend script (a device tracks it)
         String walletHex();                // the account address as 0x hex (for a device's coin reads)
     }
 
     private volatile PaySource mPaySource;
+
+    /** One counter write at a time; retries share it instead of filling the wallet lane. */
+    private static final class CounterRaise {
+        final String key = java.util.UUID.randomUUID().toString();
+        final int target;
+        final java.util.concurrent.CompletableFuture<JSONObject> result = new java.util.concurrent.CompletableFuture<>();
+        CounterRaise(int zTarget) { target = zTarget; }
+    }
+    private final Object mCounterLock = new Object();
+    private CounterRaise mCounterRaise;
 
     public void setPaySource(PaySource zSource) {
         mPaySource = zSource;
@@ -740,16 +750,38 @@ public final class ParlonsControl {
             if (ps == null) {
                 return bytes(err("wallet still opening"));
             }
-            int cur = ps.uses();                 // one cheap (lock-free) read off the two mirrors
+            JSONObject in = parse(req);
+            String key = str(in, "key");
+            if (!key.isEmpty()) {
+                CounterRaise job;
+                synchronized (mCounterLock) { job = mCounterRaise; }
+                return bytes(job != null && job.key.equals(key) ? counterReply(job)
+                        : err("that counter update is no longer available — refresh the counter"));
+            }
+            Object raise = in.get("raiseTo");
+            Integer target = null;
+            if (in.containsKey("raiseTo")) {
+                try {
+                    if (!(raise instanceof Number)) throw new IllegalArgumentException();
+                    target = new java.math.BigDecimal(raise.toString()).intValueExact();
+                } catch (RuntimeException e) {
+                    return bytes(err("the counter must be a whole number"));
+                }
+                CounterRaise active;
+                synchronized (mCounterLock) { active = mCounterRaise; }
+                if (active != null && !active.result.isDone()) {
+                    // Do not read counters behind an in-flight write's file lock on a retry.
+                    return bytes(active.target == target ? counterReply(active)
+                            : err("another counter update is still running"));
+                }
+            }
+            int cur = ps.uses();
             if (cur < 0) {
                 return bytes(err("wallet still opening"));
             }
-            JSONObject in = parse(req);
-            Object raise = in.get("raiseTo");
-            int reported = cur;
-            if (raise instanceof Number) {
-                final int to = ((Number) raise).intValue();
-                if (to <= cur) {
+            if (target != null) {
+                final int to = target;
+                if (to < cur) {
                     return bytes(err("can only RAISE above the current " + cur));
                 }
                 // Fund-critical ceiling: never fold the counter past the key's leaf maximum, or
@@ -757,16 +789,42 @@ public final class ParlonsControl {
                 if (to > mWallet.maxUses()) {
                     return bytes(err("above the key's maximum " + mWallet.maxUses()));
                 }
-                // The write takes a cross-process FileLock + fsyncs BOTH mirrors — never on the
-                // pump. Defer to the send lane; the raise is validated and raise-only, so reply
-                // optimistically and the device re-reads the persisted value on its next refresh.
-                mSendExec.execute("wallet", () -> {
-                    try { ps.raiseUsesTo(to); } catch (Exception ignored) { }
-                });
-                reported = to;
+                if (to != cur) {
+                    CounterRaise job;
+                    synchronized (mCounterLock) {
+                        job = mCounterRaise;
+                        if (job != null && !job.result.isDone()) {
+                            if (job.target != to) return bytes(err("another counter update is still running"));
+                        } else {
+                            final CounterRaise next = new CounterRaise(to);
+                            mCounterRaise = job = next;
+                            try {
+                                mSendExec.execute("wallet", () -> {
+                                    try {
+                                        ps.raiseUsesTo(to);
+                                        int saved = ps.uses();
+                                        if (saved < to) throw new IllegalStateException("counter update was not persisted");
+                                        JSONObject out = ok();
+                                        out.put("uses", saved);
+                                        out.put("max", mWallet.maxUses());
+                                        next.result.complete(out);
+                                    } catch (Exception e) {
+                                        next.result.complete(err(e.getMessage() == null ? "counter update failed" : e.getMessage()));
+                                    }
+                                });
+                            } catch (RuntimeException e) {
+                                mCounterRaise = null;
+                                throw e;
+                            }
+                        }
+                    }
+                    // The write's file locks and fsync stay on the wallet lane. Like Terminal jobs, a
+                    // slow operation yields a poll key after a short leash, never false success.
+                    return bytes(counterReply(job));
+                }
             }
             JSONObject out = ok();
-            out.put("uses", reported);
+            out.put("uses", cur);
             out.put("max", mWallet.maxUses());
             return bytes(out);
         });
@@ -2082,6 +2140,21 @@ public final class ParlonsControl {
     }
 
     // ---- helpers ----
+
+    private static JSONObject counterReply(CounterRaise zJob) throws Exception {
+        try {
+            return zJob.result.get(CMD_LEASH_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            // Older clients only understand ok/error: they must not toast "Counter raised".
+            JSONObject out = err("counter update is still running — refresh to confirm the saved count");
+            out.put("pending", true);
+            out.put("key", zJob.key);
+            return out;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e; // the queued write may still finish; never cancel a counter reservation
+        }
+    }
 
     private void requireAuth(ServiceRegistry.Request req) {
         if (!mPairing.isAuthorized(req.fromPublicKey)) {

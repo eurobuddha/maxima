@@ -454,7 +454,19 @@ public final class ParlonsRemote {
     public JSONObject walletUses(int zRaiseTo) throws Exception {
         JSONObject p = new JSONObject();
         if (zRaiseTo > 0) p.put("raiseTo", zRaiseTo);
-        return rpc(ParlonsControl.M_WALLET_USES, p);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        JSONObject r = rpc(ParlonsControl.M_WALLET_USES, p);
+        // Same bounded polling as nodeCmd. Pending is deliberately ok:false for older clients.
+        while (Boolean.TRUE.equals(r.get("pending"))) {
+            if (System.nanoTime() >= deadline) return r;
+            Object key = r.get("key");
+            if (!(key instanceof String) || ((String) key).isEmpty()) return r;
+            Thread.sleep(100);
+            JSONObject poll = new JSONObject();
+            poll.put("key", key);
+            r = rpc(ParlonsControl.M_WALLET_USES, poll);
+        }
+        return r;
     }
 
     /** Set the account's display name; the node re-announces it to every contact. */
