@@ -52,7 +52,8 @@ public final class HostConnection implements Closeable {
     private final KeyPair mPerHostKey;
     private final String mVersion;
 
-    private Socket mSocket;
+    private volatile Socket mSocket;
+    private boolean mClosed; // guarded by this; a connection instance owns only one socket
     private DataOutputStream mOut;
     private DataInputStream mIn;
 
@@ -65,7 +66,7 @@ public final class HostConnection implements Closeable {
      *  "pool":"true"). We prefer pinning a pool relay as our MLS anchor so our
      *  permanent MAX# resolves for strangers. Absent (classic/old relay) = false. */
     private volatile boolean mTheirPool;
-    private boolean mAttached;
+    private volatile boolean mAttached;
 
     /** When we last read ANY frame from this host. Mirrors the reference's
      *  per-peer read-clock (NIOClient.mLastMessageRead): a host that has gone
@@ -260,7 +261,11 @@ public final class HostConnection implements Closeable {
      * @param zTimeoutMs overall budget for reaching the attached state
      */
     public void attach(int zTimeoutMs) throws Exception {
-        mSocket = new Socket();
+        synchronized (this) {
+            if (mClosed) throw new IllegalStateException("connection closed");
+            if (mSocket != null) throw new IllegalStateException("connection already started");
+            mSocket = new Socket();
+        }
         mSocket.connect(DialAlias.resolve(mHost, mPort), zTimeoutMs);
         mSocket.setSoTimeout(zTimeoutMs);
         mSocket.setTcpNoDelay(true);
@@ -289,8 +294,11 @@ public final class HostConnection implements Closeable {
         MaximaCTRLMessage id = MaximaCTRLMessage.id(new MiniData(routingKey()));
         Frame.write(mOut, Frame.body(Frame.MSG_MAXIMA_CTRL, id));
 
-        mAttached = true;
-        mLastInbound = System.currentTimeMillis();
+        synchronized (this) {
+            if (mClosed) throw new IllegalStateException("connection closed");
+            mAttached = true;
+            mLastInbound = System.currentTimeMillis();
+        }
     }
 
     /**
@@ -612,12 +620,17 @@ public final class HostConnection implements Closeable {
 
     @Override
     public void close() {
-        mReaderRun = false;   // a blocked reader unblocks via the socket close
+        Socket socket;
+        synchronized (this) {
+            mClosed = true;
+            mReaderRun = false; // a blocked reader unblocks via the socket close
+            mAttached = false;
+            socket = mSocket;
+        }
         try {
-            if (mSocket != null) mSocket.close();
+            if (socket != null) socket.close();
         } catch (Exception ignored) {
         }
-        mAttached = false;
         failWaiters();   // a send waiting on this link fails now, not after its full timeout
     }
 
@@ -655,7 +668,7 @@ public final class HostConnection implements Closeable {
      * re-attaches. Idempotent while a reader is running.
      */
     public synchronized void startReader(Sink zSink) {
-        if (mReader != null || !mAttached || zSink == null) {
+        if (mClosed || mReader != null || !mAttached || zSink == null) {
             return;
         }
         mReaderRun = true;

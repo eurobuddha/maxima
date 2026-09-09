@@ -127,6 +127,9 @@ public final class HostPool {
 
     private final Map<String, HostRecord> mKnown = new ConcurrentHashMap<>();
     private final Map<String, HostConnection> mActive = new ConcurrentHashMap<>();
+    private final Object mLifecycle = new Object();
+    private final Map<String, HostConnection> mConnecting = new java.util.HashMap<>(); // guarded by mLifecycle
+    private volatile boolean mClosed;
     /** hostPort -> epoch-ms until which a proven-dead host is barred from re-adoption. */
     private final Map<String, Long> mCooldown = new ConcurrentHashMap<>();
     /** The trusted floor (bootstrap list / user edits): candidates discovery may never drop. */
@@ -328,6 +331,7 @@ public final class HostPool {
      * @return true if it attached
      */
     public boolean attachOne(String zHostPort, int zTimeoutMs) {
+        if (mClosed) return false;
         HostRecord rec = mKnown.computeIfAbsent(zHostPort, HostRecord::new);
         if (mActive.containsKey(zHostPort)) {
             return true;
@@ -348,18 +352,33 @@ public final class HostPool {
                 mVersion);
         conn.setAdvertisedEndpoint(mAdvertisedEndpoint);
         conn.setBeforeAck(mBeforeAck);
-        conn.setOnShed(() -> mShedExec.execute(() -> shed(zHostPort, zTimeoutMs)));
+        conn.setOnShed(() -> {
+            if (mClosed) return;
+            try { mShedExec.execute(() -> shed(zHostPort, zTimeoutMs)); }
+            catch (java.util.concurrent.RejectedExecutionException e) { if (!mClosed) throw e; }
+        });
+        synchronized (mLifecycle) {
+            if (mClosed) return false;
+            if (mActive.containsKey(zHostPort)) return true;
+            if (mConnecting.containsKey(zHostPort)) return false;
+            mConnecting.put(zHostPort, conn);
+        }
         try {
             conn.attach(zTimeoutMs);
-            mActive.put(zHostPort, conn);
-            rec.successes++;
-            rec.attachedAt = System.currentTimeMillis();
-            rec.lastSeen = rec.attachedAt;
-            // The greeting has been exchanged by now, so the host's advertised
-            // capacity (0 for a classic host) is known - fold it into the record
-            // so score() can weight future selection by merit.
-            rec.advertisedCapacity = conn.getTheirCapacity();
-            rec.consecutiveFailures = 0;
+            boolean accepted;
+            synchronized (mLifecycle) {
+                accepted = !mClosed && mConnecting.remove(zHostPort, conn);
+                if (accepted) {
+                    mActive.put(zHostPort, conn);
+                    rec.successes++;
+                    rec.attachedAt = System.currentTimeMillis();
+                    rec.lastSeen = rec.attachedAt;
+                    // Same merit input as before; closing/detaching cannot publish a late result.
+                    rec.advertisedCapacity = conn.getTheirCapacity();
+                    rec.consecutiveFailures = 0;
+                }
+            }
+            if (!accepted) { conn.close(); return false; }
             // Push receive: the reader owns this socket from here - inbound is
             // handled the instant the relay pushes it, and the 25s NAT
             // keep-alive stops the mapping being reaped.
@@ -368,7 +387,7 @@ public final class HostPool {
             }
             // The relay's greeting lists the peers IT has verified: discovery's intake.
             Listener l = mListener;
-            if (l != null) {
+            if (l != null && !mClosed && mActive.get(zHostPort) == conn) {
                 try {
                     l.onAttached(zHostPort, conn.getTheirGreeting());
                 } catch (Exception ignored) {
@@ -376,14 +395,21 @@ public final class HostPool {
             }
             return true;
         } catch (Exception e) {
-            rec.failures++;
-            rec.consecutiveFailures++;
             conn.close();
-            if (rec.consecutiveFailures >= PeerDiscovery.NOCONNECT_ATTEMPTS) {
+            boolean noConnect;
+            synchronized (mLifecycle) {
+                if (mClosed || mConnecting.get(zHostPort) != conn) return false;
+                rec.failures++;
+                rec.consecutiveFailures++;
+                noConnect = rec.consecutiveFailures >= PeerDiscovery.NOCONNECT_ATTEMPTS;
+                if (noConnect) {
+                    rec.consecutiveFailures = 0;
+                    mCooldown.put(zHostPort, System.currentTimeMillis() + COOLDOWN_MS);
+                }
+            }
+            if (noConnect) {
                 // Classic P2P_NOCONNECT: three failed connects running and the peer is
                 // forgotten (discovery drops it; the floor and the preferred host stay).
-                rec.consecutiveFailures = 0;
-                mCooldown.put(zHostPort, System.currentTimeMillis() + COOLDOWN_MS);
                 Listener l = mListener;
                 if (l != null) {
                     try {
@@ -393,6 +419,8 @@ public final class HostPool {
                 }
             }
             return false;
+        } finally {
+            synchronized (mLifecycle) { mConnecting.remove(zHostPort, conn); }
         }
     }
 
@@ -408,6 +436,7 @@ public final class HostPool {
      * @return how many are attached afterwards
      */
     public int fill(int zTimeoutMs) {
+        if (mClosed) return 0;
         String pref = mPreferred;
         if (!pref.isEmpty() && !mActive.containsKey(pref)
                 && attachOne(pref, zTimeoutMs) && mActive.size() > mTarget) {
@@ -466,7 +495,7 @@ public final class HostPool {
      * @return true if we moved
      */
     public boolean shed(String zHostPort, int zTimeoutMs) {
-        if (zHostPort == null || zHostPort.equals(mPreferred) || !mActive.containsKey(zHostPort)) {
+        if (mClosed || zHostPort == null || zHostPort.equals(mPreferred) || !mActive.containsKey(zHostPort)) {
             return false;
         }
         long now = System.currentTimeMillis();
@@ -502,17 +531,24 @@ public final class HostPool {
 
     /** Drop one relay, banking its uptime so the score reflects reality. */
     public void detach(String zHostPort) {
-        HostConnection conn = mActive.remove(zHostPort);
-        if (conn == null) {
-            return;
+        HostConnection conn, pending;
+        synchronized (mLifecycle) {
+            conn = mActive.remove(zHostPort);
+            pending = mConnecting.remove(zHostPort);
+            if (conn != null) bankUptime(zHostPort);
         }
+        if (conn != null) conn.close();
+        if (pending != null) pending.close();
+    }
+
+    /** Called with mLifecycle held; socket closure and callbacks happen outside that lock. */
+    private void bankUptime(String zHostPort) {
         HostRecord rec = mKnown.get(zHostPort);
         if (rec != null && rec.attachedAt > 0) {
             rec.totalUptimeMs += System.currentTimeMillis() - rec.attachedAt;
             rec.lastSeen = System.currentTimeMillis();
             rec.attachedAt = 0;
         }
-        conn.close();
     }
 
     /**
@@ -562,10 +598,17 @@ public final class HostPool {
     }
 
     public void closeAll() {
-        for (String h : new ArrayList<>(mActive.keySet())) {
-            detach(h);
+        List<HostConnection> connections;
+        synchronized (mLifecycle) {
+            mClosed = true;
+            connections = new ArrayList<>(mActive.values());
+            connections.addAll(mConnecting.values());
+            for (String h : mActive.keySet()) bankUptime(h);
+            mActive.clear();
+            mConnecting.clear();
         }
         mShedExec.shutdownNow();
+        for (HostConnection conn : connections) conn.close();
     }
 
     /** The reference deletes a Maxima host not seen for 7 days. */

@@ -19,6 +19,7 @@ final class FakeRelay implements AutoCloseable {
     /** A wallet gateway to advertise, or null. */
     volatile String gateway;
     volatile String gatewayKey;
+    volatile Runnable beforeGreeting = () -> { };
 
     FakeRelay(List<String> zPeers) throws Exception {
         server = new ServerSocket(0);
@@ -48,6 +49,7 @@ final class FakeRelay implements AutoCloseable {
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
             Frame.readOrSkip(in, 65536);   // their greeting
+            beforeGreeting.run();
             Frame.write(out, Frame.body(Frame.MSG_GREETING,
                     Greeting.commsOnly(PeerDiscoveryTest.PROTO, "127.0.0.1", port, peers, 64, true, 3,
                             gateway, gatewayKey)));
@@ -71,4 +73,3 @@ final class FakeRelay implements AutoCloseable {
         server.close();
     }
 }
-
