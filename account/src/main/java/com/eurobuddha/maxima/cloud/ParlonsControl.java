@@ -1644,13 +1644,6 @@ public final class ParlonsControl {
                 return bytes(err("that amount doesn't look right"));
             }
             final String fpid = pid;
-            // Record the pid ONLY after validation passes — a lost reply to a rejected request
-            // must be able to retry, not get acked as "building".
-            if (!pid.isEmpty() && mRecentPays.putIfAbsent("w:" + pid, System.currentTimeMillis()) != null) {
-                JSONObject out = ok();
-                out.put("state", "building");
-                return bytes(out);
-            }
             final org.minima.objects.base.MiniNumber amt;
             try {
                 amt = new org.minima.objects.base.MiniNumber(amount);
@@ -1659,6 +1652,12 @@ public final class ParlonsControl {
             }
             if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
                 return bytes(err("the amount must be more than zero"));
+            }
+            // Like chat.pay: rejected amounts must not reserve the retry ID.
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent("w:" + pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
             }
             final String fto = to;
             mSendExec.execute("wallet", () -> {
@@ -1724,11 +1723,6 @@ public final class ParlonsControl {
                 return bytes(err("this node broadcasts its own transactions — use wallet.send"));
             }
             final String fpid = pid;
-            if (!pid.isEmpty() && mRecentPays.putIfAbsent("wb:" + pid, System.currentTimeMillis()) != null) {
-                JSONObject out = ok();
-                out.put("state", "building");
-                return bytes(out);
-            }
             final org.minima.objects.base.MiniNumber amt;
             try {
                 amt = new org.minima.objects.base.MiniNumber(amount);
@@ -1737,6 +1731,12 @@ public final class ParlonsControl {
             }
             if (amt.isLessEqual(org.minima.objects.base.MiniNumber.ZERO)) {
                 return bytes(err("the amount must be more than zero"));
+            }
+            // Like chat.pay: rejected amounts must not reserve the retry ID.
+            if (!pid.isEmpty() && mRecentPays.putIfAbsent("wb:" + pid, System.currentTimeMillis()) != null) {
+                JSONObject out = ok();
+                out.put("state", "building");
+                return bytes(out);
             }
             final String fto = to;
             mSendExec.execute("wallet", () -> {
