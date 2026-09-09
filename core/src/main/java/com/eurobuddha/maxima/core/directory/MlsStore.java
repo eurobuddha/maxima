@@ -229,7 +229,14 @@ public final class MlsStore {
                         }
                     }
                 }
-                if (replicas >= mMaxEntries / 2 && oldestReplica != null) {
+                // A full directory can contain MORE than half local publishers. Even below
+                // the replica share, a new replica must make room from replicas only. With
+                // no replica to evict, refuse this best-effort copy and retain our publishers.
+                boolean needsSlot = cur == null && mEntries.size() >= mMaxEntries;
+                if (replicas >= mMaxEntries / 2 || needsSlot) {
+                    if (oldestReplica == null) {
+                        return false;
+                    }
                     mEntries.remove(oldestReplica);
                 }
             }
@@ -268,7 +275,7 @@ public final class MlsStore {
             return null;
         }
         if (System.currentTimeMillis() > e.expiresAt) {
-            mEntries.remove(norm(zTargetPublicKey));
+            mEntries.remove(norm(zTargetPublicKey), e);
             return null;
         }
         if (mOpenResolve || isPermanent(e.publicKey)) {

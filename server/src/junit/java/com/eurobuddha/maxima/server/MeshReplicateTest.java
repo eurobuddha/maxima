@@ -155,6 +155,42 @@ public class MeshReplicateTest {
         assertNotNull(s.peek("0xL2"));
     }
 
+    @Test
+    public void aFullLocalDirectoryRefusesReplicasInsteadOfEvictingPublishers() {
+        MlsStore s = new MlsStore();
+        s.setMaxEntries(4);
+        for (int i = 0; i < 4; i++) {
+            s.put("local" + i, Collections.singletonList("l@h:1"), Collections.emptyList());
+        }
+        assertFalse(s.putReplica("replica", "r@h:1", null, null, null, 60_000));
+        assertEquals(4, s.size());
+        for (int i = 0; i < 4; i++) assertNotNull(s.peek("local" + i));
+    }
+
+    @Test
+    public void aFullDirectoryEvictsAReplicaEvenBelowTheHalfShare() {
+        MlsStore s = new MlsStore();
+        s.setMaxEntries(4);
+        for (int i = 0; i < 3; i++) {
+            s.put("local" + i, Collections.singletonList("l@h:1"), Collections.emptyList());
+        }
+        assertTrue(s.putReplica("old", "old@h:1", null, null, null, 60_000));
+        assertTrue(s.putReplica("new", "new@h:1", null, null, null, 60_000));
+        assertEquals(4, s.size());
+        assertNull(s.peek("old"));
+        assertNotNull(s.peek("new"));
+        for (int i = 0; i < 3; i++) assertNotNull(s.peek("local" + i));
+    }
+
+    @Test
+    public void aOneEntryDirectoryReservesItsOnlySlotForALocalPublisher() {
+        MlsStore s = new MlsStore();
+        s.setMaxEntries(1);
+        assertFalse(s.putReplica("replica", "r@h:1", null, null, null, 60_000));
+        s.put("local", Collections.singletonList("l@h:1"), Collections.emptyList());
+        assertNotNull(s.peek("local"));
+    }
+
     /** A signed publish payload (the MaximaMessage a SET proof wraps) stamped with the publisher's clock. */
     private static byte[] signedPublish(long zTimeMilli) throws Exception {
         com.eurobuddha.maxima.core.msg.MaximaMessage m = new com.eurobuddha.maxima.core.msg.MaximaMessage();
