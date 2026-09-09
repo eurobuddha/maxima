@@ -91,8 +91,11 @@ public final class Probe {
                 zSelfHost, zSelfPort);
     }
 
-    /** Own and close the supplied socket; permits deterministic source binding in tests. */
-    static Greeting dialGreeting(Socket zSocket, String zHost, int zPort, int zConnectMs,
+    /**
+     * Own and close the supplied socket. Its owner may close it to cancel an in-flight probe;
+     * a cancellation or failed handshake returns null through the same cleanup path.
+     */
+    public static Greeting dialGreeting(Socket zSocket, String zHost, int zPort, int zConnectMs,
                                  int zReadMs, String zVersion, String zSelfHost, int zSelfPort) {
         boolean claim = zSelfHost != null && !zSelfHost.isEmpty() && zSelfPort > 0;
         try (Socket s = zSocket) {

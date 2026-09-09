@@ -4,7 +4,9 @@ import com.eurobuddha.maxima.core.msg.Greeting;
 import com.eurobuddha.maxima.core.net.Probe;
 import com.eurobuddha.maxima.core.store.Store;
 
+import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -85,6 +87,7 @@ public final class PeerDiscovery {
     private static final class Check {
         final String hostPort;
         final boolean force;
+        Socket socket; // guarded by PeerDiscovery's monitor
 
         Check(String zHostPort, boolean zForce) {
             hostPort = zHostPort;
@@ -94,6 +97,8 @@ public final class PeerDiscovery {
 
     /** Checks waiting for the single checker thread (classic's PEERS_CHECKER processor). */
     private final LinkedBlockingQueue<Check> mQueue = new LinkedBlockingQueue<>(1024);
+    /** One owned queued/running check per peer, guarded by this instance's monitor. */
+    private final Map<String, Check> mChecks = new HashMap<>();
     /**
      * Negative cache: a never-verified peer that failed its check -> epoch ms before which it
      * is not considered again. Without it, one relay listing fifty dead addresses would make
@@ -144,8 +149,11 @@ public final class PeerDiscovery {
     }
 
     /** An endpoint of ours: never a peer of ours. */
-    public void addSelf(String zHostPort) {
+    public synchronized void addSelf(String zHostPort) {
+        if (!mRunning) return;
         if (zHostPort != null && !zHostPort.isEmpty()) {
+            retireCheck(zHostPort);
+            mDue.remove(zHostPort);
             mSelf.add(zHostPort);
             mVerified.remove(zHostPort);
             mUnverified.remove(zHostPort);
@@ -164,10 +172,12 @@ public final class PeerDiscovery {
      * forget the lot, leaving only the bootstrap floor until the next process start. Unforced,
      * the checks defer 60 s at a time until the first relay attaches, then run as before.
      */
-    public void setStore(Store zStore) {
+    public synchronized void setStore(Store zStore) {
+        if (!mRunning) return;
         mStore = zStore == null ? Store.MEMORY_ONLY : zStore;
         int n = 0;
         for (Map.Entry<String, String> e : mStore.all(C_PEERS).entrySet()) {
+            if (!mRunning) return; // a listener may stop discovery while restoring peers
             String hp = e.getKey();
             if (!valid(hp) || mSelf.contains(hp)) {
                 continue;
@@ -233,7 +243,8 @@ public final class PeerDiscovery {
      * A greeting arrived from {@code zFromHostPort}: consider every peer it lists, and the
      * sender's own host claim (classic adds {@code client.getHost():greeting.myMinimaPort}).
      */
-    public void onGreeting(String zFromHostPort, Greeting zGreeting) {
+    public synchronized void onGreeting(String zFromHostPort, Greeting zGreeting) {
+        if (!mRunning) return;
         if (zGreeting == null) {
             return;
         }
@@ -308,7 +319,8 @@ public final class PeerDiscovery {
      * Classic {@code checkUnverifiedPeer}: unknown → unverified (bounded) → queued for a
      * check. When the verified list is full, only one newcomer in ten is even considered.
      */
-    public void addPeer(String zHostPort) {
+    public synchronized void addPeer(String zHostPort) {
+        if (!mRunning) return;
         if (!valid(zHostPort) || mSelf.contains(zHostPort)) {
             return;
         }
@@ -337,7 +349,9 @@ public final class PeerDiscovery {
 
     /** Classic {@code P2P_NOCONNECT}: after {@link #NOCONNECT_ATTEMPTS} failed connects the
      *  peer is removed from the known list. */
-    public void noConnect(String zHostPort) {
+    public synchronized void noConnect(String zHostPort) {
+        if (!mRunning) return;
+        retireCheck(zHostPort);
         boolean was = mVerified.remove(zHostPort) != null;
         mGateways.remove(zHostPort);
         mUnverified.remove(zHostPort);
@@ -361,41 +375,50 @@ public final class PeerDiscovery {
 
     /** Drive from the node's maintenance heartbeat. Cheap: it only schedules. */
     public void tick() {
-        long now = System.currentTimeMillis();
-        if (mFailedUntil.size() > MAX_FAILED) {
-            mFailedUntil.entrySet().removeIf(e -> now >= e.getValue());
+        boolean shouldSave;
+        synchronized (this) {
+            if (!mRunning) return;
+            long now = System.currentTimeMillis();
             if (mFailedUntil.size() > MAX_FAILED) {
-                mFailedUntil.clear();   // still flooded: forgetting is cheaper than growing
-            }
-        }
-        if (!mDue.isEmpty()) {
-            for (Map.Entry<String, Long> e : new ArrayList<>(mDue.entrySet())) {
-                if (now >= e.getValue()) {
-                    mDue.remove(e.getKey());
-                    queue(e.getKey(), false);
+                mFailedUntil.entrySet().removeIf(e -> now >= e.getValue());
+                if (mFailedUntil.size() > MAX_FAILED) {
+                    mFailedUntil.clear();   // still flooded: forgetting is cheaper than growing
                 }
             }
-        }
-        if (now - mLastFullRecheck > FULL_RECHECK_MS) {
-            mLastFullRecheck = now;
-            for (String hp : mVerified.keySet()) {
-                queue(hp, false);
+            if (!mDue.isEmpty()) {
+                for (Map.Entry<String, Long> e : new ArrayList<>(mDue.entrySet())) {
+                    if (now >= e.getValue()) {
+                        mDue.remove(e.getKey(), e.getValue());
+                        queue(e.getKey(), false);
+                    }
+                }
             }
+            if (now - mLastFullRecheck > FULL_RECHECK_MS) {
+                mLastFullRecheck = now;
+                for (String hp : mVerified.keySet()) {
+                    queue(hp, false);
+                }
+            }
+            shouldSave = mDirty && now - mLastSave > SAVE_MS;
         }
-        if (mDirty && now - mLastSave > SAVE_MS) {
-            save();
-        }
+        if (shouldSave) save();
     }
 
     public void stop() {
-        mRunning = false;
-        Thread t = mChecker;
-        if (t != null) {
-            t.interrupt();
+        List<Check> checks;
+        Thread t;
+        synchronized (this) {
+            mRunning = false;
+            checks = new ArrayList<>(mChecks.values());
+            mChecks.clear();
+            mQueue.clear();
+            mUnverified.clear();
+            mDue.clear();
+            t = mChecker;
         }
-        if (mDirty) {
-            save();
-        }
+        if (t != null) t.interrupt();
+        for (Check check : checks) close(check.socket);
+        if (mDirty) save();
     }
 
     // ---------------------------------------------------------------
@@ -425,12 +448,46 @@ public final class PeerDiscovery {
     // the checker (classic PEERS_CHECKPEERS on its own thread)
     // ---------------------------------------------------------------
 
-    private void queue(String zHostPort, boolean zForce) {
-        ensureChecker();
-        mQueue.offer(new Check(zHostPort, zForce));
+    private synchronized void queue(String zHostPort, boolean zForce) {
+        if (!mRunning || mChecks.containsKey(zHostPort)) return;
+        Check check = new Check(zHostPort, zForce);
+        mChecks.put(zHostPort, check);
+        if (!mQueue.offer(check)) {
+            mChecks.remove(zHostPort, check);
+            mDue.put(zHostPort, System.currentTimeMillis() + RECHECK_OFFLINE_MS);
+            return;
+        }
+        try {
+            ensureChecker();
+        } catch (RuntimeException failed) {
+            retireCheck(zHostPort);
+            mDue.put(zHostPort, System.currentTimeMillis() + RECHECK_OFFLINE_MS);
+            throw failed;
+        }
+    }
+
+    /** Called under this monitor, so a removed probe can never publish a late result. */
+    private void retireCheck(String zHostPort) {
+        Check check = mChecks.remove(zHostPort);
+        if (check != null) {
+            mQueue.remove(check);
+            close(check.socket);
+        }
+    }
+
+    private static void close(Socket zSocket) {
+        if (zSocket != null) {
+            try { zSocket.close(); } catch (Exception ignored) { }
+        }
+    }
+
+    private boolean current(Check zCheck) {
+        return mRunning && !mSelf.contains(zCheck.hostPort)
+                && mChecks.get(zCheck.hostPort) == zCheck;
     }
 
     private synchronized void ensureChecker() {
+        if (!mRunning) return;
         if (mChecker != null && mChecker.isAlive()) {
             return;
         }
@@ -449,74 +506,102 @@ public final class PeerDiscovery {
                 return;
             }
             try {
-                check(item.hostPort, item.force);
+                check(item);
             } catch (Exception e) {
                 // one bad peer must never stop the checker
             }
         }
     }
 
-    /** Package-private so a test can drive a check synchronously. */
+    /** Package-private synchronous test driver; supersedes any queued check of this peer. */
     void check(String zHostPort, boolean zForce) {
-        if (mSelf.contains(zHostPort)) {
-            return;
+        Check check;
+        synchronized (this) {
+            if (!mRunning || mSelf.contains(zHostPort)) return;
+            retireCheck(zHostPort);
+            check = new Check(zHostPort, zForce);
+            mChecks.put(zHostPort, check);
         }
-        if (!zForce && !mConnected.getAsBoolean()) {
-            // Classic: not connected to the internet — try again in 60 seconds.
-            mDue.put(zHostPort, System.currentTimeMillis() + RECHECK_OFFLINE_MS);
-            return;
-        }
-        int c = zHostPort.lastIndexOf(':');
-        String host = zHostPort.substring(0, c);
-        int port = Integer.parseInt(zHostPort.substring(c + 1));
-        Greeting g = Probe.dialGreeting(host, port, CONNECT_MS, READ_MS, mProtocol);
-        // Classic checks the greeting's version/chain; ours must answer as one of OUR relays
-        // (the "welcome":"Maxima" extra data) — a stock node greets too but relays nothing
-        // for us (no mailbox, directory or blob service), so it is not a valid peer.
-        boolean valid = g != null && g.getExtraData() != null
-                && g.getExtraData().contains("\"welcome\":\"Maxima\"");
-        if (valid) {
-            mUnverified.remove(zHostPort);
-            mDue.remove(zHostPort);
-            boolean fresh = !mVerified.containsKey(zHostPort);
-            if (fresh && mVerified.size() >= MAX_VERIFIED_PEERS) {
-                String victim = removeRandom();
-                if (victim != null) {
+        check(check);
+    }
+
+    private void check(Check zCheck) {
+        String zHostPort = zCheck.hostPort;
+        try {
+            synchronized (this) {
+                if (!current(zCheck)) return;
+            }
+            boolean connected = zCheck.force || mConnected.getAsBoolean();
+            synchronized (this) {
+                if (!current(zCheck)) return;
+                if (!connected) {
+                    // Classic: offline checks are deferred for 60 seconds.
+                    mDue.put(zHostPort, System.currentTimeMillis() + RECHECK_OFFLINE_MS);
+                    return;
+                }
+                zCheck.socket = new Socket();
+            }
+            int c = zHostPort.lastIndexOf(':');
+            String host = zHostPort.substring(0, c);
+            int port = Integer.parseInt(zHostPort.substring(c + 1));
+            Greeting g = Probe.dialGreeting(zCheck.socket, host, port, CONNECT_MS, READ_MS,
+                    mProtocol, null, 0);
+            synchronized (this) {
+                if (!current(zCheck)) return;
+                // Classic checks the greeting's version/chain; ours must answer as one of OUR relays
+                // (the "welcome":"Maxima" extra data) — a stock node greets too but relays nothing
+                // for us (no mailbox, directory or blob service), so it is not a valid peer.
+                boolean valid = g != null && g.getExtraData() != null
+                        && g.getExtraData().contains("\"welcome\":\"Maxima\"");
+                if (valid) {
+                    mUnverified.remove(zHostPort);
+                    mDue.remove(zHostPort);
+                    boolean fresh = !mVerified.containsKey(zHostPort);
+                    if (fresh && mVerified.size() >= MAX_VERIFIED_PEERS) {
+                        String victim = removeRandom();
+                        if (victim != null) {
+                            Listener l = mListener;
+                            if (l != null) {
+                                l.onRemoved(victim);
+                            }
+                        }
+                    }
+                    if (!current(zCheck)) return; // an eviction listener may retire this work
+                    mVerified.put(zHostPort, System.currentTimeMillis());
+                    noteGateway(zHostPort, g.getExtraData());
+                    mDirty = true;
                     Listener l = mListener;
                     if (l != null) {
-                        l.onRemoved(victim);
+                        l.onVerified(zHostPort);
+                    }
+                    if (!current(zCheck)) return;
+                    // A verified relay's greeting lists ITS verified peers: the list grows itself.
+                    for (String peer : Greeting.peersOf(g.getExtraData())) {
+                        addPeer(peer);
+                    }
+                } else {
+                    mGateways.remove(zHostPort);
+                    if (mVerified.remove(zHostPort) != null) {
+                        // Classic: a verified peer that went quiet gets ONE more look in 30 minutes.
+                        mUnverified.put(zHostPort, Boolean.TRUE);
+                        mDue.put(zHostPort, System.currentTimeMillis() + RECHECK_FAILED_MS);
+                        mDirty = true;
+                        Listener l = mListener;
+                        if (l != null) {
+                            l.onRemoved(zHostPort);
+                        }
+                    } else {
+                        // Never verified and does not answer: forgotten - and not re-tried for the
+                        // recheck interval however many greetings keep listing it (negative cache).
+                        mUnverified.remove(zHostPort);
+                        mDue.remove(zHostPort);
+                        mFailedUntil.put(zHostPort, System.currentTimeMillis() + RECHECK_FAILED_MS);
                     }
                 }
             }
-            mVerified.put(zHostPort, System.currentTimeMillis());
-            noteGateway(zHostPort, g.getExtraData());
-            mDirty = true;
-            Listener l = mListener;
-            if (l != null) {
-                l.onVerified(zHostPort);
-            }
-            // A verified relay's greeting lists ITS verified peers: the list grows itself.
-            for (String peer : Greeting.peersOf(g.getExtraData())) {
-                addPeer(peer);
-            }
-        } else {
-            mGateways.remove(zHostPort);
-            if (mVerified.remove(zHostPort) != null) {
-                // Classic: a verified peer that went quiet gets ONE more look in 30 minutes.
-                mUnverified.put(zHostPort, Boolean.TRUE);
-                mDue.put(zHostPort, System.currentTimeMillis() + RECHECK_FAILED_MS);
-                mDirty = true;
-                Listener l = mListener;
-                if (l != null) {
-                    l.onRemoved(zHostPort);
-                }
-            } else {
-                // Never verified and does not answer: forgotten - and not re-tried for the
-                // recheck interval however many greetings keep listing it (negative cache).
-                mUnverified.remove(zHostPort);
-                mDue.remove(zHostPort);
-                mFailedUntil.put(zHostPort, System.currentTimeMillis() + RECHECK_FAILED_MS);
-            }
+        } finally {
+            close(zCheck.socket);
+            synchronized (this) { mChecks.remove(zHostPort, zCheck); }
         }
     }
 
