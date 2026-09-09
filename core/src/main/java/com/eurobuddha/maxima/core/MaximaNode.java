@@ -1058,6 +1058,7 @@ public final class MaximaNode implements ChatPort {
     }
 
     public void stop() {
+        mRpc.close();
         stopDirect();
         mPool.closeAll();
         mDiscovery.stop();   // saves the peer list (classic P2P shutdown)

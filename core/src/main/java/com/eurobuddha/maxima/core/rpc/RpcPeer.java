@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * that never arrives is indistinguishable from a peer that went offline
  * mid-conversation - which on a mobile network is routine, not exceptional.
  */
-public final class RpcPeer {
+public final class RpcPeer implements AutoCloseable {
 
     /** How long to keep a pending request before giving up on it. */
     public static final long DEFAULT_TIMEOUT_MS = 60_000;
@@ -54,6 +54,8 @@ public final class RpcPeer {
     private final MaximaIdentity mIdentity;
     private final ServiceRegistry mServices;
     private final Map<String, Pending> mPending = new ConcurrentHashMap<>();
+    private final Object mLifecycle = new Object();
+    private volatile boolean mClosed;
 
     /** Addresses we can be reached on - all of them, when multi-homed. */
     private volatile List<String> mMyAddresses = new ArrayList<>();
@@ -112,7 +114,10 @@ public final class RpcPeer {
         String id = newCorrelationId();
         RpcEnvelope env = RpcEnvelope.request(id, zMethod, mMyAddresses, zPayload);
 
-        mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod, zTimeoutMs));
+        synchronized (mLifecycle) {
+            if (mClosed) throw new IllegalStateException("RPC peer is closed");
+            mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod, zTimeoutMs));
+        }
 
         try {
             sendTo(zPeerAddress, env, zConnectMs, zReadMs);
@@ -153,6 +158,8 @@ public final class RpcPeer {
             return false;
         }
 
+        if (mClosed) return true;
+
         RpcEnvelope env;
         try {
             env = RpcEnvelope.fromBytes(zMsg.mData.getBytes());
@@ -179,6 +186,7 @@ public final class RpcPeer {
             final List<String> targets = new ArrayList<>(env.getReplyTo());
             for (final String addr : targets) {
                 mReplyExec.execute(() -> {
+                    if (mClosed) return;
                     try {
                         sendTo(addr, reply, REPLY_CONNECT_TIMEOUT_MS, REPLY_READ_TIMEOUT_MS);
                     } catch (Exception e) {
@@ -221,6 +229,27 @@ public final class RpcPeer {
         return n;
     }
 
+    /** Stop accepting requests and fail outstanding calls once, without waiting for their deadlines.
+     * In-flight socket writes may finish; queued reply work is discarded. Repeated close is harmless.
+     * Callbacks run outside the lifecycle lock so callers may release their own resources safely. */
+    @Override public void close() {
+        List<Map.Entry<String, Pending>> pending;
+        synchronized (mLifecycle) {
+            if (mClosed) return;
+            mClosed = true;
+            pending = new ArrayList<>(mPending.entrySet());
+        }
+        mReplyExec.shutdownNow();
+        mAttached = null;
+        mMyAddresses = new ArrayList<>();
+        for (Map.Entry<String, Pending> entry : pending) {
+            if (mPending.remove(entry.getKey(), entry.getValue())) {
+                try { entry.getValue().handler.onError("RPC peer closed while waiting for " + entry.getValue().method); }
+                catch (RuntimeException ignored) { /* one callback must not strand the remaining calls */ }
+            }
+        }
+    }
+
     /** Reply leash: a relay that cannot take the bytes in this long is not the one carrying
      *  this reply — the parallel copy to the caller's other relay is. */
     static final int REPLY_CONNECT_TIMEOUT_MS = 6_000;
@@ -232,6 +261,7 @@ public final class RpcPeer {
     }
 
     private void sendTo(String zAddress, RpcEnvelope zEnvelope, int zConnectMs, int zReadMs) throws Exception {
+        if (mClosed) throw new IllegalStateException("RPC peer is closed");
         if (!MxAddress.isValidContactAddress(zAddress)) {
             throw new IllegalArgumentException("Bad peer address: " + zAddress);
         }
