@@ -9,10 +9,12 @@ import java.security.MessageDigest;
 
 /**
  * POST /v1/wake {"token":hex,"env":"prod"|"sandbox","kind":"message"|"call"} -> 202 (queued),
- * 400 (malformed), 429 (rate limited). The token is never logged: only the first 8 hex chars of
+ * 400 (malformed), 429 (rate limited), 503 (send queue full). The token is never logged: only the first 8 hex chars of
  * its SHA-256 and the APNs status appear, so a log line identifies nothing.
  */
-public final class WakeHandler implements HttpHandler {
+public final class WakeHandler implements HttpHandler, AutoCloseable {
+    static final int SEND_THREADS = 8;
+    static final int MAX_QUEUED = 256;
 
     interface Sender {
         ApnsClient.Result wake(String zToken, String zEnv, String zKind) throws Exception;
@@ -22,7 +24,8 @@ public final class WakeHandler implements HttpHandler {
     private final RateLimit mLimit;
     private final java.util.function.Consumer<String> mLog;
     private final java.util.concurrent.ExecutorService mExec =
-            java.util.concurrent.Executors.newFixedThreadPool(8, r -> {
+            new java.util.concurrent.ThreadPoolExecutor(SEND_THREADS, SEND_THREADS, 0,
+                    java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(MAX_QUEUED), r -> {
                 Thread t = new Thread(r, "wake-send");
                 t.setDaemon(true);
                 return t;
@@ -75,10 +78,14 @@ public final class WakeHandler implements HttpHandler {
                 }
             });
             reply(ex, 202, "queued");
+        } catch (java.util.concurrent.RejectedExecutionException full) {
+            reply(ex, 503, "busy");
         } catch (Exception e) {
             reply(ex, 500, "error");
         }
     }
+
+    @Override public void close() { mExec.shutdownNow(); }
 
     static String idOf(String zToken) throws Exception {
         byte[] h = MessageDigest.getInstance("SHA-256").digest(zToken.toLowerCase().getBytes(StandardCharsets.US_ASCII));

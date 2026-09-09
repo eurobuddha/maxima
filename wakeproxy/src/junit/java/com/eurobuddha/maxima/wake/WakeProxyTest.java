@@ -112,6 +112,35 @@ public class WakeProxyTest {
             assertEquals(405, get.statusCode());
         } finally {
             server.stop(0);
+            h.close();
+        }
+    }
+
+    @Test
+    public void stalledApnsHasABoundedQueueAndExplicitOverloadResponse() throws Exception {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        WakeHandler h = new WakeHandler((token, env, kind) -> {
+            release.await();
+            return new ApnsClient.Result(200, "");
+        }, new RateLimit(), line -> {});
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 4);
+        server.createContext("/v1/wake", h);
+        server.start();
+        try {
+            URI url = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1/wake");
+            HttpClient client = HttpClient.newHttpClient();
+            for (int i = 0; i <= WakeHandler.SEND_THREADS + WakeHandler.MAX_QUEUED; i++) {
+                String token = String.format("%064x", i);
+                HttpResponse<String> r = client.send(HttpRequest.newBuilder(url)
+                        .timeout(java.time.Duration.ofSeconds(3))
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"token\":\"" + token + "\"}")).build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(i < WakeHandler.SEND_THREADS + WakeHandler.MAX_QUEUED ? 202 : 503, r.statusCode());
+            }
+        } finally {
+            server.stop(0);
+            h.close();
+            release.countDown();
         }
     }
 
