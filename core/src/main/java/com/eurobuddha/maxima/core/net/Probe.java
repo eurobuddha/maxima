@@ -87,13 +87,25 @@ public final class Probe {
      */
     public static Greeting dialGreeting(String zHost, int zPort, int zConnectMs, int zReadMs,
                                         String zVersion, String zSelfHost, int zSelfPort) {
+        return dialGreeting(new Socket(), zHost, zPort, zConnectMs, zReadMs, zVersion,
+                zSelfHost, zSelfPort);
+    }
+
+    /** Own and close the supplied socket; permits deterministic source binding in tests. */
+    static Greeting dialGreeting(Socket zSocket, String zHost, int zPort, int zConnectMs,
+                                 int zReadMs, String zVersion, String zSelfHost, int zSelfPort) {
         boolean claim = zSelfHost != null && !zSelfHost.isEmpty() && zSelfPort > 0;
-        try (Socket s = new Socket()) {
+        try (Socket s = zSocket) {
             // Separate connect and read budgets, so a target that completes the
             // TCP handshake and then goes silent blocks for connect+read, not
             // 2x a single figure. The read budget is the shorter one - a real
             // endpoint greets immediately.
             s.connect(DialAlias.resolve(zHost, zPort), zConnectMs);
+            // Linux can assign the closed target's port as our ephemeral source port,
+            // completing a TCP self-connect. Its echoed greeting proves no peer exists.
+            if (s.getLocalSocketAddress().equals(s.getRemoteSocketAddress())) {
+                return null;
+            }
             s.setSoTimeout(zReadMs);
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
