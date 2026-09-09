@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
  * until the device's next authorized RPC or 5 minutes; 5 s timeouts on a single thread; after
  * three failures a proxy is left alone for 5 minutes. "off" short-circuits everything.
  */
-public final class WakeProxyClient {
+public final class WakeProxyClient implements AutoCloseable {
 
     static final long COALESCE_MS = 20_000;
     /** After a wake, no second wake until the device shows up (an authorized RPC) or this
@@ -46,6 +46,7 @@ public final class WakeProxyClient {
     private final Map<String, Integer> mProxyFailures = new ConcurrentHashMap<>();
     private final Map<String, Long> mProxyBackoffUntil = new ConcurrentHashMap<>();
     private volatile java.util.function.Consumer<String> mLog = s -> { };
+    private volatile boolean mClosed;
     /** Test seam: a URL rewrite (e.g. to a local fake proxy). */
     volatile java.util.function.UnaryOperator<String> mUrlRewrite = u -> u;
 
@@ -62,8 +63,8 @@ public final class WakeProxyClient {
      * Ask the proxy to wake this device. Returns true when a request was queued (not whether
      * it succeeded - that is fire-and-forget by design).
      */
-    public boolean wake(String zDeviceKey, String zProxy, String zToken, String zEnv, String zKind) {
-        if (zProxy == null || zProxy.isEmpty() || "off".equalsIgnoreCase(zProxy)
+    public synchronized boolean wake(String zDeviceKey, String zProxy, String zToken, String zEnv, String zKind) {
+        if (mClosed || zProxy == null || zProxy.isEmpty() || "off".equalsIgnoreCase(zProxy)
                 || zToken == null || zToken.isEmpty()) {
             return false;
         }
@@ -89,6 +90,7 @@ public final class WakeProxyClient {
     }
 
     private void post(String zProxy, String zBody) {
+        if (mClosed) return;
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(mUrlRewrite.apply(zProxy)))
                     .timeout(Duration.ofSeconds(5))
@@ -101,9 +103,21 @@ public final class WakeProxyClient {
             } else {
                 failed(zProxy, "HTTP " + resp.statusCode());
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
+            if (mClosed) return;
             failed(zProxy, e.getMessage() == null ? e.toString() : e.getMessage());
         }
+    }
+
+    @Override public synchronized void close() {
+        mClosed = true;
+        mExec.shutdownNow();
+        mLastWake.clear();
+        mQuietUntil.clear();
+        mProxyFailures.clear();
+        mProxyBackoffUntil.clear();
     }
 
     private void failed(String zProxy, String zWhy) {

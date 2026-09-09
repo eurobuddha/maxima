@@ -24,7 +24,7 @@ import java.util.List;
  * Phase 2 surface: pairing (pair / approve / revoke / list / newcode), contacts (list / add),
  * chat (summaries / conversation / send). Wallet request-signature arrives in Phase 4.
  */
-public final class ParlonsControl {
+public final class ParlonsControl implements AutoCloseable {
 
     public static final String M_PAIR         = "parlons.pair";          // no auth (bootstrap)
     public static final String M_PAIR_APPROVE = "parlons.pair.approve";
@@ -103,6 +103,7 @@ public final class ParlonsControl {
     private final DevicePairing mPairing;
     private final AccountWallet mWallet;
     private volatile StatusSource mStatus;
+    private volatile boolean mClosed;
 
     // ---- the push channel: cloud → device ----
     // Every authorized RPC refreshes the caller's LIVE record (its signature-verified key + the
@@ -222,6 +223,7 @@ public final class ParlonsControl {
 
     /** Called from the node's maintenance pump: sweep idle uploads / stale call + group records. */
     public void maintenanceSweep() {
+        if (mClosed) return;
         long now = System.currentTimeMillis();
         mUploads.entrySet().removeIf(e -> now - e.getValue().touched > 10 * 60_000L);
         mDoneUploads.entrySet().removeIf(e -> now - (Long) e.getValue()[1] > 5 * 60_000L);
@@ -487,6 +489,7 @@ public final class ParlonsControl {
     public void registerOn(ServiceRegistry zReg) {
         // --- pairing ---
         zReg.register(M_PAIR, req -> {                     // NO auth: this IS how you get authorized
+            requireOpen();
             JSONObject in = parse(req);
             DevicePairing.Result r = mPairing.requestPair(
                     req.fromPublicKey, str(in, "label"), str(in, "code"));
@@ -839,7 +842,7 @@ public final class ParlonsControl {
             mNode.setName(name);
             // Re-announce to every contact so they see the new name — same as the app's
             // Settings (setName + refreshContacts). Off-thread: it fans out over the network.
-            new Thread(mNode::refreshContacts, "parlons-setname-refresh").start();
+            mSendExec.execute("profile", mNode::refreshContacts);
             JSONObject out = ok();
             out.put("name", name);
             return bytes(out);
@@ -2141,6 +2144,46 @@ public final class ParlonsControl {
 
     // ---- helpers ----
 
+    /** Stops admission and queued work. Already-running wallet/console operations may finish. */
+    @Override public synchronized void close() {
+        if (mClosed) return;
+        mClosed = true;
+        mSendExec.shutdownNow();
+        mCallExec.shutdownNow();
+        mMediaExec.shutdownNow();
+        mConsoleExec.shutdownNow();
+        mPushPool.shutdownNow();
+        mStateFlusher.shutdownNow();
+        mWake.close();
+        mLocalSink = null;
+        mPanel = null;
+        mLive.clear();
+        mStateCoalesce.clear();
+        mStateFlushScheduled.set(false);
+        mUploads.clear();
+        mDoneUploads.clear();
+        mBalanceCache.clear();
+        mBalanceFetching.clear();
+        synchronized (mBackupPages) { mBackupPages.clear(); mBackupPagesAt.clear(); }
+        CounterRaise counter;
+        synchronized (mCounterLock) { counter = mCounterRaise; }
+        if (counter != null) counter.result.complete(err(
+                "account closed; the counter update may still finish — refresh after restart"));
+        synchronized (mConsoleJobs) {
+            for (ConsoleJob job : mConsoleJobs.values()) {
+                if (!job.done) {
+                    job.output = err("account closed; a running command may still finish").toString();
+                    job.done = true;
+                }
+            }
+            mConsoleJobs.clear();
+        }
+    }
+
+    private void requireOpen() {
+        if (mClosed) throw new IllegalStateException("account closed");
+    }
+
     private static JSONObject counterReply(CounterRaise zJob) throws Exception {
         try {
             return zJob.result.get(CMD_LEASH_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
@@ -2157,6 +2200,7 @@ public final class ParlonsControl {
     }
 
     private void requireAuth(ServiceRegistry.Request req) {
+        requireOpen();
         if (!mPairing.isAuthorized(req.fromPublicKey)) {
             // Thrown → dispatch turns it into an ERROR envelope for the caller.
             throw new SecurityException("unpaired device — not authorized for this account");
@@ -2195,6 +2239,7 @@ public final class ParlonsControl {
     }
 
     private void push(JSONObject event, String zExceptDeviceKey) {
+        if (mClosed) return;
         event.put("eid", java.util.UUID.randomUUID().toString());
         // The local panel first: in-process, never blocks (the sink queues), sees every event.
         java.util.function.Consumer<JSONObject> sink = mLocalSink;
@@ -2238,8 +2283,10 @@ public final class ParlonsControl {
             // skipped until the device's next RPC refreshes its list.
             final String deviceKey = en.getKey();
             mPushPool.execute(() -> {
+                if (mClosed) return;
                 boolean anyDelivered = false;
                 for (String addr : l.addrs) {
+                    if (mClosed) return;
                     Integer fails = l.failures.get(addr);
                     if (fails != null && fails >= PUSH_ADDR_FAILS) {
                         continue;
@@ -2270,6 +2317,7 @@ public final class ParlonsControl {
 
     /** New message on the account, inbound OR sent from one of our devices → tell every live device NOW. */
     public void pushMessage(ChatEngine.Entry e) {
+        if (mClosed) return;
         JSONObject ev = new JSONObject();
         ev.put("type", "message");
         ev.put("peer", e.isGroup() ? e.groupId : e.peer);
@@ -2292,6 +2340,7 @@ public final class ParlonsControl {
 
     /** A delivery-state change (✓ → ✓✓ → read) → live tick updates on every device. */
     public void pushState(ChatEngine.Entry e) {
+        if (mClosed) return;
         JSONObject ev = new JSONObject();
         ev.put("type", "state");
         ev.put("peer", e.isGroup() ? e.groupId : e.peer);
@@ -2301,15 +2350,21 @@ public final class ParlonsControl {
         // state per entry, STATE_COALESCE_MS after the first tick of a burst.
         mStateCoalesce.put(safe(e.id), ev);
         if (mStateFlushScheduled.compareAndSet(false, true)) {
-            mStateFlusher.schedule(() -> {
-                mStateFlushScheduled.set(false);
-                for (String id : new java.util.ArrayList<>(mStateCoalesce.keySet())) {
-                    JSONObject latest = mStateCoalesce.remove(id);
-                    if (latest != null) {
-                        push(latest);
+            try {
+                mStateFlusher.schedule(() -> {
+                    mStateFlushScheduled.set(false);
+                    for (String id : new java.util.ArrayList<>(mStateCoalesce.keySet())) {
+                        JSONObject latest = mStateCoalesce.remove(id);
+                        if (latest != null) {
+                            push(latest);
+                        }
                     }
-                }
-            }, STATE_COALESCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+                }, STATE_COALESCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.RejectedExecutionException rejected) {
+                mStateFlushScheduled.set(false);
+                if (!mClosed) throw rejected;
+                mStateCoalesce.clear();
+            }
         }
     }
 
@@ -2320,6 +2375,7 @@ public final class ParlonsControl {
      * offer is declined immediately — honest, instead of letting the caller ring out for 45s.
      */
     public void forwardCallSignal(String zFromKey, com.eurobuddha.maxima.core.chat.ChatMessage cm) {
+        if (mClosed) return;
         if ("offer".equals(cm.state)) {
             // Only a known contact may ring the account's devices — an authenticated stranger
             // who knows our key must not drive full-screen rings (same rule as the app).
@@ -2345,16 +2401,22 @@ public final class ParlonsControl {
     }
 
     private void declineCall(String zPeerKey, String zRef) {
-        mCallExec.execute(() -> {
-            try {
-                Contact c = mNode.contact(zPeerKey);
-                if (c != null) {
-                    mChat.sendCallSignal(c,
-                            com.eurobuddha.maxima.core.chat.ChatMessage.call(zRef, "bye", ""));
+        if (mClosed) return;
+        try {
+            mCallExec.execute(() -> {
+                if (mClosed) return;
+                try {
+                    Contact c = mNode.contact(zPeerKey);
+                    if (c != null) {
+                        mChat.sendCallSignal(c,
+                                com.eurobuddha.maxima.core.chat.ChatMessage.call(zRef, "bye", ""));
+                    }
+                } catch (Exception ignored) {
                 }
-            } catch (Exception ignored) {
-            }
-        });
+            });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            if (!mClosed) throw e;
+        }
     }
 
     private String nameFor(String peerKey) {

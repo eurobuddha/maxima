@@ -9,7 +9,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A bounded pool where tasks that share a KEY run one after another, in order, while tasks
+ * A fixed-size worker pool where tasks that share a KEY run one after another, in order, while tasks
  * with different keys run in parallel. The account's chat/wallet/contact sends used to share
  * ONE thread: a send to an offline peer blocked on its socket timeouts and every payment,
  * receipt and balance refresh behind it waited. Keyed by peer (or "wallet", "mls", ...) the
@@ -19,6 +19,7 @@ public final class SerialLanes {
 
     private final ExecutorService mPool;
     private final Map<String, ArrayDeque<Runnable>> mLanes = new ConcurrentHashMap<>();
+    private boolean mClosed; // guarded by mLanes, together with admission and queue removal
 
     public SerialLanes(String zName, int zThreads) {
         mPool = new ThreadPoolExecutor(zThreads, zThreads, 30, TimeUnit.SECONDS,
@@ -33,9 +34,11 @@ public final class SerialLanes {
 
     /** Run {@code zTask} after every earlier task queued under {@code zKey}. */
     public void execute(String zKey, Runnable zTask) {
+        java.util.Objects.requireNonNull(zTask, "task");
         String key = zKey == null ? "" : zKey;
         boolean start;
         synchronized (mLanes) {
+            if (mClosed) throw new java.util.concurrent.RejectedExecutionException("serial lanes closed");
             ArrayDeque<Runnable> lane = mLanes.get(key);
             if (lane == null) {
                 lane = new ArrayDeque<>();
@@ -45,9 +48,14 @@ public final class SerialLanes {
                 start = false;     // a runner owns the lane: it will pick this up
             }
             lane.add(zTask);
-        }
-        if (start) {
-            mPool.execute(() -> drain(key));
+            if (start) {
+                try {
+                    mPool.execute(() -> drain(key));
+                } catch (RuntimeException e) {
+                    mLanes.remove(key); // a refused runner must not leave an undrainable lane
+                    throw e;
+                }
+            }
         }
     }
 
@@ -76,6 +84,10 @@ public final class SerialLanes {
     }
 
     public void shutdownNow() {
+        synchronized (mLanes) {
+            mClosed = true;
+            mLanes.clear(); // includes work behind a running task that ignores interruption
+        }
         mPool.shutdownNow();
     }
 }

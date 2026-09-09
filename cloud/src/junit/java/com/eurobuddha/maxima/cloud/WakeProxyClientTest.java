@@ -36,8 +36,7 @@ public class WakeProxyClientTest {
 
     @Test
     public void oneWakeThenQuietUntilTheDeviceIsSeenAgain() throws Exception {
-        try (FakeProxy proxy = new FakeProxy()) {
-            WakeProxyClient c = new WakeProxyClient();
+        try (FakeProxy proxy = new FakeProxy(); WakeProxyClient c = new WakeProxyClient()) {
             c.mUrlRewrite = u -> proxy.url();
             assertTrue(c.wake("0xDEV", "https://wake.example/v1/wake", "ab12", "prod", "message"));
             assertFalse("coalesced", c.wake("0xDEV", "https://wake.example/v1/wake", "ab12", "prod", "message"));
@@ -54,17 +53,17 @@ public class WakeProxyClientTest {
 
     @Test
     public void offAndEmptyNeverWake() throws Exception {
-        WakeProxyClient c = new WakeProxyClient();
-        assertFalse(c.wake("0xDEV", "off", "ab12", "prod", "message"));
-        assertFalse(c.wake("0xDEV", "", "ab12", "prod", "message"));
-        assertFalse(c.wake("0xDEV", "https://wake.example/v1/wake", "", "prod", "message"));
+        try (WakeProxyClient c = new WakeProxyClient()) {
+            assertFalse(c.wake("0xDEV", "off", "ab12", "prod", "message"));
+            assertFalse(c.wake("0xDEV", "", "ab12", "prod", "message"));
+            assertFalse(c.wake("0xDEV", "https://wake.example/v1/wake", "", "prod", "message"));
+        }
     }
 
     @Test
     public void aFailingProxyIsLeftAloneAfterThreeFailures() throws Exception {
-        try (FakeProxy proxy = new FakeProxy()) {
+        try (FakeProxy proxy = new FakeProxy(); WakeProxyClient c = new WakeProxyClient()) {
             proxy.status.set(500);
-            WakeProxyClient c = new WakeProxyClient();
             c.mUrlRewrite = u -> proxy.url();
             List<String> log = Collections.synchronizedList(new java.util.ArrayList<>());
             c.setLog(log::add);

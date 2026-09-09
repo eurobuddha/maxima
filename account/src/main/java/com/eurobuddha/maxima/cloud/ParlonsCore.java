@@ -67,6 +67,7 @@ public final class ParlonsCore {
     private RelayRuntime mRelay;
     private ParlonsLocal mLocal;
     private volatile boolean mRunning;
+    private volatile boolean mStopped;
     private volatile long mStartedAt;
 
     /** Headless runtime configuration (from CLI/env — no Preferences on a VPS). */
@@ -408,7 +409,18 @@ public final class ParlonsCore {
 
     /** Stand everything up: attach to the fleet, start the pump, the pool relay, and
      *  Tier-2 direct reachability. Returns the connected-host count after attach. */
-    public int start() {
+    public synchronized int start() {
+        if (mStopped) throw new IllegalStateException("account closed; create a new account runtime to restart");
+        if (mRunning) return connectedCount();
+        try {
+            return startOnce();
+        } catch (RuntimeException | Error e) {
+            shutdown();
+            throw e;
+        }
+    }
+
+    private int startOnce() {
         mRunning = true;
         mStartedAt = System.currentTimeMillis();
         openAccountWallet();
@@ -510,8 +522,9 @@ public final class ParlonsCore {
      * @param zOutsideOpen the host's own proof that the port is reached from the internet (a node
      *                     with inbound chain peers on that very port); null = the pool's dial-back
      */
-    public boolean adoptOwnRelay(String zHostPort, String zDialActual,
+    public synchronized boolean adoptOwnRelay(String zHostPort, String zDialActual,
                                  java.util.function.Supplier<Boolean> zOutsideOpen) {
+        if (mStopped) return false;
         final String own = zHostPort == null ? "" : zHostPort.trim();
         if (own.isEmpty() || own.equals(mCfg.ownRelay)) {
             return false;
@@ -746,9 +759,11 @@ public final class ParlonsCore {
      * exactly as the app does when a chat opens.
      */
     private void openAccountWallet() {
-        Thread t = new Thread(() -> {
+        mWalletExec.execute(() -> {
+            if (!mRunning) return;
             try {
                 mWallet.open();
+                if (!mRunning) return;
                 mWalletMx = mWallet.mxAddress();
                 mWalletOpen = true;
                 log("account wallet ready: " + mWalletMx
@@ -761,9 +776,7 @@ public final class ParlonsCore {
                 mWalletError = e.getMessage() == null ? e.toString() : e.getMessage();
                 log("account wallet failed to open: " + mWalletError);
             }
-        }, "parlons-wallet-open");
-        t.setDaemon(true);
-        t.start();
+        });
     }
 
     /** Last share time per contact key — the address is re-shared hourly (cheap idempotent
@@ -774,7 +787,7 @@ public final class ParlonsCore {
     /** Wallet upkeep, retried on the heartbeat: gateway script tracking (payments need the
      *  proofs) and receive-address shares to contacts. Cheap, idempotent, network-bound. */
     private void walletUpkeep() {
-        if (!mWalletOpen) {
+        if (!mRunning || !mWalletOpen) {
             return;
         }
         // Host-specific upkeep first (cloud: gateway script tracking + the coin backfill;
@@ -782,6 +795,7 @@ public final class ParlonsCore {
         try { mWallet.upkeep(this::log); } catch (Exception e) { log("wallet upkeep failed: " + e.getMessage()); }
         long now = System.currentTimeMillis();
         for (com.eurobuddha.maxima.core.contacts.Contact c : mNode.contacts()) {
+            if (!mRunning) return;
             String key = c.publicKey == null ? "" : c.publicKey;
             Long last = mAddrShared.get(key);
             if (last != null && now - last < 3600_000L) {
@@ -941,11 +955,17 @@ public final class ParlonsCore {
         return s.length() > 80 ? s.substring(0, 80) + "…" : s;
     }
 
-    public void shutdown() {
+    public synchronized void shutdown() {
+        if (mStopped) return;
+        mStopped = true;
         mRunning = false;
+        mOwnRelayGeneration.incrementAndGet();
+        mControl.close();
         if (mMaint != null) {
             mMaint.shutdownNow();
         }
+        mWalletExec.shutdownNow();
+        mHostExec.shutdownNow();
         try { if (mLocal != null) mLocal.stop(); } catch (Exception ignored) { }
         try { if (mReach != null) mReach.shutdown(); } catch (Exception ignored) { }
         try { if (mRelay != null && !mExternalRelay) mRelay.stop(); } catch (Exception ignored) { }
