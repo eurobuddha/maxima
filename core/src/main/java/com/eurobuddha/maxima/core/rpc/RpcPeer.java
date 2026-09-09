@@ -41,11 +41,13 @@ public final class RpcPeer {
         final ResponseHandler handler;
         final long deadline;
         final String method;
+        final long timeoutMs;
 
-        Pending(ResponseHandler h, long d, String m) {
+        Pending(ResponseHandler h, long d, String m, long t) {
             handler = h;
             deadline = d;
             method = m;
+            timeoutMs = t;
         }
     }
 
@@ -110,7 +112,7 @@ public final class RpcPeer {
         String id = newCorrelationId();
         RpcEnvelope env = RpcEnvelope.request(id, zMethod, mMyAddresses, zPayload);
 
-        mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod));
+        mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod, zTimeoutMs));
 
         try {
             sendTo(zPeerAddress, env, zConnectMs, zReadMs);
@@ -210,10 +212,9 @@ public final class RpcPeer {
         long now = System.currentTimeMillis();
         int n = 0;
         for (Map.Entry<String, Pending> e : mPending.entrySet()) {
-            if (e.getValue().deadline <= now) {
-                mPending.remove(e.getKey());
+            if (e.getValue().deadline <= now && mPending.remove(e.getKey(), e.getValue())) {
                 e.getValue().handler.onError("timeout after "
-                        + DEFAULT_TIMEOUT_MS + "ms waiting for " + e.getValue().method);
+                        + e.getValue().timeoutMs + "ms waiting for " + e.getValue().method);
                 n++;
             }
         }
