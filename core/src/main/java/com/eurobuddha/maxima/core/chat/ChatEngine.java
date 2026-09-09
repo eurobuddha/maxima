@@ -1489,8 +1489,10 @@ public final class ChatEngine {
         mReceiptFlushArmed.set(false);
         java.util.List<java.util.Map.Entry<String, Entry>> batch =
                 new ArrayList<>(mPendingGroupReceipts.entrySet());
-        mPendingGroupReceipts.clear();
         for (java.util.Map.Entry<String, Entry> pe : batch) {
+            // A sender can queue a newer message after our snapshot. Remove only the
+            // entry we captured; its replacement belongs to the next scheduled flush.
+            if (!mPendingGroupReceipts.remove(pe.getKey(), pe.getValue())) continue;
             Contact c = mNode.contact(pe.getKey());
             if (c == null) {
                 continue;
