@@ -242,7 +242,7 @@ public final class MaximaNode implements ChatPort {
                 // Bank the uptime and free the slot; the caller's maintain
                 // heartbeat re-attaches. No cooldown: a NAT-reaped socket says
                 // nothing bad about the relay.
-                mPool.detach(zHostPort);
+                mPool.detachClosed(zHostPort);
             }
         });
         mRpc = new RpcPeer(zIdentity, mServices);

@@ -541,6 +541,22 @@ public final class HostPool {
         if (pending != null) pending.close();
     }
 
+    /** A delayed reader callback must not detach a healthy replacement or a new handshake. */
+    public void detachClosed(String zHostPort) {
+        HostConnection conn = mActive.get(zHostPort);
+        if (conn != null && !conn.isAttached()) detachCurrent(zHostPort, conn);
+    }
+
+    /** Reap only the connection inspected by this caller; do not touch pending replacements. */
+    private boolean detachCurrent(String zHostPort, HostConnection zExpected) {
+        synchronized (mLifecycle) {
+            if (zExpected == null || !mActive.remove(zHostPort, zExpected)) return false;
+            bankUptime(zHostPort);
+        }
+        zExpected.close();
+        return true;
+    }
+
     /** Called with mLifecycle held; socket closure and callbacks happen outside that lock. */
     private void bankUptime(String zHostPort) {
         HostRecord rec = mKnown.get(zHostPort);
@@ -581,16 +597,17 @@ public final class HostPool {
     public int reconcile(int zTimeoutMs) {
         for (String h : new ArrayList<>(mActive.keySet())) {
             HostConnection c = mActive.get(h);
-            if (c == null || !c.isAttached()
+            if (c == null) continue;
+            if (!c.isAttached()
                     || c.isStale(com.eurobuddha.maxima.core.net.Frame.SILENCE_DROP_MS)) {
-                detach(h);
+                detachCurrent(h, c);
                 continue;
             }
             if (c.needsKeepalive(com.eurobuddha.maxima.core.net.Frame.KEEPALIVE_INTERVAL_MS)) {
                 try {
                     c.keepalive();
                 } catch (Exception e) {
-                    detach(h);   // the socket is already gone
+                    detachCurrent(h, c);   // a newer attachment may already have replaced it
                 }
             }
         }
