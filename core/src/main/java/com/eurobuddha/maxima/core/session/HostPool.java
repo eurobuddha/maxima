@@ -234,7 +234,9 @@ public final class HostPool {
     }
 
     public void setPreferred(String zHostPort) {
-        mPreferred = zHostPort == null ? "" : zHostPort.trim();
+        synchronized (mLifecycle) {
+            mPreferred = zHostPort == null ? "" : zHostPort.trim();
+        }
         if (!mPreferred.isEmpty()) {
             addCandidate(mPreferred);
         }
@@ -354,7 +356,7 @@ public final class HostPool {
         conn.setBeforeAck(mBeforeAck);
         conn.setOnShed(() -> {
             if (mClosed) return;
-            try { mShedExec.execute(() -> shed(zHostPort, zTimeoutMs)); }
+            try { mShedExec.execute(() -> shed(zHostPort, conn, zTimeoutMs)); }
             catch (java.util.concurrent.RejectedExecutionException e) { if (!mClosed) throw e; }
         });
         synchronized (mLifecycle) {
@@ -495,15 +497,18 @@ public final class HostPool {
      * @return true if we moved
      */
     public boolean shed(String zHostPort, int zTimeoutMs) {
-        if (mClosed || zHostPort == null || zHostPort.equals(mPreferred) || !mActive.containsKey(zHostPort)) {
-            return false;
-        }
+        if (zHostPort == null) return false;
+        return shed(zHostPort, mActive.get(zHostPort), zTimeoutMs);
+    }
+
+    private boolean shed(String zHostPort, HostConnection zExpected, int zTimeoutMs) {
         long now = System.currentTimeMillis();
-        Long last = mShedHonoured.get(zHostPort);
-        if (last != null && now - last < SHED_ACCEPT_MS) {
-            return false;
+        synchronized (mLifecycle) {
+            if (!canShed(zHostPort, zExpected)) return false;
+            Long last = mShedHonoured.get(zHostPort);
+            if (last != null && now - last < SHED_ACCEPT_MS) return false;
+            mShedHonoured.put(zHostPort, now);
         }
-        mShedHonoured.put(zHostPort, now);
         List<String> candidates = new ArrayList<>();
         for (String h : mKnown.keySet()) {
             if (h.equals(zHostPort) || mActive.containsKey(h)) {
@@ -518,15 +523,23 @@ public final class HostPool {
         Collections.shuffle(candidates, mRand);
         int attempts = 0;
         for (String h : candidates) {
+            synchronized (mLifecycle) {
+                if (!canShed(zHostPort, zExpected)) return false;
+            }
             if (attempts++ >= 3) {
                 break;
             }
             if (attachOne(h, zTimeoutMs)) {
-                detach(zHostPort);   // replacement is up: now let the asking relay go
-                return true;
+                return detachCurrent(zHostPort, zExpected, h);
             }
         }
         return false;   // nowhere else to go: we stay, the relay can ask again later
+    }
+
+    /** Called with mLifecycle held: a queued advisory belongs to its original connection. */
+    private boolean canShed(String zHostPort, HostConnection zExpected) {
+        return !mClosed && zExpected != null && zExpected.isAttached()
+                && !zHostPort.equals(mPreferred) && mActive.get(zHostPort) == zExpected;
     }
 
     /** Drop one relay, banking its uptime so the score reflects reality. */
@@ -549,7 +562,16 @@ public final class HostPool {
 
     /** Reap only the connection inspected by this caller; do not touch pending replacements. */
     private boolean detachCurrent(String zHostPort, HostConnection zExpected) {
+        return detachCurrent(zHostPort, zExpected, null);
+    }
+
+    /** A shed also requires an eligible source and a still-attached alternative at handoff. */
+    private boolean detachCurrent(String zHostPort, HostConnection zExpected, String zReplacement) {
         synchronized (mLifecycle) {
+            if (zReplacement != null) {
+                HostConnection replacement = mActive.get(zReplacement);
+                if (!canShed(zHostPort, zExpected) || replacement == null || !replacement.isAttached()) return false;
+            }
             if (zExpected == null || !mActive.remove(zHostPort, zExpected)) return false;
             bankUptime(zHostPort);
         }
