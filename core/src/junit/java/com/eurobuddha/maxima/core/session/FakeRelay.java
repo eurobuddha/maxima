@@ -14,6 +14,7 @@ final class FakeRelay implements AutoCloseable {
     final ServerSocket server;
     final List<String> peers;
     final int port;
+    final Thread acceptor;
     volatile int greeted;
     volatile boolean running = true;
     /** A wallet gateway to advertise, or null. */
@@ -27,18 +28,19 @@ final class FakeRelay implements AutoCloseable {
         server = new ServerSocket(0);
         port = server.getLocalPort();
         peers = zPeers;
-        Thread t = new Thread(() -> {
+        acceptor = new Thread(() -> {
             while (running) {
                 try {
                     Socket s = server.accept();
+                    if (!running) { s.close(); return; }
                     new Thread(() -> serve(s)).start();
                 } catch (Exception e) {
                     return;
                 }
             }
-        });
-        t.setDaemon(true);
-        t.start();
+        }, "fake-relay-accept");
+        acceptor.setDaemon(true);
+        acceptor.start();
     }
 
     String hostPort() {
@@ -52,10 +54,13 @@ final class FakeRelay implements AutoCloseable {
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
             Frame.readOrSkip(in, 65536);   // their greeting
             beforeGreeting.run();
-            Frame.write(out, Frame.body(Frame.MSG_GREETING,
-                    Greeting.commsOnly(PeerDiscoveryTest.PROTO, "127.0.0.1", port, peers, 64, true, 3,
-                            gateway, gatewayKey)));
-            greeted++;
+            synchronized (this) {
+                if (!running) return;
+                Frame.write(out, Frame.body(Frame.MSG_GREETING,
+                        Greeting.commsOnly(PeerDiscoveryTest.PROTO, "127.0.0.1", port, peers, 64, true, 3,
+                                gateway, gatewayKey)));
+                greeted++;
+            }
             // hold the socket like a relay would, until the peer goes
             while (running) {
                 byte[] f = Frame.readOrSkip(in, 65536);
@@ -72,7 +77,13 @@ final class FakeRelay implements AutoCloseable {
 
     @Override
     public void close() throws Exception {
-        running = false;
-        server.close();
+        synchronized (this) {
+            running = false;
+            server.close();
+        }
+        // Java 21/Linux can complete a blocked accept after ServerSocket.close returns.
+        // Wait for the accept loop to leave before a test treats this port as stopped.
+        acceptor.join(5000);
+        if (acceptor.isAlive()) throw new AssertionError("fake relay acceptor did not stop");
     }
 }

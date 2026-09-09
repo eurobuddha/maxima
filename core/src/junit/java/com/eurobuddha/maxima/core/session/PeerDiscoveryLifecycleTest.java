@@ -169,6 +169,22 @@ public class PeerDiscoveryLifecycleTest {
         Field f = target.getClass().getDeclaredField(name); f.setAccessible(true); f.set(target, value);
     }
 
+    @Test public void aClosedFixtureCannotSendADelayedGreeting() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        java.util.concurrent.ExecutorService worker = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try (FakeRelay relay = new FakeRelay(Collections.emptyList())) {
+            relay.beforeGreeting = () -> { entered.countDown(); await(release); };
+            java.util.concurrent.Future<com.eurobuddha.maxima.core.msg.Greeting> result = worker.submit(() ->
+                    com.eurobuddha.maxima.core.net.Probe.dialGreeting("127.0.0.1", relay.port, 3000, 3000,
+                            PeerDiscoveryTest.PROTO));
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            relay.close();
+            release.countDown();
+            assertNull("a stopped fake relay must not answer a probe", result.get(5, TimeUnit.SECONDS));
+            assertEquals(0, relay.greeted);
+        } finally { release.countDown(); worker.shutdownNow(); worker.awaitTermination(5, TimeUnit.SECONDS); }
+    }
+
     private static PeerDiscovery discovery() {
         PeerDiscovery d = new PeerDiscovery(PeerDiscoveryTest.PROTO);
         d.setAllowAllIp(true);
