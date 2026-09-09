@@ -350,13 +350,6 @@ public final class Tenants {
     }
 
     private static void writePrivate(Path zFile, byte[] zBytes) throws Exception {
-        Files.deleteIfExists(zFile);
-        try {
-            Files.createFile(zFile, PosixFilePermissions.asFileAttribute(
-                    PosixFilePermissions.fromString("rw-------")));
-        } catch (UnsupportedOperationException nonPosix) {
-            // plain create below
-        }
-        Files.write(zFile, zBytes);
+        AccountFiles.writePrivate(zFile, zBytes);
     }
 }
