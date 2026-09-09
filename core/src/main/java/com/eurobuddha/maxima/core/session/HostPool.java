@@ -176,9 +176,13 @@ public final class HostPool {
     private final Map<String, Long> mShedHonoured = new ConcurrentHashMap<>();
     /** A relay's shed is honoured at most this often - a relay that keeps asking is ignored. */
     public static final long SHED_ACCEPT_MS = 30 * 60_000L;
-    /** Sheds run off the reader thread (an attach blocks), one at a time. */
-    private final java.util.concurrent.ExecutorService mShedExec =
-            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+    /** Pending or running advisories, guarded by mLifecycle; duplicates do not queue. */
+    private final java.util.Set<HostConnection> mQueuedSheds = new java.util.HashSet<>();
+    private static final int MAX_QUEUED_SHEDS = 32;
+    /** Sheds run off the reader thread (an attach blocks), one at a time, with bounded admission. */
+    private final java.util.concurrent.ThreadPoolExecutor mShedExec =
+            new java.util.concurrent.ThreadPoolExecutor(1, 1, 0,
+                    java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(MAX_QUEUED_SHEDS), r -> {
                 Thread t = new Thread(r, "maxima-shed");
                 t.setDaemon(true);
                 return t;
@@ -354,11 +358,7 @@ public final class HostPool {
                 mVersion);
         conn.setAdvertisedEndpoint(mAdvertisedEndpoint);
         conn.setBeforeAck(mBeforeAck);
-        conn.setOnShed(() -> {
-            if (mClosed) return;
-            try { mShedExec.execute(() -> shed(zHostPort, conn, zTimeoutMs)); }
-            catch (java.util.concurrent.RejectedExecutionException e) { if (!mClosed) throw e; }
-        });
+        conn.setOnShed(() -> queueShed(zHostPort, conn, zTimeoutMs));
         synchronized (mLifecycle) {
             if (mClosed) return false;
             if (mActive.containsKey(zHostPort)) return true;
@@ -485,6 +485,25 @@ public final class HostPool {
             attachOne(h, zTimeoutMs);
         }
         return mActive.size();
+    }
+
+    /** Advisory overload is ignored, never run on the socket reader or reserved for later. */
+    private void queueShed(String zHostPort, HostConnection zExpected, int zTimeoutMs) {
+        synchronized (mLifecycle) {
+            if (!canShed(zHostPort, zExpected)) return;
+            Long last = mShedHonoured.get(zHostPort);
+            if (last != null && System.currentTimeMillis() - last < SHED_ACCEPT_MS) return;
+            if (!mQueuedSheds.add(zExpected)) return;
+            try {
+                mShedExec.execute(() -> {
+                    try { shed(zHostPort, zExpected, zTimeoutMs); }
+                    finally { synchronized (mLifecycle) { mQueuedSheds.remove(zExpected); } }
+                });
+            } catch (RuntimeException refused) {
+                mQueuedSheds.remove(zExpected); // a later advisory may try when capacity returns
+                if (!(refused instanceof java.util.concurrent.RejectedExecutionException)) throw refused;
+            }
+        }
     }
 
     /**
@@ -645,6 +664,7 @@ public final class HostPool {
             for (String h : mActive.keySet()) bankUptime(h);
             mActive.clear();
             mConnecting.clear();
+            mQueuedSheds.clear();
         }
         mShedExec.shutdownNow();
         for (HostConnection conn : connections) conn.close();
