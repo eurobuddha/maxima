@@ -7,6 +7,7 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 
 import org.minima.system.commands.CommandRunner;
 import org.minima.utils.json.JSONObject;
@@ -24,8 +25,9 @@ import com.sun.net.httpserver.HttpServer;
  * mistake. Same URL shape as Minima's RPC ({@code GET /<url-encoded command>}, or a POST whose
  * body is the command) so the runbooks and curl one-liners are unchanged.
  *
- * <p>No auth, deliberately: only root/the {@code maxima} user can reach loopback on the box,
- * and anything that can already runs as them. The phone-facing {@link NodeGateway} is the
+ * <p>No auth, deliberately: this trusts LOCAL processes (loopback is not a per-user access
+ * control). Browser requests are restricted by Host, Origin and Fetch Metadata, following
+ * the account panel's rebinding protection. The phone-facing {@link NodeGateway} is the
  * hardened, allow-listed surface — this one is the opposite by design and must never be
  * fronted by a proxy.
  */
@@ -34,27 +36,37 @@ final class AdminRpc {
     private static final int MAX_BODY = 64 * 1024;
 
     private final HttpServer mServer;
+    private final ExecutorService mExec;
 
-    private AdminRpc(HttpServer zServer) { mServer = zServer; }
+    private AdminRpc(HttpServer zServer, ExecutorService zExec) { mServer = zServer; mExec = zExec; }
 
     /** Start on {@code 127.0.0.1:port}. Throws if the port is taken — the caller decides. */
     static AdminRpc start(int zPort) throws IOException {
         HttpServer srv = HttpServer.create(new InetSocketAddress("127.0.0.1", zPort), 16);
         srv.createContext("/", AdminRpc::handle);
-        srv.setExecutor(Executors.newFixedThreadPool(2, r -> {
+        ExecutorService exec = Executors.newFixedThreadPool(2, r -> {
             Thread t = new Thread(r, "parlons-admin-rpc");
             t.setDaemon(true);
             return t;
-        }));
+        });
+        srv.setExecutor(exec);
         srv.start();
-        return new AdminRpc(srv);
+        return new AdminRpc(srv, exec);
     }
 
     int port() { return mServer.getAddress().getPort(); }
 
-    void stop() { mServer.stop(0); }
+    void stop() { mServer.stop(0); mExec.shutdownNow(); }
 
     private static void handle(HttpExchange ex) throws IOException {
+        if (!localRequest(ex)) {
+            reply(ex, 403, "{\"status\":false,\"error\":\"cross-origin admin request refused\"}");
+            return;
+        }
+        if (!"GET".equals(ex.getRequestMethod()) && !"POST".equals(ex.getRequestMethod())) {
+            reply(ex, 405, "{\"status\":false,\"error\":\"GET or POST only\"}");
+            return;
+        }
         String command;
         try {
             if ("POST".equalsIgnoreCase(ex.getRequestMethod())) {
@@ -98,6 +110,20 @@ final class AdminRpc {
             out = err.toString();
         }
         reply(ex, code, out);
+    }
+
+    /** Adapted from ParlonsLocal.hostOk/originOk. Unlike its cookie-bound panel, this
+     * endpoint must also reject opaque origins and cross-site GETs before dispatch. */
+    private static boolean localRequest(HttpExchange ex) {
+        com.sun.net.httpserver.Headers h = ex.getRequestHeaders();
+        String suffix = ":" + ex.getLocalAddress().getPort();
+        String host = h.getFirst("Host");
+        if (h.get("Host") == null || h.get("Host").size() != 1
+                || !( ("127.0.0.1" + suffix).equals(host) || ("localhost" + suffix).equals(host))) return false;
+        String origin = h.getFirst("Origin");
+        if (origin != null && (h.get("Origin").size() != 1 || !origin.equals("http://" + host))) return false;
+        String site = h.getFirst("Sec-Fetch-Site");
+        return site == null || "same-origin".equals(site) || "none".equals(site);
     }
 
     private static String readBody(InputStream in) throws IOException {
