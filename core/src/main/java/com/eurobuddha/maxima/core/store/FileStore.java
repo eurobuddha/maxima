@@ -131,8 +131,10 @@ public final class FileStore implements Store {
 
     /** Write now, or mark dirty for the next flush, per the write-behind mode. */
     private void markOrPersist(String zCollection) {
+        // Retain the cached mutation until its replacement actually reaches disk, including
+        // immediate writes: callers may recover from an I/O failure and explicitly flush.
+        mDirty.add(zCollection);
         if (mWriteBehind) {
-            mDirty.add(zCollection);
             long delay = mFlushDelayMs;
             if (delay > 0 && mFlushScheduled.compareAndSet(false, true)) {
                 FLUSHER.schedule(() -> {
@@ -146,6 +148,7 @@ public final class FileStore implements Store {
             }
         } else {
             persist(zCollection);
+            mDirty.remove(zCollection);
         }
     }
 
@@ -239,16 +242,16 @@ public final class FileStore implements Store {
 
     @Override
     public synchronized void flush() {
-        // In immediate mode every write already landed. In write-behind mode,
+        // Immediate writes that failed also remain dirty. In write-behind mode,
         // persist each dirty collection exactly once here (one rewrite+fsync per
         // collection per flush, not per item).
         if (mDirty.isEmpty()) {
             return;
         }
         List<String> collections = new ArrayList<>(mDirty);
-        mDirty.clear();
         for (String c : collections) {
             persist(c);
+            mDirty.remove(c);
         }
     }
 
@@ -367,28 +370,47 @@ public final class FileStore implements Store {
 
     /** temp + rename, so an interrupted write cannot leave a half file. */
     private void writeAtomic(File zTarget, List<String> zLines) {
-        File tmp = new File(zTarget.getParentFile(), zTarget.getName() + ".tmp");
-        try (FileOutputStream fos = new FileOutputStream(tmp)) {
-            BufferedWriter w = new BufferedWriter(
-                    new OutputStreamWriter(fos, StandardCharsets.UTF_8));
-            for (String l : zLines) {
-                w.write(l);
-                w.newLine();
+        // Same private-temp / replacement sequence as AccountFiles.writePrivate. A failed
+        // replacement must never delete the previous snapshot or masquerade as durability.
+        java.nio.file.Path target = zTarget.toPath().toAbsolutePath();
+        java.nio.file.Path tmp = null;
+        try {
+            try {
+                tmp = java.nio.file.Files.createTempFile(target.getParent(), ".parlons-store-", ".tmp",
+                        java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                                java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+            } catch (UnsupportedOperationException nonPosix) {
+                tmp = java.nio.file.Files.createTempFile(target.getParent(), ".parlons-store-", ".tmp");
             }
-            w.flush();
-            // force the bytes to disk BEFORE the rename. Rename gives atomicity
-            // of visibility, not durability: on some filesystems a crash right
-            // after rename can expose the new name with unflushed (empty)
-            // contents - the exact data-loss this class exists to prevent.
-            fos.getFD().sync();
+            try (FileOutputStream fos = new FileOutputStream(tmp.toFile())) {
+                BufferedWriter w = new BufferedWriter(
+                        new OutputStreamWriter(fos, StandardCharsets.UTF_8));
+                for (String l : zLines) {
+                    w.write(l);
+                    w.newLine();
+                }
+                w.flush();
+                // force the bytes to disk BEFORE the rename. Rename gives atomicity
+                // of visibility, not durability: on some filesystems a crash right
+                // after rename can expose the new name with unflushed (empty)
+                // contents - the exact data-loss this class exists to prevent.
+                fos.getFD().sync();
+            }
+            try {
+                java.nio.file.Files.move(tmp, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException nonAtomic) {
+                java.nio.file.Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
-            System.err.println("[store] write failed on " + tmp + ": " + e);
-            return;
-        }
-        if (!tmp.renameTo(zTarget)) {
-            // Windows and some Android filesystems refuse rename-over.
-            if (!zTarget.delete() || !tmp.renameTo(zTarget)) {
-                System.err.println("[store] could not replace " + zTarget);
+            throw new java.io.UncheckedIOException("Could not persist " + zTarget, e);
+        } finally {
+            if (tmp != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(tmp);
+                } catch (IOException cleanup) {
+                    System.err.println("[store] temporary file cleanup failed on " + tmp + ": " + cleanup);
+                }
             }
         }
     }

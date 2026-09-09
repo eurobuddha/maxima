@@ -462,31 +462,38 @@ public final class ChatEngine {
         awaitLoaded();
         List<String> ids;
         synchronized (mDirty) {
-            if (mDirty.isEmpty()) {
-                return 0;
-            }
             ids = new ArrayList<>(mDirty);
             mDirty.clear();
         }
         int n = 0;
-        for (String id : ids) {
-            Entry e = mMessages.get(id);
-            if (e != null) {
-                mStore.put(C_MESSAGES, id, entryToJson(e));
-                n++;
+        try {
+            for (String id : ids) {
+                Entry e = mMessages.get(id);
+                if (e != null) {
+                    mStore.put(C_MESSAGES, id, entryToJson(e));
+                    n++;
+                }
             }
+            // Even with no deferred state, new messages may still be in a coalescing store
+            // or a previous disk write may need retrying.
+            mStore.flush();
+        } catch (RuntimeException failure) {
+            mDirty.addAll(ids); // retry from current entries; preserve newer dirty arrivals too
+            throw failure;
         }
-        mStore.flush();   // a write-behind store lands the batch now, not on its timer
         return n;
     }
 
     /** Flush and release the receipt pool. */
     public void close() {
-        flushState();
-        flushGroupReceipts();
-        mReceiptFlusher.shutdown();
-        mGroupPool.shutdown();
-        mReceiptPool.shutdown();
+        try {
+            flushState();
+            flushGroupReceipts();
+        } finally {
+            mReceiptFlusher.shutdown();
+            mGroupPool.shutdown();
+            mReceiptPool.shutdown();
+        }
     }
 
     private void persist(Group g) {

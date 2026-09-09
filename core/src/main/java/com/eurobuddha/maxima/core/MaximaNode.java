@@ -1061,12 +1061,16 @@ public final class MaximaNode implements ChatPort {
         mRpc.close();
         stopDirect();
         mPool.closeAll();
-        mDiscovery.stop();   // saves the peer list (classic P2P shutdown)
-        drainInbound(5_000); // let queued inbound persist before the store is flushed
-        mStore.flush();
-        mInboundExec.shutdown();
-        mRpcExec.shutdown();
-        mSideExec.shutdown();
+        try {
+            mDiscovery.stop();   // saves the peer list (classic P2P shutdown)
+            drainInbound(5_000); // let queued inbound persist before the store is flushed
+            mStore.flush();
+        } finally {
+            // Storage failure is reported, but cannot leave the node's workers accepting work.
+            mInboundExec.shutdown();
+            mRpcExec.shutdown();
+            mSideExec.shutdown();
+        }
     }
 
     /**
