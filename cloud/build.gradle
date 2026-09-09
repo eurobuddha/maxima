@@ -37,6 +37,7 @@ sourceSets {
     main {
         java {
             srcDir '../app/src/main/java'
+            srcDir '../walletfile'
             include 'com/eurobuddha/maxima/cloud/**'
             include 'org/minima/**'
             include 'com/eurobuddha/wallet/**'
@@ -48,7 +49,7 @@ sourceSets {
             exclude 'com/eurobuddha/wallet/TokenMeta.java'      // calls IconResolver
         }
     }
-    test { java.srcDirs = ['src/junit/java'] }
+    test { java.srcDirs = ['src/junit/java', '../walletfile-test'] }
 }
 
 application {
