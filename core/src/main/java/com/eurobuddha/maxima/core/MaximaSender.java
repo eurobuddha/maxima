@@ -214,12 +214,14 @@ public final class MaximaSender {
     public static Result send(String zHost, int zPort, MaxTxPoW zUnit, MiniData zMsgid,
                               int zConnectTimeoutMs, int zReadTimeoutMs, Attached zVia)
             throws Exception {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("send interrupted");
         if (zVia != null) {
             Result viaAttached = zVia.send(zHost, zPort, zUnit, zMsgid, zReadTimeoutMs);
             if (viaAttached != null) {
                 return viaAttached;
             }
         }
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("send interrupted before fallback");
         FRESH_SOCKETS.incrementAndGet();
 
         byte[] body = Frame.body(Frame.MSG_MAXIMA_TXPOW, zUnit);

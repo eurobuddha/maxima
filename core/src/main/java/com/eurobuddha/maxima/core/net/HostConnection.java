@@ -124,12 +124,18 @@ public final class HostConnection implements Closeable {
      */
     public com.eurobuddha.maxima.core.MaximaSender.Result send(MaxTxPoW zUnit, MiniData zMsgid,
                                                                int zReadMs) {
+        if (Thread.currentThread().isInterrupted()) {
+            return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, 0);
+        }
         if (!canSend()) {
             return null;
         }
         byte[] body = Frame.body(Frame.MSG_MAXIMA_TXPOW, zUnit);
         java.util.concurrent.CompletableFuture<MiniData> ack = new java.util.concurrent.CompletableFuture<>();
         synchronized (mSendLock) {   // enqueue + write as one unit, so the ledger matches the wire order
+            if (Thread.currentThread().isInterrupted()) {
+                return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, 0);
+            }
             synchronized (mAckWaiters) {
                 mAckWaiters.add(ack);
             }
@@ -156,6 +162,10 @@ public final class HostConnection implements Closeable {
             if (mLastInbound < sentAt) {
                 breakLink();
             }
+            return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);
+        } catch (InterruptedException e) {
+            // The frame may already be sent. Preserve its ACK slot and the owner's stop signal.
+            Thread.currentThread().interrupt();
             return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);
         } catch (Exception e) {
             return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, body.length);

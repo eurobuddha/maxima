@@ -20,6 +20,8 @@ final class FakeRelay implements AutoCloseable {
     volatile String gateway;
     volatile String gatewayKey;
     volatile Runnable beforeGreeting = () -> { };
+    interface MessageHook { void received(DataOutputStream out) throws Exception; }
+    volatile MessageHook onMessage = out -> { };
 
     FakeRelay(List<String> zPeers) throws Exception {
         server = new ServerSocket(0);
@@ -60,6 +62,7 @@ final class FakeRelay implements AutoCloseable {
                 if (f == null) {
                     continue;
                 }
+                if (Frame.typeOf(f) == Frame.MSG_MAXIMA_TXPOW) onMessage.received(out);
             }
         } catch (Exception ignored) {
         } finally {
