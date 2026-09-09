@@ -1,9 +1,8 @@
-name: Unit tests (JVM)
+name: Shared engine and panel tests
 
-# The fast, hermetic JVM suite: :core, :server, :maxjar. No emulator, no signing,
-# no network — pure logic tests that gate every push and PR. The Android app and
-# the desktop installers have their own workflows; this one is about correctness
-# of the shared engine, transport, and relay code.
+# Shared engine, account, wallet-counter and panel regressions. Uses temporary data
+# and loopback fixtures; no live identities, external relay or signing required.
+# Android packages and desktop installers have their own build workflows.
 
 on:
   push:
@@ -16,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: core / server / maxjar
+    name: JVM and panel regression tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,13 +25,20 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run panel regression tests
+        run: node --test account/src/test/js/panel.test.cjs
+
       - name: Run JVM unit tests
         shell: bash
-        # -PskipAndroid keeps the AGP :app module out of configuration entirely
+        # -PskipAndroid keeps both AGP modules out of configuration entirely
         # (no SDK on the runner). gradle.properties pins a local Android Studio
         # JBR path that does not exist here, so point Gradle at the runner JDK.
         run: |
-          ./gradlew :core:test :server:test :maxjar:test \
+          ./gradlew :core:check :server:test :maxjar:test :cloud:test :node:test :wakeproxy:test :desktop:test \
             -PskipAndroid=true \
             -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon
 

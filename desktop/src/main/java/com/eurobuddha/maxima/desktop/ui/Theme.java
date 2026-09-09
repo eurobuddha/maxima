@@ -65,7 +65,7 @@ public final class Theme {
         header        = c(d ? 0x22262B : 0x2A2E33);
         onHeader      = c(d ? 0xF1F2F3 : 0xFFFFFF);
         text          = c(d ? 0xE6E8EA : 0x23262B);
-        subtext       = c(d ? 0x9A9EA6 : 0x797C82);
+        subtext       = c(d ? 0x9A9EA6 : 0x676C73);
         accent        = c(d ? 0xE9E9EB : 0x2A2E33);
         onAccent      = c(d ? 0x23262B : 0xFFFFFF);
         selected      = d ? new Color(255, 255, 255, 0x14) : new Color(0, 0, 0, 0x11);

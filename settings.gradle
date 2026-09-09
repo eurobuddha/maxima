@@ -53,7 +53,9 @@ include ':cloud'
 
 // Parlons Cloud PORTAL: a standalone Parlons-parity frontend for a VPS node.
 // Separate app (own applicationId/icon); reuses the app look-layer, driven by :cloud ParlonsRemote.
-include ':portal'
+if (!providers.gradleProperty('skipAndroid').isPresent()) {
+    include ':portal'
+}
 
 // The iOS wake proxy (stateless APNs relay for sleeping paired devices). Java 11, no deps.
 include ':wakeproxy'

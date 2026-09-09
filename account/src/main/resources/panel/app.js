@@ -21,16 +21,18 @@
   function wrapContact(key, name, address) { const clean = (x) => String(x || '').split('\u0001').join(''); return CONTACT_MARK + clean(key) + '\u0001' + clean(name) + '\u0001' + clean(address); }
   const ic = window.icon;
 
+  let signedOut = false;
   async function api(method, body) {
     const r = await fetch('/api/' + method, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-    if (r.status === 401) { setState('signed out', 'bad'); throw new Error('Signed out - open the panel with a fresh link'); }
+    if (r.status === 401) { signedOut = true; setState('signed out', 'bad'); throw new Error('Signed out - open the panel with a fresh link'); }
     const j = await r.json().catch(() => ({ ok: false, error: 'bad reply' }));
-    if (j && j.ok === false) throw new Error(j.error || method + ' failed');
+    if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || method + ' failed');
     return j;
   }
   async function apiGet(name) {
     const r = await fetch('/api/' + name, { credentials: 'same-origin' });
-    if (r.status === 401) { setState('signed out', 'bad'); throw new Error('Signed out'); }
+    if (r.status === 401) { signedOut = true; setState('signed out', 'bad'); throw new Error('Signed out'); }
+    if (!r.ok) throw new Error('Could not load ' + name);
     return r.json();
   }
   let toastTimer = null;
@@ -39,6 +41,7 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'err' ? 5000 : 2400);
   }
   function setState(text, kind) {
+    if (signedOut) { text = 'signed out'; kind = 'bad'; }
     $('state').textContent = text;
     const p = $('state').parentElement; p.className = 'hpill' + (kind === 'ok' ? ' ok' : kind === 'bad' ? ' bad' : '');
   }
@@ -114,7 +117,7 @@
   }
 
   // ---------- state ----------
-  const S = { me: { name: '', permanent: '', primary: '' }, version: '', summaries: [], contacts: [], open: null, openIsGroup: false, openName: '', msgs: [], route: 'chats', lastEvent: 0, search: '', showSearch: false };
+  const S = { me: { name: '', permanent: '', primary: '' }, version: '', summaries: [], contacts: [], open: null, openIsGroup: false, openName: '', msgs: [], route: 'chats', lastEvent: 0, search: '', showSearch: false, summariesLoaded: false, summariesError: '' };
 
   // ---------- theme (the app's theme button: system → light → dark) ----------
   function applyTheme() {
@@ -137,16 +140,53 @@
       sh.querySelector('#shOut').addEventListener('click', async () => { try { await api('logout'); } catch (e) {} location.reload(); });
     }));
 
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); }
+  });
+
+  function retryCard(host, title, message, retry) {
+    const card = el('<div class="card" role="status"><div class="h">' + esc(title) + '</div><div class="sub">' + esc(message) + '</div><button class="btn ghost full">Try again</button></div>');
+    card.querySelector('button').addEventListener('click', retry); host.appendChild(card);
+  }
+  function wireSwitch(button, label, save, message) {
+    button.setAttribute('role', 'switch'); button.setAttribute('aria-label', label);
+    button.setAttribute('aria-checked', String(button.classList.contains('on')));
+    button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      const on = !button.classList.contains('on'); button.disabled = true;
+      try { await save(on); button.classList.toggle('on', on); button.setAttribute('aria-checked', String(on)); toast(message(on)); }
+      catch (e) { toast(e.message, 'err'); }
+      finally { button.disabled = false; }
+    });
+  }
+
   // ---------- bottom sheets (the app's sheet vocabulary) ----------
+  let sheetFocus = null;
   function sheet(html, wire) {
-    closeSheet();
-    const back = el('<div class="sheetback" id="sheet"><div class="sheet"><div class="grip"></div>' + html + '</div></div>');
+    closeSheet(); sheetFocus = document.activeElement;
+    const back = el('<div class="sheetback" id="sheet"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"><div class="grip"></div>' + html + '<button class="btn ghost full" id="sheetClose">Close</button></div></div>');
+    back.querySelector('.h').id = 'sheetTitle';
+    back.querySelector('#sheetClose').addEventListener('click', closeSheet);
     back.addEventListener('click', (e) => { if (e.target === back) closeSheet(); });
-    document.body.appendChild(back);
+    back.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeSheet(); return; }
+      if (e.key !== 'Tab') return;
+      const fields = [...back.querySelectorAll('button, input, textarea, a[href], [tabindex="0"]')].filter((x) => !x.disabled && !x.hidden);
+      const first = fields[0], last = fields[fields.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    document.body.appendChild(back); $('app').inert = true;
     if (wire) wire(back);
+    (back.querySelector('input:not([type="checkbox"]), textarea') || back.querySelector('button')).focus();
     return back;
   }
-  function closeSheet() { const s = $('sheet'); if (s) s.remove(); }
+  function closeSheet() {
+    const s = $('sheet'); if (!s) return;
+    s.remove(); $('app').inert = false;
+    if (sheetFocus && sheetFocus.isConnected) sheetFocus.focus();
+    sheetFocus = null;
+  }
 
   // ---------- routing ----------
   function go(hash) { location.hash = hash; }
@@ -156,6 +196,8 @@
     const h = location.hash.replace(/^#/, '') || 'chats';
     const [route, arg] = h.split('/');
     if (route === 'chat' && arg) { openChat(decodeURIComponent(arg)); if (S.route !== 'chats') { S.route = 'chats'; renderChats(); } setTab('chats'); return; }
+    S.open = null; S.msgs = []; ++openSeq; olderBusy = false;
+    $('chatpane').innerHTML = '<div class="ground"><div class="groundText">Pick a conversation.</div></div>';
     S.route = route; setTab(route);
     $('app').classList.remove('chat');
     if (route === 'contacts') renderContacts();
@@ -164,13 +206,16 @@
     else if (route === 'settings') renderSettings();
     else renderChats();
   }
-  function setTab(route) { document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.route === route)); }
+  function setTab(route) { document.querySelectorAll('.tabs button').forEach((b) => { const on = b.dataset.route === route; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }); }
 
   // ---------- Chats page ----------
   async function loadSummaries() {
-    const r = await api('chat.summaries', { offset: 0, limit: 100 });
-    S.summaries = (r.summaries || []).sort((a, b) => Number(b.time || 0) - Number(a.time || 0));
-    if (S.route === 'chats') renderChats();
+    try {
+      const r = await api('chat.summaries', { offset: 0, limit: 100 });
+      S.summaries = (r.summaries || []).sort((a, b) => Number(b.time || 0) - Number(a.time || 0));
+      S.summariesError = '';
+    } catch (e) { S.summariesError = e.message; throw e; }
+    finally { S.summariesLoaded = true; if (S.route === 'chats') { if ($('convs')) renderChatsList(); else renderChats(); } }
   }
   function renderChats() {
     const page = $('page'); page.innerHTML = '';
@@ -191,24 +236,27 @@
     const q = S.search.trim().toLowerCase();
     let rows = S.summaries;
     if (q) rows = rows.filter((s) => (s.name || '').toLowerCase().includes(q) || (s.last || '').toLowerCase().includes(q));
-    if (!rows.length) box.appendChild(el('<div class="emptyPage">' + (q ? 'Nothing matches.' : 'No chats yet.<br>Add a contact and say hello.') + '</div>'));
+    if (S.summariesError) retryCard(box, 'Could not refresh chats', S.summariesError, () => loadSummaries().catch(() => {}));
+    if (!rows.length && !S.summariesError) box.appendChild(el('<div class="emptyPage" role="status">' + (!S.summariesLoaded ? 'Loading chats…' : q ? 'Nothing matches.' : 'No chats yet.<br>Add a contact and say hello.') + '</div>'));
     for (const s of rows) {
       const unread = s.peer === S.open ? 0 : Number(s.unread || 0);
       const last = s.last ? (s.group && s.lastName && !s.lastMine ? s.lastName + ': ' : (s.lastMine ? 'You: ' : '')) + preview(s.last) : 'no messages yet';
-      const row = el('<div class="conv' + (S.open === s.peer ? ' on' : '') + '">' + avatar(s.peer, s.name, 'l')
+      const row = el('<div role="button" tabindex="0" class="conv' + (S.open === s.peer ? ' on' : '') + '">' + avatar(s.peer, s.name, 'l')
         + '<div class="mid"><div class="name">' + esc(s.name || s.peer) + '</div><div class="prev">' + esc(last) + '</div></div>'
         + '<div class="right"><div class="time">' + esc(listTime(s.time)) + '</div>' + (unread ? '<div class="badge">' + unread + '</div>' : '') + '</div></div>');
       row.addEventListener('click', () => go('#chat/' + encodeURIComponent(s.peer)));
       box.appendChild(row);
     }
-    if (q) searchMessages(q, box);
+    const seq = ++searchSeq;
+    if (q) searchMessages(q, box, seq);
   }
-  async function searchMessages(q, box) {
+  let searchSeq = 0;
+  async function searchMessages(q, box, seq) {
     try {
       const r = await api('chat.search', { q });
-      if (S.search.trim().toLowerCase() !== q) return;
+      if (seq !== searchSeq || !box.isConnected || S.search.trim().toLowerCase() !== q) return;
       for (const m of (r.messages || [])) {
-        const row = el('<div class="conv">' + avatar(m.peer, m.name, 'l') + '<div class="mid"><div class="name">' + esc(m.name) + '</div><div class="prev">' + esc((m.mine ? 'You: ' : '') + m.body) + '</div></div><div class="right"><div class="time">' + esc(listTime(m.time)) + '</div></div></div>');
+        const row = el('<div role="button" tabindex="0" class="conv">' + avatar(m.peer, m.name, 'l') + '<div class="mid"><div class="name">' + esc(m.name) + '</div><div class="prev">' + esc((m.mine ? 'You: ' : '') + m.body) + '</div></div><div class="right"><div class="time">' + esc(listTime(m.time)) + '</div></div></div>');
         row.addEventListener('click', () => go('#chat/' + encodeURIComponent(m.peer)));
         box.appendChild(row);
       }
@@ -231,21 +279,21 @@
   let openSeq = 0, olderBusy = false, olderDone = false;
   async function openChat(peer) {
     const seq = ++openSeq;
-    S.open = peer; olderDone = false;
+    S.open = peer; S.msgs = []; olderDone = false; olderBusy = false;
     const sum = S.summaries.find((s) => s.peer === peer);
     S.openIsGroup = !!(sum && sum.group);
     S.openName = (sum && sum.name) || peer;
     renderChatsList();
     $('app').classList.add('chat');
     const pane = $('chatpane'); pane.innerHTML = '';
-    pane.appendChild(el('<div class="cbar"><button class="ibtn back" id="back">' + ic('back') + '</button>' + avatar(peer, S.openName, 'm')
+    pane.appendChild(el('<div class="cbar"><button class="ibtn back" id="back" aria-label="Back to chats">' + ic('back') + '</button>' + avatar(peer, S.openName, 'm')
       + '<div class="titles"><div class="ctitle">' + esc(S.openName) + '</div><div class="csub" id="csub"></div></div>'
-      + '<button class="ibtn" id="cTheme">' + ic('theme') + '</button><button class="ibtn" id="cVideo">' + ic('videocall') + '</button><button class="ibtn" id="cCall">' + ic('call') + '</button><button class="ibtn narrow" id="cMore">' + ic('more') + '</button></div>'));
-    pane.appendChild(el('<div class="msgs" id="msgs"></div>'));
-    pane.appendChild(el('<div class="composer"><div class="ipill"><button class="ibtn" id="emojiBtn" title="Emoji">' + ic('emoji') + '</button><textarea id="draft" rows="1" placeholder="Message"></textarea>'
+      + '<button class="ibtn" id="cTheme" aria-label="Theme">' + ic('theme') + '</button><button class="ibtn" id="cVideo" aria-label="Video call">' + ic('videocall') + '</button><button class="ibtn" id="cCall" aria-label="Voice call">' + ic('call') + '</button><button class="ibtn narrow" id="cMore" aria-label="Conversation details">' + ic('more') + '</button></div>'));
+    pane.appendChild(el('<div class="msgs" id="msgs"><div class="emptyPage" role="status">Loading messages…</div></div>'));
+    pane.appendChild(el('<div class="composer"><div class="ipill"><button class="ibtn" id="emojiBtn" title="Emoji">' + ic('emoji') + '</button><textarea id="draft" aria-label="Message" rows="1" placeholder="Message"></textarea>'
       + '<input type="file" id="attachFile" hidden><button class="ibtn" id="attachBtn" title="Attach">' + ic('attach') + '</button><input type="file" id="photoFile" accept="image/*" hidden><button class="ibtn" id="photoBtn" title="Photo">' + ic('camera') + '</button></div>'
       + '<button class="sendbtn" id="sendBtn" title="Send">' + ic('send') + '</button></div><div class="senderr" id="sendErr" hidden></div>'));
-    $('back').addEventListener('click', () => { S.open = null; $('app').classList.remove('chat'); renderChatsList(); history.replaceState(null, '', '#chats'); });
+    $('back').addEventListener('click', () => go('#chats'));
     $('cTheme').addEventListener('click', () => $('btnTheme').click());
     $('cVideo').addEventListener('click', () => showBanner('Video calls ring on your phone - open Parlons there to call ' + S.openName, 5000));
     $('cCall').addEventListener('click', () => showBanner('Calls ring on your phone - open Parlons there to call ' + S.openName, 5000));
@@ -267,7 +315,8 @@
       renderMsgs(true);
       api('chat.markread', { peer }).catch(() => {});
       const s = S.summaries.find((x) => x.peer === peer); if (s) { s.unread = 0; renderChatsList(); }
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) { if (seq !== openSeq) return; const box = $('msgs'); box.innerHTML = ''; retryCard(box, 'Could not load messages', e.message, () => openChat(peer)); }
+    if (seq !== openSeq) return;
     const box = $('msgs');
     box.addEventListener('scroll', () => { if (box.scrollTop < 40) loadOlder(peer); toBottomBtn(); });
   }
@@ -282,19 +331,21 @@
     const box = $('msgs'); if (!box) return;
     const far = box.scrollHeight - box.scrollTop - box.clientHeight > 300;
     let b = $('toBottom');
-    if (far && !b) { b = el('<button class="tobottom" id="toBottom">' + ic('arrowdown') + '</button>'); b.addEventListener('click', () => { box.scrollTop = box.scrollHeight; }); $('chatpane').appendChild(b); }
+    if (far && !b) { b = el('<button class="tobottom" id="toBottom" aria-label="Latest messages">' + ic('arrowdown') + '</button>'); b.addEventListener('click', () => { box.scrollTop = box.scrollHeight; }); $('chatpane').appendChild(b); }
     if (!far && b) b.remove();
   }
   async function loadOlder(peer) {
-    if (olderBusy || olderDone || !S.msgs.length) return;
+    if (peer !== S.open || olderBusy || olderDone || !S.msgs.length) return;
+    const seq = openSeq;
     olderBusy = true;
     try {
       const r = await api('chat.conversation', { peer, limit: 100, before: Number(S.msgs[0].time) });
+      if (seq !== openSeq || peer !== S.open) return;
       const more = (r.messages || []).slice().sort((a, b) => Number(a.time) - Number(b.time));
       if (!more.length) { olderDone = true; return; }
       const box = $('msgs'), before = box.scrollHeight;
       S.msgs = more.concat(S.msgs); renderMsgs(false); box.scrollTop = box.scrollHeight - before;
-    } catch (e) { } finally { olderBusy = false; }
+    } catch (e) { } finally { if (seq === openSeq) olderBusy = false; }
   }
   // ChatActivity.ticks: ✗ failed · ✓✓ read (tick_read colour) · ✓✓ delivered · ✓ sent · ⋯ pending
   function ticks(state) {
@@ -372,17 +423,19 @@
     renderMsgs(false);
   }
   async function sendDraft() {
-    const peer = S.open; if (!peer) return;
+    const peer = S.open, seq = openSeq; if (!peer) return;
     const body = $('draft').value.trim(); if (!body) return;
     $('draft').value = ''; $('draft').style.height = 'auto';
     const local = { id: 'local-' + Date.now() + Math.random().toString(36).slice(2), body, mine: true, time: Date.now(), state: 'sending' };
-    S.msgs.push(local); renderMsgs(true);
-    try { await api('chat.send', { peer, body }); await reloadOpenTail(peer); }
-    catch (e) { local.state = 'failed'; renderMsgs(false); showSendErr(e.message); }
+    if (seq === openSeq) { S.msgs.push(local); renderMsgs(true); }
+    try { await api('chat.send', { peer, body }); await reloadOpenTail(peer, seq); }
+    catch (e) { local.state = 'failed'; if (seq === openSeq) { renderMsgs(false); showSendErr(e.message); } }
   }
   function showSendErr(msg) { const b = $('sendErr'); if (!b) return; b.textContent = msg; b.hidden = false; setTimeout(() => { b.hidden = true; }, 6000); }
-  async function reloadOpenTail(peer) {
+  async function reloadOpenTail(peer, seq = openSeq) {
+    if (peer !== S.open || seq !== openSeq) return;
     const r = await api('chat.conversation', { peer, limit: 30 });
+    if (peer !== S.open || seq !== openSeq) return;
     const tail = r.messages || [];
     S.msgs = S.msgs.filter((m) => !String(m.id).startsWith('local-') || !tail.some((t) => t.mine && (t.body === m.body || (parseMedia(m.body) && parseMedia(t.body) && Number(t.time) >= Number(m.time) - 60000))));
     for (const t of tail) { const i = S.msgs.findIndex((x) => x.id === t.id); if (i >= 0) S.msgs[i] = t; else S.msgs.push(t); }
@@ -390,7 +443,7 @@
     renderMsgs(true);
   }
   async function sendFile(file, asPhoto) {
-    const peer = S.open; if (!peer) return;
+    const peer = S.open, seq = openSeq, isGroup = S.openIsGroup; if (!peer) return;
     let blob = file, mime = file.type || 'application/octet-stream';
     if (asPhoto || mime.startsWith('image/')) {
       try {
@@ -398,25 +451,28 @@
         const max = 1600, scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
         const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
         c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-        blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85)); mime = 'image/jpeg';
+        const photo = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85)); bmp.close();
+        if (photo) { blob = photo; mime = 'image/jpeg'; }
       } catch (e) { /* not an image after all: send as is */ }
     }
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    if (bytes.length > 16 * 1024 * 1024) { showSendErr('Too big: 16 MB is the most a message can carry'); return; }
+    if (blob.size > 16 * 1024 * 1024) { toast('Too big: 16 MB is the most a message can carry', 'err'); return; }
+    let bytes;
+    try { bytes = new Uint8Array(await blob.arrayBuffer()); } catch (e) { toast('Could not read this file', 'err'); return; }
+    if (!bytes.length || bytes.length > 16 * 1024 * 1024) { toast(!bytes.length ? 'This file is empty' : 'Too big: 16 MB is the most a message can carry', 'err'); return; }
     const caption = mime.startsWith('image/') ? '' : (file.name || '');
     const local = { id: 'local-' + Date.now(), body: MEDIA_MARK + mime + '\u0001data:' + mime + ';base64,' + b64(bytes) + '\u0001' + caption, mine: true, time: Date.now(), state: 'sending' };
-    S.msgs.push(local); renderMsgs(true);
+    if (seq === openSeq) { S.msgs.push(local); renderMsgs(true); }
     const tid = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), CH = 48 * 1024;
     try {
       for (let off = 0; off < bytes.length; off += CH) {
         const last = off + CH >= bytes.length;
         const p = { tid, off, data: b64(bytes.subarray(off, Math.min(bytes.length, off + CH))), last };
-        if (last) { p.peer = peer; p.group = S.openIsGroup; p.mime = mime; p.caption = caption; }
+        if (last) { p.peer = peer; p.group = isGroup; p.mime = mime; p.caption = caption; }
         await api('media.up', p);
       }
-      setTimeout(() => reloadOpenTail(peer).catch(() => {}), 2500);
-      setTimeout(() => reloadOpenTail(peer).catch(() => {}), 12000);
-    } catch (e) { local.state = 'failed'; renderMsgs(false); showSendErr(e.message); }
+      setTimeout(() => reloadOpenTail(peer, seq).catch(() => {}), 2500);
+      setTimeout(() => reloadOpenTail(peer, seq).catch(() => {}), 12000);
+    } catch (e) { local.state = 'failed'; if (seq === openSeq) { renderMsgs(false); showSendErr(e.message); } }
   }
   function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 
@@ -428,7 +484,7 @@
     list = list.filter((x) => x.peer !== exceptKey);
     if (!list.length) { toast('No one else to send it to yet', 'err'); return; }
     let html = '<div class="h">Send contact to…</div>';
-    for (const x of list) html += '<div class="conv pick" data-peer="' + esc(x.peer) + '">' + avatar(x.peer, x.name, 'm') + '<div class="mid"><div class="name">' + esc(x.name || x.peer) + '</div>' + (x.group ? '<div class="prev">Group</div>' : '') + '</div></div>';
+    for (const x of list) html += '<div role="button" tabindex="0" class="conv pick" data-peer="' + esc(x.peer) + '">' + avatar(x.peer, x.name, 'm') + '<div class="mid"><div class="name">' + esc(x.name || x.peer) + '</div>' + (x.group ? '<div class="prev">Group</div>' : '') + '</div></div>';
     sheet(html, (sh) => {
       sh.querySelectorAll('.pick').forEach((row) => row.addEventListener('click', async () => {
         const peer = row.dataset.peer; closeSheet();
@@ -474,7 +530,7 @@
     idc.querySelector('#myQrBtn').addEventListener('click', () => { const q = idc.querySelector('#myQr'); q.hidden = !q.hidden; if (!q.hidden) drawQr(q, S.me.permanent); });
     body.appendChild(idc);
     const add = el('<div class="card"><div class="h">Add a contact</div><div class="sub">Paste their address (MAX#… or Mx…). They get an introduction; the chat opens once they accept.</div><div class="frow"><input class="field" id="addAddr" placeholder="Paste an address"><button class="btn sm" id="addBtn">' + ic('personadd') + 'Add</button></div></div>');
-    add.querySelector('#addBtn').addEventListener('click', async () => { const address = add.querySelector('#addAddr').value.trim(); if (!address) return; try { await api('contacts.add', { address }); toast('Introduction sent'); add.querySelector('#addAddr').value = ''; setTimeout(renderContacts, 1500); } catch (e) { toast(e.message, 'err'); } });
+    add.querySelector('#addBtn').addEventListener('click', async () => { const address = add.querySelector('#addAddr').value.trim(); if (!address) return; try { await api('contacts.add', { address }); toast('Introduction sent'); add.querySelector('#addAddr').value = ''; setTimeout(() => { if (S.route === 'contacts') renderContacts(); }, 1500); } catch (e) { toast(e.message, 'err'); } });
     body.appendChild(add);
     const list = el('<div class="card"><input class="field" id="cSearch" placeholder="Search contacts" style="margin-bottom:6px"><div id="cRows"></div></div>');
     body.appendChild(list);
@@ -486,7 +542,7 @@
       if (!cs.length) rows.innerHTML = '<div class="sub">' + (q ? 'Nothing matches.' : 'No contacts yet.') + '</div>';
       for (const c of cs) {
         const p = presence(c.lastSeen);
-        const r = el('<div class="rowitem" style="cursor:pointer">' + avatar(c.key, c.name, 'm') + '<div class="mid"><div class="n">' + esc(c.name || '(no name)') + '</div><div class="s">' + esc(p || 'not reached yet') + '</div></div>' + (p === 'online' ? '<span class="spill ok"><span class="dot"></span>online</span>' : '') + '</div>');
+        const r = el('<div class="rowitem" role="button" tabindex="0" style="cursor:pointer">' + avatar(c.key, c.name, 'm') + '<div class="mid"><div class="n">' + esc(c.name || '(no name)') + '</div><div class="s">' + esc(p || 'not reached yet') + '</div></div>' + (p === 'online' ? '<span class="spill ok"><span class="dot"></span>online</span>' : '') + '</div>');
         r.addEventListener('click', () => contactInfo(c.key));
         rows.appendChild(r);
       }
@@ -547,8 +603,9 @@
     const page = $('page'); page.innerHTML = '';
     const body = el('<div class="pagebody"></div>'); page.appendChild(body);
     let st = {}, fig = {};
-    try { st = await api('node.status'); } catch (e) { toast(e.message, 'err'); }
-    try { fig = await api('node.figures'); } catch (e) { }
+    try { st = await api('node.status'); fig = await api('node.figures'); }
+    catch (e) { retryCard(body, 'Could not load node details', e.message, renderNode); return; }
+    if (!body.isConnected) return;
     const up = Number(st.uptime || 0), h = Math.floor(up / 3600000), m = Math.floor((up % 3600000) / 60000);
     const anchor = (st.permanent || '').split('@').pop();
     const ownAnchor = !!fig.ownRelay && anchor === fig.ownRelay;
@@ -599,8 +656,8 @@
       const rb = r.querySelector('button'); if (rb) rb.addEventListener('click', async () => { try { await api('node.hosts', { remove: hh.host }); toast('Detached'); renderNode(); } catch (e) { toast(e.message, 'err'); } });
       hr.appendChild(r);
     }
-    hosts.querySelector('#hostAddBtn').addEventListener('click', async () => { const v = hosts.querySelector('#hostAdd').value.trim(); if (!v) return; try { await api('node.hosts', { add: v }); toast('Connecting…'); setTimeout(renderNode, 1500); } catch (e) { toast(e.message, 'err'); } });
-    hosts.querySelector('#builtin').addEventListener('click', async (ev) => { const on = !ev.currentTarget.classList.contains('on'); try { await api('node.hosts', { builtin: on }); ev.currentTarget.classList.toggle('on', on); toast(on ? 'Built-in list on' : 'Built-in list off'); } catch (e) { toast(e.message, 'err'); } });
+    hosts.querySelector('#hostAddBtn').addEventListener('click', async () => { const v = hosts.querySelector('#hostAdd').value.trim(); if (!v) return; try { await api('node.hosts', { add: v }); toast('Connecting…'); setTimeout(() => { if (S.route === 'node') renderNode(); }, 1500); } catch (e) { toast(e.message, 'err'); } });
+    wireSwitch(hosts.querySelector('#builtin'), 'Use the built-in relay list', (on) => api('node.hosts', { builtin: on }), (on) => on ? 'Built-in list on' : 'Built-in list off');
     body.appendChild(hosts);
     const mls = el('<div class="card"><div class="ctitle2">Directory anchor</div><div class="sub">Where your permanent address resolves. Pin it to one relay you trust, or let the account choose.</div><div class="frow"><button class="btn ghost sm" id="mlsPin">Pin best relay</button><button class="btn ghost sm" id="mlsClear">Clear</button><button class="btn ghost sm" id="mlsRepub">Republish</button></div><div class="mono whole" id="mlsInfo" style="font-size:11px;margin-top:6px"></div></div>');
     async function mlsDo(action) { try { const r = await api('node.mls', { action }); mls.querySelector('#mlsInfo').textContent = (r.pinned ? 'pinned: ' : 'auto: ') + (r.mls || ''); toast('Done'); } catch (e) { toast(e.message, 'err'); } }
@@ -616,12 +673,13 @@
   async function renderSettings() {
     const page = $('page'); page.innerHTML = '';
     const body = el('<div class="pagebody"></div>'); page.appendChild(body);
-    let s = {}; try { s = await api('settings.get'); } catch (e) { }
+    let s; try { s = await api('settings.get'); } catch (e) { retryCard(body, 'Could not load settings', e.message, renderSettings); return; }
+    if (!body.isConnected) return;
     const name = el('<div class="card"><div class="ctitle2">Profile</div><div class="h">Your name</div><div class="sub">What your contacts see.</div><div class="frow"><input class="field" id="setName" value="' + esc(S.me.name) + '"><button class="btn sm" id="saveName">Save</button></div></div>');
     name.querySelector('#saveName').addEventListener('click', async () => { const v = name.querySelector('#setName').value.trim(); if (!v) return; try { await api('identity.setname', { name: v }); S.me.name = v; toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
     body.appendChild(name);
     const priv = el('<div class="card"><div class="ctitle2">Privacy</div><div class="sw"><div class="lbl">Read receipts<small>Your contacts see when you have read their messages.</small></div><button class="switch' + (s.readReceipts ? ' on' : '') + '" id="rr"></button></div></div>');
-    priv.querySelector('#rr').addEventListener('click', async (ev) => { const on = !ev.currentTarget.classList.contains('on'); try { await api('settings.set', { readReceipts: on }); ev.currentTarget.classList.toggle('on', on); toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
+    wireSwitch(priv.querySelector('#rr'), 'Read receipts', (on) => api('settings.set', { readReceipts: on }), () => 'Saved');
     body.appendChild(priv);
     const th = el('<div class="card"><div class="ctitle2">Appearance</div><div class="sub">Theme follows the button in the top bar: system, light, dark.</div></div>');
     body.appendChild(th);
@@ -632,8 +690,8 @@
   }
 
   async function refreshPill() {
-    try { const st = await api('node.status'); S.version = st.version || ''; $('ver').textContent = S.version ? 'v' + S.version : ''; const n = Number(st.hosts || 0); setState(n + (n === 1 ? ' host' : ' hosts'), n > 0 ? 'ok' : 'bad'); }
-    catch (e) { setState('connected', 'ok'); }
+    try { const st = await api('node.status'); S.version = st.version || ''; $('ver').textContent = S.version ? 'v' + S.version : ''; const n = Number(st.hosts || 0); setState(n ? n + (n === 1 ? ' relay' : ' relays') : 'no relays', n > 0 ? 'ok' : 'bad'); }
+    catch (e) { setState('offline', 'bad'); }
   }
 
   // ---------- live events ----------
@@ -678,11 +736,12 @@
 
   // ---------- boot ----------
   async function boot() {
+    $('page').innerHTML = '<div class="emptyPage" role="status">Connecting to your account…</div>';
     try {
       const p = await api('ping');
       S.me = { name: p.name || '', permanent: p.permanent || '', primary: p.primary || '' };
       await refreshPill();
-    } catch (e) { setState('no account', 'bad'); return; }
+    } catch (e) { setState('offline', 'bad'); $('page').innerHTML = ''; retryCard($('page'), 'Could not reach your account', e.message, boot); return; }
     await loadSummaries().catch((e) => toast(e.message, 'err'));
     if ('Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch (e) {} }
     listen();

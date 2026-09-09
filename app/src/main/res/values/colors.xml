@@ -24,7 +24,7 @@
 
     <!-- text -->
     <color name="ux_text">#FF23262B</color>
-    <color name="ux_subtext">#FF797C82</color>
+    <color name="ux_subtext">#FF676C73</color>
 
     <!-- the single interactive "accent" is dark grey (FAB, badge, controls) -->
     <color name="ux_accent">#FF2A2E33</color>

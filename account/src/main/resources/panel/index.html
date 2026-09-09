@@ -14,12 +14,12 @@
         <div class="titlerow"><span class="title">Parlons!</span><span class="ver" id="ver"></span></div>
         <div class="credit">Powered by Maxima</div>
       </div>
-      <div class="hpill"><span class="dot" id="dot"></span><span class="ptext" id="state">starting…</span></div>
+      <div class="hpill" role="status"><span class="dot" id="dot"></span><span class="ptext" id="state">starting…</span></div>
       <button class="ibtn" id="btnTheme" title="Theme"></button>
       <button class="ibtn" id="btnSearch" title="Search"></button>
       <button class="ibtn narrow" id="btnMore" title="More"></button>
     </header>
-    <nav class="tabs" id="tabs">
+    <nav class="tabs" id="tabs" aria-label="Parlons pages">
       <button data-route="chats" class="on">Chats</button>
       <button data-route="contacts">Contacts</button>
       <button data-route="devices">Devices</button>
@@ -31,8 +31,8 @@
   <section class="chatpane" id="chatpane">
     <div class="ground" id="ground"><div class="groundText">Pick a conversation.</div></div>
   </section>
-  <div class="banner" id="banner" hidden></div>
-  <div class="toast" id="toast" hidden></div>
+  <div class="banner" id="banner" role="status" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
 </div>
 <script src="qr.js"></script>
 <script src="icons.js"></script>

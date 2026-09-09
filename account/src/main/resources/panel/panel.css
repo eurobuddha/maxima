@@ -1,16 +1,16 @@
 /* Parlons panel: the Parlons phone app, rendered as it is. Tokens = app/src/main/res/values/colors.xml
    (ux_*) and values-night; shapes = the app's drawables; 1 dp = 1 px. Manrope app-wide. */
-@font-face { font-family: "Manrope"; font-weight: 400; src: url(fonts/manrope-regular.ttf) format("truetype"); }
-@font-face { font-family: "Manrope"; font-weight: 500; src: url(fonts/manrope-medium.ttf) format("truetype"); }
-@font-face { font-family: "Manrope"; font-weight: 600; src: url(fonts/manrope-semibold.ttf) format("truetype"); }
-@font-face { font-family: "Manrope"; font-weight: 700; src: url(fonts/manrope-bold.ttf) format("truetype"); }
-@font-face { font-family: "Manrope"; font-weight: 800; src: url(fonts/manrope-extrabold.ttf) format("truetype"); }
+@font-face { font-family: "Manrope"; font-display: swap; font-weight: 400; src: url(fonts/manrope-regular.ttf) format("truetype"); }
+@font-face { font-family: "Manrope"; font-display: swap; font-weight: 500; src: url(fonts/manrope-medium.ttf) format("truetype"); }
+@font-face { font-family: "Manrope"; font-display: swap; font-weight: 600; src: url(fonts/manrope-semibold.ttf) format("truetype"); }
+@font-face { font-family: "Manrope"; font-display: swap; font-weight: 700; src: url(fonts/manrope-bold.ttf) format("truetype"); }
+@font-face { font-family: "Manrope"; font-display: swap; font-weight: 800; src: url(fonts/manrope-extrabold.ttf) format("truetype"); }
 
 :root {
   --bg: #F5F4F1; --chatbg: #F5F4F1; --card: #FFFFFF; --card2: #EFEEEB; --input: #EFEEEB; --divider: #EBE9E6;
   --press: rgba(0,0,0,.08); --scrim: rgba(0,0,0,.4);
   --header: #2A2E33; --onheader: #FFFFFF;
-  --text: #23262B; --subtext: #797C82;
+  --text: #23262B; --subtext: #676C73;
   --accent: #2A2E33; --accentpress: #3B4049; --onaccent: #FFFFFF; --selected: rgba(0,0,0,.067);
   --success: #4F9B72; --error: #C0503C; --pending: #B98A3C;
   --bin: #FFFFFF; --bintext: #23262B; --bout: #31353C; --bouttext: #FFFFFF; --boutsub: #B6B9C1; --tickread: #6B6F76;
@@ -201,3 +201,27 @@ a { color: inherit; }
 .ccname { font-weight: 700; }
 .ccaddr { font-size: 11px; opacity: .85; margin: 4px 0 8px; }
 .ccbtns { display: flex; gap: 8px; }
+
+/* Keyboard and small-window polish using the existing app palette. */
+:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+button:disabled { cursor: default; opacity: .55; }
+.conv:focus-visible, .rowitem:focus-visible { outline-offset: -3px; background: var(--selected); }
+.ibtn { flex-shrink: 0; }
+.ipill { min-width: 0; }
+.bubble { max-width: min(300px, 100%); }
+.ccard { min-width: 0; width: 220px; max-width: 100%; }
+.toast, .banner { max-width: calc(100vw - 24px); overflow-wrap: anywhere; }
+.credit { opacity: .75; }
+.ver { opacity: .8; }
+.titlerow { flex-wrap: wrap; }
+@media (max-width: 380px) {
+  .bar { flex-wrap: wrap; gap: 3px 0; }
+  .bar .titles { flex-basis: calc(100% - 126px); }
+  .bar .hpill { order: 1; margin: 4px 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .switch, .switch::after { transition: none; }
+}
+
+.ipill:focus-within { outline: 2px solid var(--text); outline-offset: -2px; }
+.ipill textarea:focus-visible { outline: none; }
