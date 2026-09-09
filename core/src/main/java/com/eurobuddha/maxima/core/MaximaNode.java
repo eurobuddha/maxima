@@ -294,16 +294,10 @@ public final class MaximaNode implements ChatPort {
     private void runFlushHooks() {
         // Everything delivered on this connection is queued on the inbound lane; let it land
         // before anything is flushed and acknowledged.
-        drainInbound(10_000);
-        try {
-            mStore.flush();
-        } catch (Exception ignored) {
-        }
+        if (!drainInbound(10_000)) throw new IllegalStateException("Inbound delivery is not drained");
+        mStore.flush();
         for (Runnable r : mFlushHooks) {
-            try {
-                r.run();
-            } catch (Exception ignored) {
-            }
+            r.run(); // a failed flush must reach HostConnection and withhold deletion permission
         }
     }
 
@@ -1294,15 +1288,28 @@ public final class MaximaNode implements ChatPort {
      * before-ack hook needs this: a mailbox ack must not be signed while a delivered message
      * is still waiting on the lane, or it would be acknowledged before it was persisted.
      */
-    void drainInbound(long zTimeoutMs) {
+    boolean drainInbound(long zTimeoutMs) {
+        if (Thread.currentThread().isInterrupted()) return false;
         if (Thread.currentThread().getName().equals("maxima-inbound")) {
-            return;   // already on the lane: everything before us has run
+            return false; // the current delivery is still running; never certify it as finished
         }
-        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        if (mInboundExec.isShutdown()) return false;
+        Thread caller = Thread.currentThread();
+        java.util.concurrent.CompletableFuture<Boolean> done = new java.util.concurrent.CompletableFuture<>();
+        // CallerRunsPolicy supplies backpressure for deliveries, but an inline barrier has NOT
+        // waited behind the queue. Only a barrier executed by the worker certifies its prefix.
+        Runnable barrier = () -> done.complete(Thread.currentThread() != caller);
         try {
-            mInboundExec.execute(done::countDown);
-            done.await(zTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            mInboundExec.execute(barrier);
+            return done.get(zTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    && !Thread.currentThread().isInterrupted();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
         } catch (Exception ignored) {
+            return false;
+        } finally {
+            mInboundExec.remove(barrier); // expired barriers must not accumulate behind a slow task
         }
     }
 

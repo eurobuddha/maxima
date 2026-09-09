@@ -348,17 +348,7 @@ public final class HostConnection implements Closeable {
     }
 
     private void answerMailboxChallenge(MaximaCTRLMessage zCtrl) {
-        // Everything delivered on this connection so far must be durable BEFORE we sign the
-        // ack that lets the relay delete its copy. (seq 0 is the possession probe; the flush
-        // is then a no-op on a clean store.)
-        Runnable before = mBeforeAck;
-        if (before != null) {
-            try {
-                before.run();
-            } catch (Exception ignored) {
-                // a failed flush must not stop the ack: the relay keeps mail until the TTL anyway
-            }
-        }
+        if (Thread.currentThread().isInterrupted()) return;
         try {
             java.io.DataInputStream d = new java.io.DataInputStream(
                     new java.io.ByteArrayInputStream(zCtrl.getData().getBytes()));
@@ -370,6 +360,13 @@ public final class HostConnection implements Closeable {
                     new MiniData(routingKey()).to0xString())) {
                 return;
             }
+            if (seq < 0) return;
+            // Sequence zero proves ownership without deleting mail. Positive acknowledgements
+            // authorize deletion, so every preceding delivery must be durable first. A failed
+            // hook exits through the catch below without signing; the relay can retry its drain.
+            Runnable before = mBeforeAck;
+            if (seq > 0 && before != null) before.run();
+            if (Thread.currentThread().isInterrupted()) return;
             // canonical: "maxack" + key DER + 8-byte big-endian seq (relay mirrors)
             java.io.ByteArrayOutputStream cb = new java.io.ByteArrayOutputStream();
             java.io.DataOutputStream cd = new java.io.DataOutputStream(cb);
@@ -389,6 +386,7 @@ public final class HostConnection implements Closeable {
             ack.setData(new MiniData(ab.toByteArray()));
             writeFrame(Frame.body(Frame.MSG_MAXIMA_CTRL, ack));
         } catch (Exception ignored) {
+            // A failed pre-ack hook produces no signature. Transport failures use normal retry semantics.
         }
     }
 
