@@ -246,13 +246,6 @@ public final class AccountBackup {
 
     /** Create-or-replace a 0600 text file. */
     private static void writePrivate(Path zFile, String zText) throws Exception {
-        Files.deleteIfExists(zFile);
-        try {
-            Files.createFile(zFile, PosixFilePermissions.asFileAttribute(
-                    PosixFilePermissions.fromString("rw-------")));
-        } catch (UnsupportedOperationException nonPosix) {
-            // non-POSIX FS — plain create below
-        }
-        Files.write(zFile, zText.getBytes(StandardCharsets.UTF_8));
+        AccountFiles.writePrivate(zFile, zText.getBytes(StandardCharsets.UTF_8));
     }
 }

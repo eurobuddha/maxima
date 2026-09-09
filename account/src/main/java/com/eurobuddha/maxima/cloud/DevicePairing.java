@@ -38,6 +38,8 @@ import java.util.Map;
 public final class DevicePairing {
 
     private static final SecureRandom RAND = new SecureRandom();
+    static final int MAX_PENDING = 64;
+    static final int MAX_LABEL_CHARS = 256;
 
     public static final class Device {
         public final String key;      // 0x-hex of the DER public key
@@ -87,6 +89,8 @@ public final class DevicePairing {
     private final Path mCodeFile;      // pair-code.txt
     private final Map<String, Device> mAuthorized = new LinkedHashMap<>();
     private final Map<String, String> mPending = new LinkedHashMap<>();   // key -> label
+    private final Map<String, Device> mSavedAuthorized = new LinkedHashMap<>();
+    private final Map<String, String> mSavedPending = new LinkedHashMap<>();
 
     public DevicePairing(Path zDataDir) {
         mFile = zDataDir.resolve("devices.json");
@@ -142,13 +146,19 @@ public final class DevicePairing {
             return Result.ALREADY;
         }
         String label = (zLabel == null || zLabel.isEmpty()) ? "device" : zLabel;
+        if (label.length() > MAX_LABEL_CHARS) throw new IllegalArgumentException("device label too long");
         String code = currentCode();
         if (zCode != null && !zCode.isEmpty() && code != null
                 && normalize(zCode).equals(normalize(code))) {
-            authorize(key, label);
+            // Consume first: a failed delete must never leave an accepted code reusable.
+            // If persisting the pairing then fails, the operator can mint a fresh code.
             consumeCode();
+            authorize(key, label);
             return Result.AUTHORIZED;
         }
+        if (label.equals(mPending.get(key))) return Result.PENDING;
+        if (!mPending.containsKey(key) && mPending.size() >= MAX_PENDING)
+            throw new IllegalStateException("pending device limit reached; ask the owner for a pairing code");
         mPending.put(key, label);
         save();
         return Result.PENDING;
@@ -254,7 +264,8 @@ public final class DevicePairing {
                 String s = new String(Files.readAllBytes(mCodeFile), StandardCharsets.UTF_8).trim();
                 return s.isEmpty() ? null : s;
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            throw new IllegalStateException("could not read pairing code", e);
         }
         return null;
     }
@@ -262,18 +273,16 @@ public final class DevicePairing {
     private void consumeCode() {
         try {
             Files.deleteIfExists(mCodeFile);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            throw new IllegalStateException("could not consume pairing code", e);
         }
     }
 
     private void writeCode(String code) {
         try {
-            Files.write(mCodeFile, code.getBytes(StandardCharsets.UTF_8));
-            try {
-                Files.setPosixFilePermissions(mCodeFile, PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException ignored) {
-            }
-        } catch (Exception ignored) {
+            AccountFiles.writePrivate(mCodeFile, code.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new IllegalStateException("could not write pairing code", e);
         }
     }
 
@@ -346,12 +355,15 @@ public final class DevicePairing {
             Object pend = o.get("pending");
             if (pend instanceof JSONArray) {
                 for (Object e : (JSONArray) pend) {
+                    if (mPending.size() >= MAX_PENDING) break;
                     JSONObject d = (JSONObject) e;
                     mPending.put(normalizeHex(String.valueOf(d.get("key"))),
                             String.valueOf(d.getOrDefault("label", "device")));
                 }
             }
-        } catch (Exception ignored) {
+            rememberSavedState();
+        } catch (Exception e) {
+            throw new IllegalStateException("could not load device authorizations", e);
         }
     }
 
@@ -387,12 +399,31 @@ public final class DevicePairing {
             JSONObject root = new JSONObject();
             root.put("authorized", auth);
             root.put("pending", pend);
-            Files.write(mFile, root.toString().getBytes(StandardCharsets.UTF_8));
-            try {
-                Files.setPosixFilePermissions(mFile, PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException ignored) {
-            }
-        } catch (Exception ignored) {
+            AccountFiles.writePrivate(mFile, root.toString().getBytes(StandardCharsets.UTF_8));
+            rememberSavedState();
+        } catch (Exception e) {
+            mAuthorized.clear();
+            for (Device d : mSavedAuthorized.values()) mAuthorized.put(d.key, copy(d));
+            mPending.clear();
+            mPending.putAll(mSavedPending);
+            throw new IllegalStateException("could not save device authorizations; change was not applied", e);
         }
+    }
+
+    private void rememberSavedState() {
+        mSavedAuthorized.clear();
+        for (Device d : mAuthorized.values()) mSavedAuthorized.put(d.key, copy(d));
+        mSavedPending.clear();
+        mSavedPending.putAll(mPending);
+    }
+
+    private static Device copy(Device d) {
+        Device c = new Device(d.key, d.label, d.pairedAt);
+        c.local = d.local;
+        c.apnsToken = d.apnsToken;
+        c.apnsEnv = d.apnsEnv;
+        c.wakeProxy = d.wakeProxy;
+        c.apnsUpdated = d.apnsUpdated;
+        return c;
     }
 }
