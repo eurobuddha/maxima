@@ -277,11 +277,9 @@ public final class FileStore implements Store {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] h = md.digest(zKey.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(64);
-            for (byte b : h) {
-                sb.append(String.format("%02x", b));
-            }
-            return new File(binDir(zCollection), sb.toString());
+            String name = com.eurobuddha.maxima.core.codec.Hex.encode(h)
+                    .substring(2).toLowerCase(java.util.Locale.ROOT);
+            return new File(binDir(zCollection), name);
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
@@ -313,14 +311,21 @@ public final class FileStore implements Store {
         if (!f.exists()) {
             return null;
         }
-        try (java.io.DataInputStream d = new java.io.DataInputStream(
-                new java.io.BufferedInputStream(new FileInputStream(f), 65536))) {
+        byte[] expectedKey = zKey.getBytes(StandardCharsets.UTF_8);
+        try (FileInputStream in = new FileInputStream(f);
+             java.io.DataInputStream d = new java.io.DataInputStream(
+                     new java.io.BufferedInputStream(in, 65536))) {
+            long length = in.getChannel().size(); // size of this opened record, even if its path is replaced
             int klen = d.readInt();
-            if (klen < 0 || klen > f.length() - 4) {
+            if (klen != expectedKey.length) {
                 return null;
             }
-            d.readFully(new byte[klen]);   // skipBytes may skip fewer; the key must be consumed whole
-            byte[] v = new byte[(int) (f.length() - 4 - klen)];
+            long valueLength = length - 4L - klen;
+            if (valueLength < 0 || valueLength > Integer.MAX_VALUE) return null;
+            byte[] key = new byte[klen];
+            d.readFully(key);
+            if (!java.util.Arrays.equals(expectedKey, key)) return null;
+            byte[] v = new byte[(int) valueLength];
             d.readFully(v);
             return v;
         } catch (IOException e) {
@@ -343,14 +348,21 @@ public final class FileStore implements Store {
             return out;
         }
         for (File f : files) {
-            try (java.io.DataInputStream d = new java.io.DataInputStream(new FileInputStream(f))) {
+            try (FileInputStream in = new FileInputStream(f);
+                 java.io.DataInputStream d = new java.io.DataInputStream(in)) {
+                long length = in.getChannel().size();
                 int klen = d.readInt();
-                if (klen <= 0 || klen > 4096 || klen > f.length() - 4) {
+                if (klen < 0 || klen > 4096 || klen > length - 4) {
                     continue;   // not one of ours
                 }
+                long valueLength = length - 4L - klen;
+                if (valueLength > Integer.MAX_VALUE) continue;
                 byte[] key = new byte[klen];
                 d.readFully(key);
-                out.put(new String(key, StandardCharsets.UTF_8), (int) (f.length() - 4 - klen));
+                String decoded = StandardCharsets.UTF_8.newDecoder()
+                        .decode(java.nio.ByteBuffer.wrap(key)).toString();
+                if (!f.getName().equals(binFile(zCollection, decoded).getName())) continue;
+                out.put(decoded, (int) valueLength);
             } catch (IOException e) {
                 System.err.println("[store] could not read " + f + ": " + e);
             }
