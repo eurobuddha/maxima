@@ -155,7 +155,8 @@ public final class PeerDiscovery {
             retireCheck(zHostPort);
             mDue.remove(zHostPort);
             mSelf.add(zHostPort);
-            mVerified.remove(zHostPort);
+            if (mVerified.remove(zHostPort) != null) mDirty = true;
+            mGateways.remove(zHostPort);
             mUnverified.remove(zHostPort);
         }
     }
@@ -210,29 +211,36 @@ public final class PeerDiscovery {
 
     /** Classic {@code updateP2PPeersList}: save only when the list is still at least half
      *  the size it was loaded at — a transient outage must not persist an emptied list. */
-    public void save() {
+    public synchronized void save() {
         int size = mVerified.size();
-        if (size > 0 && size >= mLoadedCount / 2) {
-            Map<String, String> old = mStore.all(C_PEERS);
-            for (String k : old.keySet()) {
-                if (!mVerified.containsKey(k)) {
-                    mStore.remove(C_PEERS, k);
-                }
-            }
-            for (Map.Entry<String, Long> e : mVerified.entrySet()) {
-                String v = Long.toString((e.getValue() / SAVE_GRAIN_MS) * SAVE_GRAIN_MS);
-                String gw = mGateways.get(e.getKey());
-                if (gw != null) {
-                    v = v + "|" + gw;
-                }
-                if (!v.equals(old.get(e.getKey()))) {
-                    mStore.put(C_PEERS, e.getKey(), v);   // only what actually changed
-                }
-            }
-            mStore.flush();
-        }
+        // Like ChatEngine.flushState, consume only this batch's dirty marker. A
+        // reentrant store callback may change discovery; its marker must survive.
         mDirty = false;
-        mLastSave = System.currentTimeMillis();
+        try {
+            if (size > 0 && size >= mLoadedCount / 2) {
+                Map<String, String> snapshot = new java.util.LinkedHashMap<>();
+                for (Map.Entry<String, Long> e : mVerified.entrySet()) {
+                    String v = Long.toString((e.getValue() / SAVE_GRAIN_MS) * SAVE_GRAIN_MS);
+                    String gw = mGateways.get(e.getKey());
+                    snapshot.put(e.getKey(), gw == null ? v : v + "|" + gw);
+                }
+                Store store = mStore;
+                Map<String, String> old = store.all(C_PEERS);
+                for (String k : old.keySet()) {
+                    if (!snapshot.containsKey(k)) store.remove(C_PEERS, k);
+                }
+                for (Map.Entry<String, String> e : snapshot.entrySet()) {
+                    if (!e.getValue().equals(old.get(e.getKey()))) {
+                        store.put(C_PEERS, e.getKey(), e.getValue()); // only what actually changed
+                    }
+                }
+                store.flush();
+            }
+            mLastSave = System.currentTimeMillis();
+        } catch (RuntimeException failure) {
+            mDirty = true; // includes explicit saves that started with no dirty marker
+            throw failure;
+        }
     }
 
     // ---------------------------------------------------------------
