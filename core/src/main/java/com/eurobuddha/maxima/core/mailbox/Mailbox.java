@@ -99,7 +99,8 @@ public final class Mailbox {
         /** Items whose file is being written right now, outside the monitor. */
         int pending;
         long pendingBytes;
-        final java.util.Set<String> pendingIds = new java.util.HashSet<>();
+        // Reuse each reserved item's sequence to keep fetches behind unfinished writes.
+        final Map<String, Item> pendingItems = new java.util.HashMap<>();
         /** Set when the box is evicted while a write is in flight: that write is undone. */
         boolean evicted;
     }
@@ -317,7 +318,7 @@ public final class Mailbox {
                     return Result.DUPLICATE;
                 }
             }
-            if (box.pendingIds.contains(id)) {
+            if (box.pendingItems.containsKey(id)) {
                 return Result.DUPLICATE;   // the same message is being written right now
             }
             if (box.items.size() + box.pending >= mMaxPerPeer) {
@@ -340,7 +341,7 @@ public final class Mailbox {
             }
             box.pending++;
             box.pendingBytes += len;
-            box.pendingIds.add(id);
+            box.pendingItems.put(id, item);
         }
 
         // PHASE 2 (no monitor): the durable write - a file plus an fsync, milliseconds on a
@@ -352,7 +353,7 @@ public final class Mailbox {
         synchronized (this) {
             box.pending--;
             box.pendingBytes -= len;
-            box.pendingIds.remove(item.id);
+            box.pendingItems.remove(item.id);
             if (ok && !box.evicted) {
                 // The box may have been emptied and dropped by an acknowledge meanwhile, or
                 // replaced by a fresh one for the same key: the item joins whichever box the
@@ -434,7 +435,16 @@ public final class Mailbox {
         }
         expire(box);
         List<Item> out = new ArrayList<>();
+        long firstPending = Long.MAX_VALUE;
+        for (Item pending : box.pendingItems.values()) {
+            firstPending = Math.min(firstPending, pending.sequence);
+        }
         for (Item i : box.items) {
+            // A cumulative ACK for a later item could arrive after this earlier write
+            // commits and delete it unseen. Publish only the completed prefix.
+            if (!box.pendingItems.isEmpty() && i.sequence >= firstPending) {
+                break;
+            }
             if (i.sequence > zAfterSequence) {
                 out.add(i);
                 if (out.size() >= zLimit) {

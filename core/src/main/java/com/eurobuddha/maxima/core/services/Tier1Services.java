@@ -170,7 +170,9 @@ public final class Tier1Services {
             for (Mailbox.Item i : items) {
                 byte[] ct = i.ciphertext();
                 if (ct == null) {
-                    continue;   // gone from the store underneath us: nothing to hand over
+                    // Like the relay drain, never let a later row's cumulative ACK
+                    // authorize deletion of an earlier record we could not read.
+                    break;
                 }
                 if (sb.length() > 0) {
                     sb.append('\n');

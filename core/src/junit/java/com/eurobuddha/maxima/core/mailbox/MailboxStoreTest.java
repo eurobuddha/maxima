@@ -160,12 +160,65 @@ public class MailboxStoreTest {
 
         @Override
         public boolean putBytes(String c, String k, byte[] v) {
+            // Bind this call to its gate before announcing entry; later calls may use
+            // a different gate or failure result without releasing this writer.
+            java.util.concurrent.CountDownLatch gate = release;
+            boolean failed = fail;
             entered.countDown();
             try {
-                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                gate.await(10, java.util.concurrent.TimeUnit.SECONDS);
             } catch (InterruptedException ignored) {
             }
-            return !fail && inner.putBytes(c, k, v);
+            return !failed && inner.putBytes(c, k, v);
+        }
+    }
+
+    @Test public void aLaterWriteCannotExposeAnEarlierPendingItemToAcknowledgement() throws Exception {
+        publicationOrder(false, false);
+    }
+
+    @Test public void anExistingPrefixCanBeAcknowledgedWhileTheNextWriteIsPending() throws Exception {
+        publicationOrder(true, false);
+    }
+
+    @Test public void aFailedPendingWriteReleasesTheLaterCompletedItems() throws Exception {
+        publicationOrder(false, true);
+    }
+
+    private void publicationOrder(boolean prefix, boolean failFirst) throws Exception {
+        GatedStore store = new GatedStore(tmp("publication"));
+        Mailbox mailbox = new Mailbox(); mailbox.setStore(store);
+        if (prefix) assertEquals(Mailbox.Result.STORED, mailbox.store(KEY, new byte[]{0}));
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        store.release = release; store.fail = failFirst;
+        store.entered = new java.util.concurrent.CountDownLatch(1);
+        Mailbox.Result[] result = new Mailbox.Result[1];
+        Thread writer = new Thread(() -> result[0] = mailbox.store(KEY, new byte[]{1}));
+        writer.start();
+        try {
+            assertTrue(store.entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            store.release = new java.util.concurrent.CountDownLatch(0); store.fail = false;
+            assertEquals(Mailbox.Result.DUPLICATE, mailbox.store(KEY, new byte[]{1}));
+            assertEquals(Mailbox.Result.STORED, mailbox.store(KEY, new byte[]{2}));
+            assertEquals("other recipients can still progress", Mailbox.Result.STORED,
+                    mailbox.store("0xOTHER", new byte[]{3}));
+            List<Mailbox.Item> delivered = mailbox.fetch(KEY, 0, 10);
+
+            // The earlier write commits between fetch and the client's cumulative ACK.
+            release.countDown(); writer.join(5000);
+            assertFalse("writer completed", writer.isAlive());
+            assertEquals(failFirst ? Mailbox.Result.IO_ERROR : Mailbox.Result.STORED, result[0]);
+            if (!delivered.isEmpty()) mailbox.acknowledge(KEY, delivered.get(delivered.size() - 1).sequence);
+            List<Mailbox.Item> remaining = mailbox.fetch(KEY, 0, 10);
+            assertEquals("only the pre-existing prefix was eligible for delivery", prefix ? 1 : 0, delivered.size());
+            assertEquals("an ACK cannot clear the earlier write or the withheld later item", failFirst ? 1 : 2, remaining.size());
+            int at = 0;
+            if (!failFirst) assertArrayEquals(new byte[]{1}, remaining.get(at++).ciphertext());
+            assertArrayEquals(new byte[]{2}, remaining.get(at).ciphertext());
+            assertEquals(1, mailbox.fetch("0xOTHER", 0, 10).size());
+        } finally {
+            release.countDown(); writer.join(5000);
+            assertFalse("no test writer remains", writer.isAlive());
         }
     }
 
