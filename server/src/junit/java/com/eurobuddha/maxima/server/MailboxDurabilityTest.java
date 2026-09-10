@@ -144,7 +144,9 @@ public class MailboxDurabilityTest {
             assertEquals("disk failure retains the relay copy", 1, relay.mailbox().count(routeKey));
             Files.delete(blocked.resolve("blocker")); Files.delete(blocked);
             if (breakRead) assertTrue(node.pool().attachOne(hp, 5000));
-            relay.sweepConnections(System.currentTimeMillis() + 90_001, Long.MAX_VALUE, Long.MAX_VALUE);
+            // lastDrain starts at zero: the first periodic drain is already due. Advancing
+            // the clock could falsely reap a healthy write on the newly attached socket.
+            relay.sweepConnections(System.currentTimeMillis(), Long.MAX_VALUE, Long.MAX_VALUE);
             AttachedSendTest.waitFor(() -> relay.mailbox().count(routeKey) == 0, 5000);
             assertEquals("held message", new FileStore(chatDir.toFile()).get("messages", "test"));
             assertEquals("pending", new FileStore(nodeDir.toFile()).get("settings", "test"));

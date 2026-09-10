@@ -109,7 +109,7 @@ public class MailboxAgeTest {
             MaximaSender.Built held = f.chat(ChatMessage.text("once", "text", f.now - DAY), f.now - DAY);
             f.drain(); assertEquals(1, f.deliveries.get());
             f.store(held);
-            f.relay.sweepConnections(System.currentTimeMillis() + 90_001, Long.MAX_VALUE, Long.MAX_VALUE);
+            f.relay.sweepConnections(System.currentTimeMillis(), Long.MAX_VALUE, Long.MAX_VALUE);
             AttachedSendTest.waitFor(() -> f.flushes.get() >= 2 && f.relay.mailbox().count(f.routeKey) == 0, 5000);
             assertEquals(1, f.deliveries.get()); assertEquals(1, f.chat.allMessages().size());
         }

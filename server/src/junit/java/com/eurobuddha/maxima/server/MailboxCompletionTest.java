@@ -263,7 +263,7 @@ public class MailboxCompletionTest {
                 Thread.sleep(150); assertTrue(conn.isAttached()); assertEquals(1, f.relay.mailbox().count(f.routeKey)); assertEquals(0, f.flushes.get());
                 assertNull(field(conn, HostConnection.class, "mMailboxAckTask"));
                 release.countDown(); AttachedSendTest.waitFor(() -> pool.getActiveCount() == 0 && pool.getQueue().isEmpty(), 3000);
-                f.relay.sweepConnections(System.currentTimeMillis() + 90_001, Long.MAX_VALUE, Long.MAX_VALUE);
+                f.relay.sweepConnections(System.currentTimeMillis(), Long.MAX_VALUE, Long.MAX_VALUE);
                 f.cleared(); assertEquals("saturated", new FileStore(f.dir).get("messages", "saved"));
             } finally { release.countDown(); }
         }
