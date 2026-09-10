@@ -103,6 +103,8 @@ public final class HostConnection implements Closeable {
     private final java.util.ArrayDeque<java.util.concurrent.CompletableFuture<MiniData>> mAckWaiters =
             new java.util.ArrayDeque<>();
     private final Object mSendLock = new Object();
+    private static final int MAX_ACK_SLOTS = 4096;
+    private boolean mAckStopped; // guarded by mAckWaiters, including close/admission
     private static final int MAX_PENDING_DELIVERIES = 4096;
     private final java.util.Set<java.util.concurrent.CompletableFuture<Void>> mPendingDeliveries = new java.util.HashSet<>();
     // Like RpcPeer's bounded reply pool, but never CallerRuns: the reader must keep receiving
@@ -154,8 +156,16 @@ public final class HostConnection implements Closeable {
             if (Thread.currentThread().isInterrupted()) {
                 return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, 0);
             }
+            boolean exhausted;
             synchronized (mAckWaiters) {
-                mAckWaiters.add(ack);
+                if (mAckStopped) return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, 0);
+                // Timed-out/interrupted slots still count: their late ACKs cannot be reassigned.
+                exhausted = mAckWaiters.size() >= MAX_ACK_SLOTS;
+                if (!exhausted) mAckWaiters.add(ack);
+            }
+            if (exhausted) {
+                breakLink(); // retire the whole ledger before another frame can be written
+                return new com.eurobuddha.maxima.core.MaximaSender.Result(-1, zMsgid, 0);
             }
             try {
                 writeFrame(body);
@@ -234,6 +244,7 @@ public final class HostConnection implements Closeable {
     private void failWaiters() {
         java.util.List<java.util.concurrent.CompletableFuture<MiniData>> all;
         synchronized (mAckWaiters) {
+            mAckStopped = true;
             all = new java.util.ArrayList<>(mAckWaiters);
             mAckWaiters.clear();
         }
