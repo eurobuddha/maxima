@@ -65,6 +65,17 @@ public interface Store {
         return v == null ? null : new com.eurobuddha.maxima.core.codec.MiniData(v).getBytes();
     }
 
+    /**
+     * Read at most the caller's byte budget; null if absent or too large.
+     * The compatibility default checks after reading. File-backed implementations
+     * should override this to enforce the budget before allocating the value.
+     */
+    default byte[] getBytes(String zCollection, String zKey, int zMaxBytes) {
+        if (zMaxBytes < 0) throw new IllegalArgumentException("negative byte budget");
+        byte[] value = getBytes(zCollection, zKey);
+        return value == null || value.length > zMaxBytes ? null : value;
+    }
+
     default void removeBytes(String zCollection, String zKey) {
         remove(zCollection, zKey);
     }

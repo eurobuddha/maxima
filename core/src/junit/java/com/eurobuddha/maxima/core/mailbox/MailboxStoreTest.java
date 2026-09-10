@@ -135,6 +135,19 @@ public class MailboxStoreTest {
         assertTrue(m.fetch(KEY, 0, 1).isEmpty());
     }
 
+    @Test
+    public void boundedReadsRemainCompatibleWithExistingStoreAdapters() {
+        GatedStore store = new GatedStore(tmp("bounded-adapter"));
+        assertTrue(store.putBytes("items", "key", new byte[]{1, 2}));
+        assertArrayEquals(new byte[]{1, 2}, store.getBytes("items", "key", 2));
+        org.junit.Assert.assertNull(store.getBytes("items", "key", 1));
+        org.junit.Assert.assertNull(store.getBytes("items", "missing", 2));
+        assertTrue(store.putBytes("items", "empty", new byte[0]));
+        assertArrayEquals(new byte[0], store.getBytes("items", "empty", 0));
+        org.junit.Assert.assertThrows(IllegalArgumentException.class,
+                () -> store.getBytes("items", "key", -1));
+    }
+
     /** A Store whose durable write can be held open or made to fail, wrapped around a real one. */
     static final class GatedStore implements com.eurobuddha.maxima.core.store.Store {
         final FileStore inner;

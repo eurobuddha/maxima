@@ -19,6 +19,31 @@ public class FileStoreBinaryReadTest {
         }
     }
 
+    @Test public void aCallerBudgetBoundsRepresentableFilesAndAllowsExactFits() throws Exception {
+        Path dir = tmp.newFolder().toPath(); FileStore store = new FileStore(dir.toFile());
+        assertTrue(store.putBytes("items", "key", new byte[]{1, 2}));
+        assertArrayEquals(new byte[]{1, 2}, store.getBytes("items", "key", 2));
+        assertNull(store.getBytes("items", "key", 1));
+        assertNull(store.getBytes("items", "missing", 2));
+        assertTrue(store.putBytes("items", "empty", new byte[0]));
+        assertArrayEquals(new byte[0], store.getBytes("items", "empty", 0));
+        // Leave one record so the existing file locator remains unambiguous.
+        store.removeBytes("items", "empty");
+        Path path = record(dir);
+        try (RandomAccessFile file = new RandomAccessFile(path.toFile(), "rw")) {
+            file.setLength(4L + 3 + (16 << 20));
+        }
+        assertNull(store.getBytes("items", "key", 2));
+        assertEquals(4L + 3 + (16 << 20), Files.size(path));
+        assertTrue(store.putBytes("items", "key", new byte[]{3}));
+        assertArrayEquals(new byte[]{3}, store.getBytes("items", "key", 2));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void negativeReadBudgetsAreRejected() throws Exception {
+        new FileStore(tmp.newFolder()).getBytes("items", "key", -1);
+    }
+
     @Test public void anotherKeysRecordCannotBeReadOrListedUnderTheWrongFilename() throws Exception {
         Path dir = tmp.newFolder().toPath(); FileStore store = new FileStore(dir.toFile());
         assertTrue(store.putBytes("items", "key", new byte[]{1})); Path path = record(dir);

@@ -35,7 +35,13 @@ public class MailboxRpcReadTest {
         assertEquals("1", call(registry, owner, Tier1Services.MAILBOX_ACK, next[0]));
     }
 
-    private void recover(int blockedSeq) throws Exception {
+    @Test public void enlargedCiphertextBlocksRpcUntilRepaired() throws Exception { recover(2, "grow"); }
+    @Test public void truncatedCiphertextBlocksRpcUntilRepaired() throws Exception { recover(2, "truncate"); }
+    @Test public void alteredCiphertextBlocksRpcUntilRepaired() throws Exception { recover(2, "alter"); }
+
+    private void recover(int blockedSeq) throws Exception { recover(blockedSeq, "unreadable"); }
+
+    private void recover(int blockedSeq, String damage) throws Exception {
         MaximaIdentity owner = MaximaIdentity.fromPhrase(Bip39.generate(24));
         String key = owner.publicKeyHex();
         Path dir = tmp.newFolder("mail").toPath(); FileStore store = new FileStore(dir.toFile());
@@ -50,7 +56,16 @@ public class MailboxRpcReadTest {
         for (byte b : hash) filename.append(String.format("%02x", b));
         Path target = dir.resolve("mailitems.d").resolve(filename.toString());
         Path saved = tmp.newFolder("saved").toPath().resolve("record");
-        Files.move(target, saved); Files.createDirectory(target);
+        Files.copy(target, saved);
+        if (damage.equals("unreadable")) {
+            Files.delete(target); Files.createDirectory(target);
+        } else {
+            try (java.io.RandomAccessFile file = new java.io.RandomAccessFile(target.toFile(), "rw")) {
+                if (damage.equals("grow")) file.setLength(file.length() + (16 << 20));
+                else if (damage.equals("truncate")) file.setLength(file.length() - 1);
+                else { file.seek(file.length() - 1); file.writeByte(99); }
+            }
+        }
         String fetched = call(registry, owner, Tier1Services.MAILBOX_FETCH, "0");
         if (!fetched.isEmpty()) {
             String[] rows = fetched.split("\n");

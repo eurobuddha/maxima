@@ -307,6 +307,12 @@ public final class FileStore implements Store {
 
     @Override
     public synchronized byte[] getBytes(String zCollection, String zKey) {
+        return getBytes(zCollection, zKey, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public synchronized byte[] getBytes(String zCollection, String zKey, int zMaxBytes) {
+        if (zMaxBytes < 0) throw new IllegalArgumentException("negative byte budget");
         File f = binFile(zCollection, zKey);
         if (!f.exists()) {
             return null;
@@ -321,7 +327,7 @@ public final class FileStore implements Store {
                 return null;
             }
             long valueLength = length - 4L - klen;
-            if (valueLength < 0 || valueLength > Integer.MAX_VALUE) return null;
+            if (valueLength < 0 || valueLength > zMaxBytes) return null;
             byte[] key = new byte[klen];
             d.readFully(key);
             if (!java.util.Arrays.equals(expectedKey, key)) return null;

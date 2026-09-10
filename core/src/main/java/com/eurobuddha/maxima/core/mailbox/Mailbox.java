@@ -72,13 +72,17 @@ public final class Mailbox {
             mCipher = zCipher;
         }
 
-        /** The held ciphertext, read from the store on demand; null if it is gone. */
+        /** The held ciphertext, read on demand; null if the stored bytes are unavailable or damaged. */
         public byte[] ciphertext() {
             byte[] c = mCipher;
             if (c != null) {
                 return c;
             }
-            return mOwner.mStore.getBytes(C_ITEMS, mOwner.recKey(this));
+            c = mOwner.mStore.getBytes(C_ITEMS, mOwner.recKey(this), size);
+            // Reuse the admission hash: altered bytes must never advance a cumulative ACK.
+            if (c == null || c.length != size
+                    || !new MiniData(Hashes.sha3(c)).to0xString().equalsIgnoreCase(id)) return null;
+            return c;
         }
     }
 
