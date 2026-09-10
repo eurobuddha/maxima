@@ -71,7 +71,7 @@ public final class RpcPeer implements AutoCloseable {
     }
 
     public void setAttached(MaximaSender.Attached zVia) {
-        mAttached = zVia;
+        synchronized (mLifecycle) { if (!mClosed) mAttached = zVia; }
     }
 
     public ServiceRegistry services() {
@@ -79,11 +79,11 @@ public final class RpcPeer implements AutoCloseable {
     }
 
     public void setMyAddresses(List<String> zAddresses) {
-        mMyAddresses = new ArrayList<>(zAddresses);
+        synchronized (mLifecycle) { if (!mClosed) mMyAddresses = new ArrayList<>(zAddresses); }
     }
 
     public List<String> myAddresses() {
-        return mMyAddresses;
+        return new ArrayList<>(mMyAddresses);
     }
 
     public int pendingCount() {
@@ -119,7 +119,10 @@ public final class RpcPeer implements AutoCloseable {
         synchronized (mLifecycle) {
             if (mClosed) throw new IllegalStateException("RPC peer is closed");
             if (mPending.size() >= MAX_PENDING_CALLS) throw new IllegalStateException("RPC pending-call capacity reached");
-            mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod, zTimeoutMs));
+            long deadline;
+            try { deadline = Math.addExact(System.currentTimeMillis(), zTimeoutMs); }
+            catch (ArithmeticException overflow) { deadline = zTimeoutMs >= 0 ? Long.MAX_VALUE : Long.MIN_VALUE; }
+            mPending.put(id, new Pending(zHandler, deadline, zMethod, zTimeoutMs));
         }
 
         try {
@@ -242,11 +245,11 @@ public final class RpcPeer implements AutoCloseable {
         synchronized (mLifecycle) {
             if (mClosed) return;
             mClosed = true;
+            mAttached = null;
+            mMyAddresses = new ArrayList<>();
             pending = new ArrayList<>(mPending.entrySet());
         }
         mReplyExec.shutdownNow();
-        mAttached = null;
-        mMyAddresses = new ArrayList<>();
         for (Map.Entry<String, Pending> entry : pending) {
             if (mPending.remove(entry.getKey(), entry.getValue())) {
                 try { entry.getValue().handler.onError("RPC peer closed while waiting for " + entry.getValue().method); }

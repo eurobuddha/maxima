@@ -200,7 +200,10 @@ public final class ParlonsRemote {
             }
         }, zTimeoutMs);
         long tSent = System.currentTimeMillis();
-        String resp = fut.get(zTimeoutMs + 5_000, TimeUnit.MILLISECONDS);
+        long waitMs;
+        try { waitMs = Math.addExact(zTimeoutMs, 5_000); }
+        catch (ArithmeticException overflow) { waitMs = Long.MAX_VALUE; }
+        String resp = fut.get(waitMs, TimeUnit.MILLISECONDS);
         log("rpc " + zMethod + ": send leg " + (tSent - tCall) + "ms, reply wait "
                 + (System.currentTimeMillis() - tSent) + "ms; to " + mCloudLive
                 + "; my addresses " + mNode.rpc().myAddresses());
