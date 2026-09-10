@@ -29,6 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * Keyed collections are cached in memory and rewritten on change, which is fine
  * at this scale (thousands of small records) and keeps reads free. Append logs
  * are appended to directly.
+ *
+ * Text read I/O failures throw {@link java.io.UncheckedIOException}. Only definite
+ * absence is treated as a missing path. Failed reads never enter the cache.
  */
 public final class FileStore implements Store {
 
@@ -161,7 +164,7 @@ public final class FileStore implements Store {
         return mCache.computeIfAbsent(zCollection, c -> {
             Map<String, String> m = new LinkedHashMap<>();
             File f = file(c + ".tsv");
-            if (!f.exists()) {
+            if (java.nio.file.Files.notExists(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
                 return m;
             }
             try (BufferedReader r = new BufferedReader(new InputStreamReader(
@@ -174,9 +177,9 @@ public final class FileStore implements Store {
                     }
                 }
             } catch (IOException e) {
-                // A corrupt collection must not take the process down. Losing
-                // one file is recoverable; refusing to start is not.
-                System.err.println("[store] could not read " + f + ": " + e);
+                // computeIfAbsent must not cache a partial/empty read: a later mutation
+                // would replace the complete on-disk collection with that failed snapshot.
+                throw new java.io.UncheckedIOException("Could not read " + f, e);
             }
             return m;
         });
@@ -214,7 +217,7 @@ public final class FileStore implements Store {
     public synchronized List<String> read(String zLog) {
         List<String> out = new ArrayList<>();
         File f = file(zLog + ".log");
-        if (!f.exists()) {
+        if (java.nio.file.Files.notExists(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
             return out;
         }
         try (BufferedReader r = new BufferedReader(new InputStreamReader(
@@ -226,7 +229,7 @@ public final class FileStore implements Store {
                 }
             }
         } catch (IOException e) {
-            System.err.println("[store] read failed on " + f + ": " + e);
+            throw new java.io.UncheckedIOException("Could not read " + f, e);
         }
         return out;
     }

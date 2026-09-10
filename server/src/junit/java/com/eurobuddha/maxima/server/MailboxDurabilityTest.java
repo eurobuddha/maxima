@@ -81,8 +81,9 @@ public class MailboxDurabilityTest {
         }
     }
 
-    @Test public void heldMailSurvivesAnApplicationStoreFailureAndDrainsAfterRecovery() throws Exception { recover(false); }
-    @Test public void heldMailSurvivesANodeStoreFailureAndDrainsAfterRecovery() throws Exception { recover(true); }
+    @Test public void heldMailSurvivesAnApplicationStoreFailureAndDrainsAfterRecovery() throws Exception { recover(false, false); }
+    @Test public void heldMailSurvivesANodeStoreFailureAndDrainsAfterRecovery() throws Exception { recover(true, false); }
+    @Test public void heldMailSurvivesAnApplicationReadFailureAndDrainsAfterRecovery() throws Exception { recover(false, true); }
 
     @Test public void interruptionBeforeOrDuringTheFlushDoesNotGrantDeletion() throws Exception {
         MaximaIdentity owner = identity();
@@ -101,7 +102,7 @@ public class MailboxDurabilityTest {
         }
     }
 
-    private void recover(boolean breakNodeStore) throws Exception {
+    private void recover(boolean breakNodeStore, boolean breakRead) throws Exception {
         int port = AttachedSendTest.freePort(); String hp = "127.0.0.1:" + port;
         RelayServer relay = new RelayServer(identity(), port, "1.0.48");
         MaximaIdentity owner = identity(), sender = identity();
@@ -110,8 +111,13 @@ public class MailboxDurabilityTest {
         FileStore nodeStore = new FileStore(nodeDir.toFile()), chatStore = new FileStore(chatDir.toFile());
         nodeStore.setWriteBehind(true); chatStore.setWriteBehind(true); node.setStore(nodeStore);
         nodeStore.put("settings", "test", "pending");
+        // Flush-failure cases load valid initial state before the obstruction. The read
+        // failure case deliberately leaves this collection cold until inbound delivery.
+        if (!breakRead) chatStore.all("messages");
         CountDownLatch delivered = new CountDownLatch(1); AtomicInteger deliveries = new AtomicInteger();
+        CountDownLatch attempted = new CountDownLatch(1); AtomicInteger attempts = new AtomicInteger();
         node.setMessageListener((message, id) -> {
+            attempts.incrementAndGet(); attempted.countDown();
             chatStore.put("messages", "test", new String(message.mData.getBytes(), StandardCharsets.UTF_8));
             deliveries.incrementAndGet(); delivered.countDown();
         });
@@ -125,17 +131,25 @@ public class MailboxDurabilityTest {
         relay.start();
         try {
             assertTrue(node.pool().attachOne(hp, 5000));
-            assertTrue("seq-zero possession still permits delivery", delivered.await(5, TimeUnit.SECONDS));
+            if (breakRead) {
+                assertTrue(attempted.await(5, TimeUnit.SECONDS));
+                AttachedSendTest.waitFor(() -> node.pool().activeCount() == 0, 5000);
+                assertEquals("failed read cannot become successful application delivery", 0, deliveries.get());
+            } else {
+                assertTrue("seq-zero possession still permits delivery", delivered.await(5, TimeUnit.SECONDS));
+            }
             // The byte-capture tests pin the absent ACK directly; this checks the real relay's
             // retained item after the local connection has had time to process its challenge.
             Thread.sleep(250);
             assertEquals("disk failure retains the relay copy", 1, relay.mailbox().count(routeKey));
             Files.delete(blocked.resolve("blocker")); Files.delete(blocked);
+            if (breakRead) assertTrue(node.pool().attachOne(hp, 5000));
             relay.sweepConnections(System.currentTimeMillis() + 90_001, Long.MAX_VALUE, Long.MAX_VALUE);
             AttachedSendTest.waitFor(() -> relay.mailbox().count(routeKey) == 0, 5000);
             assertEquals("held message", new FileStore(chatDir.toFile()).get("messages", "test"));
             assertEquals("pending", new FileStore(nodeDir.toFile()).get("settings", "test"));
-            assertEquals("retry uses existing message-id dedup", 1, deliveries.get());
+            assertEquals("successful application delivery occurs once", 1, deliveries.get());
+            assertEquals("only failed application delivery is retried", breakRead ? 2 : 1, attempts.get());
         } finally {
             if (Files.isDirectory(blocked)) { Files.deleteIfExists(blocked.resolve("blocker")); Files.delete(blocked); }
             node.stop(); relay.stop();

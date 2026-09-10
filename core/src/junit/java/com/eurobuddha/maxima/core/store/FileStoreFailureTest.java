@@ -45,6 +45,57 @@ public class FileStoreFailureTest {
         retryImmediateMutation(true);
     }
 
+    @Test public void aFailedCollectionReadCannotEraseThePreviousSnapshotAfterRecovery() throws Exception {
+        Path dir = tmp.newFolder("read").toPath();
+        new FileStore(dir.toFile()).put("messages", "saved", "keep me");
+        FileStore reader = new FileStore(dir.toFile());
+        Path target = dir.resolve("messages.tsv"), saved = dir.resolve("saved.tsv");
+        Files.move(target, saved); Files.createDirectory(target);
+        boolean reported = false;
+        try {
+            try { reader.get("messages", "saved"); }
+            catch (UncheckedIOException expected) { reported = true; }
+        } finally { Files.delete(target); Files.move(saved, target); }
+        reader.put("messages", "new", "new value");
+        FileStore reopened = new FileStore(dir.toFile());
+        assertEquals("a failed read must not cache an empty replacement", "keep me", reopened.get("messages", "saved"));
+        assertEquals("new value", reopened.get("messages", "new"));
+        assertTrue("read failure reaches the caller", reported);
+    }
+
+    @Test public void anUnavailableParentIsNotAMissingCollectionOrLog() throws Exception {
+        Path dir = tmp.newFolder("read").toPath(), saved = dir.resolveSibling("saved-read");
+        FileStore writer = new FileStore(dir.toFile());
+        writer.put("messages", "saved", "keep me");
+        writer.rewrite("history", Arrays.asList("saved line"));
+        FileStore reader = new FileStore(dir.toFile());
+        Files.move(dir, saved); Files.write(dir, new byte[]{1});
+        try {
+            assertThrows(UncheckedIOException.class, () -> reader.all("messages"));
+            assertThrows(UncheckedIOException.class, () -> reader.read("history"));
+            assertThrows(UncheckedIOException.class, () -> reader.put("messages", "new", "rejected"));
+            assertThrows(UncheckedIOException.class, () -> reader.remove("messages", "saved"));
+        } finally { Files.delete(dir); Files.move(saved, dir); }
+        reader.flush();
+        assertEquals(java.util.Collections.singletonMap("saved", "keep me"), reader.all("messages"));
+        assertEquals(Arrays.asList("saved line"), reader.read("history"));
+        assertNull(new FileStore(dir.toFile()).get("messages", "new"));
+    }
+
+    @Test public void anUnreadableLogReportsFailureAndCanBeReadAfterRecovery() throws Exception {
+        Path dir = tmp.newFolder("log-read").toPath();
+        FileStore reader = new FileStore(dir.toFile());
+        Path target = Files.createDirectory(dir.resolve("history.log"));
+        assertThrows(UncheckedIOException.class, () -> reader.read("history"));
+        Files.delete(target);
+        java.util.List<String> lines = Arrays.asList("line\none", "tab\tand\\slash");
+        reader.rewrite("history", lines);
+        assertEquals(lines, reader.read("history"));
+        assertTrue("a genuinely missing log stays empty", reader.read("absent").isEmpty());
+        assertTrue("a genuinely missing collection stays empty", reader.all("absent").isEmpty());
+        assertNull(reader.get("absent", "key"));
+    }
+
     private void retryImmediateMutation(boolean remove) throws Exception {
         Path dir = tmp.newFolder("store").toPath();
         Path saved = dir.resolveSibling("saved");
