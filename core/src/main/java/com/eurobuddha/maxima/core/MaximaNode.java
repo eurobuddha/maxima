@@ -818,24 +818,36 @@ public final class MaximaNode implements ChatPort {
                 mlsClient();
         // The anchor with the self-heal leash (5 s / 5 s), not the 20 s / 20 s defaults: a
         // black-holed anchor used to cost 40 s before the fallback below even started.
-        com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
-                c.resolve(mls, targetKey, SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
-        if (r.ok()) {
-            return r.address;
+        String anchorError;
+        Exception anchorFailure = null;
+        try {
+            com.eurobuddha.maxima.core.directory.MlsClient.Resolved r =
+                    c.resolve(mls, targetKey, SELFHEAL_TIMEOUT_MS, SELFHEAL_TIMEOUT_MS);
+            if (r.ok()) {
+                return r.address;
+            }
+            anchorError = r.error;
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (Exception e) {
+            // Connection refusal/DNS failure throws instead of returning a failed result.
+            // Like ParlonsKit, still ask our own pool when the anchor cannot be reached.
+            anchorFailure = e;
+            anchorError = "anchor directory failed: " + e.getMessage();
         }
         // Phase B3 fallback: the baked-in host is DOWN or missed. Ask our OWN attached pool
         // relays and accept an address only when >=2 independently agree (each may itself
         // forward across the Phase-B mesh). This resolves a permanent MAX# whose host is
         // offline, as long as two reachable pool relays can answer for the key. (When the host
-        // is merely MISSING but reachable, it forwards for us via the mesh and r.ok() above is
-        // already true — this path is specifically for a down host.)
+        // is merely MISSING but reachable, it forwards for us via the mesh and the anchor reply is
+        // already successful — this path also covers a down host.)
         java.util.List<String> pool = poolMlsAddresses();
         pool.remove(mls);   // no point re-asking the host that just failed
         String viaPool = resolveKeyVia(targetKey, pool);
         if (viaPool != null) {
             return viaPool;
         }
-        throw new IllegalStateException(r.error);
+        throw new IllegalStateException(anchorError, anchorFailure);
     }
 
     /** Publish our address to the directory - to our current MLS, the one we most
