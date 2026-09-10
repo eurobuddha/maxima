@@ -104,4 +104,49 @@ public class FileStoreFailureTest {
             assertEquals(PosixFilePermissions.fromString("rw-------"), Files.getPosixFilePermissions(file));
         }
     }
+
+    @Test public void binaryReplacementNeverDeletesAnExistingDirectory() throws Exception {
+        Path dir = tmp.newFolder("binary").toPath();
+        FileStore store = new FileStore(dir.toFile());
+        assertTrue(store.putBytes("items", "key", new byte[]{1}));
+        Path target;
+        try (java.util.stream.Stream<Path> paths = Files.list(dir.resolve("items.d"))) {
+            target = paths.findFirst().get();
+        }
+        Files.delete(target);
+        Files.createDirectory(target);
+        assertFalse(store.putBytes("items", "key", new byte[]{2}));
+        assertTrue("do not unlink an unexpected target", Files.isDirectory(target));
+        try (java.util.stream.Stream<Path> paths = Files.list(target.getParent())) {
+            assertEquals("failed staging is cleaned up", 1, paths.count());
+        }
+        Files.delete(target);
+        assertTrue(store.putBytes("items", "key", new byte[]{2}));
+        assertArrayEquals(new byte[]{2}, new FileStore(dir.toFile()).getBytes("items", "key"));
+    }
+
+    @Test public void binaryReplacementDoesNotTouchAnExistingStagingFile() throws Exception {
+        Path dir = tmp.newFolder("binary").toPath();
+        FileStore store = new FileStore(dir.toFile());
+        String key = "key\twith\nUnicode-\u00e9";
+        assertTrue(store.putBytes("items", key, new byte[]{1}));
+        Path target;
+        try (java.util.stream.Stream<Path> paths = Files.list(dir.resolve("items.d"))) {
+            target = paths.findFirst().get();
+        }
+        Path staging = target.resolveSibling(target.getFileName() + ".tmp");
+        Files.write(staging, new byte[]{9});
+        byte[] value = new byte[]{0, 1, -1, 42};
+        assertTrue(store.putBytes("items", key, value));
+        assertArrayEquals("another writer's staging file survives", new byte[]{9}, Files.readAllBytes(staging));
+        FileStore reopened = new FileStore(dir.toFile());
+        assertArrayEquals(value, reopened.getBytes("items", key));
+        assertEquals(java.util.Collections.singletonMap(key, value.length), reopened.listBytes("items"));
+        if (Files.getFileStore(target).supportsFileAttributeView("posix")) {
+            assertEquals(PosixFilePermissions.fromString("rw-------"), Files.getPosixFilePermissions(target));
+        }
+        try (java.util.stream.Stream<Path> paths = Files.list(target.getParent())) {
+            assertEquals("only completed record and untouched staging remain", 2, paths.count());
+        }
+    }
 }

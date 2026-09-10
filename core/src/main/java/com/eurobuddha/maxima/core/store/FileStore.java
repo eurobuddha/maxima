@@ -285,27 +285,19 @@ public final class FileStore implements Store {
     @Override
     public synchronized boolean putBytes(String zCollection, String zKey, byte[] zValue) {
         File target = binFile(zCollection, zKey);
-        File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
         byte[] key = zKey.getBytes(StandardCharsets.UTF_8);
-        try (FileOutputStream fos = new FileOutputStream(tmp)) {
-            java.io.DataOutputStream d = new java.io.DataOutputStream(
-                    new java.io.BufferedOutputStream(fos, 65536));
-            d.writeInt(key.length);
-            d.write(key);
-            d.write(zValue);
-            d.flush();
-            fos.getFD().sync();   // durable before it becomes visible (see writeAtomic)
-        } catch (IOException e) {
-            System.err.println("[store] write failed on " + tmp + ": " + e);
-            //noinspection ResultOfMethodCallIgnored
-            tmp.delete();
+        try {
+            writeAtomic(target, fos -> {
+                java.io.DataOutputStream d = new java.io.DataOutputStream(
+                        new java.io.BufferedOutputStream(fos, 65536));
+                d.writeInt(key.length);
+                d.write(key);
+                d.write(zValue);
+                d.flush();
+            });
+        } catch (java.io.UncheckedIOException e) {
+            System.err.println("[store] write failed on " + target + ": " + e);
             return false;
-        }
-        if (!tmp.renameTo(target)) {
-            if (!target.delete() || !tmp.renameTo(target)) {
-                System.err.println("[store] could not replace " + target);
-                return false;
-            }
         }
         return true;
     }
@@ -370,6 +362,24 @@ public final class FileStore implements Store {
 
     /** temp + rename, so an interrupted write cannot leave a half file. */
     private void writeAtomic(File zTarget, List<String> zLines) {
+        writeAtomic(zTarget, fos -> {
+            BufferedWriter w = new BufferedWriter(
+                    new OutputStreamWriter(fos, StandardCharsets.UTF_8));
+            for (String l : zLines) {
+                w.write(l);
+                w.newLine();
+            }
+            w.flush();
+        });
+    }
+
+    /** The body flushes its buffers; the shared writer owns sync, close and replacement. */
+    @FunctionalInterface
+    private interface WriteBody {
+        void write(FileOutputStream zStream) throws IOException;
+    }
+
+    private void writeAtomic(File zTarget, WriteBody zBody) {
         // Same private-temp / replacement sequence as AccountFiles.writePrivate. A failed
         // replacement must never delete the previous snapshot or masquerade as durability.
         java.nio.file.Path target = zTarget.toPath().toAbsolutePath();
@@ -383,13 +393,7 @@ public final class FileStore implements Store {
                 tmp = java.nio.file.Files.createTempFile(target.getParent(), ".parlons-store-", ".tmp");
             }
             try (FileOutputStream fos = new FileOutputStream(tmp.toFile())) {
-                BufferedWriter w = new BufferedWriter(
-                        new OutputStreamWriter(fos, StandardCharsets.UTF_8));
-                for (String l : zLines) {
-                    w.write(l);
-                    w.newLine();
-                }
-                w.flush();
+                zBody.write(fos);
                 // force the bytes to disk BEFORE the rename. Rename gives atomicity
                 // of visibility, not durability: on some filesystems a crash right
                 // after rename can expose the new name with unflushed (empty)
