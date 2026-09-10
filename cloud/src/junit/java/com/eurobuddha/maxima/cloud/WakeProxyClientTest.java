@@ -123,6 +123,135 @@ public class WakeProxyClientTest {
         observer.submit(() -> { c.drain(); return null; }).get(2, TimeUnit.SECONDS);
     }
 
+    @Test public void aFullAccountQueueRefusesWithoutQuietingTheRejectedDevice() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        try (FakeProxy slow = new FakeProxy(); FakeProxy healthy = new FakeProxy(); WakeProxyClient c = new WakeProxyClient()) {
+            slow.response = ex -> {
+                entered.countDown();
+                try { release.await(10, TimeUnit.SECONDS); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                ex.sendResponseHeaders(500, -1); ex.close();
+            };
+            c.mUrlRewrite = u -> u.contains("healthy") ? healthy.url() : slow.url();
+            try {
+                assertTrue(c.wake("first", "https://slow.example", "ab12", "prod", "message"));
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                for (int i = 0; i < WakeProxyClient.MAX_QUEUED; i++)
+                    assertTrue(c.wake("queued" + i, "https://slow.example", "ab12", "prod", "message"));
+                assertFalse("account queue is full", c.wake("retry", "https://healthy.example", "ab12", "prod", "message"));
+                release.countDown();
+                c.drain();
+                assertTrue("rejected admission did not reserve a quiet period",
+                        c.wake("retry", "https://healthy.example", "ab12", "prod", "message"));
+                c.drain();
+                assertEquals(1, healthy.bodies.size());
+            } finally { release.countDown(); }
+        } finally { release.countDown(); }
+    }
+
+    @Test public void queuedRequestsRespectBackoffLearnedAfterAdmission() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        try (FakeProxy proxy = new FakeProxy(); WakeProxyClient c = new WakeProxyClient()) {
+            proxy.response = ex -> {
+                entered.countDown();
+                try { release.await(10, TimeUnit.SECONDS); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                ex.sendResponseHeaders(500, -1); ex.close();
+            };
+            c.mUrlRewrite = u -> proxy.url();
+            try {
+                assertTrue(c.wake("first", "https://dead.example", "ab12", "prod", "message"));
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                for (int i = 0; i < 10; i++)
+                    assertTrue(c.wake("queued" + i, "https://dead.example", "ab12", "prod", "message"));
+                release.countDown(); c.drain();
+                assertEquals("queued requests stop after the third failure", 3, proxy.bodies.size());
+            } finally { release.countDown(); }
+        } finally { release.countDown(); }
+    }
+
+    @Test public void rotatingFailedProxyUrlsCannotGrowStateForever() throws Exception {
+        try (WakeProxyClient c = new WakeProxyClient()) {
+            java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong(1_000_000);
+            c.mNow = now::get;
+            c.mUrlRewrite = u -> "invalid";
+            for (int i = 0; i < 3; i++) {
+                assertTrue(c.wake("backoff" + i, "https://backoff.example", "ab12", "prod", "message"));
+                c.drain();
+            }
+            for (int i = 0; i < WakeProxyClient.MAX_PROXIES - 1; i++) {
+                assertTrue(c.wake("device" + i, "https://proxy" + i + ".example", "ab12", "prod", "message"));
+                c.drain();
+            }
+            assertFalse("retained proxy capacity", c.wake("overflow", "https://next.example", "ab12", "prod", "message"));
+            now.addAndGet(WakeProxyClient.BACKOFF_MS - 1);
+            assertFalse("capacity pressure must not discard active backoff",
+                    c.wake("still-backed-off", "https://backoff.example", "ab12", "prod", "message"));
+            assertFalse(c.wake("overflow", "https://next.example", "ab12", "prod", "message"));
+            now.incrementAndGet();
+            assertTrue("idle state expires and refused devices may retry",
+                    c.wake("overflow", "https://next.example", "ab12", "prod", "message"));
+            c.drain();
+            assertEquals(1, stateMap(c, "mProxies").size());
+        }
+    }
+
+    @Test public void fullDeviceStateExpiresWithoutEvictingAnActiveQuietPeriod() throws Exception {
+        try (FakeProxy proxy = new FakeProxy(); WakeProxyClient c = new WakeProxyClient()) {
+            java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong(1_000_000);
+            c.mNow = now::get; c.mUrlRewrite = u -> proxy.url();
+            // Seed a full still-active table without thousands of irrelevant HTTP requests.
+            for (int i = 0; i < WakeProxyClient.MAX_DEVICES; i++) {
+                stateMap(c, "mLastWake").put("device" + i, now.get());
+                stateMap(c, "mQuietUntil").put("device" + i, now.get() + WakeProxyClient.QUIET_MS);
+            }
+            assertFalse(c.wake("next", "https://wake.example", "ab12", "prod", "message"));
+            now.addAndGet(WakeProxyClient.QUIET_MS - 1);
+            assertFalse(c.wake("next", "https://wake.example", "ab12", "prod", "message"));
+            assertFalse(c.wake("device0", "https://wake.example", "ab12", "prod", "message"));
+            now.incrementAndGet();
+            assertTrue(c.wake("next", "https://wake.example", "ab12", "prod", "message"));
+            c.drain();
+            assertEquals(1, stateMap(c, "mLastWake").size());
+            assertEquals(1, stateMap(c, "mQuietUntil").size());
+            assertEquals(1, proxy.bodies.size());
+        }
+    }
+
+    @Test public void pendingWorkPinsProxyStateAndCloseCannotRepopulateIt() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        try (WakeProxyClient c = new WakeProxyClient()) {
+            java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong(1_000_000);
+            c.mNow = now::get;
+            c.mUrlRewrite = u -> {
+                entered.countDown();
+                try { release.await(10, TimeUnit.SECONDS); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                return "invalid";
+            };
+            try {
+                assertTrue(c.wake("first", "https://pending.example", "ab12", "prod", "message"));
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                now.addAndGet(WakeProxyClient.BACKOFF_MS * 2);
+                assertTrue(c.wake("second", "https://other.example", "ab12", "prod", "message"));
+                assertEquals("pending endpoint survives the expiry sweep", 2, stateMap(c, "mProxies").size());
+                c.close(); release.countDown();
+                java.lang.reflect.Field f = WakeProxyClient.class.getDeclaredField("mExec"); f.setAccessible(true);
+                assertTrue(((ExecutorService) f.get(c)).awaitTermination(5, TimeUnit.SECONDS));
+                assertTrue(stateMap(c, "mProxies").isEmpty());
+                assertTrue(stateMap(c, "mLastWake").isEmpty());
+                assertTrue(stateMap(c, "mQuietUntil").isEmpty());
+                assertFalse(c.wake("closed", "https://next.example", "ab12", "prod", "message"));
+            } finally { release.countDown(); }
+        } finally { release.countDown(); }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static java.util.Map<String, Object> stateMap(WakeProxyClient c, String name) throws Exception {
+        java.lang.reflect.Field f = WakeProxyClient.class.getDeclaredField(name); f.setAccessible(true);
+        return (java.util.Map<String, Object>) f.get(c);
+    }
+
     private static HttpHandler heldBody(int status, long length, CountDownLatch headers, CountDownLatch release) {
         return ex -> {
             try {
