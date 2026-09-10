@@ -4,8 +4,19 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * One HTTP/2 client to Apple's APNs (production and sandbox). Sends a CONTENT-FREE alert with
@@ -17,6 +28,8 @@ public final class ApnsClient {
 
     public static final String PROD = "https://api.push.apple.com";
     public static final String SANDBOX = "https://api.sandbox.push.apple.com";
+    static final int MAX_RESPONSE_BYTES = 4096;
+    static final long RESPONSE_TIMEOUT_MS = 10_000;
 
     /** What every wake carries - the same bytes for everyone, nothing about the message. */
     static String payload(String zKind) {
@@ -68,8 +81,9 @@ public final class ApnsClient {
     }
 
     private Result post(String zBase, String zToken, String zKind) throws Exception {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("APNs request interrupted");
         HttpRequest req = HttpRequest.newBuilder(URI.create(zBase + "/3/device/" + zToken))
-                .timeout(Duration.ofSeconds(10))
+                .timeout(Duration.ofMillis(RESPONSE_TIMEOUT_MS))
                 .header("authorization", "bearer " + mJwt.token())
                 .header("apns-topic", mBundle)
                 .header("apns-push-type", "alert")
@@ -78,13 +92,89 @@ public final class ApnsClient {
                 .header("content-type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payload(zKind), StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = mHttp.send(req, HttpResponse.BodyHandlers.ofString());
+        ResponseBody body = new ResponseBody();
+        CompletableFuture<HttpResponse<byte[]>> pending = mHttp.sendAsync(req, info -> {
+            if (info.statusCode() == 200) {
+                body.ignore(); // success needs only the status, like the account's wake client
+            } else if (info.headers().firstValueAsLong("Content-Length").orElse(0) > MAX_RESPONSE_BYTES) {
+                body.abort(new IOException("APNs response body exceeds " + MAX_RESPONSE_BYTES + " bytes"));
+            }
+            return body;
+        });
+        HttpResponse<byte[]> resp;
+        try {
+            // HttpRequest.timeout alone did not bound an unfinished body. Wait for the
+            // complete bounded response, retaining one existing WakeHandler worker per call.
+            resp = pending.get(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            HttpTimeoutException timeout = new HttpTimeoutException("APNs response timed out");
+            body.abort(timeout);
+            throw timeout;
+        } catch (InterruptedException e) {
+            body.abort(e);
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) throw (Exception) cause;
+            throw new IOException("APNs response failed", cause);
+        } finally {
+            if (!pending.isDone()) pending.cancel(true);
+        }
         String reason = "";
         if (resp.statusCode() != 200) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"reason\"\\s*:\\s*\"([^\"]*)\"")
-                    .matcher(resp.body() == null ? "" : resp.body());
+                    .matcher(new String(resp.body(), StandardCharsets.UTF_8));
             reason = m.find() ? m.group(1) : ("HTTP " + resp.statusCode());
         }
         return new Result(resp.statusCode(), reason);
+    }
+
+    /** A small error body only; cancellation also works before a late subscription arrives. */
+    static final class ResponseBody implements HttpResponse.BodySubscriber<byte[]> {
+        private final CompletableFuture<byte[]> mBody = new CompletableFuture<>();
+        private final ByteArrayOutputStream mBytes = new ByteArrayOutputStream();
+        private Flow.Subscription mSubscription;
+
+        @Override public CompletionStage<byte[]> getBody() { return mBody; }
+
+        @Override public synchronized void onSubscribe(Flow.Subscription subscription) {
+            if (mSubscription != null || mBody.isDone()) {
+                subscription.cancel();
+                return;
+            }
+            mSubscription = subscription;
+            subscription.request(1);
+        }
+
+        @Override public synchronized void onNext(List<ByteBuffer> buffers) {
+            if (mBody.isDone()) return;
+            for (ByteBuffer buffer : buffers) {
+                if (buffer.remaining() > MAX_RESPONSE_BYTES - mBytes.size()) {
+                    abort(new IOException("APNs response body exceeds " + MAX_RESPONSE_BYTES + " bytes"));
+                    return;
+                }
+                byte[] bytes = new byte[buffer.remaining()];
+                buffer.get(bytes);
+                mBytes.write(bytes, 0, bytes.length);
+            }
+            mSubscription.request(1);
+        }
+
+        @Override public synchronized void onComplete() {
+            if (!mBody.isDone()) mBody.complete(mBytes.toByteArray());
+        }
+
+        @Override public synchronized void onError(Throwable failure) { abort(failure); }
+
+        synchronized void abort(Throwable failure) {
+            if (mBody.isDone()) return;
+            mBody.completeExceptionally(failure);
+            if (mSubscription != null) mSubscription.cancel();
+        }
+
+        synchronized void ignore() {
+            mBody.complete(new byte[0]);
+            if (mSubscription != null) mSubscription.cancel();
+        }
     }
 }
