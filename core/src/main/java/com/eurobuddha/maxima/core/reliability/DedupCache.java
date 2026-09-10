@@ -74,8 +74,10 @@ public final class DedupCache {
      */
     public synchronized Verdict check(String zMsgid, long zTimeMilli) {
         long now = System.currentTimeMillis();
-        long skew = Math.abs(now - zTimeMilli);
-        if (skew > mWindowMs) {
+        // Subtract smaller from larger. A negative result means the distance exceeded
+        // Long.MAX_VALUE; abs() would conceal overflow (and leaves Long.MIN_VALUE negative).
+        long skew = now >= zTimeMilli ? now - zTimeMilli : zTimeMilli - now;
+        if (skew < 0 || skew > mWindowMs) {
             return Verdict.STALE;
         }
         if (mSeen.containsKey(zMsgid)) {

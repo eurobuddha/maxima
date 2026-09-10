@@ -1330,6 +1330,9 @@ public final class MaximaNode implements ChatPort {
     /** Route one inbound message: dedup and last-seen under the lock, the rest on lanes. */
     public void handle(HostConnection.Inbound zInbound) {
         MaximaMessage msg = zInbound.message;
+        final long sent;
+        try { sent = msg.mTimeMilli.getAsBigDecimal().longValueExact(); }
+        catch (ArithmeticException invalidTimestamp) { return; }
         String app = msg.mApplication.toString();
         String msgid = zInbound.msgid.to0xString();
         boolean rpc = RpcEnvelope.APPLICATION.equals(app);
@@ -1347,12 +1350,11 @@ public final class MaximaNode implements ChatPort {
                 return;
             }
             // Replay and duplicate protection - neither exists in classic.
-            DedupCache.Verdict v = mDedup.check(
-                    msgid, msg.mTimeMilli.getAsLong());
+            DedupCache.Verdict v = mDedup.check(msgid, sent);
             // Live and held units have the same wire shape. Only history content may use
             // the longer mailbox horizon; RPC, calls and mutable controls stay on the
             // original freshness gate. Keep the same bounded transport-id dedup cache.
-            boolean delayedChat = v == DedupCache.Verdict.STALE && isRetainedChat(msg);
+            boolean delayedChat = v == DedupCache.Verdict.STALE && isRetainedChat(msg, sent);
             if (delayedChat) {
                 v = mDedup.seenBefore(msgid)
                         ? DedupCache.Verdict.DUPLICATE : DedupCache.Verdict.ACCEPT;
@@ -1421,8 +1423,8 @@ public final class MaximaNode implements ChatPort {
     /** Content understood by ChatEngine as history, never an action or a mutable control.
      *  It still has a finite past horizon and cannot gain extra future clock skew. Relay
      *  storage time is not authenticated on this wire: use the signed sender timestamp. */
-    private static boolean isRetainedChat(MaximaMessage zMessage) {
-        long time = zMessage.mTimeMilli.getAsLong(), now = System.currentTimeMillis();
+    private static boolean isRetainedChat(MaximaMessage zMessage, long time) {
+        long now = System.currentTimeMillis();
         if (time > now || time < now - Mailbox.DEFAULT_TTL_MS) return false;
         String app = zMessage.mApplication.toString();
         if (!ChatMessage.APPLICATION.equals(app) && !ClassicChat.APPLICATION.equals(app)) return false;
