@@ -352,9 +352,17 @@ public final class ChatEngine {
                 mWalletAddr.put(Keys.norm(e.getKey()), e.getValue());
             }
         }
+        List<Map.Entry<String, Long>> removed = new ArrayList<>();
         for (Map.Entry<String, String> e : mStore.all(C_MESSAGES).entrySet()) {
             try {
-                Entry en = entryFromJson(e.getValue());
+                Map<String, String> record = Json.parse(e.getValue());
+                if (e.getKey().equals(record.get("removed"))) {
+                    long order = Long.parseLong(record.getOrDefault("removedOrder", "0"));
+                    mRemovalSequence = Math.max(mRemovalSequence, order);
+                    removed.add(new java.util.AbstractMap.SimpleImmutableEntry<>(e.getKey(), order));
+                    continue;
+                }
+                Entry en = entryFromJson(record);
                 if (en == null || en.id == null || en.id.isEmpty()) {
                     System.err.println("[chat] skipping message record with no id: " + e.getKey());
                     continue;
@@ -365,6 +373,10 @@ public final class ChatEngine {
                 System.err.println("[chat] bad message record " + e.getKey() + ": " + ex);
             }
         }
+        // FileStore keeps original insertion order when replacing a message. Restore removal
+        // order explicitly so clearing an old conversation does not make its markers oldest.
+        removed.sort(Map.Entry.comparingByValue());
+        for (Map.Entry<String, Long> removal : removed) mSeenIds.add(removal.getKey());
     }
 
     // ---- serialisation ----
@@ -412,7 +424,10 @@ public final class ChatEngine {
     }
 
     static Entry entryFromJson(String zJson) {
-        Map<String, String> m = Json.parse(zJson);
+        return entryFromJson(Json.parse(zJson));
+    }
+
+    private static Entry entryFromJson(Map<String, String> m) {
         Entry e = new Entry(
                 m.get("id"),
                 m.getOrDefault("peer", ""),
@@ -458,7 +473,7 @@ public final class ChatEngine {
      *
      * @return how many were written
      */
-    public int flushState() {
+    public synchronized int flushState() {
         awaitLoaded();
         List<String> ids;
         synchronized (mDirty) {
@@ -513,9 +528,8 @@ public final class ChatEngine {
         int drop = conv.size() - mMaxPerConversation;
         for (int i = 0; i < drop; i++) {
             Entry old = conv.get(i);
+            rememberRemoved(old.id);
             mMessages.remove(old.id);
-            mStore.remove(C_MESSAGES, old.id);
-            mSeenIds.add(old.id);   // remember it so a re-push isn't resurrected
         }
     }
 
@@ -571,7 +585,7 @@ public final class ChatEngine {
      * group - the roster survives so the thread can simply start fresh. Returns
      * how many messages were removed.
      */
-    public int clearConversation(String zPeerOrGroup) {
+    public synchronized int clearConversation(String zPeerOrGroup) {
         awaitLoaded();
         if (zPeerOrGroup == null || zPeerOrGroup.isEmpty()) {
             return 0;
@@ -579,8 +593,8 @@ public final class ChatEngine {
         int n = 0;
         for (Entry e : new ArrayList<>(mMessages.values())) {
             if (zPeerOrGroup.equalsIgnoreCase(e.peer) || zPeerOrGroup.equals(e.groupId)) {
+                rememberRemoved(e.id);
                 mMessages.remove(e.id);
-                mStore.remove(C_MESSAGES, e.id);
                 n++;
             }
         }
@@ -1707,6 +1721,9 @@ public final class ChatEngine {
 
     // ---------------------------------------------------------------
 
+    private static final int MAX_REMEMBERED_REMOVALS = 4000;
+    private long mRemovalSequence;
+
     /** Bounded ring of message ids dropped by prune/clear, so a relay
      *  mailbox re-push of an old message is recognised as a duplicate rather
      *  than resurrected as a new bubble (or a duplicate money bubble). */
@@ -1716,9 +1733,26 @@ public final class ChatEngine {
                     @Override
                     protected boolean removeEldestEntry(
                             java.util.Map.Entry<String, Boolean> e) {
-                        return size() > 4000;
+                        return size() > MAX_REMEMBERED_REMOVALS;
                     }
                 });
+
+    /** Replace the payload with a small removal marker in the SAME atomic collection snapshot.
+     *  No message id field: older clients already skip such records rather than showing a bubble.
+     *  Called under the chat monitor, as are record, clear and deferred state writes. */
+    private void rememberRemoved(String zId) {
+        String oldest = !mSeenIds.contains(zId) && mSeenIds.size() >= MAX_REMEMBERED_REMOVALS
+                ? mSeenIds.iterator().next() : null;
+        long order = Math.addExact(mRemovalSequence, 1);
+        mStore.put(C_MESSAGES, zId, new Json.Writer().put("removed", zId)
+                .put("removedOrder", Long.toString(order)).done());
+        mRemovalSequence = order;
+        // A prior removal may have failed during eviction cleanup while leaving a live entry.
+        // Always replace it again on retry, even if its id is already in the in-memory ring.
+        mSeenIds.remove(zId);
+        mSeenIds.add(zId);
+        if (oldest != null) mStore.remove(C_MESSAGES, oldest);
+    }
 
     private static final int MAX_CONVERSATIONS = 1000;
     private final java.util.Set<String> mConvKeys =
