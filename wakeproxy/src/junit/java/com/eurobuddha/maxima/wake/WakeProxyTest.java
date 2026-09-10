@@ -152,4 +152,38 @@ public class WakeProxyTest {
         assertTrue(ApnsClient.payload("call").contains("Incoming call"));
         assertFalse(p.contains("sender"));
     }
+
+    @Test public void tokensWithTheSameOldDigestPrefixHaveIndependentLimits() throws Exception {
+        // Synthetic valid hex tokens, found by a bounded local SHA-256 collision search.
+        String a = "0000000000000000000000000000000000000000000000000000000000007158";
+        String b = "000000000000000000000000000000000000000000000000000000000001f235";
+        String digestA = "48e58b55f0616e892c2af9aa80cc69b98c6bac9a54114ca24506e40d571af45e";
+        String digestB = "48e58b55cf11e10adf1934bb2ff41f7b68923959969e6ca444e8f01cbc2bac8c";
+        List<String> log = Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.concurrent.CountDownLatch logged = new java.util.concurrent.CountDownLatch(2);
+        WakeHandler handler = new WakeHandler((token, env, kind) -> new ApnsClient.Result(200, ""),
+                new RateLimit(), line -> { log.add(line); logged.countDown(); });
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 4);
+        server.createContext("/v1/wake", handler); server.start();
+        try {
+            URI url = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1/wake");
+            HttpClient client = HttpClient.newHttpClient();
+            for (String token : new String[]{a, b}) {
+                HttpResponse<String> r = client.send(HttpRequest.newBuilder(url)
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"token\":\"" + token + "\"}")).build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals("different tokens must have independent buckets", 202, r.statusCode());
+            }
+            HttpResponse<String> repeated = client.send(HttpRequest.newBuilder(url)
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"token\":\"" + b.toUpperCase(java.util.Locale.ROOT) + "\"}")).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals("hex case does not evade the token limit", 429, repeated.statusCode());
+            assertEquals(digestA, WakeHandler.idOf(a));
+            assertEquals(digestB, WakeHandler.idOf(b));
+            assertTrue(logged.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertTrue(log.stream().anyMatch(line -> line.contains(digestA)));
+            assertTrue(log.stream().anyMatch(line -> line.contains(digestB)));
+            assertFalse(log.stream().anyMatch(line -> line.contains(a) || line.contains(b)));
+        } finally { server.stop(0); handler.close(); }
+    }
 }

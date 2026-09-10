@@ -9,8 +9,8 @@ import java.security.MessageDigest;
 
 /**
  * POST /v1/wake {"token":hex,"env":"prod"|"sandbox","kind":"message"|"call"} -> 202 (queued),
- * 400 (malformed), 429 (rate limited), 503 (send queue full). The token is never logged: only the first 8 hex chars of
- * its SHA-256 and the APNs status appear, so a log line identifies nothing.
+ * 400 (malformed), 429 (rate limited), 503 (send queue full). The token is never logged: its full
+ * SHA-256 digest identifies the rate bucket and log entry. This is a pseudonym, not anonymity.
  */
 public final class WakeHandler implements HttpHandler, AutoCloseable {
     static final int SEND_THREADS = 8;
@@ -89,8 +89,8 @@ public final class WakeHandler implements HttpHandler, AutoCloseable {
 
     static String idOf(String zToken) throws Exception {
         byte[] h = MessageDigest.getInstance("SHA-256").digest(zToken.toLowerCase().getBytes(StandardCharsets.US_ASCII));
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 4; i++) {
+        StringBuilder sb = new StringBuilder(h.length * 2);
+        for (int i = 0; i < h.length; i++) {
             sb.append(String.format("%02x", h[i]));
         }
         return sb.toString();
