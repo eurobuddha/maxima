@@ -1,5 +1,6 @@
 package com.eurobuddha.maxima.cloud;
 
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,9 +19,9 @@ import java.util.concurrent.Executors;
  * the phone then fetches the message end-to-end from this account. Nothing about the message -
  * not the sender, not a byte of body - leaves here.
  *
- * Bounded so a dead or hostile proxy costs nothing: one wake per device per 20 s, then quiet
- * until the device's next authorized RPC or 5 minutes; 5 s timeouts on a single thread; after
- * three failures a proxy is left alone for 5 minutes. "off" short-circuits everything.
+ * One wake per device per 20 s, then quiet until its next authorized RPC or 45 s.
+ * Requests use 5 s timeouts on a single worker; response bodies are closed without buffering.
+ * After three failures a proxy is left alone for 5 minutes. "off" short-circuits everything.
  */
 public final class WakeProxyClient implements AutoCloseable {
 
@@ -97,11 +98,18 @@ public final class WakeProxyClient implements AutoCloseable {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(zBody, StandardCharsets.UTF_8))
                     .build();
-            HttpResponse<String> resp = mHttp.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() / 100 == 2) {
+            HttpResponse<InputStream> resp = mHttp.send(req, HttpResponse.BodyHandlers.ofInputStream());
+            int status;
+            // Only the status is part of this contract. Close the stream immediately:
+            // an oversized or unfinished body must not accumulate in memory or hold the wake worker.
+            try (InputStream body = resp.body()) {
+                status = resp.statusCode();
+            }
+            if (mClosed) return;
+            if (status / 100 == 2) {
                 mProxyFailures.remove(zProxy);
             } else {
-                failed(zProxy, "HTTP " + resp.statusCode());
+                failed(zProxy, "HTTP " + status);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
