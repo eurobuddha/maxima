@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * at this scale (thousands of small records) and keeps reads free. Append logs
  * are appended to directly.
  *
- * Text read I/O failures throw {@link java.io.UncheckedIOException}. Only definite
+ * Text read I/O and format failures throw {@link java.io.UncheckedIOException}. Only definite
  * absence is treated as a missing path. Failed reads never enter the cache.
  */
 public final class FileStore implements Store {
@@ -168,13 +168,17 @@ public final class FileStore implements Store {
                 return m;
             }
             try (BufferedReader r = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(f), StandardCharsets.UTF_8))) {
+                    new FileInputStream(f), StandardCharsets.UTF_8.newDecoder()))) {
                 String line;
                 while ((line = r.readLine()) != null) {
-                    int t = line.indexOf('\t');
-                    if (t > 0) {
-                        m.put(unescape(line.substring(0, t)), unescape(line.substring(t + 1)));
+                    if (line.isEmpty()) {
+                        continue;
                     }
+                    int t = line.indexOf('\t');
+                    if (t < 0) {
+                        throw new IOException("Missing record separator");
+                    }
+                    m.put(unescape(line.substring(0, t)), unescape(line.substring(t + 1)));
                 }
             } catch (IOException e) {
                 // computeIfAbsent must not cache a partial/empty read: a later mutation
@@ -221,12 +225,10 @@ public final class FileStore implements Store {
             return out;
         }
         try (BufferedReader r = new BufferedReader(new InputStreamReader(
-                new FileInputStream(f), StandardCharsets.UTF_8))) {
+                new FileInputStream(f), StandardCharsets.UTF_8.newDecoder()))) {
             String line;
             while ((line = r.readLine()) != null) {
-                if (!line.isEmpty()) {
-                    out.add(unescape(line));
-                }
+                out.add(unescape(line));
             }
         } catch (IOException e) {
             throw new java.io.UncheckedIOException("Could not read " + f, e);
@@ -430,18 +432,21 @@ public final class FileStore implements Store {
                 .replace("\r", "\\r");
     }
 
-    static String unescape(String zValue) {
+    static String unescape(String zValue) throws IOException {
         StringBuilder sb = new StringBuilder(zValue.length());
         for (int i = 0; i < zValue.length(); i++) {
             char c = zValue.charAt(i);
-            if (c == '\\' && i + 1 < zValue.length()) {
+            if (c == '\\') {
+                if (i + 1 == zValue.length()) {
+                    throw new IOException("Unfinished record escape");
+                }
                 char n = zValue.charAt(++i);
                 switch (n) {
                     case 't': sb.append('\t'); break;
                     case 'n': sb.append('\n'); break;
                     case 'r': sb.append('\r'); break;
                     case '\\': sb.append('\\'); break;
-                    default: sb.append(n);
+                    default: throw new IOException("Invalid record escape");
                 }
             } else {
                 sb.append(c);
