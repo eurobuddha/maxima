@@ -1734,7 +1734,9 @@ public final class RelayServer {
                 try {
                     byte[] ct = item.ciphertext();   // read from disk now, not held in heap
                     if (ct == null) {
-                        continue;
+                        // ACKs clear every item through maxSeq. Never advance past a read
+                        // failure: a later item's ACK would also delete this unread item.
+                        break;
                     }
                     MaxTxPoW unit = MaxTxPoW.fromBytes(reWrapForDelivery(ct));
                     zConn.write(Frame.body(Frame.MSG_MAXIMA_TXPOW, unit));
