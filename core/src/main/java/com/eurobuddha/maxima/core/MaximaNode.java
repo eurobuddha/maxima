@@ -1,5 +1,7 @@
 package com.eurobuddha.maxima.core;
 
+import com.eurobuddha.maxima.core.chat.ChatMessage;
+import com.eurobuddha.maxima.core.chat.ClassicChat;
 import com.eurobuddha.maxima.core.codec.MiniData;
 import com.eurobuddha.maxima.core.contacts.Contact;
 import com.eurobuddha.maxima.core.contacts.ContactCtrl;
@@ -1321,11 +1323,19 @@ public final class MaximaNode implements ChatPort {
             // Replay and duplicate protection - neither exists in classic.
             DedupCache.Verdict v = mDedup.check(
                     zInbound.msgid.to0xString(), msg.mTimeMilli.getAsLong());
+            // Live and held units have the same wire shape. Only history content may use
+            // the longer mailbox horizon; RPC, calls and mutable controls stay on the
+            // original freshness gate. Keep the same bounded transport-id dedup cache.
+            boolean delayedChat = v == DedupCache.Verdict.STALE && isRetainedChat(msg);
+            if (delayedChat) {
+                v = mDedup.seenBefore(zInbound.msgid.to0xString())
+                        ? DedupCache.Verdict.DUPLICATE : DedupCache.Verdict.ACCEPT;
+            }
             if (v != DedupCache.Verdict.ACCEPT) {
                 return;
             }
-            // Mark the sender seen NOW - any accepted inbound message is proof of
-            // life, which is what the contact list's connectivity indicator reads.
+            // Keep presence updates for the original freshness window. The extended
+            // history admission must not mark a long-offline sender as online NOW.
             // Classic bumps a contact's lastseen only on a contact-ctrl refresh
             // (~20-min loop); we also count chat/RPC so the dot tracks a live
             // conversation, not just the last handshake. In-memory only: the UI
@@ -1333,7 +1343,7 @@ public final class MaximaNode implements ChatPort {
             // refresh persists lastSeen. (Self-addressed check-connect probes carry
             // our own key as the sender, so they match no contact and are ignored.)
             Contact seen = mContacts.get(Keys.norm(msg.mFrom.to0xString()));
-            if (seen != null) {
+            if (seen != null && !delayedChat) {
                 seen.lastSeen = System.currentTimeMillis();
             }
         }
@@ -1354,6 +1364,28 @@ public final class MaximaNode implements ChatPort {
                 log("inbound: " + e);
             }
         });
+    }
+
+    /** Content understood by ChatEngine as history, never an action or a mutable control.
+     *  It still has a finite past horizon and cannot gain extra future clock skew. Relay
+     *  storage time is not authenticated on this wire: use the signed sender timestamp. */
+    private static boolean isRetainedChat(MaximaMessage zMessage) {
+        long time = zMessage.mTimeMilli.getAsLong(), now = System.currentTimeMillis();
+        if (time > now || time < now - Mailbox.DEFAULT_TTL_MS) return false;
+        String app = zMessage.mApplication.toString();
+        if (!ChatMessage.APPLICATION.equals(app) && !ClassicChat.APPLICATION.equals(app)) return false;
+        try {
+            String payload = new String(zMessage.mData.getBytes(), StandardCharsets.UTF_8);
+            if (ClassicChat.APPLICATION.equals(app)) {
+                ClassicChat.parse(payload); // this channel only displays content, including media
+                return true;
+            }
+            ChatMessage chat = ChatMessage.decode(payload);
+            return !chat.id.isEmpty() && (chat.type == ChatMessage.TYPE_TEXT
+                    || chat.type == ChatMessage.TYPE_GROUP_TEXT || chat.type == ChatMessage.TYPE_PAYMENT);
+        } catch (RuntimeException malformed) {
+            return false;
+        }
     }
 
     /** The ordered part: check-connect, contact-ctrl and the app listener, one at a time. */

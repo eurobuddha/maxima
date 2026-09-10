@@ -27,8 +27,9 @@ public final class DedupCache {
      * tight - it silently dropped a legitimately store-and-forwarded message,
      * and any message from a phone with more than ten minutes of clock skew
      * (common). Six hours keeps replay exposure short while not discarding
-     * real, merely-delayed, mail. Explicitly-fetched mailbox items bypass this
-     * entirely via {@link #seenBefore}.
+     * real, merely-delayed, mail. MaximaNode additionally admits recognised chat
+     * history within the mailbox retention horizon via {@link #seenBefore};
+     * commands, calls and mutable controls keep this default window.
      */
     public static final long DEFAULT_WINDOW_MS = 6L * 60 * 60 * 1000;
 
