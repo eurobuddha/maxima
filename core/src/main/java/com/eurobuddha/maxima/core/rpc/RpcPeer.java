@@ -30,6 +30,8 @@ public final class RpcPeer implements AutoCloseable {
 
     /** How long to keep a pending request before giving up on it. */
     public static final long DEFAULT_TIMEOUT_MS = 60_000;
+    /** Same per-peer pending-call budget as the Swift client; refused before signing/sending. */
+    static final int MAX_PENDING_CALLS = 256;
 
     public interface ResponseHandler {
         void onResponse(byte[] zPayload);
@@ -116,6 +118,7 @@ public final class RpcPeer implements AutoCloseable {
 
         synchronized (mLifecycle) {
             if (mClosed) throw new IllegalStateException("RPC peer is closed");
+            if (mPending.size() >= MAX_PENDING_CALLS) throw new IllegalStateException("RPC pending-call capacity reached");
             mPending.put(id, new Pending(zHandler, System.currentTimeMillis() + zTimeoutMs, zMethod, zTimeoutMs));
         }
 
@@ -221,8 +224,10 @@ public final class RpcPeer implements AutoCloseable {
         int n = 0;
         for (Map.Entry<String, Pending> e : mPending.entrySet()) {
             if (e.getValue().deadline <= now && mPending.remove(e.getKey(), e.getValue())) {
-                e.getValue().handler.onError("timeout after "
-                        + e.getValue().timeoutMs + "ms waiting for " + e.getValue().method);
+                try {
+                    e.getValue().handler.onError("timeout after "
+                            + e.getValue().timeoutMs + "ms waiting for " + e.getValue().method);
+                } catch (RuntimeException ignored) { /* like close(): one callback must not strand the rest */ }
                 n++;
             }
         }
