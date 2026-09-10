@@ -141,6 +141,7 @@ public class MailboxStoreTest {
         volatile java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
         volatile java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(0);
         volatile boolean fail;
+        volatile RuntimeException writeFailure;
         int keyedWrites;
 
         GatedStore(File zDir) {
@@ -165,40 +166,51 @@ public class MailboxStoreTest {
             // a different gate or failure result without releasing this writer.
             java.util.concurrent.CountDownLatch gate = release;
             boolean failed = fail;
+            RuntimeException failure = writeFailure;
             entered.countDown();
             try {
                 gate.await(10, java.util.concurrent.TimeUnit.SECONDS);
             } catch (InterruptedException ignored) {
             }
+            if (failure != null) throw failure;
             return !failed && inner.putBytes(c, k, v);
         }
     }
 
     @Test public void aLaterWriteCannotExposeAnEarlierPendingItemToAcknowledgement() throws Exception {
-        publicationOrder(false, false);
+        publicationOrder(false, false, false);
     }
 
     @Test public void anExistingPrefixCanBeAcknowledgedWhileTheNextWriteIsPending() throws Exception {
-        publicationOrder(true, false);
+        publicationOrder(true, false, false);
     }
 
     @Test public void aFailedPendingWriteReleasesTheLaterCompletedItems() throws Exception {
-        publicationOrder(false, true);
+        publicationOrder(false, true, false);
     }
 
-    private void publicationOrder(boolean prefix, boolean failFirst) throws Exception {
+    @Test public void aThrowingPendingWriteReleasesLaterCompletedItems() throws Exception {
+        publicationOrder(false, true, true);
+    }
+
+    private void publicationOrder(boolean prefix, boolean failFirst, boolean throwFirst) throws Exception {
         GatedStore store = new GatedStore(tmp("publication"));
         Mailbox mailbox = new Mailbox(); mailbox.setStore(store);
         if (prefix) assertEquals(Mailbox.Result.STORED, mailbox.store(KEY, new byte[]{0}));
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         store.release = release; store.fail = failFirst;
+        if (throwFirst) store.writeFailure = new java.io.UncheckedIOException(new java.io.IOException("test write failure"));
         store.entered = new java.util.concurrent.CountDownLatch(1);
         Mailbox.Result[] result = new Mailbox.Result[1];
-        Thread writer = new Thread(() -> result[0] = mailbox.store(KEY, new byte[]{1}));
+        Thread writer = new Thread(() -> {
+            try { result[0] = mailbox.store(KEY, new byte[]{1}); }
+            catch (RuntimeException expectedOnOldCode) { /* assertions below verify cleanup and the result */ }
+        });
         writer.start();
         try {
             assertTrue(store.entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
             store.release = new java.util.concurrent.CountDownLatch(0); store.fail = false;
+            store.writeFailure = null;
             assertEquals(Mailbox.Result.DUPLICATE, mailbox.store(KEY, new byte[]{1}));
             assertEquals(Mailbox.Result.STORED, mailbox.store(KEY, new byte[]{2}));
             assertEquals("other recipients can still progress", Mailbox.Result.STORED,
@@ -208,7 +220,6 @@ public class MailboxStoreTest {
             // The earlier write commits between fetch and the client's cumulative ACK.
             release.countDown(); writer.join(5000);
             assertFalse("writer completed", writer.isAlive());
-            assertEquals(failFirst ? Mailbox.Result.IO_ERROR : Mailbox.Result.STORED, result[0]);
             if (!delivered.isEmpty()) mailbox.acknowledge(KEY, delivered.get(delivered.size() - 1).sequence);
             List<Mailbox.Item> remaining = mailbox.fetch(KEY, 0, 10);
             assertEquals("only the pre-existing prefix was eligible for delivery", prefix ? 1 : 0, delivered.size());
@@ -217,6 +228,7 @@ public class MailboxStoreTest {
             if (!failFirst) assertArrayEquals(new byte[]{1}, remaining.get(at++).ciphertext());
             assertArrayEquals(new byte[]{2}, remaining.get(at).ciphertext());
             assertEquals(1, mailbox.fetch("0xOTHER", 0, 10).size());
+            assertEquals(failFirst ? Mailbox.Result.IO_ERROR : Mailbox.Result.STORED, result[0]);
         } finally {
             release.countDown(); writer.join(5000);
             assertFalse("no test writer remains", writer.isAlive());
@@ -271,11 +283,54 @@ public class MailboxStoreTest {
         assertEquals(Mailbox.Result.IO_ERROR, m.store(KEY, "lost".getBytes()));
         assertEquals("the reservation was undone", 0, m.totalItems());
         assertEquals(0, m.totalBytes());
+        assertEquals("failed admission does not keep an empty recipient", 0, m.boxCount());
         assertEquals(0, files(dir));
         gated.fail = false;
         assertEquals("the disk came back: the retry stores", Mailbox.Result.STORED, m.store(KEY, "lost".getBytes()));
         assertEquals(1, m.totalItems());
         assertEquals(1, files(dir));
+    }
+
+    @Test public void aThrowingWriteReleasesCapacityAndAllowsTheSameMessageToRetry() {
+        GatedStore store = new GatedStore(tmp("throw-retry"));
+        store.writeFailure = new java.io.UncheckedIOException(new java.io.IOException("test write failure"));
+        Mailbox box = new Mailbox(Mailbox.DEFAULT_TTL_MS, 1, 1, 1, 1, 1); box.setStore(store);
+        Mailbox.Result result = null;
+        try { result = box.store(KEY, new byte[]{1}); }
+        catch (RuntimeException expectedOnOldCode) { /* verify the leaked reservation, not merely the exception */ }
+        assertEquals("failed writes release their item reservation", 0, box.totalItems());
+        assertEquals(0, box.totalBytes()); assertEquals(0, box.boxCount());
+        assertEquals(Mailbox.Result.IO_ERROR, result);
+        store.writeFailure = null;
+        assertEquals(Mailbox.Result.STORED, box.store(KEY, new byte[]{1}));
+        assertEquals(1, box.fetch(KEY, 0, 1).size());
+        assertEquals(1, box.totalItems()); assertEquals(1, box.totalBytes());
+    }
+
+    @Test public void aThrowingEvictedWriterCannotLeakGlobalCapacity() throws Exception {
+        GatedStore store = new GatedStore(tmp("throw-evicted"));
+        store.writeFailure = new IllegalStateException("test storage failure");
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        store.release = release;
+        Mailbox box = new Mailbox(Mailbox.DEFAULT_TTL_MS, 2, 2, 1, 3, 3); box.setStore(store);
+        Mailbox.Result[] result = new Mailbox.Result[1];
+        Thread writer = new Thread(() -> {
+            try { result[0] = box.store(KEY, new byte[]{1}); }
+            catch (RuntimeException expectedOnOldCode) { /* verify global reservation cleanup below */ }
+        });
+        writer.start();
+        try {
+            assertTrue(store.entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            store.release = new java.util.concurrent.CountDownLatch(0); store.writeFailure = null;
+            assertEquals(Mailbox.Result.STORED, box.store("other", new byte[]{2}));
+            assertEquals(0, box.count(KEY));
+            release.countDown(); writer.join(5000); assertFalse(writer.isAlive());
+            assertEquals("only the other recipient remains reserved", 1, box.totalItems());
+            assertEquals(1, box.totalBytes()); assertEquals(1, box.boxCount());
+            assertEquals(Mailbox.Result.IO_ERROR, result[0]);
+            assertEquals(Mailbox.Result.STORED, box.store("other", new byte[]{3}));
+            assertEquals(2, box.fetch("other", 0, 2).size());
+        } finally { release.countDown(); writer.join(5000); assertFalse(writer.isAlive()); }
     }
 
     @Test

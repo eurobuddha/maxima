@@ -411,7 +411,15 @@ public final class Mailbox {
         // PHASE 2 (no monitor): the durable write - a file plus an fsync, milliseconds on a
         // VPS disk. Holding the mailbox monitor across it serialised every store, fetch and
         // acknowledge on the relay behind one fsync at a time.
-        boolean ok = mStore.putBytes(C_ITEMS, recKey(item), zCiphertext);
+        boolean ok;
+        try {
+            ok = mStore.putBytes(C_ITEMS, recKey(item), zCiphertext);
+        } catch (RuntimeException e) {
+            // Store adapters may throw instead of returning false. They must still undo
+            // admission below, or pendingItems strands later mail and leaks quota forever.
+            System.err.println("[mailbox] item write failed: " + e);
+            ok = false;
+        }
 
         // PHASE 3 (monitor): commit or undo the reservation.
         synchronized (this) {
@@ -437,6 +445,7 @@ public final class Mailbox {
             }
             mTotalBytes -= len;
             mTotalItems--;
+            if (box.items.isEmpty() && box.pending == 0) mBoxes.remove(key, box);
             if (ok) {
                 // Evicted while being written: it must not survive on disk.
                 mStore.removeBytes(C_ITEMS, recKey(item));
