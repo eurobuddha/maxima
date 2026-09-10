@@ -53,6 +53,9 @@ public final class MaximaNode implements ChatPort {
 
     private final Map<String, Contact> mContacts = new ConcurrentHashMap<>();
     private final DedupCache mDedup = new DedupCache();
+    // Active deliveries survive dedup-cache eviction. Guarded by this, with admission below.
+    private final Map<String, java.util.concurrent.CompletableFuture<Void>> mDeliveries = new java.util.HashMap<>();
+    private boolean mStopping;
     private final Outbox mOutbox = new Outbox();
     private final Mailbox mMailbox = new Mailbox();
     private final MlsStore mDirectory = new MlsStore();
@@ -230,9 +233,8 @@ public final class MaximaNode implements ChatPort {
             }
         });
         // Push receive: every attached host gets a dedicated reader that hands
-        // inbound straight to handle() the instant the relay pushes it. handle()
-        // is synchronized, so inbound stays effectively single-threaded exactly
-        // as it was under the old one-thread pump loop.
+        // inbound straight to handle() the instant the relay pushes it. Admission is
+        // synchronized; per-delivery completion follows the selected worker or inline path.
         mPool.setSink(new com.eurobuddha.maxima.core.net.HostConnection.Sink() {
             @Override
             public void onInbound(com.eurobuddha.maxima.core.net.HostConnection.Inbound zIn) {
@@ -294,9 +296,8 @@ public final class MaximaNode implements ChatPort {
     }
 
     private void runFlushHooks() {
-        // Everything delivered on this connection is queued on the inbound lane; let it land
-        // before anything is flushed and acknowledged.
-        if (!drainInbound(10_000)) throw new IllegalStateException("Inbound delivery is not drained");
+        // HostConnection has waited for its own deliveries, including RPC and CallerRuns
+        // work. A global worker barrier neither proves that nor needs to delay other relays.
         mStore.flush();
         for (Runnable r : mFlushHooks) {
             r.run(); // a failed flush must reach HostConnection and withhold deletion permission
@@ -1054,6 +1055,15 @@ public final class MaximaNode implements ChatPort {
     }
 
     public void stop() {
+        List<java.util.concurrent.CompletableFuture<Void>> pending;
+        synchronized (this) {
+            mStopping = true;
+            pending = new ArrayList<>(mDeliveries.values());
+            mDeliveries.clear();
+        }
+        for (java.util.concurrent.CompletableFuture<Void> done : pending) {
+            done.completeExceptionally(new IllegalStateException("node stopped"));
+        }
         mRpc.close();
         stopDirect();
         mPool.closeAll();
@@ -1260,10 +1270,9 @@ public final class MaximaNode implements ChatPort {
      * handle() was one synchronized block covering dedup, contact fsync, the reciprocal
      * introduce (a network send), every RPC handler (a contacts.resolve did an MLS lookup,
      * a node.cmd slept up to 2.5 s) and the chat persist: one slow thing deafened the node.
-     * Now: dedup + last-seen under the lock (microseconds); chat + contact-ctrl on the
-     * inbound lane (ordered, single thread); RPC on its own lane (ordered among RPCs, as its
-     * handlers assume; never in chat's way). Bounded queues fall back to running on the
-     * reader thread - natural backpressure, never an unbounded heap.
+     * Now: dedup + last-seen under the lock; chat + contact-ctrl normally on one inbound
+     * worker, and RPC on a separate worker. Saturated bounded queues fall back to the reader
+     * thread, so completion follows each delivery, not merely the worker's queue position.
      */
     private final java.util.concurrent.ThreadPoolExecutor mInboundExec = lane("maxima-inbound", 4096);
     private final java.util.concurrent.ThreadPoolExecutor mRpcExec = lane("maxima-rpc", 1024);
@@ -1280,15 +1289,18 @@ public final class MaximaNode implements ChatPort {
                     t.setDaemon(true);
                     return t;
                 },
-                new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+                (task, executor) -> {
+                    if (executor.isShutdown()) throw new java.util.concurrent.RejectedExecutionException("lane closed");
+                    task.run(); // backpressure; its delivery future still tracks this reader-thread work
+                });
         e.allowCoreThreadTimeOut(true);
         return e;
     }
 
     /**
      * Wait until everything queued on the inbound lane so far has run (bounded). The
-     * before-ack hook needs this: a mailbox ack must not be signed while a delivered message
-     * is still waiting on the lane, or it would be acknowledged before it was persisted.
+     * shutdown uses this for best-effort draining. Mailbox acknowledgement instead follows
+     * per-delivery futures, since a worker barrier cannot cover inline or RPC work.
      */
     boolean drainInbound(long zTimeoutMs) {
         if (Thread.currentThread().isInterrupted()) return false;
@@ -1319,21 +1331,47 @@ public final class MaximaNode implements ChatPort {
     public void handle(HostConnection.Inbound zInbound) {
         MaximaMessage msg = zInbound.message;
         String app = msg.mApplication.toString();
+        String msgid = zInbound.msgid.to0xString();
+        boolean rpc = RpcEnvelope.APPLICATION.equals(app);
+        java.util.concurrent.CompletableFuture<Void> done;
         synchronized (this) {
+            if (mStopping) {
+                java.util.concurrent.CompletableFuture<Void> stopped = new java.util.concurrent.CompletableFuture<>();
+                stopped.completeExceptionally(new IllegalStateException("node stopped"));
+                zInbound.deferAcknowledgementUntil(stopped);
+                return;
+            }
+            java.util.concurrent.CompletableFuture<Void> running = mDeliveries.get(msgid);
+            if (running != null) {
+                zInbound.deferAcknowledgementUntil(running);
+                return;
+            }
             // Replay and duplicate protection - neither exists in classic.
             DedupCache.Verdict v = mDedup.check(
-                    zInbound.msgid.to0xString(), msg.mTimeMilli.getAsLong());
+                    msgid, msg.mTimeMilli.getAsLong());
             // Live and held units have the same wire shape. Only history content may use
             // the longer mailbox horizon; RPC, calls and mutable controls stay on the
             // original freshness gate. Keep the same bounded transport-id dedup cache.
             boolean delayedChat = v == DedupCache.Verdict.STALE && isRetainedChat(msg);
             if (delayedChat) {
-                v = mDedup.seenBefore(zInbound.msgid.to0xString())
+                v = mDedup.seenBefore(msgid)
                         ? DedupCache.Verdict.DUPLICATE : DedupCache.Verdict.ACCEPT;
             }
             if (v != DedupCache.Verdict.ACCEPT) {
+                if (v == DedupCache.Verdict.DUPLICATE) {
+                    zInbound.deferAcknowledgementUntil(mDedup.completion(msgid));
+                }
                 return;
             }
+            done = new java.util.concurrent.CompletableFuture<>();
+            zInbound.deferAcknowledgementUntil(done);
+            if (mDeliveries.size() >= DedupCache.DEFAULT_MAX_ENTRIES) {
+                mDedup.forget(msgid);
+                done.completeExceptionally(new java.util.concurrent.RejectedExecutionException("inbound delivery capacity"));
+                return;
+            }
+            mDeliveries.put(msgid, done);
+            mDedup.trackCompletion(msgid, done);
             // Keep presence updates for the original freshness window. The extended
             // history admission must not mark a long-offline sender as online NOW.
             // Classic bumps a contact's lastseen only on a contact-ctrl refresh
@@ -1347,23 +1385,37 @@ public final class MaximaNode implements ChatPort {
                 seen.lastSeen = System.currentTimeMillis();
             }
         }
-        if (RpcEnvelope.APPLICATION.equals(app)) {
-            mRpcExec.execute(() -> {
+        java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean();
+        try {
+            (rpc ? mRpcExec : mInboundExec).execute(() -> {
+                started.set(true);
+                Throwable failure = null;
                 try {
-                    mRpc.onInbound(msg);
-                } catch (Exception e) {
-                    log("rpc inbound: " + e);
+                    if (rpc) mRpc.onInbound(msg); else handleOnLane(zInbound);
+                } catch (Throwable error) {
+                    failure = error;
+                } finally {
+                    finishDelivery(msgid, done, failure, !rpc);
                 }
+                if (failure != null) log((rpc ? "rpc inbound: " : "inbound: ") + failure);
             });
-            return;
+        } catch (RuntimeException rejected) {
+            // CallerRuns can propagate an error from inside the task. Only a rejection
+            // before dispatch is known to have produced no RPC side effect.
+            finishDelivery(msgid, done, rejected, !started.get() || !rpc);
         }
-        mInboundExec.execute(() -> {
-            try {
-                handleOnLane(zInbound);
-            } catch (Exception e) {
-                log("inbound: " + e);
-            }
-        });
+    }
+
+    private void finishDelivery(String zMsgid, java.util.concurrent.CompletableFuture<Void> zDone,
+                                Throwable zFailure, boolean zRetryable) {
+        synchronized (this) {
+            mDeliveries.remove(zMsgid, zDone);
+            // RPC dispatch normally turns service errors into ERROR replies. An unexpected
+            // failure outside that contract may follow a side effect: retain its failed outcome
+            // in the bounded dedup cache instead of transparently executing the command again.
+            if (zFailure != null && zRetryable) mDedup.forget(zMsgid);
+        }
+        if (zFailure == null) zDone.complete(null); else zDone.completeExceptionally(zFailure);
     }
 
     /** Content understood by ChatEngine as history, never an action or a mutable control.

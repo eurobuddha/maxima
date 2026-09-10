@@ -145,10 +145,7 @@ public final class ParlonsCore {
         // (listener wired AFTER mControl below — it fans events out through the control push)
         mNode.setLogListener(s -> log("node: " + s));   // log() tees into the ring itself
         mNode.setMessageListener((msg, msgid) -> {
-            try {
-                mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
-            } catch (Exception ignored) {
-            }
+            mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
         });
 
         // The owner control channel: paired devices drive the account over the encrypted

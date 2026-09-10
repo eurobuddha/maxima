@@ -103,6 +103,24 @@ public final class HostConnection implements Closeable {
     private final java.util.ArrayDeque<java.util.concurrent.CompletableFuture<MiniData>> mAckWaiters =
             new java.util.ArrayDeque<>();
     private final Object mSendLock = new Object();
+    private static final int MAX_PENDING_DELIVERIES = 4096;
+    private final java.util.Set<java.util.concurrent.CompletableFuture<Void>> mPendingDeliveries = new java.util.HashSet<>();
+    // Like RpcPeer's bounded reply pool, but never CallerRuns: the reader must keep receiving
+    // send ACKs while an application delivery or its durable flush is still pending.
+    private static final java.util.concurrent.ThreadPoolExecutor MAILBOX_ACK_EXEC = mailboxAckExecutor();
+    private java.util.concurrent.FutureTask<Void> mMailboxAckTask; // guarded by this
+    private long mPendingMailboxSeq; // newest challenge while the one task is busy
+    private java.util.List<java.util.concurrent.CompletableFuture<Void>> mPendingMailboxDeliveries = java.util.Collections.emptyList();
+    private boolean mMailboxAckStopped;
+
+    private static java.util.concurrent.ThreadPoolExecutor mailboxAckExecutor() {
+        java.util.concurrent.ThreadPoolExecutor pool = new java.util.concurrent.ThreadPoolExecutor(
+                2, 8, 30, java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(256),
+                r -> { Thread t = new Thread(r, "maxima-mailbox-ack"); t.setDaemon(true); return t; },
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
     private final java.util.concurrent.atomic.AtomicLong mAttachedSends =
             new java.util.concurrent.atomic.AtomicLong();
 
@@ -208,6 +226,9 @@ public final class HostConnection implements Closeable {
         }
         mAttached = false;
         failWaiters();
+        synchronized (mPendingDeliveries) { mPendingDeliveries.clear(); }
+        stopMailboxAcks();
+        interruptReader();
     }
 
     private void failWaiters() {
@@ -219,6 +240,11 @@ public final class HostConnection implements Closeable {
         for (java.util.concurrent.CompletableFuture<MiniData> f : all) {
             f.completeExceptionally(new java.io.IOException("connection closed"));
         }
+    }
+
+    private void interruptReader() {
+        Thread reader = mReader;
+        if (reader != null && reader != Thread.currentThread()) reader.interrupt();
     }
 
     public void setAdvertisedEndpoint(String zHostPort) {
@@ -361,36 +387,130 @@ public final class HostConnection implements Closeable {
                 return;
             }
             if (seq < 0) return;
-            // Sequence zero proves ownership without deleting mail. Positive acknowledgements
-            // authorize deletion, so every preceding delivery must be durable first. A failed
-            // hook exits through the catch below without signing; the relay can retry its drain.
-            Runnable before = mBeforeAck;
-            if (seq > 0 && before != null) before.run();
-            if (Thread.currentThread().isInterrupted()) return;
-            // canonical: "maxack" + key DER + 8-byte big-endian seq (relay mirrors)
-            java.io.ByteArrayOutputStream cb = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream cd = new java.io.DataOutputStream(cb);
-            cd.write("maxack".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-            cd.write(key.getBytes());
-            cd.writeLong(seq);
-            cd.flush();
-            byte[] sig = com.eurobuddha.maxima.core.crypto.MaximaCrypto.sign(
-                    mPerHostKey.getPrivate(), cb.toByteArray());
-            java.io.ByteArrayOutputStream ab = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream ad = new java.io.DataOutputStream(ab);
-            key.writeDataStream(ad);
-            new com.eurobuddha.maxima.core.codec.MiniNumber(seq).writeDataStream(ad);
-            new MiniData(sig).writeDataStream(ad);
-            ad.flush();
-            MaximaCTRLMessage ack = new MaximaCTRLMessage(CTRL_MAILBOX_ACK);
-            ack.setData(new MiniData(ab.toByteArray()));
-            writeFrame(Frame.body(Frame.MSG_MAXIMA_CTRL, ack));
+            // Possession never waits for application work and deletes nothing. Positive
+            // challenges run off-reader so awaited work can still send/receive on this link.
+            if (seq == 0) writeMailboxAck(key, 0); else scheduleMailboxAck(seq);
         } catch (Exception ignored) {
-            // A failed pre-ack hook produces no signature. Transport failures use normal retry semantics.
+            // Invalid challenge or broken transport: no deletion permission.
         }
     }
 
+    private void scheduleMailboxAck(long zSeq) {
+        java.util.List<java.util.concurrent.CompletableFuture<Void>> pending;
+        synchronized (mPendingDeliveries) { pending = new java.util.ArrayList<>(mPendingDeliveries); }
+        synchronized (this) {
+            if (mClosed || mMailboxAckStopped) return;
+            mPendingMailboxSeq = Math.max(mPendingMailboxSeq, zSeq);
+            mPendingMailboxDeliveries = pending;
+            startMailboxAck();
+        }
+    }
+
+    private synchronized void startMailboxAck() {
+        if (mClosed || mMailboxAckStopped || mMailboxAckTask != null || mPendingMailboxSeq <= 0) return;
+        mMailboxAckTask = new java.util.concurrent.FutureTask<>(() -> {
+            try {
+                long seq;
+                java.util.List<java.util.concurrent.CompletableFuture<Void>> pending;
+                synchronized (this) {
+                    if (mClosed || mMailboxAckStopped) return null;
+                    seq = mPendingMailboxSeq;
+                    pending = mPendingMailboxDeliveries;
+                    mPendingMailboxSeq = 0;
+                    mPendingMailboxDeliveries = java.util.Collections.emptyList();
+                }
+                if (seq > 0) completeMailboxAck(seq, pending);
+            } finally {
+                synchronized (this) {
+                    mMailboxAckTask = null;
+                    startMailboxAck();
+                }
+            }
+            return null;
+        });
+        try { MAILBOX_ACK_EXEC.execute(mMailboxAckTask); }
+        catch (java.util.concurrent.RejectedExecutionException saturated) {
+            mMailboxAckTask = null;
+            mPendingMailboxSeq = 0;
+            mPendingMailboxDeliveries = java.util.Collections.emptyList(); // relay periodically retries
+        }
+    }
+
+    private void stopMailboxAcks() {
+        java.util.concurrent.FutureTask<Void> task;
+        synchronized (this) {
+            mMailboxAckStopped = true;
+            mPendingMailboxSeq = 0;
+            mPendingMailboxDeliveries = java.util.Collections.emptyList();
+            task = mMailboxAckTask;
+            mMailboxAckTask = null;
+        }
+        if (task != null) { task.cancel(true); MAILBOX_ACK_EXEC.remove(task); }
+    }
+
+    private void completeMailboxAck(long zSeq, java.util.List<java.util.concurrent.CompletableFuture<Void>> zPending) {
+        try {
+            awaitDeliveries(zPending, 10_000);
+            Runnable before = mBeforeAck;
+            if (before != null) before.run();
+            writeMailboxAck(new MiniData(routingKey()), zSeq);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.CancellationException failedDelivery) {
+            // Reattachment retries retained application content. An uncertain RPC outcome
+            // stays failed in the bounded node dedup cache instead of executing twice.
+            breakLink();
+        } catch (Exception ignored) {
+            // Timeout/store failure leaves the copy for the relay's normal periodic retry.
+        }
+    }
+
+    private void writeMailboxAck(MiniData key, long seq) throws Exception {
+        if (Thread.currentThread().isInterrupted()) return;
+        // canonical: "maxack" + key DER + 8-byte big-endian seq (relay mirrors)
+        java.io.ByteArrayOutputStream cb = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream cd = new java.io.DataOutputStream(cb);
+        cd.write("maxack".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        cd.write(key.getBytes());
+        cd.writeLong(seq);
+        cd.flush();
+        byte[] sig = com.eurobuddha.maxima.core.crypto.MaximaCrypto.sign(
+                mPerHostKey.getPrivate(), cb.toByteArray());
+        java.io.ByteArrayOutputStream ab = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream ad = new java.io.DataOutputStream(ab);
+        key.writeDataStream(ad);
+        new com.eurobuddha.maxima.core.codec.MiniNumber(seq).writeDataStream(ad);
+        new MiniData(sig).writeDataStream(ad);
+        ad.flush();
+        MaximaCTRLMessage ack = new MaximaCTRLMessage(CTRL_MAILBOX_ACK);
+        ack.setData(new MiniData(ab.toByteArray()));
+        writeFrame(Frame.body(Frame.MSG_MAXIMA_CTRL, ack));
+    }
+
+    private void trackDelivery(java.util.concurrent.CompletableFuture<Void> zDone) {
+        if (zDone == null || (zDone.isDone() && !zDone.isCompletedExceptionally())) return;
+        synchronized (mPendingDeliveries) {
+            if (mPendingDeliveries.size() >= MAX_PENDING_DELIVERIES) {
+                mPendingDeliveries.removeIf(f -> f.isDone() && !f.isCompletedExceptionally());
+                if (mPendingDeliveries.size() >= MAX_PENDING_DELIVERIES && !mPendingDeliveries.contains(zDone)) {
+                    breakLink(); // bounded state; closing cannot grant deletion permission
+                    return;
+                }
+            }
+            mPendingDeliveries.add(zDone); // a repeated in-flight duplicate shares one future
+        }
+    }
+
+    private void awaitDeliveries(java.util.List<java.util.concurrent.CompletableFuture<Void>> pending, long zTimeoutMs) throws Exception {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(zTimeoutMs);
+        for (java.util.concurrent.CompletableFuture<Void> done : pending) {
+            done.get(Math.max(0, deadline - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS);
+        }
+        synchronized (mPendingDeliveries) { mPendingDeliveries.removeAll(pending); }
+    }
+
     private synchronized void writeFrame(byte[] zBody) throws Exception {
+        if (mClosed || mMailboxAckStopped) throw new java.io.IOException("connection closed");
         Frame.write(mOut, zBody);
         mLastWrite = System.currentTimeMillis();
     }
@@ -474,6 +594,13 @@ public final class HostConnection implements Closeable {
         public final MaximaMessage message;
         public final MiniData msgid;
         public final boolean signatureValid;
+        private java.util.function.Consumer<java.util.concurrent.CompletableFuture<Void>> mDeliveryTracker;
+
+        /** Async consumers call before returning from onInbound. Synchronous consumers need
+         *  no adaptation. The transport waits for this outcome before its store-flush hook. */
+        public void deferAcknowledgementUntil(java.util.concurrent.CompletableFuture<Void> zDone) {
+            if (mDeliveryTracker != null) mDeliveryTracker.accept(zDone);
+        }
 
         Inbound(MaximaMessage zMsg, MiniData zMsgid, boolean zSigValid) {
             message = zMsg;
@@ -588,6 +715,7 @@ public final class HostConnection implements Closeable {
             int status = unwrap(unit, routingKey(), mPerHostKey.getPrivate(), holder);
             ack(status);
             if (status == Frame.RESPONSE_OK && holder[0] != null) {
+                holder[0].mDeliveryTracker = this::trackDelivery;
                 return holder[0];
             }
         }
@@ -640,6 +768,9 @@ public final class HostConnection implements Closeable {
         } catch (Exception ignored) {
         }
         failWaiters();   // a send waiting on this link fails now, not after its full timeout
+        synchronized (mPendingDeliveries) { mPendingDeliveries.clear(); }
+        stopMailboxAcks();
+        interruptReader(); // a completion wait, unlike a socket read, needs explicit interruption
     }
 
     // ---------------------------------------------------------------
@@ -693,8 +824,10 @@ public final class HostConnection implements Closeable {
                     if (in != null) {
                         try {
                             zSink.onInbound(in);
-                        } catch (Exception ignored) {
-                            // a bad handler must not kill the transport
+                        } catch (Exception failedDelivery) {
+                            // Reattach with the relay copy intact. Treating a failed synchronous
+                            // consumer as success would let the following challenge delete it.
+                            throw failedDelivery;
                         }
                     }
                 }
@@ -705,6 +838,10 @@ public final class HostConnection implements Closeable {
                 }
             } finally {
                 mReader = null;
+                if (mReaderRun && !mAttached) {
+                    close();
+                    zSink.onDead(hp);
+                }
             }
         }, "maxima-reader-" + hp);
         t.setDaemon(true);

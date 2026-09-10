@@ -32,6 +32,9 @@ public class MailboxDurabilityTest {
     private static void answer(HostConnection conn, MaximaCTRLMessage challenge) throws Exception {
         Method method = HostConnection.class.getDeclaredMethod("answerMailboxChallenge", MaximaCTRLMessage.class);
         method.setAccessible(true); method.invoke(conn, challenge);
+        Field taskField = HostConnection.class.getDeclaredField("mMailboxAckTask"); taskField.setAccessible(true);
+        Future<?> task = (Future<?>) taskField.get(conn);
+        if (task != null) task.get(2, TimeUnit.SECONDS);
     }
     private static ByteArrayOutputStream capture(HostConnection conn) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -90,9 +93,10 @@ public class MailboxDurabilityTest {
                 answer(conn, challenge(conn.routingKey(), 1));
                 assertEquals(0, sent.size()); assertTrue(Thread.currentThread().isInterrupted());
                 Thread.interrupted();
-                conn.setBeforeAck(() -> Thread.currentThread().interrupt());
+                java.util.concurrent.atomic.AtomicBoolean workerInterrupted = new java.util.concurrent.atomic.AtomicBoolean();
+                conn.setBeforeAck(() -> { Thread.currentThread().interrupt(); workerInterrupted.set(Thread.currentThread().isInterrupted()); });
                 answer(conn, challenge(conn.routingKey(), 1));
-                assertEquals(0, sent.size()); assertTrue(Thread.currentThread().isInterrupted());
+                assertEquals(0, sent.size()); assertTrue(workerInterrupted.get());
             } finally { Thread.interrupted(); }
         }
     }

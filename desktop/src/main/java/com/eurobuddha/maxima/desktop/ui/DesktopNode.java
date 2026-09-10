@@ -171,7 +171,7 @@ public final class DesktopNode {
             mChat.setListener(fanout());
             mNode.setLogListener(DesktopEventLog::add);
             mNode.setMessageListener((msg, msgid) -> {
-                try { mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString()); } catch (Exception ignored) { }
+                mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
             });
             DesktopEventLog.add("ENGINE: built-in");
         }

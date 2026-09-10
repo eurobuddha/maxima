@@ -39,6 +39,7 @@ public final class DedupCache {
     private final long mWindowMs;
     private final int mMaxEntries;
     private final Map<String, Long> mSeen;
+    private final Map<String, java.util.concurrent.CompletableFuture<Void>> mCompletions = new java.util.HashMap<>();
 
     public DedupCache() {
         this(DEFAULT_WINDOW_MS, DEFAULT_MAX_ENTRIES);
@@ -51,7 +52,9 @@ public final class DedupCache {
         mSeen = new LinkedHashMap<String, Long>(256, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-                return size() > mMaxEntries;
+                if (size() <= mMaxEntries) return false;
+                mCompletions.remove(eldest.getKey());
+                return true;
             }
         };
     }
@@ -91,7 +94,23 @@ public final class DedupCache {
         return mSeen.size();
     }
 
+    /** Keep the processing outcome for exactly as long as its bounded dedup entry. */
+    public synchronized void trackCompletion(String zMsgid, java.util.concurrent.CompletableFuture<Void> zDone) {
+        if (mSeen.containsKey(zMsgid)) mCompletions.put(zMsgid, zDone);
+    }
+
+    public synchronized java.util.concurrent.CompletableFuture<Void> completion(String zMsgid) {
+        return mCompletions.get(zMsgid);
+    }
+
+    /** A retryable application failure must not masquerade as an already-delivered message. */
+    public synchronized void forget(String zMsgid) {
+        mSeen.remove(zMsgid);
+        mCompletions.remove(zMsgid);
+    }
+
     public synchronized void clear() {
         mSeen.clear();
+        mCompletions.clear();
     }
 }
