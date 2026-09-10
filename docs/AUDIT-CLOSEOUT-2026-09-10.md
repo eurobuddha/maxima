@@ -87,3 +87,7 @@ Desktop propagation uses the existing checksum-verifying fetch scripts. Source/d
 6. **Cohesion proposal:** a build-time compatibility manifest tying source commit, wire fixtures and bundled artifact hashes to host versions. It must not become a runtime registry or permission requirement for joining the network. Not implemented in this pass.
 
 The pass ends at the owner's requested boundary. Its closure means the authorized in-flight repair, validation, dependency propagation and reporting are complete; it does not mean every bug is fixed or decentralisation is fully satisfied. No new audit branch is opened by this report.
+
+## Subsequent authorised publication
+
+The owner subsequently authorised publishing the completed session work. See [the publication report](PUBLICATION-2026-09-10.md) for the now-live store versions, desktop installers, IPFS snapshot and the remaining iPhone App Store Connect access blocker. The audit remains closed and wake-proxy centralisation remains unresolved.
