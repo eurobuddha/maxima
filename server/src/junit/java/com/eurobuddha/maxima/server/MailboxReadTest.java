@@ -27,6 +27,42 @@ public class MailboxReadTest {
     @Test public void anUnreadableFirstRecordCannotBeClearedByLaterMail() throws Exception { recover(0); }
     @Test public void anUnreadableMiddleRecordOnlyAllowsAcknowledgingTheDeliveredPrefix() throws Exception { recover(1); }
 
+    @Test public void aDelayedSignedAcknowledgementCannotClearNewMail() throws Exception {
+        MaximaIdentity owner = MaximaIdentity.fromPhrase(Bip39.generate(24));
+        MaximaIdentity sender = MaximaIdentity.fromPhrase(Bip39.generate(24));
+        String key = owner.publicKeyHex();
+        RelayServer relay = new RelayServer(sender, 0, "1.0.48");
+        relay.setStore(new FileStore(tmp.newFolder()));
+        ByteArrayOutputStream sent = new ByteArrayOutputStream();
+        try (Socket socket = new Socket() {
+            @Override public InputStream getInputStream() { return new ByteArrayInputStream(new byte[0]); }
+            @Override public OutputStream getOutputStream() { return sent; }
+        }) {
+            Class<?> connType = Class.forName(RelayServer.class.getName() + "$Conn");
+            Constructor<?> ctor = connType.getDeclaredConstructor(RelayServer.class, Socket.class);
+            ctor.setAccessible(true); Object conn = ctor.newInstance(relay, socket);
+            Method drain = RelayServer.class.getDeclaredMethod("drainMailbox", connType, String.class);
+            Method ack = RelayServer.class.getDeclaredMethod("handleMailboxAck", connType, MaximaCTRLMessage.class);
+            drain.setAccessible(true); ack.setAccessible(true);
+            long old = 0;
+            for (int i = 1; i <= 2; i++) {
+                byte[] unit = Codec.serialise(MaximaSender.build(sender.publicKey(), sender.keyPair().getPrivate(),
+                        owner.publicKey(), "sequence-test", new byte[]{(byte) i}, System.currentTimeMillis()).unit);
+                assertEquals(Mailbox.Result.STORED, relay.mailbox().store(key, unit));
+                if (old > 0) {
+                    acknowledgeSequence(relay, conn, ack, owner, old);
+                    assertEquals("an old signed ACK retains new mail", 1, relay.mailbox().count(key));
+                }
+                long sequence = relay.mailbox().highestSequence(key);
+                assertTrue(sequence > old);
+                sent.reset(); drain.invoke(relay, conn, key);
+                List<byte[]> delivered = acknowledgeCaptured(relay, conn, ack, owner, sent, sequence);
+                assertEquals(1, delivered.size()); assertArrayEquals(unit, delivered.get(0));
+                assertEquals(0, relay.mailbox().count(key)); old = sequence;
+            }
+        } finally { relay.stop(); }
+    }
+
     private void recover(int blockedIndex) throws Exception {
         MaximaIdentity owner = MaximaIdentity.fromPhrase(Bip39.generate(24));
         MaximaIdentity sender = MaximaIdentity.fromPhrase(Bip39.generate(24));
@@ -98,16 +134,22 @@ public class MailboxReadTest {
             MiniData key = MiniData.readFromStream(data); challengeSeq = MiniNumber.readFromStream(data).getAsLong();
             assertArrayEquals(owner.publicKey(), key.getBytes()); challenges++;
             // Answer what the relay actually asked, exactly like the production clients.
-            byte[] signature = MaximaCrypto.sign(owner.keyPair().getPrivate(),
-                    RelayServer.mailboxAckCanonical(key.getBytes(), challengeSeq));
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bytes);
-            key.writeDataStream(out); new MiniNumber(challengeSeq).writeDataStream(out);
-            new MiniData(signature).writeDataStream(out); out.flush();
-            MaximaCTRLMessage reply = new MaximaCTRLMessage(RelayServer.CTRL_MAILBOX_ACK);
-            reply.setData(new MiniData(bytes.toByteArray())); ack.invoke(relay, conn, reply);
+            acknowledgeSequence(relay, conn, ack, owner, challengeSeq);
         }
         assertEquals("only the contiguous delivered prefix may be challenged", expectedSeq, challengeSeq);
         assertEquals(expectedSeq == 0 ? 0 : 1, challenges);
         return delivered;
+    }
+
+    private static void acknowledgeSequence(RelayServer relay, Object conn, Method ack,
+            MaximaIdentity owner, long sequence) throws Exception {
+        MiniData key = new MiniData(owner.publicKey());
+        byte[] signature = MaximaCrypto.sign(owner.keyPair().getPrivate(),
+                RelayServer.mailboxAckCanonical(key.getBytes(), sequence));
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bytes);
+        key.writeDataStream(out); new MiniNumber(sequence).writeDataStream(out);
+        new MiniData(signature).writeDataStream(out); out.flush();
+        MaximaCTRLMessage reply = new MaximaCTRLMessage(RelayServer.CTRL_MAILBOX_ACK);
+        reply.setData(new MiniData(bytes.toByteArray())); ack.invoke(relay, conn, reply);
     }
 }

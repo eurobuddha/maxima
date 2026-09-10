@@ -19,6 +19,22 @@ public class MailboxRpcReadTest {
     @Test public void unreadableFirstRecordBlocksLaterRpcRows() throws Exception { recover(1); }
     @Test public void unreadableMiddleRecordLeavesTheRpcPrefixUsable() throws Exception { recover(2); }
 
+    @Test public void aDelayedRpcAcknowledgementCannotClearNewMail() throws Exception {
+        MaximaIdentity owner = MaximaIdentity.fromPhrase(Bip39.generate(24));
+        Mailbox mailbox = new Mailbox(); mailbox.setStore(new FileStore(tmp.newFolder()));
+        ServiceRegistry registry = new ServiceRegistry();
+        new Tier1Services(owner, mailbox, new MlsStore()).registerAll(registry);
+        mailbox.store(owner.publicKeyHex(), new byte[]{1});
+        String old = call(registry, owner, Tier1Services.MAILBOX_FETCH, "0").split("\\|", 2)[0];
+        assertEquals("1", call(registry, owner, Tier1Services.MAILBOX_ACK, old));
+        mailbox.store(owner.publicKeyHex(), new byte[]{2});
+        assertEquals("0", call(registry, owner, Tier1Services.MAILBOX_ACK, old));
+        String[] next = call(registry, owner, Tier1Services.MAILBOX_FETCH, old).split("\\|", 2);
+        assertEquals(2, next.length); assertEquals("0x02", next[1]);
+        assertTrue(Long.parseLong(next[0]) > Long.parseLong(old));
+        assertEquals("1", call(registry, owner, Tier1Services.MAILBOX_ACK, next[0]));
+    }
+
     private void recover(int blockedSeq) throws Exception {
         MaximaIdentity owner = MaximaIdentity.fromPhrase(Bip39.generate(24));
         String key = owner.publicKeyHex();

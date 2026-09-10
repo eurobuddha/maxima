@@ -53,7 +53,7 @@ public final class Mailbox {
         public final String id;
         public final String recipientKey;
         public final long storedAt;
-        /** Monotonic within a recipient, so a client can resume from a cursor. */
+        /** Monotonic across this mailbox, with gaps allowed, so a client can resume from a cursor. */
         public final long sequence;
         /** Ciphertext length; the bytes themselves live in the store. */
         public final int size;
@@ -93,7 +93,6 @@ public final class Mailbox {
         final List<Item> items = new ArrayList<>();
         /** Bytes of committed items. */
         long bytes;
-        long nextSeq = 1;
         /** For LRU eviction under the global cap. */
         long lastActivity = System.currentTimeMillis();
         /** Items whose file is being written right now, outside the monitor. */
@@ -123,6 +122,12 @@ public final class Mailbox {
     static final String C_ITEMS = "mailitems";
     /** The pre-0.4.42 keyed collection (value = storedAt|hex): migrated on load. */
     private static final String C_LEGACY = "mailbox";
+    /** One bounded reservation record, independent of recipient churn and item deletion. */
+    private static final String C_SEQUENCE = "mailseq";
+    private static final int SEQUENCE_BATCH = 4096;
+    private long mLastSequence;
+    private long mReservedThrough;
+    private boolean mSequenceReady = true; // a new memory-only mailbox needs no loading
 
     private final long mTtlMs;
     private final int mMaxPerPeer;
@@ -160,12 +165,29 @@ public final class Mailbox {
 
     /** Attach durable storage and reload whatever is held. Call before use. */
     public synchronized void setStore(com.eurobuddha.maxima.core.store.Store zStore) {
+        mSequenceReady = false;
         mStore = zStore == null
                 ? com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY : zStore;
+        // A restart skips the unused remainder of the last durable reservation. Numbers
+        // may be wasted, but a delayed ACK must never refer to a new item after deletion.
+        String reserved = mStore == com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY
+                ? null : mStore.get(C_SEQUENCE, "reserved");
+        long floor = 0;
+        if (reserved != null) {
+            try {
+                floor = Long.parseLong(reserved);
+                if (floor < 0) throw new NumberFormatException("negative reservation");
+            } catch (NumberFormatException e) {
+                throw new IllegalStateException("Invalid mailbox sequence reservation", e);
+            }
+        }
+        mReservedThrough = floor;
+        mLastSequence = Math.max(mLastSequence, floor);
         // Items stored before the store was attached stay in memory only; from here on a
         // stored item's bytes are the store's.
         migrateLegacy();
         load();
+        mSequenceReady = true;
     }
 
     /** Persist any write-behind changes. Drive from a maintenance tick + shutdown. */
@@ -209,6 +231,18 @@ public final class Mailbox {
     private void load() {
         // Keys carry everything: no ciphertext is read here, however much is held.
         List<Map.Entry<String, Integer>> all = new ArrayList<>(mStore.listBytes(C_ITEMS).entrySet());
+        // Upgrade old stores before pruning expired/over-quota records: their sequences
+        // remain used even when the last item or entire recipient is removed on this boot.
+        long highest = mLastSequence;
+        for (Map.Entry<String, Integer> e : all) {
+            String[] k = e.getKey().split("\\|", 4);
+            if (k.length == 4) {
+                try { highest = Math.max(highest, Long.parseLong(k[1])); }
+                catch (NumberFormatException ignored) { /* malformed item, handled below */ }
+            }
+        }
+        if (highest > mReservedThrough) reserveThrough(highest);
+        mLastSequence = highest;
         // Oldest first, so the caps below keep the earliest mail and drop the newest overflow.
         all.sort(Comparator.comparingLong(e -> storedAtOf(e.getKey())));
         long now = System.currentTimeMillis();
@@ -221,6 +255,7 @@ public final class Mailbox {
                 }
                 String recipient = norm(k[0]);   // boxes are keyed normalised, always
                 long seq = Long.parseLong(k[1]);
+                if (seq <= 0) continue; // zero is possession-only; negative values are not cursors
                 long storedAt = Long.parseLong(k[2]);
                 String id = k[3];
                 int size = e.getValue();
@@ -239,7 +274,6 @@ public final class Mailbox {
                 Box box = mBoxes.computeIfAbsent(recipient, x -> new Box());
                 box.items.add(new Item(this, id, recipient, seq, storedAt, size, null));
                 box.bytes += size;
-                box.nextSeq = Math.max(box.nextSeq, seq + 1);
                 mTotalBytes += size;
                 mTotalItems++;
             } catch (Exception ex) {
@@ -268,6 +302,27 @@ public final class Mailbox {
         return recKey(zItem.recipientKey, zItem.sequence, zItem.storedAt, zItem.id);
     }
 
+    /** Caller holds the mailbox monitor. Publish no number before its reservation is durable. */
+    private void reserveThrough(long zSequence) {
+        if (mStore != com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY) {
+            mStore.put(C_SEQUENCE, "reserved", Long.toString(zSequence));
+            mStore.flush(); // the relay deliberately uses write-behind FileStore
+        }
+        mReservedThrough = zSequence;
+    }
+
+    private long nextSequence() {
+        if (mLastSequence == Long.MAX_VALUE) {
+            throw new IllegalStateException("Mailbox sequence exhausted");
+        }
+        if (mLastSequence == mReservedThrough) {
+            // One tiny durable write per batch, not per item or recipient. Ciphertext
+            // writes still run outside the mailbox monitor as before.
+            reserveThrough(mLastSequence + Math.min(SEQUENCE_BATCH, Long.MAX_VALUE - mLastSequence));
+        }
+        return ++mLastSequence;
+    }
+
     /**
      * Hold a message for an offline recipient.
      *
@@ -283,6 +338,7 @@ public final class Mailbox {
         // PHASE 1 (monitor): quotas, dedup, a sequence number, and a RESERVATION of the
         // global and per-box budgets for this item.
         synchronized (this) {
+            if (!mSequenceReady) return Result.IO_ERROR;
             // Enforce the GLOBAL caps before allocating a new box. A brand-new key
             // that would push us over either global limit is refused rather than
             // evicting a real recipient's mail for a stranger's flood; an existing
@@ -329,9 +385,17 @@ public final class Mailbox {
             }
             long now = System.currentTimeMillis();
             boolean durable = mStore != com.eurobuddha.maxima.core.store.Store.MEMORY_ONLY;
+            long sequence;
+            try {
+                sequence = nextSequence();
+            } catch (RuntimeException e) {
+                if (box.items.isEmpty() && box.pending == 0) mBoxes.remove(key, box);
+                System.err.println("[mailbox] sequence reservation failed: " + e);
+                return Result.IO_ERROR;
+            }
             // A durable store owns the bytes from here (one file); a memory-only store keeps
             // them on the item so a test / the in-app mailbox needs no second copy.
-            item = new Item(this, id, key, box.nextSeq++, now, len, durable ? null : zCiphertext);
+            item = new Item(this, id, key, sequence, now, len, durable ? null : zCiphertext);
             mTotalBytes += len;
             mTotalItems++;
             if (!durable) {
@@ -363,7 +427,6 @@ public final class Mailbox {
                     mBoxes.put(key, box);
                     cur = box;
                 }
-                cur.nextSeq = Math.max(cur.nextSeq, item.sequence + 1);
                 int at = cur.items.size();
                 while (at > 0 && cur.items.get(at - 1).sequence > item.sequence) {
                     at--;   // keep the list in sequence order for highestSequence()

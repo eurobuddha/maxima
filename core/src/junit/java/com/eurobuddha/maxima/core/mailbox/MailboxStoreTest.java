@@ -67,7 +67,7 @@ public class MailboxStoreTest {
         assertEquals("held", new String(after.get(0).ciphertext()));
         assertEquals("more", new String(after.get(1).ciphertext()));
         assertEquals(Mailbox.Result.STORED, m2.store(KEY, "third".getBytes()));
-        assertEquals("sequence continues after a reload", seq + 1, m2.highestSequence(KEY));
+        assertTrue("sequence advances beyond the previous cursor after a reload", m2.highestSequence(KEY) > seq);
 
         m2.acknowledge(KEY, seq);
         assertEquals(1, files(dir));
@@ -141,12 +141,13 @@ public class MailboxStoreTest {
         volatile java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
         volatile java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(0);
         volatile boolean fail;
+        int keyedWrites;
 
         GatedStore(File zDir) {
             inner = new FileStore(zDir);
         }
 
-        @Override public void put(String c, String k, String v) { inner.put(c, k, v); }
+        @Override public void put(String c, String k, String v) { keyedWrites++; inner.put(c, k, v); }
         @Override public String get(String c, String k) { return inner.get(c, k); }
         @Override public void remove(String c, String k) { inner.remove(c, k); }
         @Override public java.util.Map<String, String> all(String c) { return inner.all(c); }
