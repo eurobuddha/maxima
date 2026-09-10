@@ -297,19 +297,32 @@ public final class NodeGateway {
         private final java.util.concurrent.ConcurrentHashMap<String, Bucket> mPerIp =
                 new java.util.concurrent.ConcurrentHashMap<>();
         private static final int MAX_IPS = 8192;
+        private long mLastPruneNanos;
+        private boolean mPruned;
 
         RateLimiter(double zGlobalRate, double zPerIpRate) {
             mPerIpRate = zPerIpRate;
             mGlobal = zGlobalRate > 0 ? new Bucket(zGlobalRate) : null;
         }
 
-        boolean allow(String zIp) {
+        synchronized boolean allow(String zIp) {
             if (mGlobal != null && !mGlobal.tryAcquire()) return false;
             if (mPerIpRate > 0) {
                 Bucket b = mPerIp.get(zIp);
                 if (b == null) {
-                    if (mPerIp.size() >= MAX_IPS) mPerIp.clear();   // bound memory; crude periodic reset
-                    b = mPerIp.computeIfAbsent(zIp, k -> new Bucket(mPerIpRate));
+                    // Retire only fully refilled buckets: recreating one then grants no
+                    // extra tokens. Keep admission, acquisition and retirement under the
+                    // same monitor so a bucket cannot be used after it has been retired.
+                    long now = System.nanoTime();
+                    if (mPerIp.size() >= MAX_IPS
+                            && (!mPruned || now - mLastPruneNanos >= 1_000_000_000L)) {
+                        mPruned = true;
+                        mLastPruneNanos = now; // at most one bounded scan per second
+                        mPerIp.entrySet().removeIf(e -> e.getValue().fullyRefilled(now));
+                    }
+                    if (mPerIp.size() >= MAX_IPS) return false;
+                    b = new Bucket(mPerIpRate);
+                    mPerIp.put(zIp, b);
                 }
                 if (!b.tryAcquire()) return false;
             }
@@ -329,6 +342,10 @@ public final class NodeGateway {
             mRefillPerNano = zRatePerSec / 1_000_000_000.0;
             mTokens = mCapacity;
             mLastNanos = System.nanoTime();
+        }
+
+        synchronized boolean fullyRefilled(long zNow) {
+            return mTokens + (zNow - mLastNanos) * mRefillPerNano >= mCapacity;
         }
 
         synchronized boolean tryAcquire() {

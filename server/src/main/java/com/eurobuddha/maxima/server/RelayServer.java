@@ -1606,20 +1606,7 @@ public final class RelayServer {
 
     /** Probe rate limit: cheap for the caller, an outbound dial for us. */
     private boolean allowProbe(String zCallerKey) {
-        if (mProbeLimits.size() > MAX_RATE_ENTRIES) {
-            long now = System.currentTimeMillis();
-            mProbeLimits.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
-        }
-        RateLimit rl = mProbeLimits.computeIfAbsent(zCallerKey, k -> new RateLimit());
-        synchronized (rl) {
-            long now = System.currentTimeMillis();
-            if (now - rl.windowStart > 60_000) {
-                rl.windowStart = now;
-                rl.count = 0;
-            }
-            rl.count++;
-            return rl.count <= MAX_PROBES_PER_MINUTE;
-        }
+        return allow(mProbeLimits, zCallerKey, MAX_PROBES_PER_MINUTE);
     }
 
     /**
@@ -1806,19 +1793,25 @@ public final class RelayServer {
      * grow it without limit.
      */
     private boolean allow(Map<String, RateLimit> zMap, String zKey, int zPerMinute) {
-        if (zMap.size() > MAX_RATE_ENTRIES) {
-            long now = System.currentTimeMillis();
-            zMap.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
-        }
-        RateLimit rl = zMap.computeIfAbsent(zKey, k -> new RateLimit());
-        synchronized (rl) {
+        // Admission, accounting and maintenance use the same map monitor. Locking
+        // just the entry allowed cleanup to detach a bucket that was still in use.
+        synchronized (zMap) {
+            RateLimit rl = zMap.get(zKey);
+            if (rl == null) {
+                // The existing 30s maintenance loop reclaims expired entries. Do not
+                // scan the full map on every refused key during a distinct-key flood.
+                if (zMap.size() >= MAX_RATE_ENTRIES) return false;
+                rl = new RateLimit();
+                zMap.put(zKey, rl);
+            }
             long now = System.currentTimeMillis();
             if (now - rl.windowStart > 60_000) {
                 rl.windowStart = now;
                 rl.count = 0;
             }
+            if (rl.count >= zPerMinute) return false;
             rl.count++;
-            return rl.count <= zPerMinute;
+            return true;
         }
     }
 
@@ -1830,8 +1823,11 @@ public final class RelayServer {
         }
         long now = System.currentTimeMillis();
         for (Map<String, RateLimit> m : java.util.Arrays.asList(mLimits, mFrameLimits,
-                mTousLimits, mProbeLimits, mClaimLimits, mBlobPutLimits)) {
-            m.entrySet().removeIf(e -> now - e.getValue().windowStart > 120_000);
+                mTousLimits, mProbeLimits, mClaimLimits, mBlobPutLimits,
+                mReplicaInLimits, mReplicateLimit, mForwardLimit)) {
+            synchronized (m) {
+                m.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
+            }
         }
         mPeers.expire();
         considerBootstrapPeers();
