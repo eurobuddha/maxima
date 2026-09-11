@@ -103,6 +103,24 @@ public class CallManagerTest {
         verify(pc, never()).createAnswer(any(), any());
     }
 
+    @Test public void staleNotificationCannotAnswerOrDeclineReplacementCall() throws Exception {
+        set("mState", CallManager.State.INCOMING_RINGING);
+        set("mPendingOfferSdp", "synthetic-offer");
+        calls.accept("old-call"); calls.decline("old-call"); idle();
+        assertEquals(CallManager.State.INCOMING_RINGING, calls.state());
+        assertEquals("synthetic-call", calls.callId());
+        verify(pc, never()).setRemoteDescription(any(), any());
+        verify(pc, never()).close();
+    }
+
+    @Test public void notificationDeclinesOnlyItsOwnCall() throws Exception {
+        set("mState", CallManager.State.INCOMING_RINGING);
+        calls.decline("synthetic-call"); idle();
+        verify(pc).close();
+        assertEquals(CallManager.State.IDLE, calls.state());
+        assertEquals("", calls.callId());
+    }
+
     private void answer() throws Exception {
         calls.onSignal("synthetic-peer", ChatMessage.call("synthetic-call", "answer", "synthetic-sdp"));
         idle(); assertNotNull(remoteSet.get());

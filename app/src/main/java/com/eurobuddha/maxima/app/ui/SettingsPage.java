@@ -79,6 +79,7 @@ public final class SettingsPage implements Page {
                 + "|" + com.eurobuddha.maxima.app.AppLock.isAvailable(mAct)
                 + "|" + ChatPrefs.appearance(mAct)
                 + "|" + ChatPrefs.nodeKind(mAct)
+                + "|" + com.eurobuddha.maxima.app.call.IncomingCallScreen.canShowFullScreen(mAct)
                 + "|" + isBatteryExempt()
                 + "|" + MaximaApiReceiver.pendingPackages(mAct)
                 + "|" + MaximaApiReceiver.approvedPackages(mAct);
@@ -108,6 +109,15 @@ public final class SettingsPage implements Page {
                     EventLog.add("message sound " + (checked ? "on" : "off"));
                     render();
                 }));
+        mPrivacy.addView(k.divider());
+        boolean fullScreen = com.eurobuddha.maxima.app.call.IncomingCallScreen.canShowFullScreen(mAct);
+        LinearLayout calls = k.kv("Incoming calls",
+                fullScreen ? "Ringtone, vibration and call alerts"
+                        : "Allow full-screen alerts to show calls on the lock screen",
+                fullScreen ? "SETTINGS" : "ALLOW", 0);
+        calls.setOnClickListener(v ->
+                com.eurobuddha.maxima.app.call.IncomingCallScreen.openCallSettings(mAct));
+        mPrivacy.addView(calls);
         mPrivacy.addView(k.divider());
         mPrivacy.addView(k.kv("Delivery receipts",
                 "Always on — the second tick is the transport doing its job",

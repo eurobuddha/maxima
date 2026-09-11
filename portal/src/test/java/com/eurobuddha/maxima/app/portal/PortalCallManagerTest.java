@@ -109,6 +109,24 @@ public class PortalCallManagerTest {
         signal.put("from", "synthetic-peer"); signal.put("ref", "synthetic-call");
         return signal;
     }
+    @Test public void staleNotificationCannotAnswerOrDeclineReplacementCall() throws Exception {
+        set("mState", PortalCallManager.State.INCOMING_RINGING);
+        set("mPendingOfferSdp", "synthetic-offer");
+        calls.accept("old-call"); calls.decline("old-call"); idle();
+        assertEquals(PortalCallManager.State.INCOMING_RINGING, calls.state());
+        assertEquals("synthetic-call", calls.callId());
+        verify(pc, never()).setRemoteDescription(any(), any());
+        verify(pc, never()).close();
+    }
+
+    @Test public void notificationDeclinesOnlyItsOwnCall() throws Exception {
+        set("mState", PortalCallManager.State.INCOMING_RINGING);
+        calls.decline("synthetic-call"); idle();
+        verify(pc).close();
+        assertEquals(PortalCallManager.State.IDLE, calls.state());
+        assertEquals("", calls.callId());
+    }
+
     private void answer() throws Exception {
         calls.onSignal(signal("answer", "synthetic-sdp"));
         idle(); assertNotNull(remoteSet.get());

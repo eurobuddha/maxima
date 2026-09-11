@@ -2,8 +2,6 @@ package com.eurobuddha.maxima.app.portal;
 
 import android.content.Context;
 import android.media.AudioManager;
-import android.media.Ringtone;
-import android.media.RingtoneManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -96,7 +94,6 @@ public final class PortalCallManager {
     private String mPendingOfferSdp;
     private final List<IceCandidate> mPendingIce = new ArrayList<>();
     private volatile Listener mListener;
-    private Ringtone mRing;
     private Runnable mRingTimeout;
     private boolean mMuted;
     private boolean mSpeaker;
@@ -124,6 +121,10 @@ public final class PortalCallManager {
 
     public State state() {
         return mState;
+    }
+
+    public String callId() {
+        return mCallId;
     }
 
     public String peerKey() {
@@ -261,7 +262,6 @@ public final class PortalCallManager {
                     mPendingIce.clear();
                     setState(State.INCOMING_RINGING, null);
                     armRingTimeout();
-                    startRinging();
                     PortalIncomingCall.show(mCtx, from, mPeerName, mVideo);
                     break;
                 }
@@ -323,8 +323,14 @@ public final class PortalCallManager {
     // ------------------------------------------------------------------
 
     public void accept() {
+        accept(mCallId);
+    }
+
+    /** A notification action must never answer a later, replacement call. */
+    public void accept(String expectedCallId) {
         mExec.execute(() -> {
-            if (mState != State.INCOMING_RINGING || mPendingOfferSdp == null) {
+            if (expectedCallId == null || !expectedCallId.equals(mCallId)
+                    || mState != State.INCOMING_RINGING || mPendingOfferSdp == null) {
                 return;
             }
             stopRinging();
@@ -351,8 +357,13 @@ public final class PortalCallManager {
     }
 
     public void decline() {
+        decline(mCallId);
+    }
+
+    public void decline(String expectedCallId) {
         mExec.execute(() -> {
-            if (mState == State.INCOMING_RINGING) {
+            if (expectedCallId != null && expectedCallId.equals(mCallId)
+                    && mState == State.INCOMING_RINGING) {
                 signal("bye", "");
                 end("declined", false);
             }
@@ -640,25 +651,9 @@ public final class PortalCallManager {
         }
     }
 
-    private void startRinging() {
-        try {
-            mRing = RingtoneManager.getRingtone(mCtx,
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
-            if (mRing != null) {
-                if (android.os.Build.VERSION.SDK_INT >= 28) {
-                    mRing.setLooping(true);
-                }
-                mRing.play();
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
     private void stopRinging() {
-        if (mRing != null) {
-            try { mRing.stop(); } catch (Exception ignored) { }
-            mRing = null;
-        }
+        // Android owns ringtone playback; cancellation stops sound and vibration together.
+        PortalIncomingCall.dismiss(mCtx);
     }
 
     private void signal(String zKind, String zPayload) {

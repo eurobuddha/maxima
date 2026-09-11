@@ -34,6 +34,13 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
     private org.webrtc.SurfaceViewRenderer mLocalView;
     private boolean mVideoUi;
 
+    public static final String EXTRA_CALL_ID = "call_id";
+    public static final String EXTRA_ANSWER_CALL_ID = "answer_call_id";
+    private String mCallId;
+    private String mPendingAnswer;
+    private boolean mPendingOutgoing;
+    private boolean mPermissionRequest;
+    private boolean mListening;
     private String mPeer;
     private TextView mStatus;
     private LinearLayout mIncomingRow, mLiveRow;
@@ -64,6 +71,13 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         }
         String who = getIntent().getStringExtra(EXTRA_NAME);
         PortalCallManager pre = PortalCallManager.get(this);
+        mCallId = getIntent().getStringExtra(EXTRA_CALL_ID);
+        if (mCallId != null && !mCallId.equals(pre.callId())) {
+            finish();
+            return;
+        }
+        if (mCallId == null) mCallId = pre.callId();
+        mPendingAnswer = getIntent().getStringExtra(EXTRA_ANSWER_CALL_ID);
         if (who == null || who.isEmpty()) {
             who = pre.peerName();
         }
@@ -101,11 +115,11 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         mIncomingRow.setOrientation(LinearLayout.HORIZONTAL);
         mIncomingRow.setGravity(Gravity.CENTER);
         mIncomingRow.addView(roundButton("Decline", 0xFFE0524D,
-                v -> PortalCallManager.get(this).decline()));
+                v -> PortalCallManager.get(this).decline(mCallId)));
         mIncomingRow.addView(gap());
         mIncomingRow.addView(roundButton("Answer", 0xFF3E9B63, v -> {
-            PortalIncomingCall.dismiss(this);
-            PortalCallManager.get(this).accept();
+            mPendingAnswer = mCallId;
+            runPendingCallAction();
         }));
         root.addView(mIncomingRow);
 
@@ -161,27 +175,85 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
             setContentView(root);
         }
 
-        if (mVideoUi && checkSelfPermission(android.Manifest.permission.CAMERA)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{
-                    android.Manifest.permission.CAMERA,
-                    android.Manifest.permission.RECORD_AUDIO}, 2);
-        }
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 1);
-        }
         PortalCallManager cm = PortalCallManager.get(this);
         cm.setListener(this);
-        boolean startingOut = getIntent().getBooleanExtra(EXTRA_OUTGOING, false)
+        mListening = true;
+        mPendingOutgoing = getIntent().getBooleanExtra(EXTRA_OUTGOING, false)
                 && cm.state() == PortalCallManager.State.IDLE;
-        if (startingOut) {
-            cm.startCall(mPeer, who, mVideoUi);
-            // startCall runs async on the manager thread; rendering cm.state() here would show
-            // "Call ended" + arm the auto-finish before OUTGOING_RINGING lands.
-            renderState(PortalCallManager.State.OUTGOING_RINGING, null);
+        renderState(mPendingOutgoing ? PortalCallManager.State.OUTGOING_RINGING : cm.state(), null);
+        runPendingCallAction();
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        String call = intent.getStringExtra(EXTRA_CALL_ID);
+        if (call != null && !call.equals(PortalCallManager.get(this).callId())) return;
+        if (call == null || !call.equals(mCallId)) {
+            setIntent(intent);
+            recreate();
+            return;
+        }
+        setIntent(intent);
+        mPendingAnswer = intent.getStringExtra(EXTRA_ANSWER_CALL_ID);
+        runPendingCallAction();
+    }
+
+    private void runPendingCallAction() {
+        PortalCallManager cm = PortalCallManager.get(this);
+        if (mPendingAnswer != null && (!mPendingAnswer.equals(cm.callId())
+                || cm.state() != PortalCallManager.State.INCOMING_RINGING)) {
+            mPendingAnswer = null;
+        }
+        if (mPendingAnswer == null && !mPendingOutgoing) return;
+        if (mPermissionRequest) return;
+        java.util.ArrayList<String> missing = new java.util.ArrayList<>();
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            missing.add(android.Manifest.permission.RECORD_AUDIO);
+        }
+        if (mVideoUi && checkSelfPermission(android.Manifest.permission.CAMERA)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            missing.add(android.Manifest.permission.CAMERA);
+        }
+        if (!missing.isEmpty()) {
+            mPermissionRequest = true;
+            requestPermissions(missing.toArray(new String[0]), 1);
+            return;
+        }
+        if (mPendingAnswer != null) {
+            String call = mPendingAnswer;
+            mPendingAnswer = null;
+            getIntent().removeExtra(EXTRA_ANSWER_CALL_ID);
+            cm.accept(call);
+        } else if (mPendingOutgoing) {
+            mPendingOutgoing = false;
+            if (cm.state() == PortalCallManager.State.IDLE) {
+                cm.startCall(mPeer, getIntent().getStringExtra(EXTRA_NAME), mVideoUi);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != 1) return;
+        mPermissionRequest = false;
+        boolean granted = results.length > 0;
+        for (int result : results) {
+            granted &= result == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
+        if (granted) {
+            runPendingCallAction();
         } else {
-            renderState(cm.state(), null);
+            mPendingAnswer = null;
+            getIntent().removeExtra(EXTRA_ANSWER_CALL_ID);
+            android.widget.Toast.makeText(this, "Microphone" + (mVideoUi ? " and camera" : "")
+                    + " permission is needed for this call", android.widget.Toast.LENGTH_LONG).show();
+            if (mPendingOutgoing) {
+                mPendingOutgoing = false;
+                finish();
+            }
         }
     }
 
@@ -269,6 +341,7 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         super.onDestroy();
         mTick.removeCallbacksAndMessages(null);
         PortalCallManager cm = PortalCallManager.get(this);
+        if (!mListening) return;
         cm.setListener(null);
         if (mVideoUi) {
             cm.detachVideoSinks();

@@ -29,7 +29,7 @@ The separately paused wake-proxy centralisation issue remains unresolved. This r
 
 Existing call teardown/callback issues seen during review (empty bye ID after teardown, unguarded outgoing offer callback, no ICE restart) are recorded for follow-up and are not claimed fixed here.
 
-Local evidence: `../_artifacts/parlons-mobile-calls-2026-09-11/`, including baseline failures, test/build logs, artifact hashes, deployment before/after records and the live Fold capture. No real call has yet been verified.
+Local evidence: `../_artifacts/parlons-mobile-calls-2026-09-11/`, including baseline failures, test/build logs, artifact hashes, deployment before/after records and the live Fold capture. A real cross-network Wi-Fi voice call reached LIVE on the Fold and S10+ at23:04:54 BST; the owner reported success after changing Wi-Fi. Mobile-data and video calls remain unverified.
 
 ## Publication and deployment completed
 
@@ -40,3 +40,15 @@ Mac installers for all three apps passed Developer ID signing, notarisation, sta
 Node0.2.106 is active on Sally, Hetzner, MegaMMR and Vigilance. All four passed11/11 external synthetic-client relay checks. Public identity and existing systemd configuration hashes were preserved. STUN passes from outside on Sally and Hetzner. MegaMMR and Vigilance listen on UDP9501 and have host firewall allow rules but remain externally unreachable from both the Mac and Sally; upstream firewall access was requested. Capture counters are inconclusive about the precise drop location. Maxlite and Openproject's existing standalone STUN responders already passed the baseline probes and were not changed. The Pi is not part of the Android STUN list.
 
 The Fold was reconnected and confirmed on0.6.120/code720; live call capture resumed. A successful real mobile-data voice/video call is still unverified. IPFS publication and latest call-test status are tracked in the local evidence report. The goal remains open.
+
+## Incoming-call follow-up — Android0.6.121 / Cloud0.2.70
+
+The owner reported silent ringing and a small notification, including on the S10+ with Sound enabled. The S10+ log proves `RingtoneManager.getRingtone(content://settings/system/ringtone)` repeatedly failed with a Samsung `WRITE_SETTINGS` SecurityException. Its ringtone volume was15/15, unmuted, with DND off. The old call channel also explicitly had no sound, leaving no audible fallback. The Fold separately had full-screen call permission denied; it was enabled for the owner's test, and both devices subsequently reported normal Sound mode.
+
+Reused both existing incoming notification helpers, managers, call activities, settings rows and actual-manager test fixtures. Android now owns looping ringtone playback via a high-importance ringtone channel; cancellation stops it on accept, decline, timeout or hangup. A new channel migrates the old code-silent default while retaining importance, vibration and exposed user sound choices. Android12+ uses native CallStyle with Answer/Decline; older supported Android versions retain the full-screen intent and gain expanded text/actions. Settings links expose ringtone and full-screen alert controls. No WRITE_SETTINGS permission, server, central service or new dependency is introduced.
+
+Notification actions carry immutable, per-call PendingIntents. Both managers validate the expected call ID on their state executor before answering or declining. Stale call activities cannot act on replacement calls. Answer waits for microphone/camera permission; denial leaves an incoming call unanswered. The full Android app also declares vibration permission.
+
+Validation: signed release builds and release lint checks passed;22 Android tests passed (full7, Cloud15). Regression tests exercise stale actions, matching decline, SDP ordering and old callbacks. Source review found and corrected a stale-intent activity path; no remaining blocking finding in this change. Physical audible ringing, lock-screen prominence and notification actions await the owner's test. Both Fold and S10+ were upgraded in place to0.6.121/code721 and launched; Android Cloud0.2.70/code270 carries the same fix. APK signatures verify. This follow-up changes only the two Android apps, so desktop/node binaries remain the published versions above.
+
+The preceding IPFS snapshot was published to CID `bafybeidq3evmjz2bd2dda7gm5calv4wngnxqgzoag3ykc6i36fxjbeykq4` and the existing IPNS name. All11 changed catalogue rows were read back directly by CID and matched versions/hashes. The public gateway returned504 during verification; optional Filebase pin-list access failed. These limitations do not establish external gateway availability.

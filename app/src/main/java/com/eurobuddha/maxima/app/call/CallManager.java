@@ -2,8 +2,6 @@ package com.eurobuddha.maxima.app.call;
 
 import android.content.Context;
 import android.media.AudioManager;
-import android.media.Ringtone;
-import android.media.RingtoneManager;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -101,7 +99,6 @@ public final class CallManager {
     private String mPendingOfferSdp;
     private final List<IceCandidate> mPendingIce = new ArrayList<>();
     private volatile Listener mListener;
-    private Ringtone mRing;
     private Runnable mRingTimeout;
     private boolean mMuted;
     private boolean mSpeaker;
@@ -129,6 +126,10 @@ public final class CallManager {
 
     public State state() {
         return mState;
+    }
+
+    public String callId() {
+        return mCallId;
     }
 
     public String peerKey() {
@@ -294,7 +295,6 @@ public final class CallManager {
                     mPendingIce.clear();
                     setState(State.INCOMING_RINGING, null);
                     armRingTimeout();
-                    startRinging();
                     IncomingCallScreen.show(mCtx, zFromKey);
                     break;
                 }
@@ -351,8 +351,14 @@ public final class CallManager {
     // ------------------------------------------------------------------
 
     public void accept() {
+        accept(mCallId);
+    }
+
+    /** A notification action must never answer a later, replacement call. */
+    public void accept(String expectedCallId) {
         mExec.execute(() -> {
-            if (mState != State.INCOMING_RINGING || mPendingOfferSdp == null) {
+            if (expectedCallId == null || !expectedCallId.equals(mCallId)
+                    || mState != State.INCOMING_RINGING || mPendingOfferSdp == null) {
                 return;
             }
             stopRinging();
@@ -379,8 +385,13 @@ public final class CallManager {
     }
 
     public void decline() {
+        decline(mCallId);
+    }
+
+    public void decline(String expectedCallId) {
         mExec.execute(() -> {
-            if (mState == State.INCOMING_RINGING) {
+            if (expectedCallId != null && expectedCallId.equals(mCallId)
+                    && mState == State.INCOMING_RINGING) {
                 signal("bye", "");
                 end("declined", false);
             }
@@ -707,28 +718,9 @@ public final class CallManager {
         }
     }
 
-    private void startRinging() {
-        try {
-            mRing = RingtoneManager.getRingtone(mCtx,
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
-            if (mRing != null) {
-                if (android.os.Build.VERSION.SDK_INT >= 28) {
-                    mRing.setLooping(true);
-                }
-                mRing.play();
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
     private void stopRinging() {
-        if (mRing != null) {
-            try {
-                mRing.stop();
-            } catch (Exception ignored) {
-            }
-            mRing = null;
-        }
+        // Android owns ringtone playback; cancellation stops sound and vibration together.
+        IncomingCallScreen.dismiss(mCtx);
     }
 
     private void signal(String zKind, String zPayload) {

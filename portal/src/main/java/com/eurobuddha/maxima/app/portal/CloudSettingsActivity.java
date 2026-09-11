@@ -299,6 +299,12 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         mMsgSound.setOnCheckedChangeListener((v, on) -> PortalNotifier.setMessageSound(c, on));
         sndRow.addView(mMsgSound);
         notifCard.addView(sndRow);
+        notifCard.addView(PortalUi.gap(c, 12));
+        TextView calls = PortalUi.ghost(c, "Incoming call settings");
+        calls.setOnClickListener(v -> PortalIncomingCall.openCallSettings(this));
+        notifCard.addView(calls);
+        notifCard.addView(PortalUi.label(c,
+                "Ringtone, vibration and full-screen alerts on the lock screen."));
         body.addView(notifCard);
 
         // --- keys & backup: the identity lifecycle, app-parity discipline ---

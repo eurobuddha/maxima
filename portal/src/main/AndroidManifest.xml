@@ -111,5 +111,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <receiver android:name="com.eurobuddha.maxima.app.portal.PortalIncomingCall$DeclineReceiver"
+            android:exported="false" />
+
     </application>
 </manifest>
