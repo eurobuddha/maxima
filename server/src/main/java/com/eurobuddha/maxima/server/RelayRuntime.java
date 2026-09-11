@@ -101,6 +101,8 @@ public final class RelayRuntime {
     private final Path mDataDir;
 
     private RelayServer mRelay;
+    private MiniStun mStun;
+    private boolean mStunEnabled = !"false".equalsIgnoreCase(System.getenv("MAXIMA_STUN"));
     private Thread mMaintain;
     private volatile boolean mRunning;
     private volatile Consumer<Stats> mTickListener;
@@ -223,7 +225,12 @@ public final class RelayRuntime {
         mShared = zShared;
     }
 
-    public void start() throws Exception {
+    /** Optional public-address discovery for calls. Set before start; no media is relayed. */
+    public void setStunEnabled(boolean zEnabled) {
+        mStunEnabled = zEnabled;
+    }
+
+    public synchronized void start() throws Exception {
         RelayServer relay = new RelayServer(mIdentity, mPort, mProtocol, mPool);
         relay.setShared(mShared);
         relay.setRateLimit(mRate);
@@ -251,6 +258,19 @@ public final class RelayRuntime {
         relay.start();
         mRelay = relay;
         mRunning = true;
+
+        // Own STUN here, not in the standalone CLI: node/cloud/desktop hosts use this
+        // runtime directly, including shared TCP mode. UDP uses the same port number.
+        if (mStunEnabled) {
+            MiniStun stun = new MiniStun(mPort);
+            try {
+                stun.start();
+                mStun = stun;
+            } catch (java.net.SocketException e) {
+                stun.close();
+                System.err.println("STUN unavailable on udp/" + mPort + ": " + e);
+            }
+        }
 
         mMaintain = new Thread(this::maintainLoop, "maxima-relay-maintain");
         mMaintain.setDaemon(true);
@@ -318,8 +338,9 @@ public final class RelayRuntime {
     }
 
     /** Stop the maintain loop, flush write-behind mail, and stop the relay. Idempotent. */
-    public void stop() {
+    public synchronized void stop() {
         mRunning = false;
+        if (mStun != null) { mStun.close(); mStun = null; }
         if (mMaintain != null) {
             mMaintain.interrupt();
         }

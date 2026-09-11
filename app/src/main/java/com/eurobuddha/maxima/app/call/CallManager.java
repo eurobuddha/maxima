@@ -219,7 +219,7 @@ public final class CallManager {
                 mState = State.IDLE;
                 return;
             }
-            mCallId = UUID.randomUUID().toString().substring(0, 13);
+            mCallId = UUID.randomUUID().toString();
             mPeerKey = zPeerKey;
             mVideo = zVideo;
             setState(State.OUTGOING_RINGING, null);
@@ -252,6 +252,9 @@ public final class CallManager {
     public void onSignal(final String zFromKey, final ChatMessage zMsg) {
         mExec.execute(() -> {
             String kind = zMsg.state;
+            if (java.util.Arrays.asList("offer", "answer", "ice", "busy", "bye").contains(kind)) {
+                EventLog.add("call signal in: " + kind + " state=" + mState);
+            }
             switch (kind) {
                 case "offer": {
                     // The relay mailbox re-pushes held units on reconnect: a
@@ -302,10 +305,7 @@ public final class CallManager {
                     stopRingTimeout();
                     setState(State.CONNECTING, null);
                     armConnectTimeout();
-                    mPc.setRemoteDescription(new Sdp("answer-remote"),
-                            new SessionDescription(
-                                    SessionDescription.Type.ANSWER, zMsg.body));
-                    drainIce();
+                    setRemote(new SessionDescription(SessionDescription.Type.ANSWER, zMsg.body), () -> { });
                     break;
                 }
                 case "ice": {
@@ -361,20 +361,20 @@ public final class CallManager {
             armConnectTimeout();
             ensureFactory();
             createPeer();
-            mPc.setRemoteDescription(new Sdp("offer-remote"),
-                    new SessionDescription(
-                            SessionDescription.Type.OFFER, mPendingOfferSdp));
-            drainIce();
-            MediaConstraints mc = new MediaConstraints();
-            mPc.createAnswer(new Sdp("answer-create") {
-                @Override
-                public void onCreateSuccess(SessionDescription sdp) {
-                    mExec.execute(() -> {
-                        mPc.setLocalDescription(new Sdp("answer-local"), sdp);
-                        signal("answer", sdp.description);
-                    });
-                }
-            }, mc);
+            final PeerConnection pc = mPc;
+            final String call = mCallId;
+            setRemote(new SessionDescription(SessionDescription.Type.OFFER, mPendingOfferSdp), () -> {
+                pc.createAnswer(new Sdp("answer-create") {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sdp) {
+                        mExec.execute(() -> {
+                            if (mPc != pc || !call.equals(mCallId)) { return; }
+                            pc.setLocalDescription(new Sdp("answer-local"), sdp);
+                            signal("answer", sdp.description);
+                        });
+                    }
+                }, new MediaConstraints());
+            });
         });
     }
 
@@ -442,13 +442,15 @@ public final class CallManager {
         List<PeerConnection.IceServer> servers = new ArrayList<>();
         // OUR fleet answers STUN (relay 0.4.22, udp on the relay port) - no
         // third party learns who is calling. Same WiFi never needs it: host
-        // candidates connect directly. Three relays for redundancy.
+        // candidates connect directly. Four relays for redundancy.
         servers.add(PeerConnection.IceServer
                 .builder("stun:95.179.179.181:9501").createIceServer());
         servers.add(PeerConnection.IceServer
                 .builder("stun:65.109.31.226:9501").createIceServer());
         servers.add(PeerConnection.IceServer
                 .builder("stun:45.77.246.226:9501").createIceServer());
+        servers.add(PeerConnection.IceServer
+                .builder("stun:78.141.237.9:9501").createIceServer());
         PeerConnection.RTCConfiguration cfg =
                 new PeerConnection.RTCConfiguration(servers);
         cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
@@ -456,8 +458,11 @@ public final class CallManager {
         mPc = mFactory.createPeerConnection(cfg, new PeerConnection.Observer() {
             @Override
             public void onIceCandidate(IceCandidate c) {
-                mExec.execute(() -> signal("ice",
-                        c.sdpMid + "\n" + c.sdpMLineIndex + "\n" + c.sdp));
+                mExec.execute(() -> {
+                    if (!callAtCreate.equals(mCallId)) { return; }
+                    EventLog.add("call local ICE: " + iceKind(c));
+                    signal("ice", c.sdpMid + "\n" + c.sdpMLineIndex + "\n" + c.sdp);
+                });
             }
 
             @Override
@@ -469,6 +474,7 @@ public final class CallManager {
                     if (!callAtCreate.equals(mCallId)) {
                         return;
                     }
+                    EventLog.add("call peer connection: " + s);
                     if (s == PeerConnection.PeerConnectionState.CONNECTED) {
                         stopConnectTimeout();
                         mLiveSince = System.currentTimeMillis();
@@ -493,9 +499,13 @@ public final class CallManager {
 
             @Override public void onIceCandidatesRemoved(IceCandidate[] c) { }
             @Override public void onSignalingChange(PeerConnection.SignalingState s) { }
-            @Override public void onIceConnectionChange(PeerConnection.IceConnectionState s) { }
+            @Override public void onIceConnectionChange(PeerConnection.IceConnectionState s) {
+                mExec.execute(() -> { if (callAtCreate.equals(mCallId)) { EventLog.add("call ICE connection: " + s); } });
+            }
             @Override public void onIceConnectionReceivingChange(boolean b) { }
-            @Override public void onIceGatheringChange(PeerConnection.IceGatheringState s) { }
+            @Override public void onIceGatheringChange(PeerConnection.IceGatheringState s) {
+                mExec.execute(() -> { if (callAtCreate.equals(mCallId)) { EventLog.add("call ICE gathering: " + s); } });
+            }
             @Override public void onAddStream(org.webrtc.MediaStream s) { }
             @Override public void onRemoveStream(org.webrtc.MediaStream s) { }
             @Override public void onDataChannel(org.webrtc.DataChannel d) { }
@@ -555,11 +565,39 @@ public final class CallManager {
         }
     }
 
+    /** Remote SDP is asynchronous. ICE queued before or during it is usable only after success. */
+    private void setRemote(SessionDescription description, Runnable ready) {
+        final PeerConnection pc = mPc;
+        final String call = mCallId;
+        pc.setRemoteDescription(new Sdp("remote") {
+            @Override public void onSetSuccess() {
+                mExec.execute(() -> {
+                    if (mPc != pc || !call.equals(mCallId)) { return; }
+                    drainIce();
+                    ready.run();
+                });
+            }
+        }, description);
+    }
+
     private void drainIce() {
         for (IceCandidate c : mPendingIce) {
-            mPc.addIceCandidate(c);
+            boolean added = mPc.addIceCandidate(c);
+            EventLog.add("call queued ICE: " + iceKind(c) + " accepted=" + added);
         }
         mPendingIce.clear();
+    }
+
+    /** Log candidate transport/type only; never SDP credentials or local/public addresses. */
+    private static String iceKind(IceCandidate candidate) {
+        String[] parts = candidate.sdp.split("\\s+");
+        String protocol = parts.length > 2 && "tcp".equalsIgnoreCase(parts[2]) ? "tcp" : "udp";
+        for (int i = 0; i + 1 < parts.length; i++) {
+            if ("typ".equals(parts[i]) && java.util.Arrays.asList("host", "srflx", "prflx", "relay").contains(parts[i + 1])) {
+                return protocol + "/" + parts[i + 1];
+            }
+        }
+        return protocol + "/unknown";
     }
 
     private void armConnectTimeout() {
@@ -741,6 +779,7 @@ public final class CallManager {
 
     private void setState(State zState, String zReason) {
         mState = zState;
+        EventLog.add("call state: " + zState + (zReason == null ? "" : " " + zReason));
         final Listener l = mListener;
         if (l != null) {
             mMain.post(() -> l.onCallState(zState, mPeerKey, zReason));

@@ -202,7 +202,7 @@ public final class PortalCallManager {
             if (mState != State.IDLE && mState != State.ENDED) {
                 return;
             }
-            mCallId = UUID.randomUUID().toString().substring(0, 13);
+            mCallId = UUID.randomUUID().toString();
             mPeerKey = zPeerKey;
             mPeerName = zPeerName == null ? "" : zPeerName;
             mVideo = zVideo;
@@ -272,9 +272,7 @@ public final class PortalCallManager {
                     stopRingTimeout();
                     setState(State.CONNECTING, null);
                     armConnectTimeout();
-                    mPc.setRemoteDescription(new Sdp("answer-remote"),
-                            new SessionDescription(SessionDescription.Type.ANSWER, payload));
-                    drainIce();
+                    setRemote(new SessionDescription(SessionDescription.Type.ANSWER, payload), () -> { });
                     break;
                 }
                 case "ice": {
@@ -335,19 +333,20 @@ public final class PortalCallManager {
             armConnectTimeout();
             ensureFactory();
             createPeer();
-            mPc.setRemoteDescription(new Sdp("offer-remote"),
-                    new SessionDescription(SessionDescription.Type.OFFER, mPendingOfferSdp));
-            drainIce();
-            MediaConstraints mc = new MediaConstraints();
-            mPc.createAnswer(new Sdp("answer-create") {
-                @Override
-                public void onCreateSuccess(SessionDescription sdp) {
-                    mExec.execute(() -> {
-                        mPc.setLocalDescription(new Sdp("answer-local"), sdp);
-                        signal("answer", sdp.description);
-                    });
-                }
-            }, mc);
+            final PeerConnection pc = mPc;
+            final String call = mCallId;
+            setRemote(new SessionDescription(SessionDescription.Type.OFFER, mPendingOfferSdp), () -> {
+                pc.createAnswer(new Sdp("answer-create") {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sdp) {
+                        mExec.execute(() -> {
+                            if (mPc != pc || !call.equals(mCallId)) { return; }
+                            pc.setLocalDescription(new Sdp("answer-local"), sdp);
+                            signal("answer", sdp.description);
+                        });
+                    }
+                }, new MediaConstraints());
+            });
         });
     }
 
@@ -414,14 +413,18 @@ public final class PortalCallManager {
         servers.add(PeerConnection.IceServer.builder("stun:95.179.179.181:9501").createIceServer());
         servers.add(PeerConnection.IceServer.builder("stun:65.109.31.226:9501").createIceServer());
         servers.add(PeerConnection.IceServer.builder("stun:45.77.246.226:9501").createIceServer());
+        servers.add(PeerConnection.IceServer.builder("stun:78.141.237.9:9501").createIceServer());
         PeerConnection.RTCConfiguration cfg = new PeerConnection.RTCConfiguration(servers);
         cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
         final String callAtCreate = mCallId;
         mPc = mFactory.createPeerConnection(cfg, new PeerConnection.Observer() {
             @Override
             public void onIceCandidate(IceCandidate c) {
-                mExec.execute(() -> signal("ice",
-                        c.sdpMid + "\n" + c.sdpMLineIndex + "\n" + c.sdp));
+                mExec.execute(() -> {
+                    if (!callAtCreate.equals(mCallId)) { return; }
+                    Log.i(TAG, "local ICE: " + iceKind(c));
+                    signal("ice", c.sdpMid + "\n" + c.sdpMLineIndex + "\n" + c.sdp);
+                });
             }
 
             @Override
@@ -430,6 +433,7 @@ public final class PortalCallManager {
                     if (!callAtCreate.equals(mCallId)) {
                         return;   // stale callback from a closed PC
                     }
+                    Log.i(TAG, "peer connection: " + s);
                     if (s == PeerConnection.PeerConnectionState.CONNECTED) {
                         stopConnectTimeout();
                         mLiveSince = System.currentTimeMillis();
@@ -453,9 +457,13 @@ public final class PortalCallManager {
 
             @Override public void onIceCandidatesRemoved(IceCandidate[] c) { }
             @Override public void onSignalingChange(PeerConnection.SignalingState s) { }
-            @Override public void onIceConnectionChange(PeerConnection.IceConnectionState s) { }
+            @Override public void onIceConnectionChange(PeerConnection.IceConnectionState s) {
+                mExec.execute(() -> { if (callAtCreate.equals(mCallId)) { Log.i(TAG, "ICE connection: " + s); } });
+            }
             @Override public void onIceConnectionReceivingChange(boolean b) { }
-            @Override public void onIceGatheringChange(PeerConnection.IceGatheringState s) { }
+            @Override public void onIceGatheringChange(PeerConnection.IceGatheringState s) {
+                mExec.execute(() -> { if (callAtCreate.equals(mCallId)) { Log.i(TAG, "ICE gathering: " + s); } });
+            }
             @Override public void onAddStream(org.webrtc.MediaStream s) { }
             @Override public void onRemoveStream(org.webrtc.MediaStream s) { }
             @Override public void onDataChannel(org.webrtc.DataChannel d) { }
@@ -511,11 +519,39 @@ public final class PortalCallManager {
         }
     }
 
+    /** Remote SDP is asynchronous. ICE queued before or during it is usable only after success. */
+    private void setRemote(SessionDescription description, Runnable ready) {
+        final PeerConnection pc = mPc;
+        final String call = mCallId;
+        pc.setRemoteDescription(new Sdp("remote") {
+            @Override public void onSetSuccess() {
+                mExec.execute(() -> {
+                    if (mPc != pc || !call.equals(mCallId)) { return; }
+                    drainIce();
+                    ready.run();
+                });
+            }
+        }, description);
+    }
+
     private void drainIce() {
         for (IceCandidate c : mPendingIce) {
-            mPc.addIceCandidate(c);
+            boolean added = mPc.addIceCandidate(c);
+            Log.i(TAG, "queued ICE: " + iceKind(c) + " accepted=" + added);
         }
         mPendingIce.clear();
+    }
+
+    /** Log candidate transport/type only; never SDP credentials or local/public addresses. */
+    private static String iceKind(IceCandidate candidate) {
+        String[] parts = candidate.sdp.split("\\s+");
+        String protocol = parts.length > 2 && "tcp".equalsIgnoreCase(parts[2]) ? "tcp" : "udp";
+        for (int i = 0; i + 1 < parts.length; i++) {
+            if ("typ".equals(parts[i]) && java.util.Arrays.asList("host", "srflx", "prflx", "relay").contains(parts[i + 1])) {
+                return protocol + "/" + parts[i + 1];
+            }
+        }
+        return protocol + "/unknown";
     }
 
     private void armConnectTimeout() {

@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.99";
+    public static final String VERSION = "0.4.100";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -216,15 +216,6 @@ public final class Main {
                 s.acceptAlive ? "" : " ACCEPT=DEAD", s.acceptFailures, s.writeStalls,
                 s.pushDiscards, s.sheds, s.replicasSent, s.replicasStored));
         runtime.start();
-
-        // STUN on the same port number, UDP side: phones discover their public
-        // address for calls from OUR fleet instead of a third party. Disable
-        // with MAXIMA_STUN=false.
-        if (!"false".equalsIgnoreCase(System.getenv("MAXIMA_STUN"))) {
-            Thread stun = new Thread(new MiniStun(port), "ministun");
-            stun.setDaemon(true);
-            stun.start();
-        }
 
         System.out.println("  listening on 0.0.0.0:" + port);
         System.out.println();

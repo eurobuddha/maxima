@@ -19,7 +19,7 @@ public class MiniStunTest {
 
     /** A minimal RFC 5389 binding request: type 0x0001, magic cookie, 12-byte
      *  transaction id. */
-    private static byte[] bindingRequest(byte[] txid) {
+    static byte[] bindingRequest(byte[] txid) {
         byte[] d = new byte[20];
         d[0] = 0x00;
         d[1] = 0x01;            // type: binding request

@@ -4,6 +4,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.SocketException;
 
 /**
  * A minimal RFC 5389 STUN binding responder on UDP, sharing the relay's port
@@ -12,22 +13,35 @@ import java.net.InetAddress;
  * server that would otherwise see every caller's IP. Answers binding requests
  * with XOR-MAPPED-ADDRESS and ignores everything else.
  */
-public final class MiniStun implements Runnable {
+public final class MiniStun implements AutoCloseable {
 
     private static final int MAGIC = 0x2112A442;
 
     private final int mPort;
+    private DatagramSocket mSocket;
+    private boolean mClosed;
 
     public MiniStun(int zPort) {
         mPort = zPort;
     }
 
-    @Override
-    public void run() {
-        try (DatagramSocket sock = new DatagramSocket(mPort)) {
+    /** Bind before returning, so the owning runtime knows whether STUN is available. */
+    public synchronized void start() throws SocketException {
+        if (mClosed) { throw new IllegalStateException("STUN responder is closed"); }
+        if (mSocket != null) { return; }
+        DatagramSocket sock = new DatagramSocket(mPort);
+        mSocket = sock;
+        Thread worker = new Thread(() -> serve(sock), "ministun");
+        worker.setDaemon(true);
+        try { worker.start(); }
+        catch (RuntimeException | Error e) { sock.close(); mSocket = null; throw e; }
+    }
+
+    private void serve(DatagramSocket sock) {
+        try (DatagramSocket owned = sock) {
             byte[] buf = new byte[1500];
             System.out.println("STUN responder on udp/" + mPort);
-            while (true) {
+            while (!sock.isClosed()) {
                 DatagramPacket in = new DatagramPacket(buf, buf.length);
                 sock.receive(in);
                 byte[] resp = respond(in);
@@ -37,8 +51,17 @@ public final class MiniStun implements Runnable {
                 }
             }
         } catch (Exception e) {
-            System.err.println("STUN responder stopped: " + e);
+            synchronized (this) {
+                if (!mClosed) { System.err.println("STUN responder stopped: " + e); }
+            }
         }
+    }
+
+    /** Closing the socket releases the port and wakes a blocked receive immediately. */
+    @Override
+    public synchronized void close() {
+        mClosed = true;
+        if (mSocket != null) { mSocket.close(); mSocket = null; }
     }
 
     /** Binding request -> success response with XOR-MAPPED-ADDRESS, else null. */
