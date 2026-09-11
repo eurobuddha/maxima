@@ -48,6 +48,8 @@ public final class CloudSession {
 
     private static volatile MaximaIdentity sDeviceId;
     private static volatile ParlonsRemote sRemote;
+    // As in HostPool: state publication/invalidation share a short lock; network work does not.
+    private static final Object LIFECYCLE = new Object();
 
     private CloudSession() {
     }
@@ -73,11 +75,30 @@ public final class CloudSession {
     }
 
     public static void setAccount(Context c, String a) {
-        prefs(c).edit().putString("account", a == null ? "" : a.trim()).apply();
+        ParlonsRemote old;
+        synchronized (LIFECYCLE) {
+            old = resetLocked(c);
+            prefs(c).edit().putString("account", a == null ? "" : a.trim())
+                    .putBoolean("paired", false).apply();
+        }
+        close(old);
     }
 
     public static void setPaired(Context c, boolean p) {
         prefs(c).edit().putBoolean("paired", p).apply();
+    }
+
+    /** Pairing replies can arrive after a reset; only their original remote may pair this UI. */
+    public static boolean setPaired(Context c, ParlonsRemote owner) {
+        synchronized (LIFECYCLE) {
+            if (owner == null || owner != sRemote) return false;
+            setPaired(c, true);
+            return true;
+        }
+    }
+
+    private static boolean isCurrent(ParlonsRemote remote) {
+        synchronized (LIFECYCLE) { return remote != null && remote == sRemote; }
     }
 
     /** This device's own identity (a key distinct from any account), persisted 0600. */
@@ -125,9 +146,10 @@ public final class CloudSession {
 
     private static void connectOn(ExecutorService lane, Context c, Cb cb) {
         final Context app = c.getApplicationContext();
+        final int gen = sGen; // the request belongs to the session in which it was queued
         lane.execute(() -> {
             try {
-                cb.ok(ensureRemote(app));
+                cb.ok(ensureRemote(app, gen));
             } catch (Exception e) {
                 cb.err(e.getMessage() == null ? e.toString() : e.getMessage());
             }
@@ -140,44 +162,51 @@ public final class CloudSession {
     /** The warm-address cache key — scoped PER ACCOUNT. A global key let a stale address from
      *  a previous account pass the warm probe and silently drive the WRONG account. */
     private static String liveKey(Context c) {
-        return "livemx_" + Integer.toHexString(account(c).hashCode());
+        return liveKey(account(c));
+    }
+
+    private static String liveKey(String account) {
+        return "livemx_" + Integer.toHexString(account.hashCode());
     }
 
     /** Create-once (both lanes race here): connect with the WARM fast path — the last resolved
      *  live address is probed first, skipping the MLS resolve ladder on the happy path. */
-    private static synchronized ParlonsRemote ensureRemote(Context app) throws Exception {
-        ParlonsRemote r = sRemote;
-        if (r != null) {
-            return r;
+    private static synchronized ParlonsRemote ensureRemote(Context app, int gen) throws Exception {
+        final String account, key, warm;
+        synchronized (LIFECYCLE) {
+            if (gen != sGen) throw new IllegalStateException("connection was reset");
+            if (sRemote != null) return sRemote;
+            account = account(app);
+            key = liveKey(account);
+            warm = cached(app, key);
         }
-        final int gen = sGen;
-        r = new ParlonsRemote(deviceId(app));
-        // This phone's own seeds first; the compiled-in list only while it is switched on.
-        r.setSeedRelays(PortalRelayStore.get(app));
+        ParlonsRemote r = new ParlonsRemote(deviceId(app));
         try {
-            r.connect(account(app), cached(app, liveKey(app)));
-            // The push channel is part of a connection: install BEFORE publishing the remote, so
-            // a failure here discards the remote instead of caching a deaf-but-heartbeating one.
-            installPush(app, r);
+            // This phone's own seeds first; keep the existing user-controlled seed policy.
+            r.setSeedRelays(PortalRelayStore.get(app));
+            r.connect(account, warm);
+            String live = r.liveAddress();
+            synchronized (LIFECYCLE) {
+                if (gen != sGen) throw new IllegalStateException("connection was reset");
+                // Check, cache and publication are one operation relative to reset/account switch.
+                installPush(app, r);
+                cache(app, key, live);
+                sRemote = r;
+            }
+            return r;
         } catch (Exception e) {
-            try { r.close(); } catch (Exception ignored) { }   // no leaked node threads/sockets
+            close(r);
             throw e;
         }
-        if (gen != sGen) {
-            // reset() ran while we were connecting (re-pair, unpair) — this remote belongs to
-            // a dead session and must not resurrect it.
-            try { r.close(); } catch (Exception ignored) { }
-            throw new IllegalStateException("connection was reset");
-        }
-        cache(app, liveKey(app), r.liveAddress());   // next cold start reconnects warm
-        sRemote = r;
-        return r;
     }
 
-    /** Refresh the warm-address cache if the account moved mid-session (heartbeat calls this). */
-    public static void noteLiveAddress(Context c, String zLive) {
-        if (zLive != null && !zLive.isEmpty() && !zLive.equals(cached(c, liveKey(c)))) {
-            cache(c, liveKey(c), zLive);
+    /** Only the currently owned remote may refresh its account's warm address. */
+    public static void noteLiveAddress(Context c, ParlonsRemote owner, String zLive) {
+        synchronized (LIFECYCLE) {
+            if (owner == null || owner != sRemote) return;
+            if (zLive != null && !zLive.isEmpty() && !zLive.equals(cached(c, liveKey(c)))) {
+                cache(c, liveKey(c), zLive);
+            }
         }
     }
 
@@ -194,21 +223,17 @@ public final class CloudSession {
      * until the remote is connected.
      */
     public static com.eurobuddha.maxima.core.media.MediaService media(Context c) {
-        ParlonsRemote r = sRemote;
-        if (r == null) {
-            return null;
-        }
-        if (sMedia == null) {
-            synchronized (CloudSession.class) {
-                if (sMedia == null) {
-                    com.eurobuddha.maxima.core.store.BlobStore blobs =
-                            new com.eurobuddha.maxima.core.store.BlobStore(
-                                    new File(c.getFilesDir(), "media"), 256L * 1024 * 1024);
-                    sMedia = new com.eurobuddha.maxima.core.media.MediaService(r.node(), blobs);
-                }
+        synchronized (LIFECYCLE) {
+            ParlonsRemote r = sRemote;
+            if (r == null) return null;
+            if (sMedia == null) {
+                com.eurobuddha.maxima.core.store.BlobStore blobs =
+                        new com.eurobuddha.maxima.core.store.BlobStore(
+                                new File(c.getFilesDir(), "media"), 256L * 1024 * 1024);
+                sMedia = new com.eurobuddha.maxima.core.media.MediaService(r.node(), blobs);
             }
+            return sMedia;
         }
-        return sMedia;
     }
 
     /**
@@ -220,6 +245,7 @@ public final class CloudSession {
     public static void installPush(Context appCtx, ParlonsRemote r) {
         final Context app = appCtx.getApplicationContext();
         r.setPushListener(ev -> {
+            if (!isCurrent(r)) return;
             notePushAlive();
             // The dedup set already recorded this event's eid BEFORE this listener ran, so a retry
             // of a thrown event is dropped as a duplicate — one fan-out step must never abort the
@@ -246,6 +272,7 @@ public final class CloudSession {
             }
         });
         IO.execute(() -> {
+            if (!isCurrent(r)) return;
             try { r.registerPush(); } catch (Exception ignored) { }
         });
     }
@@ -305,6 +332,7 @@ public final class CloudSession {
      */
     public static void reconnect(Context c, String zWhy) {
         final Context app = c.getApplicationContext();
+        final int requestedGen = sGen;
         if (!sReconnecting.compareAndSet(false, true)) {
             return;
         }
@@ -314,14 +342,18 @@ public final class CloudSession {
         if (l != null) { try { l.run(); } catch (Exception ignored) { } }
         IO.execute(() -> {
             try {
-                sGen++;                       // an in-flight connect must not publish after this
-                ParlonsRemote old = sRemote;
-                sRemote = null;
-                sMedia = null;                // bound to the OLD node — rebuilt on the new one
-                if (old != null) {
-                    try { old.close(); } catch (Exception ignored) { }
+                final ParlonsRemote old;
+                final int gen;
+                synchronized (LIFECYCLE) {
+                    if (requestedGen != sGen) return; // reset superseded this queued recovery
+                    gen = ++sGen;
+                    old = sRemote;
+                    sRemote = null;
+                    sMedia = null;
+                    sPushAliveMs = 0;
                 }
-                ensureRemote(app);
+                close(old);
+                ensureRemote(app, gen);
                 android.util.Log.i("ParlonsCloud", "[portal] reconnected");
             } catch (Exception e) {
                 android.util.Log.w("ParlonsCloud", "[portal] reconnect failed: " + e.getMessage());
@@ -334,24 +366,35 @@ public final class CloudSession {
     }
 
     public static void reset(Context c) {
-        sGen++;                       // an in-flight connect must not publish after this
-        ParlonsRemote r = sRemote;
-        sRemote = null;
-        sMedia = null;                // bound to the OLD node — a new connection builds fresh
-        if (r != null) {
-            try { r.close(); } catch (Exception ignored) { }
+        final ParlonsRemote old;
+        synchronized (LIFECYCLE) {
+            old = resetLocked(c);
         }
+        close(old);
+    }
+
+    /** Caller holds LIFECYCLE; no network work or socket closure under this lock. */
+    private static ParlonsRemote resetLocked(Context c) {
+        sGen++;
+        ParlonsRemote old = sRemote;
+        sRemote = null;
+        sMedia = null;
+        sPushAliveMs = 0;
+        sLastReach = sLastHosts = -1;
+        sLastReachAt = 0;
         SharedPreferences p = prefs(c);
         SharedPreferences.Editor e = p.edit();
         for (String key : p.getAll().keySet()) {
-            if (key.startsWith("cache_")) {
-                e.remove(key);
-            }
+            if (key.startsWith("cache_")) e.remove(key);
         }
         e.apply();
-        // The wallet history ledger holds the PREVIOUS account's sends/receipts (amounts,
-        // counterparty addresses, full txids) — a new account paired on this device must never
-        // see them.
         WalletLedger.clear(c);
+        return old;
+    }
+
+    private static void close(ParlonsRemote remote) {
+        if (remote != null) {
+            try { remote.close(); } catch (Exception ignored) { }
+        }
     }
 }

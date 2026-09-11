@@ -146,7 +146,6 @@ public final class OnboardingActivity extends AppCompatActivity {
         String c = mCode.getText().toString().trim();
         if (a.isEmpty()) { toast("Enter or scan your account address"); return; }
         CloudSession.setAccount(this, a);
-        CloudSession.reset(this);   // fresh remote + cleared caches for the (possibly new) account
         mGo.setEnabled(false);
         show("Attaching to the network…");
         CloudSession.connect(this, new CloudSession.Cb() {
@@ -156,8 +155,8 @@ public final class OnboardingActivity extends AppCompatActivity {
                     JSONObject res = r.pair("android:" + android.os.Build.MODEL, c);
                     String st = String.valueOf(res.get("status"));
                     if ("authorized".equals(st) || "already".equals(st)) {
-                        CloudSession.setPaired(OnboardingActivity.this, true);
                         runOnUiThread(() -> {
+                            if (!CloudSession.setPaired(OnboardingActivity.this, r)) return;
                             startActivity(new Intent(OnboardingActivity.this, MainActivity.class));
                             finish();
                         });
