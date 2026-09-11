@@ -30,3 +30,13 @@ The separately paused wake-proxy centralisation issue remains unresolved. This r
 Existing call teardown/callback issues seen during review (empty bye ID after teardown, unguarded outgoing offer callback, no ICE restart) are recorded for follow-up and are not claimed fixed here.
 
 Local evidence: `../_artifacts/parlons-mobile-calls-2026-09-11/`, including baseline failures, test/build logs, artifact hashes, deployment before/after records and the live Fold capture. No real call has yet been verified.
+
+## Publication and deployment completed
+
+Source, versioned artifacts and all11 Android/desktop PandaApps rows are committed and pushed. Catalogue commit: `bd983eb0ddf94b68f61168dd0a3e26693e8110c0`. Both Electron update feeds list mac-arm64, win-x64 and linux-x64; all six installers are retained in their respective local `dist` folders and match the live feed hashes. All three standalone Parlons installers are in `maxima/dist`, with a combined checksum manifest.
+
+Mac installers for all three apps passed Developer ID signing, notarisation, stapling and Gatekeeper verification. Both Electron CI matrices passed all three platforms. Standalone Parlons installer builds passed on all three platforms; the pre-existing Windows empty-checksum upload fault recurred and publication was completed with verified combined checksums, as in the preceding release. The workflow itself still reports failure. minimaDesk's catalogue push initially failed on a Windows download; the exact asset was subsequently downloaded, hash-verified, and the catalogue gate passed before pushing. No validation hook was bypassed.
+
+Node0.2.106 is active on Sally, Hetzner, MegaMMR and Vigilance. All four passed11/11 external synthetic-client relay checks. Public identity and existing systemd configuration hashes were preserved. STUN passes from outside on Sally and Hetzner. MegaMMR and Vigilance listen on UDP9501 and have host firewall allow rules but remain externally unreachable from both the Mac and Sally; upstream firewall access was requested. Capture counters are inconclusive about the precise drop location. Maxlite and Openproject's existing standalone STUN responders already passed the baseline probes and were not changed. The Pi is not part of the Android STUN list.
+
+The Fold was reconnected and confirmed on0.6.120/code720; live call capture resumed. A successful real mobile-data voice/video call is still unverified. IPFS publication and latest call-test status are tracked in the local evidence report. The goal remains open.
