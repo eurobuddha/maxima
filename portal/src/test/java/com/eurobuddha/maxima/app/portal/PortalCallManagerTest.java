@@ -127,6 +127,60 @@ public class PortalCallManagerTest {
         assertEquals("", calls.callId());
     }
 
+    @Test public void duplicateAnswersCannotReapplySdpOrRestartLiveCall() throws Exception {
+        answer(); answer();
+        verify(pc, times(1)).setRemoteDescription(any(), any());
+        finishRemote();
+        set("mState", PortalCallManager.State.LIVE);
+        answer();
+        assertEquals(PortalCallManager.State.LIVE, calls.state());
+        verify(pc, times(1)).setRemoteDescription(any(), any());
+    }
+
+    @Test public void answerCannotReplaceAnIncomingOffer() throws Exception {
+        set("mState", PortalCallManager.State.INCOMING_RINGING);
+        calls.onSignal(signal("answer", "unexpected-answer"));
+        idle();
+        assertEquals(PortalCallManager.State.INCOMING_RINGING, calls.state());
+        verify(pc, never()).setRemoteDescription(any(), any());
+    }
+
+    @Test public void connectionFailureSendsByeForTheRetiredCall() throws Exception {
+        List<Runnable> queued = queuedFailureBye();
+        com.eurobuddha.maxima.cloud.ParlonsRemote remote = mock(com.eurobuddha.maxima.cloud.ParlonsRemote.class);
+        JSONObject ok = new JSONObject(); ok.put("ok", true);
+        when(remote.callSignal(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(ok);
+        try (org.mockito.MockedStatic<CloudSession> session = mockStatic(CloudSession.class)) {
+            session.when(CloudSession::remoteOrNull).thenReturn(remote);
+            queued.get(0).run();
+            verify(remote).callSignal("synthetic-peer", "synthetic-call", "bye", "", "");
+        }
+    }
+
+    /** Hold transport until after the state has been cleared, then run its actual queued send. */
+    private List<Runnable> queuedFailureBye() throws Exception {
+        ExecutorService sender = (ExecutorService) get("mSendExec");
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch hold = new java.util.concurrent.CountDownLatch(1);
+        sender.execute(() -> {
+            started.countDown();
+            try { hold.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        worker.submit(() -> {
+            try {
+                java.lang.reflect.Method end = PortalCallManager.class.getDeclaredMethod("end", String.class, boolean.class);
+                end.setAccessible(true); end.invoke(calls, "couldn't connect", true);
+            } catch (Exception e) { throw new RuntimeException(e); }
+        }).get(5, TimeUnit.SECONDS);
+        List<Runnable> queued = sender.shutdownNow();
+        assertEquals(1, queued.size());
+        assertEquals("", calls.callId());
+        assertEquals(PortalCallManager.State.IDLE, calls.state());
+        verify(pc).close();
+        return queued;
+    }
+
     private void answer() throws Exception {
         calls.onSignal(signal("answer", "synthetic-sdp"));
         idle(); assertNotNull(remoteSet.get());

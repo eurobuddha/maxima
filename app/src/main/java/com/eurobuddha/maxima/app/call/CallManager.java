@@ -254,7 +254,7 @@ public final class CallManager {
         mExec.execute(() -> {
             String kind = zMsg.state;
             if (java.util.Arrays.asList("offer", "answer", "ice", "busy", "bye").contains(kind)) {
-                EventLog.add("call signal in: " + kind + " state=" + mState);
+                EventLog.add("call signal in: " + kind + " call=" + zMsg.ref + " state=" + mState);
             }
             switch (kind) {
                 case "offer": {
@@ -299,7 +299,8 @@ public final class CallManager {
                     break;
                 }
                 case "answer": {
-                    if (!zMsg.ref.equals(mCallId) || !zFromKey.equals(mPeerKey) || mPc == null) {
+                    if (!zMsg.ref.equals(mCallId) || !zFromKey.equals(mPeerKey) || mPc == null
+                            || mState != State.OUTGOING_RINGING) {
                         return;
                     }
                     stopRingTimeout();
@@ -319,9 +320,11 @@ public final class CallManager {
                     IceCandidate cand = new IceCandidate(
                             p[0], Integer.parseInt(p[1]), p[2]);
                     if (mPc != null && mPc.getRemoteDescription() != null) {
-                        mPc.addIceCandidate(cand);
+                        boolean added = mPc.addIceCandidate(cand);
+                        EventLog.add("call remote ICE: " + iceKind(cand) + " accepted=" + added);
                     } else {
                         mPendingIce.add(cand);
+                        EventLog.add("call remote ICE queued: " + iceKind(cand) + " count=" + mPendingIce.size());
                     }
                     break;
                 }
@@ -584,6 +587,7 @@ public final class CallManager {
             @Override public void onSetSuccess() {
                 mExec.execute(() -> {
                     if (mPc != pc || !call.equals(mCallId)) { return; }
+                    EventLog.add("call remote SDP ready: " + description.type + " call=" + call);
                     drainIce();
                     ready.run();
                 });
@@ -633,14 +637,15 @@ public final class CallManager {
         stopRinging();
         stopRingTimeout();
         stopConnectTimeout();
+        // Capture the original call id in the queued bye before retiring this call.
+        if (zSignalBye) {
+            signal("bye", "");
+        }
         mLastEndedCallId = mCallId;
         mCallId = "";   // ended: late/duplicate frames must no longer match
         // The lock-screen call notification must die with the call, whether or
         // not the call screen is open to dismiss it.
         IncomingCallScreen.dismiss(mCtx);
-        if (zSignalBye) {
-            signal("bye", "");
-        }
         if (mPc != null) {
             try {
                 mPc.close();
@@ -730,7 +735,12 @@ public final class CallManager {
     private void signalTo(final String zPeerKey, final String zCallId,
             final String zKind, final String zPayload) {
         final boolean video = mVideo;
+        final long queuedAt = System.nanoTime();
+        EventLog.add("call signal queued: " + zKind + " call=" + zCallId);
         mSendExec.execute(() -> {
+            final long startedAt = System.nanoTime();
+            EventLog.add("call signal sending: " + zKind + " call=" + zCallId
+                    + " queueMs=" + ((startedAt - queuedAt) / 1_000_000));
             try {
                 ChatEngine chat = MaximaService.chat();
                 Contact c = contact(zPeerKey);
@@ -742,6 +752,8 @@ public final class CallManager {
                     m.memo = "video";   // the flat codec's spare field
                 }
                 chat.sendCallSignal(c, m);
+                EventLog.add("call signal transport returned: " + zKind + " call=" + zCallId
+                        + " sendMs=" + ((System.nanoTime() - startedAt) / 1_000_000));
             } catch (Exception e) {
                 EventLog.add("call signal " + zKind + " failed: " + e.getMessage());
                 if ("offer".equals(zKind) || "answer".equals(zKind)) {

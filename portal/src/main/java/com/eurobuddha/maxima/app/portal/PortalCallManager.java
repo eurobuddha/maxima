@@ -266,7 +266,8 @@ public final class PortalCallManager {
                     break;
                 }
                 case "answer": {
-                    if (!ref.equals(mCallId) || !from.equalsIgnoreCase(mPeerKey) || mPc == null) {
+                    if (!ref.equals(mCallId) || !from.equalsIgnoreCase(mPeerKey) || mPc == null
+                            || mState != State.OUTGOING_RINGING) {
                         return;
                     }
                     stopRingTimeout();
@@ -285,9 +286,11 @@ public final class PortalCallManager {
                     }
                     IceCandidate cand = new IceCandidate(p[0], Integer.parseInt(p[1]), p[2]);
                     if (mPc != null && mPc.getRemoteDescription() != null) {
-                        mPc.addIceCandidate(cand);
+                        boolean added = mPc.addIceCandidate(cand);
+                        Log.i(TAG, "call remote ICE: " + iceKind(cand) + " accepted=" + added);
                     } else {
                         mPendingIce.add(cand);
+                        Log.i(TAG, "call remote ICE queued: " + iceKind(cand) + " count=" + mPendingIce.size());
                     }
                     break;
                 }
@@ -538,6 +541,7 @@ public final class PortalCallManager {
             @Override public void onSetSuccess() {
                 mExec.execute(() -> {
                     if (mPc != pc || !call.equals(mCallId)) { return; }
+                    Log.i(TAG, "call remote SDP ready: " + description.type + " call=" + call);
                     drainIce();
                     ready.run();
                 });
@@ -587,12 +591,13 @@ public final class PortalCallManager {
         stopRinging();
         stopRingTimeout();
         stopConnectTimeout();
-        mLastEndedCallId = mCallId;
-        mCallId = "";
-        PortalIncomingCall.dismiss(mCtx);
+        // Capture the original call id in the queued bye before retiring this call.
         if (zSignalBye) {
             signal("bye", "");
         }
+        mLastEndedCallId = mCallId;
+        mCallId = "";
+        PortalIncomingCall.dismiss(mCtx);
         if (mPc != null) {
             try { mPc.close(); } catch (Exception ignored) { }
             mPc = null;
@@ -665,7 +670,12 @@ public final class PortalCallManager {
     private void signalTo(final String zPeerKey, final String zCallId,
                           final String zKind, final String zPayload) {
         final boolean video = mVideo;
+        final long queuedAt = System.nanoTime();
+        Log.i(TAG, "call signal queued: " + zKind + " call=" + zCallId);
         mSendExec.execute(() -> {
+            final long startedAt = System.nanoTime();
+            Log.i(TAG, "call signal sending: " + zKind + " call=" + zCallId
+                    + " queueMs=" + ((startedAt - queuedAt) / 1_000_000));
             String error = null;
             try {
                 ParlonsRemote r = CloudSession.remoteOrNull();
@@ -674,6 +684,8 @@ public final class PortalCallManager {
                 } else {
                     String memo = video && "offer".equals(zKind) ? "video" : "";
                     JSONObject res = r.callSignal(zPeerKey, zCallId, zKind, zPayload, memo);
+                    Log.i(TAG, "call signal transport returned: " + zKind + " call=" + zCallId
+                            + " sendMs=" + ((System.nanoTime() - startedAt) / 1_000_000));
                     Object ok = res.get("ok");
                     if (!(ok instanceof Boolean) || !((Boolean) ok)) {
                         error = String.valueOf(res.get("error"));

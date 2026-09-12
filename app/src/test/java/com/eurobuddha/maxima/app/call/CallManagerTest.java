@@ -121,6 +121,65 @@ public class CallManagerTest {
         assertEquals("", calls.callId());
     }
 
+    @Test public void duplicateAnswersCannotReapplySdpOrRestartLiveCall() throws Exception {
+        answer(); answer();
+        verify(pc, times(1)).setRemoteDescription(any(), any());
+        finishRemote();
+        set("mState", CallManager.State.LIVE);
+        answer();
+        assertEquals(CallManager.State.LIVE, calls.state());
+        verify(pc, times(1)).setRemoteDescription(any(), any());
+    }
+
+    @Test public void answerCannotReplaceAnIncomingOffer() throws Exception {
+        set("mState", CallManager.State.INCOMING_RINGING);
+        calls.onSignal("synthetic-peer", ChatMessage.call("synthetic-call", "answer", "unexpected-answer"));
+        idle();
+        assertEquals(CallManager.State.INCOMING_RINGING, calls.state());
+        verify(pc, never()).setRemoteDescription(any(), any());
+    }
+
+    @Test public void connectionFailureSendsByeForTheRetiredCall() throws Exception {
+        List<Runnable> queued = queuedFailureBye();
+        com.eurobuddha.maxima.core.chat.ChatEngine chat = mock(com.eurobuddha.maxima.core.chat.ChatEngine.class);
+        com.eurobuddha.maxima.core.ChatPort port = mock(com.eurobuddha.maxima.core.ChatPort.class);
+        com.eurobuddha.maxima.core.contacts.Contact peer = new com.eurobuddha.maxima.core.contacts.Contact("synthetic-peer");
+        when(port.contact("synthetic-peer")).thenReturn(peer);
+        try (org.mockito.MockedStatic<com.eurobuddha.maxima.app.MaximaService> service = mockStatic(com.eurobuddha.maxima.app.MaximaService.class)) {
+            service.when(com.eurobuddha.maxima.app.MaximaService::chat).thenReturn(chat);
+            service.when(com.eurobuddha.maxima.app.MaximaService::port).thenReturn(port);
+            queued.get(0).run();
+            org.mockito.ArgumentCaptor<ChatMessage> sent = org.mockito.ArgumentCaptor.forClass(ChatMessage.class);
+            verify(chat).sendCallSignal(eq(peer), sent.capture());
+            assertEquals("synthetic-call", sent.getValue().ref);
+            assertEquals("bye", sent.getValue().state);
+        }
+    }
+
+    /** Hold transport until after the state has been cleared, then run its actual queued send. */
+    private List<Runnable> queuedFailureBye() throws Exception {
+        ExecutorService sender = (ExecutorService) get("mSendExec");
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch hold = new java.util.concurrent.CountDownLatch(1);
+        sender.execute(() -> {
+            started.countDown();
+            try { hold.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        worker.submit(() -> {
+            try {
+                java.lang.reflect.Method end = CallManager.class.getDeclaredMethod("end", String.class, boolean.class);
+                end.setAccessible(true); end.invoke(calls, "couldn't connect", true);
+            } catch (Exception e) { throw new RuntimeException(e); }
+        }).get(5, TimeUnit.SECONDS);
+        List<Runnable> queued = sender.shutdownNow();
+        assertEquals(1, queued.size());
+        assertEquals("", calls.callId());
+        assertEquals(CallManager.State.IDLE, calls.state());
+        verify(pc).close();
+        return queued;
+    }
+
     private void answer() throws Exception {
         calls.onSignal("synthetic-peer", ChatMessage.call("synthetic-call", "answer", "synthetic-sdp"));
         idle(); assertNotNull(remoteSet.get());
