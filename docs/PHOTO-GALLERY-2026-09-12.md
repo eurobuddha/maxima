@@ -43,3 +43,36 @@ centralisation issue and cross-network calling investigation remain unresolved.
 
 Publication status and final installer hashes are recorded in the local release STATUS.md;
 a successful build alone is not evidence of store publication.
+
+## Final release evidence
+
+Committed and pushed: maxima `a1ee17a186b5414f6be398d834a767ccac509b4e`,
+minimaCore Desktop `afbdf8d7cbd4bd744b86d6fbe2e3021f6d1da323`,
+minimaDesk `2533a7c4f38ec230043ea32892296f40c17d0cea`,
+iOS feature `acaaab3` (validation report `04301e9`).
+
+Both Android versions, all nine desktop platform entries, and both desktop update feeds
+are live. PandaApps final catalogue commit: `a34f67a4d5cc312bc2c0075e720ec5e5fef7aff7`.
+All 11 affected rows were read back from the GitHub API, the public IPFS gateway, and
+snapshot `bafybeicdtcbrcvutpduuladkbqcexlt2gvm4uhs6l65xarmy6ns6u7txqe`, with matching
+versions and SHA-256 hashes. The mirror was published on Hetzner. Optional Filebase
+remote pinning still reports an unavailable pin list; the local pin/public gateway work.
+
+All three Mac installers are Developer ID signed, notarized, stapled and verified.
+Windows/Linux installers were downloaded into each application's local `dist` folder
+and checked against release/feed digests. Both Mac host bundles contain the exact verified
+Node 0.2.108 jar. Standalone Windows compilation and MSI packaging succeeded; its CI
+attachment step failed on an empty SHA256SUMS. The released MSI digest was verified,
+the signed local Mac image replaced the unsigned CI image, and a complete three-platform
+checksum manifest was uploaded. Fixing the CI checksum-generation step is follow-up work.
+
+Parlons 0.6.123 (723) is installed and launched on the S23 and Z Fold, using in-place
+updates that retain account data. The synthetic S23 test app was removed.
+The exact iPhone gallery view passed an isolated simulator interaction test covering
+swipes, earlier history without selection loss, arrows and dismissal. The signed iOS
+archive and extension signatures verify; App Store Connect upload fails with
+`exportArchive Failed to Use Accounts`. iOS is not published to TestFlight/App Store.
+
+No fleet services were restarted for this gallery release. Node/Cloud jars are published;
+the paused WakeProxy fleet rollout remains paused. The pre-existing cross-network calling
+failure and standalone desktop calling implementation remain outside this feature.
