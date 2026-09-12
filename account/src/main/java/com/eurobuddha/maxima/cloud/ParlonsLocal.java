@@ -77,7 +77,7 @@ public final class ParlonsLocal {
     static final Set<String> ALLOWED = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "ping", "pair.list", "pair.approve", "pair.revoke", "pair.newcode",
             "node.status", "node.log", "node.figures", "node.hosts", "node.mls",
-            "identity.setname", "settings.get", "settings.set",
+            "identity.setname", "settings.get", "settings.set", "call.signal",
             "contacts.list", "contacts.add", "contacts.rename", "contacts.resolve",
             "contacts.remove", "contacts.info",
             "chat.summaries", "chat.conversation", "chat.send", "chat.markread", "chat.clear",
@@ -189,6 +189,19 @@ public final class ParlonsLocal {
                 }
             }
         };
+    }
+
+    // An event connection has its own call identity, bound to its HttpOnly session. Two tabs
+    // share the local device key, but must never both answer the same call.
+    private final Map<String, CallClient> mCallClients = new ConcurrentHashMap<>();
+
+    private static final class CallClient {
+        final String session;
+        CallClient(String session) { this.session = session; }
+    }
+
+    public boolean callsLive() {
+        return mPairing.isAuthorized(mLocalKey) && mCallClients.values().stream().anyMatch(c -> mSessions.containsKey(c.session));
     }
 
     /** Browser tabs currently listening on {@code /events}. */
@@ -382,6 +395,17 @@ public final class ParlonsLocal {
         if (body.length == 0) {
             body = "{}".getBytes(StandardCharsets.UTF_8);
         }
+        if ("call.signal".equals(name)) {
+            JSONObject signal;
+            try { signal = (JSONObject) new org.minima.utils.json.parser.JSONParser().parse(new String(body, StandardCharsets.UTF_8)); }
+            catch (Exception bad) { fail(ex, 400, "invalid call signal"); return; }
+            String client = String.valueOf(signal.get("client"));
+            CallClient caller = mCallClients.get(client);
+            if (caller == null || !session.equals(caller.session)) { fail(ex, 403, "call event connection required"); return; }
+            // Only this loopback adapter may supply the authenticated local caller identity.
+            signal.put("localClient", client);
+            body = signal.toString().getBytes(StandardCharsets.UTF_8);
+        }
         ServiceRegistry.Request req = new ServiceRegistry.Request("parlons." + name, body, mLocalKey,
                 Collections.emptyList());   // no reply address: never in the push fan-out
         byte[] out;
@@ -406,8 +430,17 @@ public final class ParlonsLocal {
     }
 
     private void events(HttpExchange ex) throws IOException {
-        if (session(ex) == null) {
-            return;
+        String session = session(ex);
+        if (session == null) return;
+        if (!mPairing.isAuthorized(mLocalKey)) { fail(ex, 403, "local device revoked"); return; }
+        String client = query(ex).get("client");
+        if (client == null) client = token();
+        if (!client.matches("[A-Za-z0-9_-]{20,100}")) { fail(ex, 400, "invalid event client"); return; }
+        CallClient listener = new CallClient(session);
+        CallClient existing = mCallClients.putIfAbsent(client, listener);
+        if (existing != null) {
+            if (!session.equals(existing.session)) { fail(ex, 403, "event client belongs to another session"); return; }
+            mCallClients.put(client, listener);
         }
         LinkedBlockingQueue<String> q = new LinkedBlockingQueue<>(SSE_QUEUE);
         mClients.add(q);
@@ -419,9 +452,9 @@ public final class ParlonsLocal {
             OutputStream os = ex.getResponseBody();
             // The client catches up with chat.since from the time in this hello.
             os.write(("event: hello\ndata: {\"time\":" + System.currentTimeMillis()
-                    + ",\"listeners\":" + mClients.size() + "}\n\n").getBytes(StandardCharsets.UTF_8));
+                    + ",\"listeners\":" + mClients.size() + ",\"client\":\"" + client + "\"}\n\n").getBytes(StandardCharsets.UTF_8));
             os.flush();
-            while (!Thread.currentThread().isInterrupted()) {
+            while (!Thread.currentThread().isInterrupted() && mSessions.containsKey(session) && mPairing.isAuthorized(mLocalKey)) {
                 String line = q.poll(SSE_PING_MS, TimeUnit.MILLISECONDS);
                 if (line == null) {
                     os.write(": ping\n\n".getBytes(StandardCharsets.UTF_8));
@@ -439,6 +472,7 @@ public final class ParlonsLocal {
             // the tab closed or the server stopped
         } finally {
             mClients.remove(q);
+            mCallClients.remove(client, listener);
             try { ex.close(); } catch (Exception ignored) { }
         }
     }

@@ -1,0 +1,31 @@
+# Parlons calls in minimaCore Desktop and minimaDesk
+
+The shared account panel's voice/video buttons previously redirected users to a paired phone. They now place and answer calls on the computer itself. Incoming calls ring and fill the panel; both Electron hosts load the receiver before the Parlons tab is visited, select it and bring the window forward when a call arrives. On macOS, closing the window keeps its receiver alive while the existing app/node remains running; Quit still stops the app and node.
+
+Versions: Parlons Node **0.2.107**, Cloud host **0.11.103**, minimaCore Desktop **0.16.81**, minimaDesk **0.7.64**. Source and installers are being prepared; see the local release evidence for publication status.
+
+## Reuse and implementation
+
+- `portal/src/main/java/com/eurobuddha/maxima/app/portal/PortalCallManager.java`: reused signal schema, fleet STUN configuration, single-call states, 45-second ringing and 20-second connecting deadlines, asynchronous remote-SDP/ICE ordering and call-identity guards. Browser adaptation is `account/src/main/resources/panel/calls.js`; no added dependency.
+- `account/src/main/resources/panel/app.js`, `panel.css`, `icons.js`: existing contacts, authenticated API, themes, buttons and avatar renderer. `calls-ui.js` supplies the full-window call screen, local ringtone, voice/video, mute and camera controls.
+- `ParlonsLocal.java`, `ParlonsControl.java`, `ParlonsCore.java`: existing loopback ticket/cookie authentication, allow-list and SSE feed. An authenticated event connection now counts as an available call receiver. Each browser has a separate call identity bound to its session, including SSE reconnects. First answer/decline wins atomically; losing tabs/devices cannot hang up the winning call. Peer identity scopes the call claim.
+- Both Electron hosts carry the same `main/parlons-calls.js`. Only their dedicated panel guest and exact loopback origin receive microphone/camera access and background autoplay. Guest preload restrictions remain. macOS packages declare microphone/camera use and audio-input entitlement.
+
+## Validation
+
+- Browser call-engine regressions: offer-before-ICE, early/concurrent ICE, duplicate answers, deferred microphone permission after hangup, exact-call Answer/Decline, sibling-answer cancellation, stale/unknown/busy offers, timeout and cleanup.
+- Existing panel regression tests continue to pass.
+- Real account handler tests cover browser/phone answer races, losing-device hangup refusal, unknown-contact rejection and local presence. Local HTTP tests cover event-client/session binding, forged local-client replacement and revoked-device presence, alongside the existing ticket/cookie/Host/Origin/allow-list tests.
+- Electron host tests cover exact-origin media permission, cross-frame refusal, reserved partition, autoplay/background settings, call attention and loading before visiting the tab. minimaDesk TypeScript check passes.
+- Isolated real Chromium tests exchanged both audio and video RTP in both directions with fake capture devices. Ringtone AudioContext ran while hidden, the actual guest integration selected/brought forward the panel, and Answer/Hangup stopped ringing and cleaned up. Light/dark screenshots captured.
+- Synthetic tests do not establish physical speaker/microphone quality, Android interoperability, or cross-internet NAT traversal. macOS OS permission prompts require user consent; synthetic capture tests bypass those prompts.
+
+## Decentralisation and unresolved cross-network call
+
+Call signalling retains the existing authenticated, encrypted Maxima route. Media uses direct WebRTC DTLS-SRTP between participants; STUN discovers addresses and does not carry media. No new central service or media relay was introduced. The existing STUN list has redundant hosts but remains operator-concentrated; it is not proof of operator independence. There is no TURN fallback for networks that cannot establish a direct path.
+
+The owner reported a failed Z Fold call to a friend on another internet connection on 2026-09-12. At 10:25 the Fold gathered public (`srflx`) addresses, received an answer, entered CONNECTING and received remote ICE candidates several seconds apart, but never reached LIVE before the remote bye. This proves a failed media establishment after signalling; it does not identify the far-end NAT or prove a missing-STUN cause. The friend's version and far-end diagnostics remain needed. No unsolicited test calls to that contact were placed. Earlier evidence records externally blocked UDP9501 at MegaMMR and Vigilance; this release does not claim to fix that infrastructure issue.
+
+Wake-proxy fleet work remains paused and excluded from the release tree. The existing wake-proxy centralisation issue remains unresolved. Decentralisation is **not** claimed fully satisfied.
+
+Local evidence: `../_artifacts/parlons-desktop-calls-2026-09-12/` (outside this repository), including clean source, test/build logs, media counters, screenshots, Fold diagnostic capture and publication records.

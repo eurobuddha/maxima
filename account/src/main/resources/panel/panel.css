@@ -225,3 +225,20 @@ button:disabled { cursor: default; opacity: .55; }
 
 .ipill:focus-within { outline: 2px solid var(--text); outline-offset: -2px; }
 .ipill textarea:focus-visible { outline: none; }
+
+/* A call fills the panel, including narrow desktop windows, in both themes. */
+.call-screen { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; gap: 20px; padding: 28px 20px; overflow: auto; background: var(--bg); color: var(--text); }
+.call-heading { text-align: center; flex-shrink: 0; }
+.call-brand { color: var(--subtext); font-size: 14px; margin-bottom: 28px; }
+#callAvatar .av { width: 88px; height: 88px; font-size: 38px; margin: auto; }
+#callName { font-size: clamp(24px, 4vw, 36px); overflow-wrap: anywhere; margin: 18px 0 8px; }
+#callStatus { color: var(--subtext); font-size: 17px; }
+.call-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; flex-shrink: 0; }
+.call-controls .btn { min-height: 56px; min-width: 110px; border-radius: 28px; font-size: 16px; }
+.call-controls .call-answer { background: #267344; color: #fff; }
+.call-controls .call-decline { background: #b3362d; color: #fff; }
+.call-controls button:focus-visible { outline: 3px solid var(--text); outline-offset: 4px; }
+.call-video { position: relative; width: min(100%, 960px); min-height: 150px; flex: 1; }
+#callRemote { width: 100%; height: 100%; max-height: 50vh; object-fit: contain; background: #111; border-radius: 16px; }
+#callLocal { position: absolute; right: 12px; bottom: 12px; width: 25%; max-height: 130px; border-radius: 10px; background: #111; transform: scaleX(-1); }
+.call-audio-note { color: var(--text); text-align: center; }

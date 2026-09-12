@@ -240,6 +240,26 @@ public class ParlonsLocalTest {
         c.disconnect();
     }
 
+    @Test
+    public void callSignalsRequireAnActiveEventClientBoundToTheSameSession() throws Exception {
+        String cookie = signIn(), other = signIn();
+        reg.register("parlons.call.signal", req -> { seen.set(req); return "{\"ok\":true}".getBytes(StandardCharsets.UTF_8); });
+        String client = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        String body = "{\"client\":\"" + client + "\",\"localClient\":\"forged\"}";
+        assertEquals(403, call("POST", "/api/call.signal", cookie, null, body, null).code);
+        HttpURLConnection c = (HttpURLConnection) new URL(base() + "/events?client=" + client).openConnection();
+        c.setRequestProperty("Cookie", ParlonsLocal.COOKIE + "=" + cookie);
+        c.setReadTimeout(5000); assertEquals(200, c.getResponseCode());
+        assertTrue(readEvent(c.getInputStream()).contains(client)); assertTrue(local.callsLive());
+        assertEquals(403, call("POST", "/api/call.signal", other, null, body, null).code);
+        assertEquals(200, call("POST", "/api/call.signal", cookie, null, body, null).code);
+        String forwarded = new String(seen.get().payload, StandardCharsets.UTF_8);
+        assertTrue(forwarded.contains("\"localClient\":\"" + client + "\""));
+        assertFalse(forwarded.contains("forged"));
+        assertTrue(pairing.revoke(key, new com.eurobuddha.maxima.core.codec.MiniData(key).to0xString()));
+        assertFalse(local.callsLive()); c.disconnect();
+    }
+
     private static String readEvent(InputStream in) throws Exception {
         StringBuilder sb = new StringBuilder();
         int b, nl = 0;

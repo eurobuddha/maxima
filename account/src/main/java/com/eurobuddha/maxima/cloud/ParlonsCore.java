@@ -618,6 +618,7 @@ public final class ParlonsCore {
             local.start();
             mLocal = local;
             mControl.setLocalSink(local.sink());
+            mControl.setLocalLive(local::callsLive);
             mControl.setPanelSource(local::newTicketUrl);
         } catch (Exception e) {
             mLocal = null;

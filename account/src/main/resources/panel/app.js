@@ -23,7 +23,7 @@
 
   let signedOut = false;
   async function api(method, body) {
-    const r = await fetch('/api/' + method, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const r = await fetch('/api/' + method, { method: 'POST', credentials: 'same-origin', signal: method === 'call.signal' ? AbortSignal.timeout(10000) : undefined, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
     if (r.status === 401) { signedOut = true; setState('signed out', 'bad'); throw new Error('Signed out - open the panel with a fresh link'); }
     const j = await r.json().catch(() => ({ ok: false, error: 'bad reply' }));
     if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || method + ' failed');
@@ -295,8 +295,8 @@
       + '<button class="sendbtn" id="sendBtn" title="Send">' + ic('send') + '</button></div><div class="senderr" id="sendErr" hidden></div>'));
     $('back').addEventListener('click', () => go('#chats'));
     $('cTheme').addEventListener('click', () => $('btnTheme').click());
-    $('cVideo').addEventListener('click', () => showBanner('Video calls ring on your phone - open Parlons there to call ' + S.openName, 5000));
-    $('cCall').addEventListener('click', () => showBanner('Calls ring on your phone - open Parlons there to call ' + S.openName, 5000));
+    $('cVideo').addEventListener('click', () => startCall(true));
+    $('cCall').addEventListener('click', () => startCall(false));
     $('cMore').addEventListener('click', () => S.openIsGroup ? groupInfo(peer) : contactInfo(peer));
     $('sendBtn').addEventListener('click', sendDraft);
     $('emojiBtn').addEventListener('click', () => { const d = $('draft'); d.focus(); });
@@ -694,14 +694,19 @@
     catch (e) { setState('offline', 'bad'); }
   }
 
+  function startCall(video) {
+    if (S.openIsGroup) { toast('Calls are available in one-to-one conversations.'); return; }
+    if (calls && S.open) calls.start(S.open, S.openName, video).catch(e => toast(e.message, 'err'));
+  }
+
   // ---------- live events ----------
-  let es = null;
+  let es = null, calls = null;
   function listen() {
     if (es) { try { es.close(); } catch (e) {} }
-    es = new EventSource('/events');
-    es.addEventListener('hello', () => { refreshPill(); catchUp(); });
+    es = new EventSource('/events?client=' + encodeURIComponent(calls.client));
+    es.addEventListener('hello', () => { calls.ready = true; refreshPill(); catchUp(); });
     es.addEventListener('push', (ev) => { let e; try { e = JSON.parse(ev.data); } catch (x) { return; } handleEvent(e); });
-    es.onerror = () => { setState('reconnecting…', 'bad'); };
+    es.onerror = () => { calls.ready = false; setState('reconnecting…', 'bad'); };
   }
   async function catchUp() {
     if (!S.lastEvent) { await loadSummaries().catch(() => {}); return; }
@@ -722,8 +727,7 @@
     } else if (e.type === 'state') {
       if (S.open === e.peer) { const m = S.msgs.find((x) => x.id === e.id); if (m) { m.state = e.state; renderMsgs(false); } }
     } else if (e.type === 'call') {
-      if (e.kind === 'offer') showBanner((e.name || 'Someone') + ' is calling - answer on your phone', 30000);
-      else if (e.kind === 'taken' || e.kind === 'bye') hideBanner();
+      if (calls) calls.receive(e);
     }
   }
   let bannerTimer = null;
@@ -744,6 +748,7 @@
     } catch (e) { setState('offline', 'bad'); $('page').innerHTML = ''; retryCard($('page'), 'Could not reach your account', e.message, boot); return; }
     await loadSummaries().catch((e) => toast(e.message, 'err'));
     if ('Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch (e) {} }
+    if (!calls) calls = window.initParlonsCalls({api, avatar, toast});
     listen();
     render();
   }

@@ -244,6 +244,10 @@ public final class ParlonsControl implements AutoCloseable {
      *  is handed here first, in-process. Null = no local consumer. */
     private volatile java.util.function.Consumer<JSONObject> mLocalSink;
 
+    private volatile java.util.function.BooleanSupplier mLocalLive = () -> false;
+
+    public void setLocalLive(java.util.function.BooleanSupplier live) { mLocalLive = live; }
+
     public void setLocalSink(java.util.function.Consumer<JSONObject> zSink) {
         mLocalSink = zSink;
     }
@@ -1396,30 +1400,27 @@ public final class ParlonsControl implements AutoCloseable {
             if (peer.isEmpty() || id.isEmpty() || kind.isEmpty()) {
                 return bytes(err("peer, id and kind required"));
             }
+            Contact c = mNode.contact(peer);
+            if (c == null) return bytes(err("unknown contact " + peer));
             String dev = new com.eurobuddha.maxima.core.codec.MiniData(req.fromPublicKey).to0xString();
-            if ("answer".equals(kind)) {
-                // First answer wins across the account's devices; the rest stop ringing.
-                Taken taken = mCallTaken.putIfAbsent(id, new Taken(dev));
-                if (taken != null && !taken.device.equalsIgnoreCase(dev)) {
+            String client = mPairing.isLocal(dev) ? str(in, "localClient") : "";
+            String owner = client.isEmpty() ? dev : dev + ":" + client;
+            // Include the peer in the claim key: call ids from distinct contacts are unrelated.
+            String claim = peer.toLowerCase(java.util.Locale.ROOT) + ":" + id;
+            Taken taken = mCallTaken.get(claim);
+            if (taken != null && !taken.device.equalsIgnoreCase(owner)) {
+                return bytes(err("answered on another device"));
+            }
+            if ("answer".equals(kind) || "bye".equals(kind)) {
+                // Answer and decline race atomically. A losing device must not hang up the winner.
+                taken = mCallTaken.putIfAbsent(claim, new Taken(owner));
+                if (taken != null && !taken.device.equalsIgnoreCase(owner)) {
                     return bytes(err("answered on another device"));
                 }
                 JSONObject ev = new JSONObject();
-                ev.put("type", "call");
-                ev.put("kind", "taken");
-                ev.put("ref", id);
+                ev.put("type", "call"); ev.put("kind", "taken"); ev.put("ref", id);
+                if (!client.isEmpty()) ev.put("exceptClient", client);
                 push(ev, dev);
-            } else if ("bye".equals(kind) && !mCallTaken.containsKey(id)) {
-                // A DECLINE from one device stops the others ringing too — without this the
-                // siblings ring out their full 45s for a call already refused.
-                JSONObject ev = new JSONObject();
-                ev.put("type", "call");
-                ev.put("kind", "taken");
-                ev.put("ref", id);
-                push(ev, dev);
-            }
-            Contact c = mNode.contact(peer);
-            if (c == null) {
-                return bytes(err("unknown contact " + peer));
             }
             com.eurobuddha.maxima.core.chat.ChatMessage m =
                     com.eurobuddha.maxima.core.chat.ChatMessage.call(id, kind, payload);
@@ -2219,6 +2220,7 @@ public final class ParlonsControl implements AutoCloseable {
     // ---- push: cloud → devices ----
 
     private boolean anyLive() {
+        if (mLocalLive.getAsBoolean()) return true;
         long now = System.currentTimeMillis();
         for (Live l : mLive.values()) {
             if (now - l.seen < LIVE_MS) {
