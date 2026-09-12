@@ -2,7 +2,9 @@
 
 The shared account panel's voice/video buttons previously redirected users to a paired phone. They now place and answer calls on the computer itself. Incoming calls ring and fill the panel; both Electron hosts load the receiver before the Parlons tab is visited, select it and bring the window forward when a call arrives. On macOS, closing the window keeps its receiver alive while the existing app/node remains running; Quit still stops the app and node.
 
-Versions: Parlons Node **0.2.107**, Cloud host **0.11.103**, minimaCore Desktop **0.16.81**, minimaDesk **0.7.64**. Source and installers are being prepared; see the local release evidence for publication status.
+Versions: Parlons Node **0.2.107**, Cloud host **0.11.103**, minimaCore Desktop **0.16.81**, minimaDesk **0.7.64**. Source is committed and pushed. GitHub releases and both desktop update feeds are published for macOS arm64, Windows x64 and Linux x64. All six installers are present in the hosts' respective local `dist` folders; Mac installers are signed, notarised and stapled. Catalogue/IPFS status is recorded in the local release evidence.
+
+This is not a complete telephony closeout. The Z Fold-to-friend connection failure remains unresolved, and standalone Parlons Desktop **1.5.99** still has signalling-only call handling: its buttons show an explanation and it cannot carry audio/video. Updating the standalone app remains outstanding. The iPhone client also has no implemented calling engine.
 
 ## Reuse and implementation
 
@@ -27,5 +29,9 @@ Call signalling retains the existing authenticated, encrypted Maxima route. Medi
 The owner reported a failed Z Fold call to a friend on another internet connection on 2026-09-12. At 10:25 the Fold gathered public (`srflx`) addresses, received an answer, entered CONNECTING and received remote ICE candidates several seconds apart, but never reached LIVE before the remote bye. This proves a failed media establishment after signalling; it does not identify the far-end NAT or prove a missing-STUN cause. The friend's version and far-end diagnostics remain needed. No unsolicited test calls to that contact were placed. Earlier evidence records externally blocked UDP9501 at MegaMMR and Vigilance; this release does not claim to fix that infrastructure issue.
 
 Wake-proxy fleet work remains paused and excluded from the release tree. The existing wake-proxy centralisation issue remains unresolved. Decentralisation is **not** claimed fully satisfied.
+
+## Further observations retained for follow-up
+
+The Fold log also contains a separate earlier call to S10+ with two answers: the second attempts to apply an answer in the WebRTC `stable` state. The original Android answer handler does not currently restrict acceptance to OUTGOING_RINGING. This is separate from the later friend failure, whose captured timeline has one answer. The Android `end` method also clears the call identifier before its optional bye is queued. These observations have not been patched in this desktop release and are not claimed as the cause of the friend's failed call.
 
 Local evidence: `../_artifacts/parlons-desktop-calls-2026-09-12/` (outside this repository), including clean source, test/build logs, media counters, screenshots, Fold diagnostic capture and publication records.
