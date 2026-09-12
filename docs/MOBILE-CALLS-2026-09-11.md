@@ -70,3 +70,20 @@ After the owner unlocked the S10+, the two test phones were paired through the n
 Local evidence: `RINGER-VERIFIED-2026-09-12.json`, both `*-incoming.png` screenshots, UI/window/audio snapshots, `decline-action-test.json` and call logs under the evidence directory.22 Android unit tests and both signed release builds had passed before publication. Android Cloud0.2.70 carries the same repair and passed its tests/build; a paired Cloud device was not part of this hardware run. No further APK changes were needed after the successful hardware checks. Mobile-data/video and the separately paused wake-proxy issue remain outside this ringing verification.
 
 The S10+ screenshot also exposes low-contrast status-bar text over a light status-bar background. Record that as cosmetic follow-up; the full-screen caller display and controls are readable.
+
+## Coverage of other telephony variants — checked2026-09-12
+
+The owner requested the same ringtone/full-screen repair for the other variants that support telephony. Inspection of current source found the following:
+
+| Variant | Actual calling capability | Repair coverage |
+|---|---|---|
+| Original Android | Native WebRTC voice/video | Published0.6.121/code721; verified on S10+ and S23 |
+| Android Cloud portal | Native WebRTC voice/video for a paired account | Same repair already published0.2.70/code270; tests/build passed |
+| Standalone Parlons Desktop | Signalling-only incoming dialog; Decline/timeout; no audio/video media | No compatible telephony implementation to patch |
+| Web account panel, including minimaCore Desktop and minimaDesk | Call buttons display a phone-only explanation; incoming offers display a banner | No WebRTC media session, ringtone or answer implementation to propagate this fix into |
+| iPhone client | Chat client; voice/video calling not implemented | No CallKit/WebRTC implementation to patch; calls remain a feature in the existing parity plan |
+| Cloud/Node account hosts and relays | Route call signalling for capable clients | Android notification/audio playback is client-local; no server repair needed |
+
+Exact sources checked: `app/.../call/IncomingCallScreen.java` and `CallManager.java`; `portal/.../PortalIncomingCall.java` and `PortalCallManager.java`; `desktop/.../ui/DesktopCalls.java` (complete implementation), its attachment in `MaximaWindow.java` and buttons in `ChatsPanel.java`; `account/src/main/resources/panel/app.js` (`cCall`, `cVideo`, `handleEvent`); both Electron hosts' `main/parlons.js` and panel IPC wiring in `main/main.js`; iOS `App/Sources/Chats/ChatView.swift`, `App/project.yml`, `ParlonsKit/Package.swift` and `docs/PARITY-PLAN.md` phase5. Searches covered the related native/UI sources and Minima app catalogue trees; no additional live calling implementation was found.
+
+Thus every currently implemented voice/video client already contains the repair. This check required no new application code, version bump, rebuild or deployment. Making iPhone or desktop answer audio/video calls is new feature work, beyond propagating a notification fix. The existing desktop call icons and earlier broad parity language must not be treated as proof of media support. Wake-proxy fleet work remains paused; adding iOS call wake delivery must respect the unresolved decentralisation constraint.
