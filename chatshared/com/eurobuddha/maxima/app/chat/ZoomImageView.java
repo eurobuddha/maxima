@@ -22,6 +22,11 @@ public final class ZoomImageView extends android.widget.ImageView {
     private ScaleGestureDetector mScale;
     private GestureDetector mGest;
     private Runnable mSingleTap;
+    private java.util.function.IntConsumer mPage;
+    private float mDownX, mDownY;
+    private boolean mCanPage;
+
+    public void setOnPage(java.util.function.IntConsumer page) { mPage = page; }
 
     public ZoomImageView(Context zCtx) {
         super(zCtx);
@@ -30,6 +35,7 @@ public final class ZoomImageView extends android.widget.ImageView {
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override
             public boolean onScale(ScaleGestureDetector d) {
+                mCanPage = false;
                 float cur = scale();
                 float target = Math.max(mFit, Math.min(mFit * 5f,
                         cur * d.getScaleFactor()));
@@ -42,6 +48,9 @@ public final class ZoomImageView extends android.widget.ImageView {
         });
         mGest = new GestureDetector(zCtx, new GestureDetector.SimpleOnGestureListener() {
             @Override
+            public boolean onDown(MotionEvent e) { return true; }
+
+            @Override
             public boolean onScroll(MotionEvent a, MotionEvent b, float dx, float dy) {
                 mM.postTranslate(-dx, -dy);
                 clamp();
@@ -51,6 +60,7 @@ public final class ZoomImageView extends android.widget.ImageView {
 
             @Override
             public boolean onDoubleTap(MotionEvent e) {
+                mCanPage = false;
                 float cur = scale();
                 if (cur > mFit * 1.01f) {
                     fit();
@@ -86,6 +96,8 @@ public final class ZoomImageView extends android.widget.ImageView {
     @Override
     public void setImageBitmap(Bitmap zBmp) {
         super.setImageBitmap(zBmp);
+        mM.reset(); mFit = 1f;
+        setImageMatrix(mM);
         fit();
     }
 
@@ -131,7 +143,26 @@ public final class ZoomImageView extends android.widget.ImageView {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+        int action = e.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mDownX = e.getX(); mDownY = e.getY();
+            mCanPage = scale() <= mFit * 1.01f;
+        }
+        // A pinch (including zooming back to fit) must never turn its final UP into a page.
+        if (e.getPointerCount() > 1 || action == MotionEvent.ACTION_CANCEL) mCanPage = false;
+        if (action == MotionEvent.ACTION_UP) {
+            int direction = PhotoSwipe.direction(e.getX() - mDownX, e.getY() - mDownY,
+                    getResources().getDisplayMetrics().density, mCanPage);
+            if (mPage != null && direction != 0) {
+                MotionEvent cancel = MotionEvent.obtain(e);
+                cancel.setAction(MotionEvent.ACTION_CANCEL);
+                mGest.onTouchEvent(cancel);
+                mScale.onTouchEvent(cancel);
+                cancel.recycle();
+                mCanPage = false;
+                mPage.accept(direction);
+                return true;
+            }
             performClick();
         }
         mScale.onTouchEvent(e);

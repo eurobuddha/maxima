@@ -36,29 +36,71 @@ final class ImageViewer {
 
     private ImageViewer() { }
 
-    static void open(Window owner, BufferedImage img, String suggestedName) {
+    interface Loader { BufferedImage load(com.eurobuddha.maxima.core.chat.ChatImages.Photo photo) throws Exception; }
+
+    static void open(Window owner, com.eurobuddha.maxima.core.chat.ChatImages photos, Loader loader) {
+        if (photos.current() == null) return;
         JDialog d = new JDialog(owner, "Image", JDialog.ModalityType.APPLICATION_MODAL);
         d.setLayout(new BorderLayout());
-
-        Canvas canvas = new Canvas(img);
+        Canvas canvas = new Canvas(null);
         d.add(canvas, BorderLayout.CENTER);
-
-        // Translucent chrome bar (matches the phone's #B3000000 overlay).
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
         bar.setBackground(new Color(0, 0, 0, 179));
-        bar.add(chromeButton("Save", () -> save(d, img, suggestedName)));
-        bar.add(chromeButton("Copy", () -> copy(img)));
-        bar.add(chromeButton("Close", d::dispose));
-        d.add(bar, BorderLayout.SOUTH);
-
+        javax.swing.JLabel counter = new javax.swing.JLabel(); counter.setForeground(Color.WHITE);
+        bar.add(counter);
+        JButton save = chromeButton("Save", () -> {
+            if (canvas.img != null) save(d, canvas.img,
+                    com.eurobuddha.maxima.core.chat.ChatMedia.mime(photos.current().body).contains("png") ? "image.png" : "image.jpg");
+        });
+        JButton copy = chromeButton("Copy", () -> { if (canvas.img != null) copy(canvas.img); });
+        java.util.concurrent.ThreadPoolExecutor worker = (java.util.concurrent.ThreadPoolExecutor)
+                java.util.concurrent.Executors.newFixedThreadPool(1);
+        java.util.concurrent.Future<?>[] pending = {null};
+        int[] generation = {0};
+        Runnable[] bind = new Runnable[1];
+        java.util.function.IntConsumer page = delta -> { if (photos.move(delta)) bind[0].run(); };
+        JButton prev = chromeButton("‹", () -> page.accept(-1)); prev.setToolTipText("Previous photo");
+        JButton next = chromeButton("›", () -> page.accept(1)); next.setToolTipText("Next photo");
+        JButton retry = chromeButton("Retry", () -> bind[0].run());
+        bar.add(prev); bar.add(next); bar.add(retry); bar.add(save); bar.add(copy);
+        bar.add(chromeButton("Close", d::dispose)); d.add(bar, BorderLayout.SOUTH);
+        bind[0] = () -> {
+            int ticket = ++generation[0];
+            if (pending[0] != null) pending[0].cancel(true);
+            worker.purge();
+            canvas.setImage(null); canvas.status = "Loading photo…";
+            save.setEnabled(false); copy.setEnabled(false); retry.setVisible(false);
+            counter.setText((photos.index() + 1) + " / " + photos.size());
+            prev.setEnabled(photos.index() > 0); next.setEnabled(photos.index() + 1 < photos.size());
+            com.eurobuddha.maxima.core.chat.ChatImages.Photo photo = photos.current();
+            pending[0] = worker.submit(() -> {
+                BufferedImage result = null;
+                try { result = loader.load(photo); } catch (Exception ignored) { }
+                final BufferedImage image = result;
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (ticket != generation[0] || !d.isDisplayable()) return;
+                    canvas.status = "Photo unavailable"; canvas.setImage(image);
+                    save.setEnabled(image != null); copy.setEnabled(image != null); retry.setVisible(image == null);
+                });
+            });
+        };
+        canvas.page = page;
+        d.addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                generation[0]++; worker.shutdownNow(); canvas.setImage(null);
+            }
+        });
+        d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         d.getRootPane().registerKeyboardAction(e -> d.dispose(),
-                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
-                JComponent.WHEN_IN_FOCUSED_WINDOW);
-
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        d.getRootPane().registerKeyboardAction(e -> page.accept(-1),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        d.getRootPane().registerKeyboardAction(e -> page.accept(1),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
         d.setSize(Math.min(screen.width - 80, 1100), Math.min(screen.height - 80, 820));
         d.setLocationRelativeTo(owner);
-        d.setVisible(true);
+        bind[0].run(); d.setVisible(true);
     }
 
     private static JButton chromeButton(String label, Runnable action) {
@@ -119,7 +161,11 @@ final class ImageViewer {
 
     /** Zoom/pan canvas. */
     private static final class Canvas extends JComponent {
-        private final BufferedImage img;
+        private BufferedImage img;
+        private String status = "Loading photo…";
+        private java.util.function.IntConsumer page;
+        private Point down;
+        private boolean canPage;
         private double zoom = 1;       // 1 = fit-to-window
         private double fit = 1;
         private int panX, panY;
@@ -130,9 +176,16 @@ final class ImageViewer {
             setBackground(Color.BLACK);
             setOpaque(true);
             MouseAdapter m = new MouseAdapter() {
-                public void mousePressed(MouseEvent e) { drag = e.getPoint(); }
+                public void mousePressed(MouseEvent e) { drag = e.getPoint(); down = e.getPoint(); canPage = zoom <= 1.01; }
+                public void mouseReleased(MouseEvent e) {
+                    if (down != null && canPage && page != null) {
+                        int dx = e.getX() - down.x, dy = e.getY() - down.y;
+                        if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.5) page.accept(dx < 0 ? 1 : -1);
+                    }
+                    down = null; drag = null;
+                }
                 public void mouseDragged(MouseEvent e) {
-                    if (drag != null) {
+                    if (drag != null && zoom > 1.01) {
                         panX += e.getX() - drag.x;
                         panY += e.getY() - drag.y;
                         drag = e.getPoint();
@@ -148,11 +201,16 @@ final class ImageViewer {
             addMouseListener(m);
             addMouseMotionListener(m);
             addMouseWheelListener((MouseWheelEvent e) -> {
+                canPage = false;
                 double f = e.getPreciseWheelRotation() < 0 ? 1.1 : 1 / 1.1;
                 double nz = Math.max(1, Math.min(8, zoom * f));
                 zoom = nz;
                 repaint();
             });
+        }
+
+        void setImage(BufferedImage image) {
+            img = image; zoom = 1; panX = 0; panY = 0; repaint();
         }
 
         protected void paintComponent(Graphics g) {
@@ -162,6 +220,10 @@ final class ImageViewer {
             int w = getWidth(), h = getHeight();
             g2.setColor(Color.BLACK);
             g2.fillRect(0, 0, w, h);
+            if (img == null) {
+                g2.setColor(Color.WHITE); g2.drawString(status, Math.max(12, w / 2 - 70), h / 2);
+                g2.dispose(); return;
+            }
             int iw = img.getWidth(), ih = img.getHeight();
             fit = Math.min((double) w / iw, (double) h / ih);
             double scale = fit * zoom;

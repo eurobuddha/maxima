@@ -397,9 +397,103 @@
       catch (e) { toast(e.message, 'err'); b.disabled = false; }
     }));
     box.querySelectorAll('.cccopy').forEach((b) => b.addEventListener('click', () => copy(b.dataset.addr)));
-    box.querySelectorAll('img.pic').forEach((img) => img.addEventListener('click', () => { const v = el('<div class="viewer"><img src="' + esc(img.src) + '"></div>'); v.addEventListener('click', () => v.remove()); document.body.appendChild(v); }));
+    box.querySelectorAll('img.pic').forEach((img) => {
+      img.tabIndex = 0; img.setAttribute('role', 'button'); img.setAttribute('aria-label', 'Open photo');
+      img.addEventListener('click', () => openPhotos(img.closest('.mrow').dataset.id));
+    });
     if (atEnd) box.scrollTop = box.scrollHeight;
     toBottomBtn();
+  }
+  // Same conversation order and bounded navigation as the native photo viewers.
+  function chatPhotos(messages) {
+    const seen = new Set();
+    return messages.filter((e) => {
+      const m = parseMedia(e.body);
+      if (!m || !m.mime.startsWith('image/') || !mediaUrl(m) || seen.has(e.id)) return false;
+      seen.add(e.id); return true;
+    }).slice().sort((a, b) => Number(a.time) - Number(b.time));
+  }
+  function openPhotos(id) {
+    let photos = chatPhotos(S.msgs);
+    const peer = S.open;
+    let oldest = Math.min(...S.msgs.map((m) => Number(m.time)).filter((t) => t > 0));
+    let olderDone = !Number.isFinite(oldest), busy = false, closed = false;
+    let index = photos.findIndex((e) => e.id === id);
+    if (index < 0) return;
+    const focus = document.activeElement, app = $('app'), wasInert = app.inert;
+    const v = el('<div class="viewer" role="dialog" aria-modal="true" aria-label="Chat photos">'
+      + '<div class="photo-stage"></div><div class="photo-top"><span class="photo-count" aria-live="polite"></span>'
+      + '<button class="photo-close" aria-label="Close photo viewer">×</button></div>'
+      + '<div class="photo-nav"><button class="photo-prev" aria-label="Previous photo">‹</button>'
+      + '<button class="photo-next" aria-label="Next photo">›</button></div></div>');
+    const stage = v.querySelector('.photo-stage'), prev = v.querySelector('.photo-prev'), next = v.querySelector('.photo-next');
+    const close = () => { closed = true; document.removeEventListener('keydown', onKey, true); v.remove(); app.inert = wasInert; if (focus && focus.isConnected) focus.focus(); };
+    const bind = () => {
+      const img = document.createElement('img'); img.alt = 'Photo ' + (index + 1); img.draggable = false;
+      const note = document.createElement('button'); note.className = 'photo-status'; note.textContent = 'Loading photo…'; note.disabled = true;
+      img.addEventListener('load', () => note.remove());
+      img.addEventListener('error', () => { img.hidden = true; note.textContent = 'Photo unavailable · retry'; note.disabled = false; });
+      note.addEventListener('click', bind);
+      // Replace the element per page: a late response cannot overwrite the selected photo.
+      stage.replaceChildren(img, note); img.src = mediaUrl(parseMedia(photos[index].body));
+      v.querySelector('.photo-count').textContent = (index + 1) + ' / ' + photos.length;
+      prev.disabled = index === 0 && olderDone; next.disabled = index === photos.length - 1;
+    };
+    const page = async (delta) => {
+      if (busy) return;
+      const n = index + delta;
+      if (n >= 0 && n < photos.length) { index = n; bind(); return; }
+      if (delta >= 0 || olderDone) return;
+      busy = true; prev.disabled = true; next.disabled = true;
+      v.querySelector('.photo-count').textContent = 'Loading earlier photos…';
+      const selectedId = photos[index].id;
+      try {
+        while (!closed) {
+          const r = await api('chat.conversation', {peer, limit: 100, before: oldest});
+          if (closed) return;
+          const entries = r.messages || [];
+          const earliest = Math.min(...entries.map((e) => Number(e.time)).filter((t) => t > 0));
+          if (!entries.length || !Number.isFinite(earliest) || earliest >= oldest) { olderDone = true; break; }
+          oldest = earliest;
+          photos = chatPhotos(photos.concat(entries));
+          index = photos.findIndex((e) => e.id === selectedId);
+          if (index > 0) { index--; break; }
+        }
+      } catch (e) { toast('Could not load earlier photos. Try again.', 'err'); }
+      finally { busy = false; if (!closed) bind(); }
+    };
+    prev.addEventListener('click', () => page(-1)); next.addEventListener('click', () => page(1));
+    v.querySelector('.photo-close').addEventListener('click', close);
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); page(e.key === 'ArrowLeft' ? -1 : 1); }
+      else if (e.key === 'Tab') {
+        const fields = [...v.querySelectorAll('button')].filter((b) => !b.disabled);
+        const first = fields[0], last = fields[fields.length - 1];
+        if (!v.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    let down = null, multi = false;
+    const pointers = new Set();
+    stage.addEventListener('pointerdown', (e) => {
+      pointers.add(e.pointerId);
+      if (pointers.size > 1) { multi = true; return; }
+      multi = false; down = { x: e.clientX, y: e.clientY };
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointerup', (e) => {
+      pointers.delete(e.pointerId);
+      if (down && !multi && (!window.visualViewport || window.visualViewport.scale <= 1.01)) {
+        const dx = e.clientX - down.x, dy = e.clientY - down.y;
+        if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.5) page(dx < 0 ? 1 : -1);
+      }
+      down = null;
+    });
+    stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); down = null; multi = true; });
+    document.body.appendChild(v); app.inert = true; bind(); v.querySelector('.photo-close').focus();
   }
   function drawWave(c) {
     const bars = waveBars(c.dataset.wave || ''); const n = Math.max(bars.length, 24);

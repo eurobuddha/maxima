@@ -418,6 +418,12 @@ public final class CloudChatActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        if (mPhotoViewer != null) mPhotoViewer.dismiss();
+        super.onDestroy();
+    }
+
     private void startCall(boolean zVideo) {
         Intent i = new Intent(this, PortalCallActivity.class);
         i.putExtra(PortalCallActivity.EXTRA_PEER, mPeer);
@@ -1206,68 +1212,38 @@ public final class CloudChatActivity extends AppCompatActivity {
         mAdapter.notifyDataSetChanged();
     }
 
-    /** Full-screen in-app viewer: pinch-zoom, pan, double-tap, save, share. */
+    /** Photo snapshot of this conversation, including images outside the thumbnail cache. */
+    private com.eurobuddha.maxima.app.chat.ChatImageViewer mPhotoViewer;
     private void openImage(String id) {
-        final android.graphics.Bitmap b = mImageCache.get(id);
-        if (b == null) {
-            return;
+        java.util.List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> photos = new java.util.ArrayList<>();
+        for (Msg m : mMsgs) {
+            photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(m.id, m.body, m.time));
         }
-        final android.app.Dialog d = new android.app.Dialog(this,
-                android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        android.widget.FrameLayout root = new android.widget.FrameLayout(this);
-        root.setBackgroundColor(0xFF000000);
-
-        com.eurobuddha.maxima.app.chat.ZoomImageView z =
-                new com.eurobuddha.maxima.app.chat.ZoomImageView(this);
-        z.setImageBitmap(b);
-        root.addView(z, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        final android.widget.LinearLayout bar = new android.widget.LinearLayout(this);
-        bar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(0xB3000000);
-        bar.setPadding(dp(10), dp(14), dp(14), dp(10));
-
-        android.widget.ImageView close = new android.widget.ImageView(this);
-        close.setImageResource(R.drawable.ic_close);
-        close.setColorFilter(0xFFFFFFFF);
-        close.setPadding(dp(8), dp(8), dp(8), dp(8));
-        close.setOnClickListener(v -> d.dismiss());
-        bar.addView(close, new android.widget.LinearLayout.LayoutParams(dp(40), dp(40)));
-
-        View spacer = new View(this);
-        bar.addView(spacer, new android.widget.LinearLayout.LayoutParams(0, 1, 1f));
-
-        TextView save = new TextView(this);
-        save.setText("Save");
-        save.setTextColor(0xFFFFFFFF);
-        save.setTextSize(15);
-        save.setTypeface(null, android.graphics.Typeface.BOLD);
-        save.setPadding(dp(14), dp(8), dp(14), dp(8));
-        save.setOnClickListener(v -> saveImage(id));
-        bar.addView(save);
-
-        TextView share = new TextView(this);
-        share.setText("Share");
-        share.setTextColor(0xFFFFFFFF);
-        share.setTextSize(15);
-        share.setTypeface(null, android.graphics.Typeface.BOLD);
-        share.setPadding(dp(14), dp(8), dp(14), dp(8));
-        share.setOnClickListener(v -> shareImage(id));
-        bar.addView(share);
-
-        root.addView(bar, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP));
-        z.setOnSingleTap(() -> bar.setVisibility(
-                bar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-        d.setContentView(root);
-        d.show();
+        com.eurobuddha.maxima.core.chat.ChatImages gallery =
+                new com.eurobuddha.maxima.core.chat.ChatImages(photos, id);
+        if (gallery.current() == null) return;
+        if (mPhotoViewer != null) mPhotoViewer.dismiss();
+        mPhotoViewer = new com.eurobuddha.maxima.app.chat.ChatImageViewer(this, gallery,
+                mImageCache, photo -> decodeBounded(fetchMediaBytes(
+                        com.eurobuddha.maxima.core.chat.ChatMedia.ref(photo.body))),
+                this::saveImage, this::shareImage);
+        long oldest = Long.MAX_VALUE;
+        for (Msg m : mMsgs) if (m.time > 0) oldest = Math.min(oldest, m.time);
+        if (oldest != Long.MAX_VALUE) mPhotoViewer.setHistory(before -> {
+            ParlonsRemote remote = CloudSession.remoteOrNull();
+            if (remote == null) throw new IllegalStateException("Not connected");
+            java.util.List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> page = new java.util.ArrayList<>();
+            for (Msg m : parseMsgs(remote.conversation(mPeer, 100, before))) {
+                page.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(m.id, m.body, m.time));
+            }
+            return page;
+        }, oldest);
+        mPhotoViewer.show();
     }
 
-    private void saveImage(String id) {
-        final android.graphics.Bitmap b = mImageCache.get(id);
+    private void saveImage(String id) { saveImage(mImageCache.get(id)); }
+
+    private void saveImage(final android.graphics.Bitmap b) {
         if (b == null) {
             return;
         }
@@ -1289,8 +1265,9 @@ public final class CloudChatActivity extends AppCompatActivity {
         }, "portal-save-image").start();
     }
 
-    private void shareImage(String id) {
-        final android.graphics.Bitmap b = mImageCache.get(id);
+    private void shareImage(String id) { shareImage(mImageCache.get(id)); }
+
+    private void shareImage(final android.graphics.Bitmap b) {
         if (b == null) {
             return;
         }

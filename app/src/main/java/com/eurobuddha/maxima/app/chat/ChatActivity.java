@@ -328,6 +328,22 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return android.graphics.BitmapFactory.decodeByteArray(zRaw, 0, zRaw.length, d);
     }
 
+    /** Same encrypted media path for thumbnails and the full-screen gallery; runs off-main. */
+    private byte[] fetchMediaBytes(String ref) throws Exception {
+        if (ref.startsWith("data:")) {
+            int comma = ref.indexOf(',');
+            if (comma < 0) throw new IllegalArgumentException("Invalid photo");
+            return android.util.Base64.decode(ref.substring(comma + 1), android.util.Base64.DEFAULT);
+        }
+        com.eurobuddha.maxima.core.media.MediaService media = MaximaService.media();
+        if (media == null || !ref.startsWith("mx1:")) throw new IllegalStateException("Media unavailable");
+        com.eurobuddha.maxima.core.media.MediaManifest mf =
+                com.eurobuddha.maxima.core.media.MediaManifest.decode(new String(
+                        android.util.Base64.decode(ref.substring(4), android.util.Base64.URL_SAFE),
+                        java.nio.charset.StandardCharsets.UTF_8));
+        return media.fetch(mf);
+    }
+
     /** Show the image for a media bubble: cache hit, else fetch+decode off-main. */
     private void bindImage(android.widget.ImageView view, String body, String id) {
         android.graphics.Bitmap cached = mImageCache.get(id);
@@ -349,30 +365,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(body);
         new Thread(() -> {
             try {
-                // Embedded image (local-only media): decode straight from the ref.
-                if (ref != null && ref.startsWith("data:")) {
-                    int comma = ref.indexOf(',');
-                    byte[] raw = android.util.Base64.decode(
-                            ref.substring(comma + 1), android.util.Base64.DEFAULT);
-                    android.graphics.Bitmap dbmp = decodeBounded(raw);
-                    if (dbmp != null) {
-                        mImageCache.put(id, dbmp);
-                        runOnUiThread(this::render);
-                    }
-                    return;
-                }
-                com.eurobuddha.maxima.core.media.MediaService media = MaximaService.media();
-                com.eurobuddha.maxima.core.media.MediaManifest mf =
-                        com.eurobuddha.maxima.core.media.MediaManifest.decode(
-                                new String(android.util.Base64.decode(
-                                        ref.substring("mx1:".length()),
-                                        android.util.Base64.URL_SAFE),
-                                        java.nio.charset.StandardCharsets.UTF_8));
-                byte[] bytes = media.fetch(mf);
-                android.graphics.Bitmap bmp = decodeBounded(bytes);
+                android.graphics.Bitmap bmp = decodeBounded(fetchMediaBytes(ref));
                 if (bmp != null) {
                     mImageCache.put(id, bmp);
                     runOnUiThread(this::render);
+                    return;
                 }
                 // Decode returned null: mark failed so a redraw doesn't
                 // spawn a fresh decode thread every tick forever.
@@ -386,8 +383,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     /** Hand the photo to any other app via the existing payloads FileProvider. */
-    private void shareImage(String id) {
-        final android.graphics.Bitmap b = mImageCache.get(id);
+    private void shareImage(String id) { shareImage(mImageCache.get(id)); }
+
+    private void shareImage(final android.graphics.Bitmap b) {
         if (b == null) {
             return;
         }
@@ -416,8 +414,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }, "chat-share-image").start();
     }
 
-    private void saveImage(String id) {
-        final android.graphics.Bitmap b = mImageCache.get(id);
+    private void saveImage(String id) { saveImage(mImageCache.get(id)); }
+
+    private void saveImage(final android.graphics.Bitmap b) {
         if (b == null) {
             return;
         }
@@ -441,69 +440,24 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         }, "chat-save-image").start();
     }
 
-    /** Tap a photo to open it full-screen in the system viewer (pinch-zoom,
-     *  share, save all come for free there). We write the decoded bitmap to our
-     *  own cache and hand it out through the existing FileProvider. */
-    /** Full-screen in-app viewer: pinch-zoom, pan, double-tap, save, share. */
+    /** Photo snapshot of this conversation, including images outside the thumbnail cache. */
+    private com.eurobuddha.maxima.app.chat.ChatImageViewer mPhotoViewer;
     private void openImage(String id) {
-        final android.graphics.Bitmap b = mImageCache.get(id);
-        if (b == null) {
-            return;
+        java.util.List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> photos = new java.util.ArrayList<>();
+        ChatEngine chat = MaximaService.chat();
+        if (chat == null) return;
+        for (ChatEngine.Entry e : chat.conversation(mConversation)) {
+            photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(e.id, e.body, e.time));
         }
-        final android.app.Dialog d = new android.app.Dialog(this,
-                android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        android.widget.FrameLayout root = new android.widget.FrameLayout(this);
-        root.setBackgroundColor(0xFF000000);
-
-        ZoomImageView z = new ZoomImageView(this);
-        z.setImageBitmap(b);
-        root.addView(z, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        // Chrome: close on the left, Save/Share on the right; single tap hides it.
-        final LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(0xB3000000);
-        bar.setPadding(dp(10), dp(14), dp(14), dp(10));
-
-        android.widget.ImageView close = new android.widget.ImageView(this);
-        close.setImageResource(R.drawable.ic_close);
-        close.setColorFilter(0xFFFFFFFF);
-        close.setPadding(dp(8), dp(8), dp(8), dp(8));
-        close.setOnClickListener(v -> d.dismiss());
-        bar.addView(close, new LinearLayout.LayoutParams(dp(40), dp(40)));
-
-        View spacer = new View(this);
-        bar.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
-
-        TextView save = new TextView(this);
-        save.setText("Save");
-        save.setTextColor(0xFFFFFFFF);
-        save.setTextSize(15);
-        save.setTypeface(null, android.graphics.Typeface.BOLD);
-        save.setPadding(dp(14), dp(8), dp(14), dp(8));
-        save.setOnClickListener(v -> saveImage(id));
-        bar.addView(save);
-
-        TextView share = new TextView(this);
-        share.setText("Share");
-        share.setTextColor(0xFFFFFFFF);
-        share.setTextSize(15);
-        share.setTypeface(null, android.graphics.Typeface.BOLD);
-        share.setPadding(dp(14), dp(8), dp(14), dp(8));
-        share.setOnClickListener(v -> shareImage(id));
-        bar.addView(share);
-
-        root.addView(bar, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP));
-
-        z.setOnSingleTap(() -> bar.setVisibility(
-                bar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-
-        d.setContentView(root);
-        d.show();
+        com.eurobuddha.maxima.core.chat.ChatImages gallery =
+                new com.eurobuddha.maxima.core.chat.ChatImages(photos, id);
+        if (gallery.current() == null) return;
+        if (mPhotoViewer != null) mPhotoViewer.dismiss();
+        mPhotoViewer = new com.eurobuddha.maxima.app.chat.ChatImageViewer(this, gallery,
+                mImageCache, photo -> decodeBounded(fetchMediaBytes(
+                        com.eurobuddha.maxima.core.chat.ChatMedia.ref(photo.body))),
+                this::saveImage, this::shareImage);
+        mPhotoViewer.show();
     }
 
     /** Send Minima to this contact from inside the chat. */
@@ -1516,6 +1470,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     @Override
     protected void onDestroy() {
+        if (mPhotoViewer != null) mPhotoViewer.dismiss();
         super.onDestroy();
         // Rotation/OS-kill of the record dialog would otherwise leak the
         // MediaRecorder + mic; close it defensively.

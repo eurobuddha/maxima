@@ -884,7 +884,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
 
         if (media) {
-            addMediaTo(b, e.body, fg);
+            addMediaTo(b, e.body, e.id, fg);
         } else if (pay) {
             JLabel dir = new JLabel(mine ? "↑ You sent" : "↓ You received");
             dir.setFont(t.font(11f));
@@ -1024,7 +1024,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             String mime = ChatMedia.mime(e.body), ref = ChatMedia.ref(e.body);
             if (mime != null && mime.startsWith("image/") && ref != null) {
                 javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open image");
-                open.addActionListener(a -> openImage(ref, mime));
+                open.addActionListener(a -> openImage(e.id));
                 m.add(open);
             }
         }
@@ -1499,7 +1499,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     // ---- media ----
 
-    private void addMediaTo(JPanel b, String body, Color fg) {
+    private void addMediaTo(JPanel b, String body, String id, Color fg) {
         String caption = ChatMedia.caption(body);
         String mime = ChatMedia.mime(body);
         final String ref = ChatMedia.ref(body);
@@ -1515,7 +1515,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             // Click the thumbnail to open the full-screen viewer (phone parity).
             img.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
             img.addMouseListener(new MouseAdapter() {
-                public void mouseClicked(MouseEvent ev) { openImage(ref, mime); }
+                public void mouseClicked(MouseEvent ev) { openImage(id); }
             });
         }
         if (cached != null) {
@@ -1570,33 +1570,28 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }, "media-fetch").start();
     }
 
-    /** Fetch the full-resolution image behind a media ref and open the viewer. */
-    private void openImage(String ref, String mime) {
-        new Thread(() -> {
-            try {
-                byte[] bytes;
-                if (ref.startsWith("mx1:")) {
-                    String json = new String(java.util.Base64.getUrlDecoder()
-                            .decode(ref.substring(4)), java.nio.charset.StandardCharsets.UTF_8);
-                    bytes = node.media().fetch(MediaManifest.decode(json));
-                } else if (ref.startsWith("data:")) {
-                    int comma = ref.indexOf(',');
-                    bytes = java.util.Base64.getDecoder().decode(ref.substring(comma + 1));
-                } else {
-                    return;
-                }
-                java.awt.image.BufferedImage full =
-                        javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
-                if (full == null) return;
-                String ext = mime != null && mime.contains("png") ? "png" : "jpg";
-                javax.swing.SwingUtilities.invokeLater(() -> ImageViewer.open(
-                        javax.swing.SwingUtilities.getWindowAncestor(this), full, "image." + ext));
-            } catch (Exception ex) {
-                javax.swing.SwingUtilities.invokeLater(() ->
-                        javax.swing.JOptionPane.showMessageDialog(this,
-                                "Couldn't open image: " + ex.getMessage()));
-            }
-        }, "image-open").start();
+    /** Reuse the conversation store and encrypted loader for every page, without loading all bitmaps. */
+    private void openImage(String id) {
+        if (mOpen == null) return;
+        java.util.List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> photos = new java.util.ArrayList<>();
+        for (ChatEngine.Entry e : node.chat().conversation(mOpen)) {
+            photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(e.id, e.body, e.time));
+        }
+        ImageViewer.open(javax.swing.SwingUtilities.getWindowAncestor(this),
+                new com.eurobuddha.maxima.core.chat.ChatImages(photos, id), photo -> {
+            String ref = ChatMedia.ref(photo.body);
+            byte[] bytes;
+            if (ref.startsWith("mx1:")) {
+                String json = new String(java.util.Base64.getUrlDecoder()
+                        .decode(ref.substring(4)), java.nio.charset.StandardCharsets.UTF_8);
+                bytes = node.media().fetch(MediaManifest.decode(json));
+            } else if (ref.startsWith("data:")) {
+                int comma = ref.indexOf(',');
+                if (comma < 0) throw new IllegalArgumentException("Invalid photo");
+                bytes = java.util.Base64.getDecoder().decode(ref.substring(comma + 1));
+            } else throw new IllegalArgumentException("Image unavailable");
+            return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+        });
     }
 
     /** Host window, so the chat's "Send payment" can use the ONE wallet instance. */

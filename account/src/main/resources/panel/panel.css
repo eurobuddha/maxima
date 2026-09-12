@@ -192,8 +192,16 @@ a { color: inherit; }
 .banner { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: var(--card); color: var(--text); padding: 12px 18px; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.35); z-index: 9; font-weight: 600; }
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--onaccent); padding: 9px 16px; border-radius: 999px; font-size: 13px; z-index: 9; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
 .toast.err { background: var(--error); color: #fff; }
-.viewer { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: grid; place-items: center; z-index: 10; cursor: zoom-out; }
-.viewer img { max-width: 96vw; max-height: 96vh; }
+.viewer { position: fixed; inset: 0; background: #000; color: #fff; z-index: 10; }
+.photo-stage { position: absolute; inset: 60px 0 76px; display: grid; place-items: center; touch-action: pan-y pinch-zoom; }
+.viewer img { max-width: 96%; max-height: 100%; object-fit: contain; user-select: none; }
+.viewer button { color: #fff; background: #222; border: 0; border-radius: 12px; min-width: 48px; min-height: 48px; cursor: pointer; }
+.viewer button:disabled { opacity: .35; cursor: default; }
+.photo-top { position: absolute; inset: 8px 12px auto; display: flex; align-items: center; justify-content: space-between; }
+.photo-close, .photo-nav button { font-size: 30px; }
+.photo-nav { position: absolute; bottom: 16px; width: 100%; display: flex; gap: 16px; justify-content: center; }
+.photo-status { position: absolute; padding: 12px; }
+.photo-count { font-size: 14px; }
 
 /* shared-contact card in a bubble */
 .ccard { min-width: 220px; }

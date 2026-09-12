@@ -21,7 +21,7 @@ function harness(fetch) {
   const context = vm.createContext({ fetch, document: { getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
     window: { icon: () => '', addEventListener() {} }, localStorage: { getItem: () => null },
     setTimeout() {}, clearTimeout() {}, Uint8Array, btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
-  const expose = `globalThis.panel = { S, api, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
+  const expose = `globalThis.panel = { S, api, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
     get busy() { return olderBusy; }, get done() { return olderDone; } };
@@ -84,4 +84,13 @@ test('switch saves once, reflects success after the event ends and preserves val
   d.resolve(); await save; assert.equal(button.attrs['aria-checked'], 'true'); assert.equal(button.disabled, false);
   h.p.wireSwitch(button, 'Read receipts', async () => { throw new Error('No connection'); }, () => 'Saved');
   await button.handlers.click(); assert.equal(button.attrs['aria-checked'], 'true'); assert.equal(h.node('toast').textContent, 'No connection');
+});
+
+test('photo gallery excludes other media, preserves chronological order and deduplicates history', () => {
+  const h = harness(async () => reply({}));
+  const photo = (id, time) => ({id, time, body: '\u0001m\u0001image/jpeg\u0001data:image/jpeg;base64,AA==\u0001caption'});
+  const rows = [photo('late', 3), {id: 'text', time: 1, body: 'text'}, photo('early', 1), photo('late', 3),
+    {id: 'audio', time: 2, body: '\u0001m\u0001audio/ogg\u0001data:audio/ogg;base64,AA==\u0001'}];
+  assert.deepEqual(Array.from(h.p.chatPhotos(rows), p => p.id), ['early', 'late']);
+  assert.equal(rows.length, 5);
 });
