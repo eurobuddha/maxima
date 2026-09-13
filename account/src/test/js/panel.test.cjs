@@ -21,8 +21,8 @@ function harness(fetch) {
   const renders = { page: 0, list: 0, messages: 0 };
   const context = vm.createContext({ fetch, document: { body: element(), createElement: () => ({content: {firstElementChild: element()}}), getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
     window: { icon: () => '', addEventListener() {} }, localStorage: { getItem: () => null },
-    setTimeout() {}, clearTimeout() {}, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
-  const expose = `globalThis.panel = { S, api, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
+    setTimeout() {}, clearTimeout() {}, URL, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
+  const expose = `globalThis.panel = { S, api, linkText, bubbleHtml, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
     get busy() { return olderBusy; }, get done() { return olderDone; } };
@@ -95,4 +95,20 @@ test('photo gallery excludes other media, preserves chronological order and dedu
     {id: 'audio', time: 2, body: '\u0001m\u0001audio/ogg\u0001data:audio/ogg;base64,AA==\u0001'}];
   assert.deepEqual(Array.from(h.p.chatPhotos(rows), p => p.id), ['early', 'late']);
   assert.equal(rows.length, 5);
+});
+
+test('chat links preserve literal text, balanced punctuation and query strings', () => {
+  const h = harness(async () => reply({}));
+  const out = h.p.linkText('🙂 (https://example.org/a_(b)). www.example.org/x?a=1&b=2!');
+  assert.match(out, /href="https:\/\/example.org\/a_\(b\)"/);
+  assert.match(out, /<\/a>\)\./);
+  assert.match(out, /href="https:\/\/www.example.org\/x\?a=1&amp;b=2"/);
+  assert.equal((out.match(/target="_blank" rel="noopener noreferrer"/g) || []).length, 2);
+});
+test('chat rendering escapes HTML and does not link executable schemes or credentials', () => {
+  const h = harness(async () => reply({}));
+  const text = '<img src=x onerror=alert(1)> javascript:alert(1) file:///tmp/x https://user:pass@example.org';
+  const out = h.p.bubbleHtml({body: text, time: 0, id: 'x'});
+  assert.ok(out.includes('&lt;img')); assert.ok(!out.includes('<img')); assert.ok(!out.includes('class="chat-link"'));
+  assert.ok(h.p.bubbleHtml({body:'https://example.org',time:0,id:'x'}).includes('class="chat-link"'));
 });

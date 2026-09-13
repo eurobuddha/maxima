@@ -255,3 +255,5 @@ button:disabled { cursor: default; opacity: .55; }
 
 .file-progress {accent-color:var(--text)}
 .sheet:has(.file-status) .actions {gap:8px;flex-wrap:wrap}
+
+.bubble .chat-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }

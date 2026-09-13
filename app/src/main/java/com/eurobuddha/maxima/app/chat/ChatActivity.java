@@ -2093,6 +2093,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private void bindMessage(MsgVH h, Row r) {
         ChatEngine.Entry e = r.entry;
         h.body.setOnClickListener(null);
+        ChatLinkText.reset(h.body);
         h.body.setTextIsSelectable(!com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body));
         h.body.setClickable(false);
         h.bubble.setOnLongClickListener(v -> {
@@ -2172,6 +2173,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.body.setVisibility(View.VISIBLE);
                 h.body.setText(e.body);
             }
+        }
+
+        if (!pay && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body)
+                && !com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
+                && h.body.getVisibility() == View.VISIBLE) {
+            ChatLinkText.bind(h.body, h.body.getText().toString());
         }
 
         // Timestamp + ticks only on the last of a run (iMessage-style).

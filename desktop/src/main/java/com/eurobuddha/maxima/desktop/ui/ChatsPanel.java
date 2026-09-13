@@ -954,16 +954,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             }, "add-shared-contact").start());
             b.add(add);
         } else {
-            JTextArea body = new JTextArea(e.body);
-            body.setFont(t.font(13.5f));
-            body.setForeground(fg);
-            body.setOpaque(false);
-            body.setEditable(false);
-            body.setFocusable(false);
-            body.setLineWrap(true);
-            body.setWrapStyleWord(true);
-            body.setAlignmentX(Component.LEFT_ALIGNMENT);
-            b.add(body);
+            b.add(linkedText(e.body, fg));
         }
 
         if (last) {   // phone: timestamp + ticks only on the last bubble of a cluster
@@ -1504,6 +1495,45 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         d.setVisible(true);
     }
 
+    private javax.swing.JComponent linkedText(String text, Color fg) {
+        if (com.eurobuddha.maxima.core.chat.ChatLinks.find(text).isEmpty()) {
+            JTextArea body = new JTextArea(text);
+            body.setFont(t.font(13.5f)); body.setForeground(fg); body.setOpaque(false);
+            body.setEditable(false); body.setFocusable(false);
+            body.setLineWrap(true); body.setWrapStyleWord(true);
+            body.setAlignmentX(Component.LEFT_ALIGNMENT);
+            return body;
+        }
+        StringBuilder html = new StringBuilder();
+        String colour = String.format("#%06x", fg.getRGB() & 0xffffff);
+        int offset = 0;
+        for (com.eurobuddha.maxima.core.chat.ChatLinks.Link link : com.eurobuddha.maxima.core.chat.ChatLinks.find(text)) {
+            html.append(escHtml(text.substring(offset, link.start)));
+            html.append("<a style='color:").append(colour).append("' href=\"").append(escHtml(link.url))
+                    .append("\">").append(escHtml(text.substring(link.start, link.end))).append("</a>");
+            offset = link.end;
+        }
+        html.append(escHtml(text.substring(offset)));
+        javax.swing.JEditorPane view = new javax.swing.JEditorPane();
+        view.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+        view.setContentType("text/html");
+        view.setFont(t.font(13.5f)); view.setForeground(fg);
+        view.setOpaque(false); view.setEditable(false); view.setBorder(null);
+        view.setText("<html><body style='color:" + colour + ";margin:0'><div style='width:320px'>"
+                + html.toString().replace("\n", "<br>") + "</div></body></html>");
+        view.setAlignmentX(Component.LEFT_ALIGNMENT);
+        view.addHyperlinkListener(event -> {
+            if (event.getEventType() != javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) return;
+            final String url = event.getDescription();
+            if (!url.regionMatches(true, 0, "http://", 0, 7) && !url.regionMatches(true, 0, "https://", 0, 8)) return;
+            new Thread(() -> {
+                try { java.awt.Desktop.getDesktop().browse(java.net.URI.create(url)); }
+                catch (Exception ex) { javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(this, "Could not open the browser.")); }
+            }, "chat-open-link").start();
+        });
+        return view;
+    }
+
     // ---- media ----
 
     private void addMediaTo(JPanel b, String body, String id, Color fg) {
@@ -1539,10 +1569,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
         b.add(img);
         if (caption != null && !caption.isEmpty()) {
-            JLabel cap = new JLabel("<html><div style='width:320px'>" + escHtml(caption) + "</div></html>");
-            cap.setFont(t.font(13f));
-            cap.setForeground(fg);
-            cap.setAlignmentX(Component.LEFT_ALIGNMENT);
+            javax.swing.JComponent cap = linkedText(caption, fg);
             cap.setBorder(new EmptyBorder(5, 0, 0, 0));
             b.add(cap);
         }

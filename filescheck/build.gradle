@@ -15,3 +15,9 @@ tasks.register('copySha3', Copy) {
     into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app')
 }
 tasks.named('preBuild').configure { dependsOn 'copySha3' }
+
+tasks.register('copyChatLinkText', Copy) {
+    from '../chatshared/com/eurobuddha/maxima/app/chat/ChatLinkText.java'
+    into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app/chat')
+}
+tasks.named('preBuild').configure { dependsOn 'copyChatLinkText' }

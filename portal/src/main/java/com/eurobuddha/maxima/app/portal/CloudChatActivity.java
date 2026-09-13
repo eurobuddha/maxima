@@ -1988,6 +1988,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             }
 
             h.body.setOnClickListener(null);
+            com.eurobuddha.maxima.app.chat.ChatLinkText.reset(h.body);
             h.body.setTextIsSelectable(!com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body));
             h.body.setClickable(false);
             boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body);
@@ -2032,6 +2033,12 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.body.setText(m.body);
                 h.body.setTextColor(ink);
                 h.body.setTypeface(null, android.graphics.Typeface.NORMAL);
+            }
+
+            if (!pay && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)
+                    && !com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body)
+                    && h.body.getVisibility() == View.VISIBLE) {
+                com.eurobuddha.maxima.app.chat.ChatLinkText.bind(h.body, h.body.getText().toString());
             }
 
             String meta = stamp(m.time);

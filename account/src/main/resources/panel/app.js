@@ -7,6 +7,35 @@
   // ---------- helpers ----------
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function linkText(text) {
+    text = String(text || '');
+    const re = /\b(?:https?:\/\/|www\.)[^\s<>"\x00-\x1f\x7f]+/gi;
+    let html = '', offset = 0, match;
+    while ((match = re.exec(text))) {
+      const token = match[0], balance = [0, 0, 0];
+      for (const c of token) {
+        const open = '([{'.indexOf(c), close = ')]}'.indexOf(c);
+        if (open >= 0) balance[open]++;
+        if (close >= 0) balance[close]--;
+      }
+      let end = token.length;
+      while (end > 0) {
+        const last = token[end - 1], close = ')]}'.indexOf(last);
+        if (".,!?;:'".includes(last)) { end--; continue; }
+        if (close >= 0 && balance[close] < 0) { balance[close]++; end--; continue; }
+        break;
+      }
+      const raw = token.slice(0, end);
+      const href = /^www\./i.test(raw) ? 'https://' + raw : raw;
+      try {
+        const url = new URL(href);
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) continue;
+        html += esc(text.slice(offset, match.index)) + '<a class="chat-link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">' + esc(raw) + '</a>';
+        offset = match.index + raw.length;
+      } catch (_) {}
+    }
+    return html + esc(text.slice(offset));
+  }
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const MEDIA_MARK = '\u0001m\u0001';   // core ChatMedia: SOH-fenced 'm', then mime SOH ref SOH caption
   const CONTACT_MARK = '\u0001c\u0001'; // core ChatContact: SOH-fenced 'c', then key SOH name SOH address
@@ -377,13 +406,13 @@
         inner += '<div class="audio" data-src="' + esc(url) + '"><button class="play" title="Play">' + ic('play') + '</button><div class="wave"><canvas data-wave="' + esc(parts[1] || '') + '"></canvas><div class="atime">' + esc(parts[0] || '') + '</div></div></div>';
       } else if (url) inner += '<div class="body"><a href="' + esc(url) + '" download>' + esc(preview(e.body)) + '</a></div>';
       else inner += '<div class="body">' + esc(preview(e.body)) + '</div>';
-      if (m.caption && !m.mime.startsWith('audio/')) inner += '<div class="body">' + esc(m.caption) + '</div>';
+      if (m.caption && !m.mime.startsWith('audio/')) inner += '<div class="body">' + linkText(m.caption) + '</div>';
     } else if (parseContact(e.body || '')) {
       const c = parseContact(e.body);
       inner += '<div class="ccard"><div class="cchead">' + avatar(c.key, c.name, 'm') + '<div><div class="ccname">' + esc(c.name || '(no name)') + '</div><div class="sub">Shared contact</div></div></div>'
         + '<div class="mono whole ccaddr">' + esc(c.address) + '</div>'
         + '<div class="ccbtns"><button class="btn sm ccadd" data-addr="' + esc(c.address) + '" data-name="' + esc(c.name) + '">Add contact</button><button class="btn sm ghost cccopy" data-addr="' + esc(c.address) + '">Copy</button></div></div>';
-    } else inner += '<div class="body">' + esc(e.body || '') + '</div>';
+    } else inner += '<div class="body">' + linkText(e.body || '') + '</div>';
     let meta = hhmm(e.time);
     if (mine) meta += ' ' + (S.openIsGroup && e.delivered != null && e.state !== 'read' ? e.delivered + ' ' : '') + ticks(e.state);
     return '<div class="mrow ' + (mine ? 'mine' : 'theirs') + '" data-id="' + esc(e.id) + '"><div class="bubble">' + inner + '<div class="meta">' + meta + '</div></div></div>';
