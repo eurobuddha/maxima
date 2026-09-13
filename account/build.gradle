@@ -31,6 +31,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
+    implementation project(':files')
     api project(':core')
     api project(':server')                       // RelayRuntime (the in-process pool relay + Stats)
     compileOnly project(':minima-common')        // org.minima.utils.json + MiniNumber — host-supplied at runtime

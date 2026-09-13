@@ -19,6 +19,7 @@ rootProject.name = 'maxima'
 // :core is a pure JVM library shared by both hosts. It must never import
 // android.* or the node IPC layer - see core/build.gradle.
 include ':core'
+include ':files'
 
 // Added as they are built (milestones 7 and 8 in the plan):
 include ':server'
@@ -59,3 +60,6 @@ if (!providers.gradleProperty('skipAndroid').isPresent()) {
 
 // The iOS wake proxy (stateless APNs relay for sleeping paired devices). Java 11, no deps.
 include ':wakeproxy'
+
+// Isolated synthetic smoke app: never included in production releases.
+if (providers.gradleProperty('privateFilesCheck').isPresent()) include ':filescheck'

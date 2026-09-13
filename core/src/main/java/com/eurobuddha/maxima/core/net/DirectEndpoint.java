@@ -174,6 +174,10 @@ public final class DirectEndpoint {
                     continue;
                 }
                 int type = Frame.typeOf(frame);
+                if (type == PrivateStreams.TYPE) {
+                    PrivateStreams.serve(frame, zSocket, in, out);
+                    return;
+                }
                 if (type == Frame.MSG_GREETING) {
                     // We are the endpoint - advertise no host, exactly as the
                     // relay greeting does. The sender already dialled us.

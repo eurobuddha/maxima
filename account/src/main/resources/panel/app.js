@@ -110,6 +110,7 @@
     if (c) return '👤 Contact: ' + (c.name || '(no name)');
     const m = parseMedia(body);
     if (!m) return body;
+    if (m.ref.startsWith('pf1:')) return '📎 ' + m.caption;
     const kind = m.mime.startsWith('video') ? '🎥 Video' : m.mime.startsWith('audio') ? '🎤 Voice note' : '📷 Photo';
     let cap = m.caption;
     if (m.mime.startsWith('audio') && cap.indexOf('|') >= 0) cap = cap.slice(0, cap.indexOf('|'));
@@ -187,6 +188,8 @@
     if (sheetFocus && sheetFocus.isConnected) sheetFocus.focus();
     sheetFocus = null;
   }
+
+  const privateFiles = window.ParlonsFiles.create({ api, sheet, closeSheet, esc, toast });
 
   // ---------- routing ----------
   function go(hash) { location.hash = hash; }
@@ -304,7 +307,10 @@
     $('draft').addEventListener('input', () => { const t = $('draft'); t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; });
     $('photoBtn').addEventListener('click', () => $('photoFile').click());
     $('photoFile').addEventListener('change', () => { const f = $('photoFile').files[0]; if (f) sendFile(f, true); $('photoFile').value = ''; });
-    $('attachBtn').addEventListener('click', () => $('attachFile').click());
+    $('attachBtn').addEventListener('click', () => sheet('<div class="h">Attach</div><button class="btn private-pick">Private file…</button><button class="btn ghost private-list">File transfers</button>', panel => {
+      panel.querySelector('.private-pick').onclick = () => { closeSheet(); $('attachFile').click(); };
+      panel.querySelector('.private-list').onclick = () => { closeSheet(); privateFiles.list(); };
+    }));
     $('attachFile').addEventListener('change', () => { const f = $('attachFile').files[0]; if (f) sendFile(f, false); $('attachFile').value = ''; });
     $('draft').focus();
     subtitle(peer);
@@ -360,7 +366,10 @@
     const mine = !!e.mine, m = parseMedia(e.body || '');
     let inner = '';
     if (S.openIsGroup && !mine && e.sname) inner += '<div class="sname">' + esc(e.sname) + '</div>';
-    if (m) {
+    if (m && m.ref.startsWith('pf1:')) {
+      const f = window.ParlonsFiles.parse(m.ref);
+      inner += '<button class="btn ghost private-file-card">' + esc(f ? '📎 ' + f.name + ' · ' + window.ParlonsFiles.size(f.size) : 'Private file') + '<br>Transfer controls</button>';
+    } else if (m) {
       const url = mediaUrl(m);
       if (m.mime.startsWith('image/') && url) inner += '<img class="pic" loading="lazy" alt="photo" src="' + esc(url) + '">';
       else if (m.mime.startsWith('audio/') && url) {
@@ -391,6 +400,11 @@
     box.innerHTML = html;
     box.querySelectorAll('canvas[data-wave]').forEach(drawWave);
     box.querySelectorAll('.audio').forEach(wireAudio);
+    box.querySelectorAll('.private-file-card').forEach(button => button.addEventListener('click', () => {
+      const entry = S.msgs.find(e => e.id === button.closest('[data-id]').dataset.id);
+      const m = entry && parseMedia(entry.body), f = m && window.ParlonsFiles.parse(m.ref);
+      if (f) privateFiles.show(f.id, m.ref, S.open, S.openIsGroup); else toast('Update Parlons to open this file', 'err');
+    }));
     box.querySelectorAll('.ccadd').forEach((b) => b.addEventListener('click', async () => {
       b.disabled = true;
       try { await api('contacts.add', { address: b.dataset.addr }); toast('Contact added' + (b.dataset.name ? ': ' + b.dataset.name : '')); await loadSummaries(); }
@@ -409,7 +423,7 @@
     const seen = new Set();
     return messages.filter((e) => {
       const m = parseMedia(e.body);
-      if (!m || !m.mime.startsWith('image/') || !mediaUrl(m) || seen.has(e.id)) return false;
+      if (!m || m.ref.startsWith('pf1:') || !m.mime.startsWith('image/') || !mediaUrl(m) || seen.has(e.id)) return false;
       seen.add(e.id); return true;
     }).slice().sort((a, b) => Number(a.time) - Number(b.time));
   }
@@ -538,6 +552,7 @@
   }
   async function sendFile(file, asPhoto) {
     const peer = S.open, seq = openSeq, isGroup = S.openIsGroup; if (!peer) return;
+    if (!asPhoto) { await privateFiles.send(file, peer, isGroup); return; }
     let blob = file, mime = file.type || 'application/octet-stream';
     if (asPhoto || mime.startsWith('image/')) {
       try {

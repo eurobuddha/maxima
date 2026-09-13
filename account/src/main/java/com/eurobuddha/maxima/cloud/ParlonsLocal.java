@@ -81,7 +81,7 @@ public final class ParlonsLocal {
             "contacts.list", "contacts.add", "contacts.rename", "contacts.resolve",
             "contacts.remove", "contacts.info",
             "chat.summaries", "chat.conversation", "chat.send", "chat.markread", "chat.clear",
-            "chat.search", "chat.since", "media.up",
+            "chat.search", "chat.since", "media.up", "files",
             "group.create", "group.info", "group.update"
     )));
 
@@ -232,6 +232,8 @@ public final class ParlonsLocal {
                 api(ex, path.substring(5));
             } else if ("/events".equals(path)) {
                 events(ex);
+            } else if ("/private-file".equals(path)) {
+                privateFile(ex);
             } else if ("/media".equals(path)) {
                 media(ex);
             } else {
@@ -475,6 +477,30 @@ public final class ParlonsLocal {
             mCallClients.remove(client, listener);
             try { ex.close(); } catch (Exception ignored) { }
         }
+    }
+
+    private com.eurobuddha.maxima.files.PrivateFiles mPrivateFiles;
+    public void setPrivateFiles(com.eurobuddha.maxima.files.PrivateFiles files) { mPrivateFiles = files; }
+    private void privateFile(HttpExchange ex) throws IOException {
+        if (session(ex) == null) return;
+        if (mPrivateFiles == null) { fail(ex, 404, "Private files unavailable"); return; }
+        String id = query(ex).get("id");
+        if(id==null || !id.matches("[a-f0-9]{32}")){fail(ex,400,"Invalid transfer");return;}
+        boolean headersSent = false;
+        try (java.io.InputStream input = mPrivateFiles.open(id)) {
+            long size = Long.parseLong(mPrivateFiles.status(id).get("size"));
+            String filename = java.net.URLEncoder.encode(mPrivateFiles.name(id), "UTF-8").replace("+", "%20");
+            ex.getResponseHeaders().set("Content-Type", "application/octet-stream");
+            ex.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"Parlons-file\"; filename*=UTF-8''" + filename);
+            ex.getResponseHeaders().set("Cache-Control", "no-store");
+            ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+            ex.sendResponseHeaders(200, size == 0 ? -1 : size);
+            headersSent = true;
+            if (size > 0) try (java.io.OutputStream out = ex.getResponseBody()) {
+                byte[] buffer = new byte[65536]; int n; while ((n = input.read(buffer)) != -1) out.write(buffer, 0, n);
+            }
+        } catch (Exception e) { if(!headersSent)fail(ex,409,"File is not ready to save"); }
+        finally { ex.close(); }
     }
 
     private void media(HttpExchange ex) throws IOException {

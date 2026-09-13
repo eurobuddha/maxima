@@ -955,6 +955,15 @@ public final class RelayServer {
                     }
                     continue;
                 }
+                if (Frame.typeOf(body) == com.eurobuddha.maxima.core.net.PrivateStreams.TYPE) {
+                    // Dedicated, unregistered connection only. Never turn a messaging route
+                    // into a byte stream or let maintenance inject frames into torrent data.
+                    if (zConn.routingKey == null) {
+                        com.eurobuddha.maxima.core.net.PrivateStreams.serve(
+                                body, zConn.socket, zConn.in, zConn.out);
+                    }
+                    return;
+                }
                 handleFrame(zConn, body);
             }
         } catch (Exception e) {

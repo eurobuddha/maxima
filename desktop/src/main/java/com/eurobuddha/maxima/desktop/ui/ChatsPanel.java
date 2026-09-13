@@ -846,7 +846,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private JComponent bubble(ChatEngine.Entry e, boolean first, boolean last) {
         boolean mine = e.mine;
-        boolean media = ChatMedia.isMedia(e.body);
+        boolean media = ChatMedia.isMedia(e.body) && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body);
         boolean pay = ChatPay.isPayment(e.body);
 
         JPanel line = new JPanel();
@@ -917,6 +917,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     }
                 });
             }
+        } else if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body)) {
+            String filename = ChatMedia.caption(e.body);
+            javax.swing.JButton file = new javax.swing.JButton("📎 " + filename + " · Transfer controls");
+            file.setForeground(fg); file.setContentAreaFilled(false); file.setAlignmentX(Component.LEFT_ALIGNMENT);
+            final String conversation = mOpen; final boolean isGroup = mOpenGroup;
+            file.addActionListener(event -> PrivateFileDialog.showBody(this, node, e.body, conversation, isGroup));
+            b.add(file);
         } else if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)) {
             // A shared contact: who, their full address, one action.
             final String cname = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
@@ -1604,6 +1611,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         javax.swing.JMenuItem photo = new javax.swing.JMenuItem("Photo…");
         photo.addActionListener(e -> attachFile());
         m.add(photo);
+        javax.swing.JMenuItem privateFile = new javax.swing.JMenuItem("Private file…");
+        privateFile.addActionListener(e -> PrivateFileDialog.choose(this, node, mOpen, mOpenGroup)); m.add(privateFile);
+        javax.swing.JMenuItem transfers = new javax.swing.JMenuItem("File transfers");
+        transfers.addActionListener(e -> PrivateFileDialog.list(this, node)); m.add(transfers);
         javax.swing.JMenuItem voice = new javax.swing.JMenuItem("Voice note");
         voice.addActionListener(e -> VoiceNotes.record(
                 javax.swing.SwingUtilities.getWindowAncestor(this), t, this::sendVoice));

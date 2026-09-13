@@ -209,6 +209,16 @@ public final class DesktopNode {
     public MediaService media()    { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
     public DesktopRelayStore relayStore() { return mRelayStore; }
+    private com.eurobuddha.maxima.files.PrivateFiles mPrivateFiles;
+    private com.eurobuddha.maxima.files.FileCommands mFileCommands;
+    public synchronized com.eurobuddha.maxima.files.FileCommands files() throws Exception {
+        if (mNode == null || !mRunning) throw new java.io.IOException("Connect the Parlons engine first");
+        if (mFileCommands == null) {
+            mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, mDataDir.resolve("private-files"));
+            mFileCommands = new com.eurobuddha.maxima.files.FileCommands(mPrivateFiles, mDataDir.resolve("private-files/uploads"));
+        }
+        return mFileCommands;
+    }
     public Path dataDir()          { return mDataDir; }
 
     // ---- location service (MLS), engine-agnostic ----
@@ -481,7 +491,9 @@ public final class DesktopNode {
         } catch (Exception ignored) { }
     }
 
-    public void shutdown() {
+    public synchronized void shutdown() {
+        if (mFileCommands != null) { mFileCommands.close(); mFileCommands = null; }
+        if (mPrivateFiles != null) { mPrivateFiles.close(); mPrivateFiles = null; }
         mRunning = false;
         if (mMaint != null) {
             mMaint.shutdownNow();

@@ -595,6 +595,17 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     /** The attach "+" sheet: gallery, and (1:1 only) a payment - the camera has
      *  its own button in the bar now, WhatsApp-style. */
+    private PrivateFileUi mFileUi;
+    private PrivateFileUi fileUi() {
+        if (mFileUi == null) {
+            mFileUi = new PrivateFileUi(this, params -> {
+                final com.eurobuddha.maxima.files.FileCommands commands = MaximaService.files();
+                if (commands == null) throw new java.io.IOException("Private files require the Parlons engine");
+                return commands.call(params);
+            }, mConversation, MaximaService.chat() != null && MaximaService.chat().group(mConversation) != null);
+        }
+        return mFileUi;
+    }
     private void attachSheet() {
         ChatEngine chat = MaximaService.chat();
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
@@ -603,6 +614,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 && node.contact(mConversation) != null;
         final List<String> items = new ArrayList<>();
         items.add("Photo library");
+        items.add("Private file");
+        items.add("File transfers");
         items.add("Voice note");
         if (canPay) {
             items.add("Send payment");
@@ -610,7 +623,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         new AlertDialog.Builder(this)
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     String c = items.get(which);
-                    if ("Send payment".equals(c)) {
+                    if ("Private file".equals(c)) {
+                        fileUi().pick();
+                    } else if ("File transfers".equals(c)) {
+                        fileUi().transfers();
+                    } else if ("Send payment".equals(c)) {
                         payContact();
                     } else if ("Voice note".equals(c)) {
                         startVoiceNote();
@@ -660,6 +677,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     @Override
     protected void onActivityResult(int req, int res, android.content.Intent data) {
         super.onActivityResult(req, res, data);
+        if (mFileUi != null && mFileUi.result(req, res, data)) return;
         if (req == TAKE_PHOTO && res == RESULT_OK && mCaptureUri != null) {
             promptCaption(mCaptureUri);
             return;
@@ -1470,6 +1488,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     @Override
     protected void onDestroy() {
+        if (mFileUi != null) mFileUi.close();
         if (mPhotoViewer != null) mPhotoViewer.dismiss();
         super.onDestroy();
         // Rotation/OS-kill of the record dialog would otherwise leak the
@@ -2073,6 +2092,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     private void bindMessage(MsgVH h, Row r) {
         ChatEngine.Entry e = r.entry;
+        h.body.setOnClickListener(null);
+        h.body.setTextIsSelectable(!com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body));
+        h.body.setClickable(false);
         h.bubble.setOnLongClickListener(v -> {
             showMessageMenu(e);
             return true;
@@ -2116,7 +2138,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.who.setVisibility(View.GONE);
             }
 
-            if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)) {
+            if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body)) {
+                h.audio.setVisibility(View.GONE); h.image.setVisibility(View.GONE); h.image.setImageDrawable(null);
+                h.body.setVisibility(View.VISIBLE); h.body.setText(PrivateFileUi.label(e.body));
+                h.body.setOnClickListener(v -> fileUi().showBody(e.body));
+                h.bubble.setOnClickListener(v -> fileUi().showBody(e.body));
+            } else if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)) {
                 h.audio.setVisibility(View.GONE);
                 h.image.setVisibility(View.GONE);
                 h.image.setImageDrawable(null);

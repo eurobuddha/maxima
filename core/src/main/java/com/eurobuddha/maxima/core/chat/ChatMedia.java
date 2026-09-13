@@ -73,6 +73,7 @@ public final class ChatMedia {
         if (p == null) {
             return zBody;
         }
+        if (p[1].startsWith(ChatFile.PREFIX)) return "📎 " + p[2];
         String kind = p[0].startsWith("video") ? "🎥 Video"
                 : p[0].startsWith("audio") ? "🎤 Voice note"
                 : "📷 Photo";

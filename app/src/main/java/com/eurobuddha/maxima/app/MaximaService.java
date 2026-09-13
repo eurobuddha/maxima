@@ -50,6 +50,9 @@ public final class MaximaService extends Service {
     public static final String ACTION_TICK = "com.eurobuddha.maxima.app.TICK";
 
     private static volatile MaximaNode sNode;
+    private static volatile com.eurobuddha.maxima.files.PrivateFiles sPrivateFiles;
+    private static volatile com.eurobuddha.maxima.files.FileCommands sFileCommands;
+    public static com.eurobuddha.maxima.files.FileCommands files() { return sFileCommands; }
     private static volatile AndroidContribution sPolicy;
     private static volatile com.eurobuddha.maxima.core.chat.ChatEngine sChat;
     private static volatile com.eurobuddha.maxima.app.direct.DirectReachability sDirect;
@@ -220,6 +223,10 @@ public final class MaximaService extends Service {
                 new java.io.File(getFilesDir(), "chat"), 2000),
                 () -> EventLog.add("chat history loaded"));
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
+        try {
+            sPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(sNode, chat, new java.io.File(getFilesDir(), "private-files").toPath());
+            sFileCommands = new com.eurobuddha.maxima.files.FileCommands(sPrivateFiles, new java.io.File(getFilesDir(), "private-files/uploads").toPath());
+        } catch (java.io.IOException e) { EventLog.add("Private file storage unavailable: " + e.getMessage()); }
         chat.setMediaService(sMedia);   // photos/videos in chat, self-hosted
         final MaximaNode node = sNode;
         chat.setListener(new com.eurobuddha.maxima.core.chat.ChatEngine.Listener() {
@@ -931,6 +938,8 @@ public final class MaximaService extends Service {
             // Flush deferred state and release the receipt pool.
             ch.close();
         }
+        if (sFileCommands != null) { sFileCommands.close(); sFileCommands = null; }
+        if (sPrivateFiles != null) { sPrivateFiles.close(); sPrivateFiles = null; }
         MaximaNode n = sNode;
         if (n != null) {
             n.stop();

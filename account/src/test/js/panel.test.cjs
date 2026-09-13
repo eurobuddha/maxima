@@ -8,25 +8,27 @@ const vm = require('node:vm');
 // sockets, production test hooks or duplicate implementation of the async state machine.
 const source = fs.readFileSync(process.env.PARLONS_PANEL_SOURCE || path.join(__dirname, '../../main/resources/panel/app.js'), 'utf8');
 function element() {
-  const classes = new Set(), attrs = {}, handlers = {};
+  const classes = new Set(), attrs = {}, handlers = {}, children = new Map();
   return { attrs, handlers, disabled: false, parentElement: {}, textContent: '', innerHTML: '',
     classList: { contains: k => classes.has(k), toggle(k, on) { on ? classes.add(k) : classes.delete(k); } },
     addEventListener(k, f) { handlers[k] = f; }, setAttribute(k,v) { attrs[k] = v; }, removeAttribute(k) { delete attrs[k]; },
-    querySelectorAll() { return []; }, style: {}, scrollHeight: 100, scrollTop: 0, clientHeight: 100 };
+    querySelector(k) { if (!children.has(k)) children.set(k, element()); return children.get(k); },
+    appendChild() {}, remove() {}, focus() {}, isConnected: false, querySelectorAll() { return []; }, style: {}, scrollHeight: 100, scrollTop: 0, clientHeight: 100 };
 }
 function harness(fetch) {
   const nodes = new Map();
   const node = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   const renders = { page: 0, list: 0, messages: 0 };
-  const context = vm.createContext({ fetch, document: { getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
+  const context = vm.createContext({ fetch, document: { body: element(), createElement: () => ({content: {firstElementChild: element()}}), getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
     window: { icon: () => '', addEventListener() {} }, localStorage: { getItem: () => null },
-    setTimeout() {}, clearTimeout() {}, Uint8Array, btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
+    setTimeout() {}, clearTimeout() {}, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
   const expose = `globalThis.panel = { S, api, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
     get busy() { return olderBusy; }, get done() { return olderDone; } };
     renderChats = () => { renders.page++; }; renderChatsList = () => { renders.list++; }; renderMsgs = () => { renders.messages++; };`;
   assert.match(source, /  boot\(\);\s*\}\)\(\);\s*$/);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/panel/private-files.js'), 'utf8'), context);
   vm.runInContext(source.replace(/  boot\(\);\s*\}\)\(\);\s*$/, expose + '\n})();'), context);
   return { p: context.panel, node, renders };
 }
@@ -72,9 +74,9 @@ test('late send refresh cannot leak the previous conversation into a reopened ch
 test('file upload retains its original recipient and group flag after navigation', async () => {
   const d = deferred(), calls = [], h = harness(async (url, options) => { calls.push(JSON.parse(options.body)); return reply({ok: true}); });
   h.p.select('group', true);
-  const upload = h.p.sendFile({type: 'text/plain', name: 'hello.txt', arrayBuffer: () => d.promise}, false);
+  const upload = h.p.sendFile({type: 'text/plain', name: 'hello.txt', size: 1, slice: () => ({arrayBuffer: () => d.promise})}, false);
   h.p.select('person', false); d.resolve(new Uint8Array([65]).buffer); await upload;
-  assert.equal(calls.length, 1); assert.equal(calls[0].peer, 'group'); assert.equal(calls[0].group, true);
+  assert.deepEqual(calls.map(c => c.action), ['begin', 'append', 'finish']); assert.equal(calls[0].peer, 'group'); assert.equal(calls[0].group, true);
   assert.deepEqual(Array.from(h.p.S.msgs, x => x.id), ['person']); assert.equal(h.renders.messages, 0);
 });
 test('switch saves once, reflects success after the event ends and preserves value on failure', async () => {

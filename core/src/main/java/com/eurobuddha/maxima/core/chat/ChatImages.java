@@ -21,7 +21,7 @@ public final class ChatImages {
     public ChatImages(List<Photo> messages, String selectedId) {
         Set<String> seen = new HashSet<>();
         for (Photo p : messages) {
-            if (p.id != null && !p.id.isEmpty() && ChatMedia.mime(p.body).startsWith("image/")
+            if (p.id != null && !p.id.isEmpty() && ChatMedia.mime(p.body).startsWith("image/") && !ChatFile.isFile(p.body)
                     && !ChatMedia.ref(p.body).isEmpty() && seen.add(p.id)) photos.add(p);
         }
         photos.sort(Comparator.comparingLong(p -> p.time));

@@ -1,0 +1,17 @@
+plugins { alias(libs.plugins.android.application) }
+android {
+    namespace 'com.eurobuddha.filescheck'
+    compileSdk 36
+    defaultConfig { applicationId 'com.eurobuddha.filescheck'; minSdk 28; targetSdk 35; versionCode 1; versionName 'test' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    sourceSets { main { java.srcDirs += ['../files/src/test/java'] } }
+    sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/sha3'))
+    packaging { resources.excludes += ['META-INF/DEPENDENCIES', 'META-INF/INDEX.LIST'] }
+}
+dependencies { implementation project(':files'); implementation('com.github.atomashpolskiy:bt-core:1.10') { exclude group: 'com.google.inject', module: 'guice' }; implementation 'org.bouncycastle:bcprov-jdk15on:1.69'; implementation 'junit:junit:4.13.2' }
+
+tasks.register('copySha3', Copy) {
+    from '../app/src/main/java/com/eurobuddha/maxima/app/Sha3Provider.java'
+    into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app')
+}
+tasks.named('preBuild').configure { dependsOn 'copySha3' }

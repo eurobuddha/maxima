@@ -490,7 +490,19 @@ public final class ParlonsControl implements AutoCloseable {
         }
     }
 
+    private com.eurobuddha.maxima.files.FileCommands mFileCommands;
+    public void setFileCommands(com.eurobuddha.maxima.files.FileCommands commands) { mFileCommands = commands; }
+
     public void registerOn(ServiceRegistry zReg) {
+        zReg.register(com.eurobuddha.maxima.files.FileCommands.METHOD, req -> {
+            requireAuth(req);
+            if (mFileCommands == null) return bytes(err("This node needs the private file update"));
+            JSONObject input = parse(req);
+            java.util.Map<String,String> values = new java.util.LinkedHashMap<>();
+            for (Object k : input.keySet()) values.put(k.toString(), String.valueOf(input.get(k)));
+            JSONObject output = new JSONObject(); output.putAll(mFileCommands.call(values));
+            return bytes(output);
+        });
         // --- pairing ---
         zReg.register(M_PAIR, req -> {                     // NO auth: this IS how you get authorized
             requireOpen();

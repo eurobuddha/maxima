@@ -61,6 +61,8 @@ public final class ParlonsCore {
     private final ParlonsControl mControl;
     /** True when the host handed us an already-running relay (a Parlons Node runs its own). */
     private boolean mExternalRelay;
+    private com.eurobuddha.maxima.files.PrivateFiles mPrivateFiles;
+    private com.eurobuddha.maxima.files.FileCommands mFileCommands;
 
     private ScheduledExecutorService mMaint;
     private ReachabilityManager mReach;
@@ -142,6 +144,15 @@ public final class ParlonsCore {
         mChatStore = FileStore.coalescing(new File(base, AccountBackup.CHAT_DIR), 2000);
         mChat.setStore(mChatStore);   // flushed before any mailbox ack
         mChat.setMediaService(mMedia);
+        try {
+            mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, zDataDir.resolve("private-files"));
+            mPrivateFiles.setExtraSources(() -> {
+                String own = mCfg.ownRelay;
+                return mRelay != null && own != null && !own.isEmpty() && mNode.isHostVerified(own)
+                        ? java.util.Collections.singletonList(own) : java.util.Collections.emptyList();
+            });
+            mFileCommands = new com.eurobuddha.maxima.files.FileCommands(mPrivateFiles, zDataDir.resolve("private-files/uploads"));
+        } catch (java.io.IOException e) { throw new IllegalStateException("Cannot open private file storage", e); }
         // (listener wired AFTER mControl below — it fans events out through the control push)
         mNode.setLogListener(s -> log("node: " + s));   // log() tees into the ring itself
         mNode.setMessageListener((msg, msgid) -> {
@@ -153,6 +164,7 @@ public final class ParlonsCore {
         // (MaximaNode routes RpcEnvelope.APPLICATION first), so control never hits chat.
         mPairing = new DevicePairing(zDataDir);
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
+        mControl.setFileCommands(mFileCommands);
         mControl.setStatusSource(new ParlonsControl.StatusSource() {
             public long uptimeMillis() { return mStartedAt == 0 ? 0 : System.currentTimeMillis() - mStartedAt; }
             public String version()    { return mCfg.version; }
@@ -615,6 +627,7 @@ public final class ParlonsCore {
             }
             ParlonsLocal local = new ParlonsLocal(mNode.services(), key, mDataDir, zPort,
                     () -> mNode.permanentAddress(), mPairing, mMedia, this::log);
+            local.setPrivateFiles(mPrivateFiles);
             local.start();
             mLocal = local;
             mControl.setLocalSink(local.sink());
@@ -959,6 +972,8 @@ public final class ParlonsCore {
         mRunning = false;
         mOwnRelayGeneration.incrementAndGet();
         mControl.close();
+        if (mFileCommands != null) mFileCommands.close();
+        if (mPrivateFiles != null) mPrivateFiles.close();
         if (mMaint != null) {
             mMaint.shutdownNow();
         }

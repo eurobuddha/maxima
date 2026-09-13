@@ -420,6 +420,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (mFileUi != null) mFileUi.close();
         if (mPhotoViewer != null) mPhotoViewer.dismiss();
         super.onDestroy();
     }
@@ -1296,9 +1297,26 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     // ---- attach / camera / caption / send-photo ----
 
+    private com.eurobuddha.maxima.app.chat.PrivateFileUi mFileUi;
+    private com.eurobuddha.maxima.app.chat.PrivateFileUi fileUi() {
+        if (mFileUi == null) {
+            mFileUi = new com.eurobuddha.maxima.app.chat.PrivateFileUi(this, params -> {
+                final com.eurobuddha.maxima.cloud.ParlonsRemote remote = CloudSession.remoteOrNull();
+                if (remote == null) throw new java.io.IOException("Connect to your account first");
+                org.minima.utils.json.JSONObject input = new org.minima.utils.json.JSONObject(); input.putAll(params);
+                org.minima.utils.json.JSONObject response = remote.rpc("parlons.files", input);
+                java.util.Map<String,String> out = new java.util.LinkedHashMap<>();
+                for (Object k : response.keySet()) out.put(k.toString(), String.valueOf(response.get(k)));
+                return out;
+            }, mPeer, mGroup);
+        }
+        return mFileUi;
+    }
     private void attachSheet() {
         final java.util.List<String> items = new ArrayList<>();
         items.add("Photo library");
+        items.add("Private file");
+        items.add("File transfers");
         items.add("Voice note");
         if (!mGroup) {
             items.add("Send payment");
@@ -1306,7 +1324,11 @@ public final class CloudChatActivity extends AppCompatActivity {
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
                     String pick = items.get(which);
-                    if ("Send payment".equals(pick)) {
+                    if ("Private file".equals(pick)) {
+                        fileUi().pick();
+                    } else if ("File transfers".equals(pick)) {
+                        fileUi().transfers();
+                    } else if ("Send payment".equals(pick)) {
                         payContact();
                     } else if ("Voice note".equals(pick)) {
                         startVoiceNote();
@@ -1423,6 +1445,7 @@ public final class CloudChatActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (mFileUi != null && mFileUi.result(req, res, data)) return;
         if (req == TAKE_PHOTO && res == RESULT_OK && mCaptureUri != null) {
             promptCaption(mCaptureUri);
             return;
@@ -1964,6 +1987,9 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.sender.setVisibility(View.GONE);
             }
 
+            h.body.setOnClickListener(null);
+            h.body.setTextIsSelectable(!com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body));
+            h.body.setClickable(false);
             boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body);
             boolean media = !pay && com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
             String mime = media ? com.eurobuddha.maxima.core.chat.ChatMedia.mime(m.body) : "";
@@ -1980,11 +2006,16 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.body.setText(payLine);
                 h.body.setTextColor(ink);
                 h.body.setTypeface(null, android.graphics.Typeface.BOLD);
-            } else if (media && mime.startsWith("audio")) {
+            } else if (media && mime.startsWith("audio") && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)) {
                 h.image.setVisibility(View.GONE);
                 h.audio.setVisibility(View.VISIBLE);
                 h.body.setVisibility(View.GONE);
                 bindAudio(h, m);
+            } else if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)) {
+                h.audio.setVisibility(View.GONE); h.image.setVisibility(View.GONE); h.image.setImageDrawable(null);
+                h.body.setVisibility(View.VISIBLE); h.body.setText(com.eurobuddha.maxima.app.chat.PrivateFileUi.label(m.body));
+                h.body.setOnClickListener(v -> fileUi().showBody(m.body));
+                h.body.setTextColor(ink);
             } else if (media) {
                 h.audio.setVisibility(View.GONE);
                 h.image.setVisibility(View.VISIBLE);
@@ -2020,8 +2051,9 @@ public final class CloudChatActivity extends AppCompatActivity {
             if (m.mine && "failed".equals(m.state)) {
                 h.bubble.setOnClickListener(v -> offerReconnect());
             } else {
-                h.bubble.setOnClickListener(null);
-                h.bubble.setClickable(false);
+                h.bubble.setOnClickListener(com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)
+                        ? v -> fileUi().showBody(m.body) : null);
+                h.bubble.setClickable(com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body));
             }
             h.bubble.setOnLongClickListener(v -> {
                 bubbleMenu(m);
