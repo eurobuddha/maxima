@@ -40,7 +40,7 @@
         await this.createPeer(c); if (!this.valid(c)) return;
         const offer = await c.pc.createOffer(); if (!this.valid(c)) return;
         await c.pc.setLocalDescription(offer); if (!this.valid(c)) return;
-        await this.signal(c, 'offer', offer.sdp); this.flushLocal(c);
+        await this.publishLocal(c, 'offer');
       } catch (e) { this.failed(c, e); }
     }
     async receive(ev) {
@@ -79,7 +79,7 @@
         await this.remote(c, 'offer', c.offer); if (!this.valid(c)) return;
         const answer = await c.pc.createAnswer(); if (!this.valid(c)) return;
         await c.pc.setLocalDescription(answer); if (!this.valid(c)) return;
-        await this.signal(c, 'answer', answer.sdp); this.flushLocal(c);
+        await this.publishLocal(c, 'answer');
       } catch (e) { this.failed(c, e); }
     }
     async createPeer(c) {
@@ -100,8 +100,11 @@
         if (!this.valid(c) || !ev.candidate) return;
         const ice = ev.candidate;
         const payload = ice.sdpMid + '\n' + ice.sdpMLineIndex + '\n' + ice.candidate;
-        if (c.signalled) this.signal(c, 'ice', payload).catch(() => {});
+        if (c.signalled) { if (!this.embedded(c.published, payload)) this.signal(c, 'ice', payload).catch(() => {}); }
         else c.localIce.push(payload);
+      };
+      c.pc.onicegatheringstatechange = () => {
+        if (this.valid(c) && c.pc.iceGatheringState === 'complete' && c.finishGather) c.finishGather();
       };
       c.pc.onconnectionstatechange = () => {
         if (!this.valid(c)) return;
@@ -118,10 +121,32 @@
       while (this.valid(c) && c.ice.length) await c.pc.addIceCandidate(c.ice.shift());
       if (this.valid(c)) c.remoteReady = true;
     }
+    async publishLocal(c, kind) {
+      // WebRTC localDescription includes gathered candidates; keep late trickle for slow STUN.
+      await new Promise(resolve => {
+        c.finishGather = () => {
+          this.env.clearTimeout(c.gatherTimer); c.finishGather = null; resolve();
+        };
+        c.gatherTimer = this.env.setTimeout(() => { if (c.finishGather) c.finishGather(); }, 1500);
+        if (c.pc.iceGatheringState === 'complete') c.finishGather();
+      });
+      if (!this.valid(c)) return;
+      c.published = c.pc.localDescription && c.pc.localDescription.sdp;
+      if (!c.published) throw new Error('Local call description unavailable');
+      await this.signal(c, kind, c.published); this.flushLocal(c);
+    }
+    embedded(sdp, payload) {
+      const parts = payload.split('\n'), index = Number(parts[1]), candidate = parts.slice(2).join('\n').replace(/\s+ufrag\s+\S+/g, '');
+      let section = -1;
+      return String(sdp).split(/\r?\n/).some(line => {
+        if (line.startsWith('m=')) section++;
+        return section === index && line === 'a=' + candidate;
+      });
+    }
     flushLocal(c) {
       if (!this.valid(c)) return;
       c.signalled = true;
-      c.localIce.splice(0).forEach(p => this.signal(c, 'ice', p).catch(() => {}));
+      c.localIce.splice(0).forEach(p => { if (!this.embedded(c.published, p)) this.signal(c, 'ice', p).catch(() => {}); });
     }
     mute() {
       const c = this.current; if (!c || !c.media) return;
@@ -140,6 +165,7 @@
     end(c, reason, bye) {
       if (!this.valid(c)) return;
       if (bye) this.signal(c, 'bye').catch(() => {}); // capture the id before clearing it
+      if (c.finishGather) c.finishGather();
       this.env.clearTimeout(c.timer); this.ended.add(c.id);
       if (this.ended.size > 100) this.ended.delete(this.ended.values().next().value);
       this.current = null;

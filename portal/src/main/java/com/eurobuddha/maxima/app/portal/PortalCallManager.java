@@ -1,6 +1,7 @@
 package com.eurobuddha.maxima.app.portal;
 
 import android.content.Context;
+import com.eurobuddha.maxima.app.call.GatheredCallSdp;
 import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -83,6 +84,7 @@ public final class PortalCallManager {
 
     private PeerConnectionFactory mFactory;
     private PeerConnection mPc;
+    private GatheredCallSdp mLocalSdp;
     private AudioSource mSource;
     private AudioTrack mTrack;
 
@@ -216,12 +218,14 @@ public final class PortalCallManager {
             if (mVideo) {
                 mc.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"));
             }
-            mPc.createOffer(new Sdp("offer-create") {
+            final PeerConnection pc = mPc;
+            final String call = mCallId;
+            pc.createOffer(new Sdp("offer-create") {
                 @Override
                 public void onCreateSuccess(SessionDescription sdp) {
                     mExec.execute(() -> {
-                        mPc.setLocalDescription(new Sdp("offer-local"), sdp);
-                        signal("offer", sdp.description);
+                        if (mPc != pc || !call.equals(mCallId)) return;
+                        mLocalSdp.start(sdp);
                     });
                 }
             }, mc);
@@ -350,8 +354,7 @@ public final class PortalCallManager {
                     public void onCreateSuccess(SessionDescription sdp) {
                         mExec.execute(() -> {
                             if (mPc != pc || !call.equals(mCallId)) { return; }
-                            pc.setLocalDescription(new Sdp("answer-local"), sdp);
-                            signal("answer", sdp.description);
+                            mLocalSdp.start(sdp);
                         });
                     }
                 }, new MediaConstraints());
@@ -437,7 +440,7 @@ public final class PortalCallManager {
                 mExec.execute(() -> {
                     if (!callAtCreate.equals(mCallId)) { return; }
                     Log.i(TAG, "local ICE: " + iceKind(c));
-                    signal("ice", c.sdpMid + "\n" + c.sdpMLineIndex + "\n" + c.sdp);
+                    if (mLocalSdp != null) mLocalSdp.candidate(c);
                 });
             }
 
@@ -476,7 +479,7 @@ public final class PortalCallManager {
             }
             @Override public void onIceConnectionReceivingChange(boolean b) { }
             @Override public void onIceGatheringChange(PeerConnection.IceGatheringState s) {
-                mExec.execute(() -> { if (callAtCreate.equals(mCallId)) { Log.i(TAG, "ICE gathering: " + s); } });
+                mExec.execute(() -> { if (callAtCreate.equals(mCallId)) { Log.i(TAG, "ICE gathering: " + s); if (mLocalSdp != null) mLocalSdp.gathering(s); } });
             }
             @Override public void onAddStream(org.webrtc.MediaStream s) { }
             @Override public void onRemoveStream(org.webrtc.MediaStream s) { }
@@ -492,6 +495,14 @@ public final class PortalCallManager {
                 }
             }
         });
+        final PeerConnection pc = mPc;
+        mLocalSdp = new GatheredCallSdp(pc,
+                () -> mPc == pc && callAtCreate.equals(mCallId), mExec::execute,
+                (task, ms) -> mMain.postDelayed(task, ms), mMain::removeCallbacks,
+                this::signal, error -> {
+                    Log.w(TAG, "call local SDP failed: " + error);
+                    end("couldn't prepare call", true);
+                });
         mSource = mFactory.createAudioSource(new MediaConstraints());
         mTrack = mFactory.createAudioTrack("a0", mSource);
         mTrack.setEnabled(!mMuted);
@@ -595,6 +606,7 @@ public final class PortalCallManager {
         if (zSignalBye) {
             signal("bye", "");
         }
+        if (mLocalSdp != null) { mLocalSdp.close(); mLocalSdp = null; }
         mLastEndedCallId = mCallId;
         mCallId = "";
         PortalIncomingCall.dismiss(mCtx);

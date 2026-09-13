@@ -6,7 +6,7 @@ function fixture() {
   const sent = [], states = [], timers = new Map(), peers = [], media = [];
   let serial = 0;
   class PC {
-    constructor() { this.ice = []; this.tracks = []; peers.push(this); }
+    constructor() { this.ice = []; this.tracks = []; this.iceGatheringState = 'complete'; peers.push(this); }
     addTrack(t) { this.tracks.push(t); }
     async createOffer() { return {type:'offer', sdp:'offer-sdp'}; }
     async createAnswer() { assert.ok(this.remoteDescription); return {type:'answer', sdp:'answer-sdp'}; }
@@ -75,4 +75,32 @@ test('ring timeout and permission denial end the exact call',async()=>{
   assert.equal(f.calls.current,null);assert.equal(f.sent.at(-1).id,'remote-call');
   f.env.navigator.mediaDevices.getUserMedia=async()=>{throw Object.assign(new Error('denied'),{name:'NotAllowedError'});};
   await f.calls.start('peer','Peer',false);assert.equal(f.calls.current,null);assert.equal(f.timers.size,0);
+});
+
+test('initial SDP carries gathered ICE once; late ICE keeps the existing wire format', async()=>{
+  const f=fixture(); await f.calls.start('peer','Peer',false);
+  f.calls.hangup(f.calls.current.id); await idle(); f.sent.length=0;
+  f.env.RTCPeerConnection.prototype.setLocalDescription=async function(sdp){
+    this.localDescription={type:sdp.type,sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=candidate-local\r\n'};
+    this.onicecandidate({candidate:{sdpMid:'0',sdpMLineIndex:0,candidate:'candidate-local ufrag synthetic'}});
+  };
+  await f.calls.start('peer','Peer',false); await idle();
+  assert.deepEqual(f.sent.map(s=>s.kind),['offer']); assert.match(f.sent[0].payload,/a=candidate-local/);
+  f.peers.at(-1).onicecandidate({candidate:{sdpMid:'0',sdpMLineIndex:0,candidate:'candidate-late'}}); await idle();
+  assert.equal(f.sent.at(-1).kind,'ice'); assert.equal(f.sent.at(-1).payload,'0\n0\ncandidate-late');
+});
+test('gathering deadline keeps calls usable when STUN is slow', async()=>{
+  const f=fixture();
+  f.env.RTCPeerConnection.prototype.setLocalDescription=async function(sdp){this.localDescription=sdp;this.iceGatheringState='gathering';};
+  const starting=f.calls.start('peer','Peer',false);await idle();
+  assert.equal(f.sent.length,0); assert.equal(f.timers.size,2);
+  [...f.timers.values()].at(-1)(); await starting; await idle();
+  assert.equal(f.sent[0].kind,'offer');assert.equal(f.timers.size,1);
+});
+test('hangup while gathering clears the wait and cannot send a stale offer', async()=>{
+  const f=fixture();
+  f.env.RTCPeerConnection.prototype.setLocalDescription=async function(sdp){this.localDescription=sdp;this.iceGatheringState='gathering';};
+  const starting=f.calls.start('peer','Peer',false);await idle();
+  f.calls.hangup(f.calls.current.id);await starting;await idle();
+  assert.deepEqual(f.sent.map(s=>s.kind),['bye']);assert.equal(f.timers.size,0);
 });

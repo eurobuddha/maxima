@@ -4,7 +4,7 @@ android {
     compileSdk 36
     defaultConfig { applicationId 'com.eurobuddha.filescheck'; minSdk 28; targetSdk 35; versionCode 1; versionName 'test' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
-    sourceSets { main { java.srcDirs += ['../files/src/test/java'] } }
+    // Import only the Android smoke suite used by MainActivity; the file-manager suite is JVM-only.
     sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/sha3'))
     packaging { resources.excludes += ['META-INF/DEPENDENCIES', 'META-INF/INDEX.LIST'] }
 }
@@ -21,3 +21,17 @@ tasks.register('copyChatLinkText', Copy) {
     into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app/chat')
 }
 tasks.named('preBuild').configure { dependsOn 'copyChatLinkText' }
+
+// Uses the same native WebRTC and SDP helper as both production Android clients.
+dependencies { implementation 'io.getstream:stream-webrtc-android:1.1.1' }
+tasks.register('copyGatheredCallSdp', Copy) {
+    from '../chatshared/com/eurobuddha/maxima/app/call/GatheredCallSdp.java'
+    into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app/call')
+}
+tasks.named('preBuild').configure { dependsOn 'copyGatheredCallSdp' }
+
+tasks.register('copyPrivateTorrentTest', Copy) {
+    from '../files/src/test/java/com/eurobuddha/maxima/files/PrivateTorrentTest.java'
+    into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/files')
+}
+tasks.named('preBuild').configure { dependsOn 'copyPrivateTorrentTest' }
