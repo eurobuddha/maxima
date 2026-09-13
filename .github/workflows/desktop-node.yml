@@ -118,11 +118,23 @@ jobs:
       - name: Checksums
         shell: bash
         run: |
-          cd desktop/build/jpackage
-          for f in *.dmg *.msi *.deb; do
-            [ -f "$f" ] && shasum -a 256 "$f" >> SHA256SUMS || true
-          done
-          cat SHA256SUMS || true
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root = Path('desktop/build/jpackage')
+          files = sorted(p for p in root.iterdir() if p.suffix in ('.dmg', '.msi', '.deb'))
+          if not files:
+              raise SystemExit('No installer produced')
+          rows = []
+          for path in files:
+              digest = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1 << 20), b''):
+                      digest.update(block)
+              rows.append(f'{digest.hexdigest()}  {path.name}')
+          (root / 'SHA256SUMS-${{ matrix.platform }}').write_text('\n'.join(rows) + '\n')
+          print('\n'.join(rows))
+          PY
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -132,7 +144,7 @@ jobs:
             desktop/build/jpackage/*.dmg
             desktop/build/jpackage/*.msi
             desktop/build/jpackage/*.deb
-            desktop/build/jpackage/SHA256SUMS
+            desktop/build/jpackage/SHA256SUMS-*
           if-no-files-found: warn
 
       - name: Attach to release (tag builds only)
@@ -143,4 +155,4 @@ jobs:
             desktop/build/jpackage/*.dmg
             desktop/build/jpackage/*.msi
             desktop/build/jpackage/*.deb
-            desktop/build/jpackage/SHA256SUMS
+            desktop/build/jpackage/SHA256SUMS-*
