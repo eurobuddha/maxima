@@ -4,7 +4,7 @@ This implements files shared inside existing Parlons conversations, with BitTorr
 
 ## Using it
 
-Choose **Private file** from a chat's attachment menu. The recipient opens the file card and chooses **Download**. Transfers have progress, Pause/Resume, Save, and Remove controls. **File transfers** lists this account's retained transfers. Active downloads can upload encrypted pieces to the conversation's other participants. Restarting leaves transfers paused; previously verified files remain available to save.
+Choose **Private file** from a chat's attachment menu. The recipient opens the file card and chooses **Download**. Transfers have progress, Pause/Resume, Save, and Remove controls. **File transfers** lists this account's retained transfers. Active downloads can upload encrypted pieces to the conversation's other participants. After a restart, previously active transfers automatically resume once chat storage is loaded; deliberately paused transfers remain paused. Previously verified files remain available to save. Files saved by the first private-file build lack a persisted pause state and need one initial Resume to opt into this behaviour.
 
 At least one participating account must be reachable through its existing Parlons listening port, or reachable on the same LAN. An outbound-only participant can connect to a reachable participant; reverse introductions let an outbound-only sender serve a reachable recipient. If nobody is reachable, the transfer waits. There is no automatic central-server fallback. Cloud phone clients use their existing paired account, with no new account or credentials.
 
@@ -26,14 +26,14 @@ Both participants need a version supporting private files; Cloud clients also ne
 
 | Variant | Version |
 |---|---|
-| Original Android | 0.6.124 (724) |
-| Cloud Android | 0.2.73 (273) |
-| Parlons Node | 0.2.109 |
-| Parlons Cloud host | 0.11.105 |
+| Original Android | 0.6.125 (725) |
+| Cloud Android | 0.2.74 (274) |
+| Parlons Node | 0.2.110 |
+| Parlons Cloud host | 0.11.106 |
 | Relay server | 0.4.101 |
-| Standalone desktop | 1.5.101 |
-| minimaCore Desktop | 0.16.83 |
-| minimaDesk | 0.7.66 |
+| Standalone desktop | 1.5.102 |
+| minimaCore Desktop | 0.16.84 |
+| minimaDesk | 0.7.67 |
 | iPhone Cloud client | 0.1.34 (32) |
 
 Both Electron hosts reuse the same account panel and node jar, pinned by `package.json` `parlonsNode`. Classic-engine mode has no private-file engine. No WakeProxy code or credentials are changed.
@@ -47,3 +47,9 @@ Automated validation covers authenticated encryption/tampering/empty files, clos
 The S23 Ultra and S10+ each passed six runtime checks. The existing core protocol parity suite passed 63 checks; the panel suite passed 17; Electron host suites passed 7 and 6. A real Electron UI harness verified explicit download, escaped filenames, progress, light/dark contrast, pause/resume and dismissal. Three Swift parser/media tests passed. A phone-to-friend transfer across independent internet connections remains a release validation item. No claim of end-to-end internet validation is made by the loopback/runtime tests.
 
 Wake-proxy centralisation remains unresolved and paused as requested. This feature adds no new mandatory central service, but does not establish that the whole Parlons system is fully decentralised.
+
+## Local auto-resume follow-up
+
+The auto-resume change is isolated in `feature/private-files-auto-resume`, worktree `parlons-file-auto-resume`. The version bumps above are source candidates only. Phone installation, new installers, fleet deployment and bundling node 0.2.110 into minimaCore/minimaDesk have not been performed in this side conversation. Cloud Android and iPhone use the account node’s shared transfer service, so this behaviour requires updating the paired node; their client source is unchanged.
+
+Publication of this follow-up was explicitly requested on 13 September 2026. Current release evidence is in `_artifacts/parlons-auto-resume-release-2026-09-13` at the family root. Cloud Android also receives a version bump because its package contains the shared host library; iPhone client source is unchanged by auto-resume.

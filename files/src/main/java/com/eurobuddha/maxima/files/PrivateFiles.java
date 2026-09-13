@@ -50,7 +50,7 @@ public final class PrivateFiles implements AutoCloseable {
         volatile String status="Preparing",error="",token="";
         final Object disk = new Object();
         volatile long reservedSize;
-        volatile long done; volatile boolean paused,ready; volatile int generation;
+        volatile long done; volatile boolean paused,ready,restorePending; volatile int generation;
         volatile TorrentTunnel tunnel;
         Transfer(String id,String peer,boolean group,boolean mine,Path dir){this.id=id;this.peer=peer;this.group=group;this.mine=mine;this.dir=dir;}
     }
@@ -62,7 +62,7 @@ public final class PrivateFiles implements AutoCloseable {
             String id=Json.parse(req.payloadAsString()).getOrDefault("id","");
             Transfer t=transfers.get(id);
             String from=new MiniData(req.fromPublicKey).to0xString().toLowerCase(Locale.ROOT);
-            if(t==null || t.file==null || t.paused || !authorised(t,from))throw new SecurityException("Transfer unavailable");
+            if(t==null || t.file==null || t.paused || t.tunnel==null || !authorised(t,from))throw new SecurityException("Transfer unavailable");
             // Also connect back, so an unreachable sender can upload to a reachable recipient.
             Map<String,String> request=Json.parse(req.payloadAsString());
             introduce(t,request.getOrDefault("sources",""),request.getOrDefault("token",""));
@@ -142,11 +142,12 @@ public final class PrivateFiles implements AutoCloseable {
     private synchronized void start(Transfer t)throws Exception {
         if(closed)throw new IOException("File sharing stopped");
         if(t.tunnel!=null)return;
-        t.paused=false;t.error="";t.status=t.mine?"Sharing":"Connecting";int generation=++t.generation;
+        t.restorePending=false;t.paused=false;t.error="";t.status=t.ready?"Ready · sharing":t.mine?"Sharing":"Connecting";int generation=++t.generation;
+        try {
         PrivateTorrent bt=engine();
         TorrentTunnel tunnel=new TorrentTunnel();t.tunnel=tunnel;t.token=FileCrypto.randomHex(32);
         tunnel.expose(t.token,PrivateTorrent.validate(t.file).getTorrentId().getBytes(),bt.port());
-        try{bt.start(t.file,t.dir,(complete,total)->{
+        bt.start(t.file,t.dir,(complete,total)->{
             if(t.generation!=generation)return;
             t.done=Math.min(t.file.size,(long)complete*FileCrypto.PLAIN_PIECE);
             if(!t.ready && !t.mine && complete<total)t.status=complete>0?"Downloading":"Connecting";
@@ -165,13 +166,16 @@ public final class PrivateFiles implements AutoCloseable {
                 }catch(Exception e){failed(t,generation,message(e));}
             });}catch(RejectedExecutionException e){failed(t,generation,"Busy; tap Resume");}
         },error->failed(t,generation,error));
-        }catch(Exception e){pauseEngine(t);throw e;}
+        save(t);
+        }catch(Exception e){failed(t,generation,message(e));throw e;}
     }
     private synchronized void failed(Transfer t,int generation,String error) {
         if(t.generation!=generation)return;
-        t.paused=true;pauseEngine(t);t.status="Failed";t.error=error;
+        t.restorePending=false;t.paused=true;pauseEngine(t);t.status="Failed";t.error=error;
+        try{save(t);}catch(IOException e){t.error+="; could not save paused state";}
     }
-    public synchronized void pause(String id)throws IOException {Transfer t=get(id);t.paused=true;t.status=t.ready?"Ready · paused":"Paused";pauseEngine(t);}
+    public synchronized void pause(String id)throws IOException {Transfer t=get(id);t.restorePending=false;t.paused=true;t.status=t.ready?"Ready · paused":"Paused";
+        try{pauseEngine(t);}finally{if(t.file!=null)save(t);}}
     private void pauseEngine(Transfer t){t.generation++;TorrentTunnel tunnel=t.tunnel;t.tunnel=null;t.token="";t.tunnels.clear();if(tunnel!=null)tunnel.close();if(engine!=null)engine.pause(t.id);}
     public synchronized void resume(String id)throws Exception {Transfer t=get(id);if(t.file==null)throw new IOException("Choose the file again");start(t);}
     public synchronized void remove(String id)throws Exception {Transfer t=get(id);pause(id);transfers.remove(id);
@@ -188,6 +192,7 @@ public final class PrivateFiles implements AutoCloseable {
     private Transfer get(String id)throws IOException{Transfer t=transfers.get(id);if(t==null)throw new IOException("Transfer not found");return t;}
     private void discover(){
         if(closed)return;
+        resumeRestored();
         for(Transfer t:transfers.values())if(t.file!=null && t.tunnel!=null && !t.paused){
             for(String key:t.participants){
                 if(!authorised(t,key))continue;
@@ -205,6 +210,13 @@ public final class PrivateFiles implements AutoCloseable {
                     } catch(Exception e) { pendingPeers.remove(pending); }
                 }); } catch(RejectedExecutionException e) { pendingPeers.remove(pending); }
             }
+        }
+    }
+    /** Wait for asynchronous Android chat loading; explicit Pause cancels pending restoration. */
+    private synchronized void resumeRestored(){
+        if(closed || !chat.isLoaded())return;
+        for(Transfer t:transfers.values())if(t.restorePending){
+            try{start(t);}catch(Exception ignored){/* start records a visible, persisted failure. */}
         }
     }
     private void introduce(Transfer t,String sources,String token){
@@ -233,9 +245,11 @@ public final class PrivateFiles implements AutoCloseable {
         });}catch(RejectedExecutionException ignored){}
     }
     private void save(Transfer t)throws IOException {
+        synchronized(t.disk){
         String json=new Json.Writer().put("ref",t.file.ref()).put("peer",t.peer).put("group",Boolean.toString(t.group))
-                .put("mine",Boolean.toString(t.mine)).put("members",String.join(",",t.participants)).done();
+                .put("mine",Boolean.toString(t.mine)).put("members",String.join(",",t.participants)).put("paused",Boolean.toString(t.paused)).done();
         Path tmp=t.dir.resolve("offer.tmp");Files.write(tmp,bytes(json));privatePath(tmp,false);Files.move(tmp,t.dir.resolve("offer.json"),StandardCopyOption.REPLACE_EXISTING);
+        }
     }
     private void load()throws IOException {
         try(java.util.stream.Stream<Path> dirs=Files.list(root)){
@@ -246,9 +260,12 @@ public final class PrivateFiles implements AutoCloseable {
                 try{Map<String,String> m=Json.parse(new String(Files.readAllBytes(state),StandardCharsets.UTF_8));ChatFile f=ChatFile.parse(m.get("ref"));if(!dir.getFileName().toString().equals(f.id))continue;
                     Transfer t=new Transfer(f.id,m.get("peer"),Boolean.parseBoolean(m.get("group")),Boolean.parseBoolean(m.get("mine")),dir);
                     t.file=f;t.reservedSize=f.size;t.paused=true;
+                    // Old builds did not record pause intent. Leave those files paused until
+                    // the owner resumes once, rather than undoing an unknown deliberate pause.
+                    t.restorePending="false".equals(m.get("paused"));
                     // This cache is only published by authenticated decryption, in an owner-only directory.
                     t.ready=Files.isRegularFile(dir.resolve("verified.bin"),LinkOption.NOFOLLOW_LINKS) && Files.size(dir.resolve("verified.bin"))==f.size;
-                    t.done=t.ready?f.size:0;t.status=t.ready?"Ready · paused":"Paused";t.participants.addAll(Arrays.asList(m.get("members").split(",")));transfers.put(f.id,t);
+                    t.done=t.ready?f.size:0;t.status=t.restorePending?"Resuming":t.ready?"Ready · paused":"Paused";t.participants.addAll(Arrays.asList(m.get("members").split(",")));transfers.put(f.id,t);
                 }catch(Exception ignored){orphan(dir);}
             }
         }

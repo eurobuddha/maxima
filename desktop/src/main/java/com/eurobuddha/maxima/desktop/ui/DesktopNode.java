@@ -176,6 +176,8 @@ public final class DesktopNode {
             DesktopEventLog.add("ENGINE: built-in");
         }
         applySavedMls();   // re-pin a static MLS across restarts (phone parity)
+        // Restore active shares at startup, without requiring the file dialog to be opened.
+        if(mNode!=null)try{files();}catch(Exception e){DesktopEventLog.add("Private file storage unavailable: "+e.getMessage());}
     }
 
     private ChatEngine.Listener fanout() {

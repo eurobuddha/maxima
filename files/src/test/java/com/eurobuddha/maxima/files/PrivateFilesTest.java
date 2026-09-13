@@ -90,4 +90,62 @@ public class PrivateFilesTest {
             }
         }
     }
+    private static void awaitSharing(Fixture f,PrivateFiles files,String id)throws Exception {
+        ServiceRegistry.Request request=new ServiceRegistry.Request(PrivateFiles.PEERS,new Json.Writer().put("id",id).done().getBytes(StandardCharsets.UTF_8),f.peer.publicKey(),Collections.emptyList());
+        long until=System.currentTimeMillis()+10000;
+        while(f.node.services().dispatch("synthetic",request).isError() && System.currentTimeMillis()<until)Thread.sleep(25);
+        assertFalse(f.node.services().dispatch("synthetic",request).isError());
+        assertEquals("false",files.status(id).get("paused"));
+    }
+    @Test(timeout=30000) public void activeShareResumesAfterRestartAndExplicitPausePersists()throws Exception {
+        try(Fixture f=new Fixture()){
+            byte[] plain="restart sharing".getBytes(StandardCharsets.UTF_8);
+            String id=f.files.send(new ByteArrayInputStream(plain),plain.length,"restart.txt","text/plain",f.peer.publicKeyHex(),false);
+            long until=System.currentTimeMillis()+10000;
+            while(!"true".equals(f.files.status(id).get("ready")) && System.currentTimeMillis()<until)Thread.sleep(25);
+            assertEquals("true",f.files.status(id).get("ready"));
+            f.files.close();
+            try(PrivateFiles reopened=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){
+                awaitSharing(f,reopened,id);
+                assertEquals("Ready · sharing",reopened.status(id).get("status"));
+                try(InputStream in=reopened.open(id)){assertArrayEquals(plain,in.readAllBytes());}
+                reopened.pause(id);
+            }
+            try(PrivateFiles paused=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){
+                Thread.sleep(2200);assertEquals("true",paused.status(id).get("paused"));
+                paused.resume(id);
+            }
+            try(PrivateFiles resumed=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){awaitSharing(f,resumed,id);}
+        }
+    }
+    @Test(timeout=30000) public void unfinishedAcceptedDownloadResumes()throws Exception {
+        try(Fixture f=new Fixture()){
+            f.files.close();
+            Path source=Files.createDirectory(f.root.resolve("source"));ChatFile offer=PrivateTorrentTest.prepare(source,new byte[2*FileCrypto.PLAIN_PIECE]);
+            Path dir=Files.createDirectory(f.root.resolve("files").resolve(offer.id));
+            Files.write(dir.resolve("payload.bin"),Arrays.copyOf(Files.readAllBytes(source.resolve("payload.bin")),FileCrypto.PIECE));
+            String saved=new Json.Writer().put("ref",offer.ref()).put("peer",f.peer.publicKeyHex()).put("group","false")
+                    .put("mine","false").put("members",f.peer.publicKeyHex().toLowerCase(Locale.ROOT)).put("paused","false").done();
+            Files.write(dir.resolve("offer.json"),saved.getBytes(StandardCharsets.UTF_8));
+            try(PrivateFiles reopened=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){
+                awaitSharing(f,reopened,offer.id);assertEquals("false",reopened.status(offer.id).get("ready"));
+                assertEquals(1,reopened.list().size());
+            }
+        }
+    }
+    @Test(timeout=30000) public void legacyStateStaysPausedUntilExplicitResume()throws Exception {
+        try(Fixture f=new Fixture()){
+            String id=f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"legacy.txt","text/plain",f.peer.publicKeyHex(),false);
+            f.files.close();Path state=f.root.resolve("files").resolve(id).resolve("offer.json");
+            Map<String,String> saved=Json.parse(Files.readString(state));saved.remove("paused");
+            Json.Writer writer=new Json.Writer();saved.forEach(writer::put);Files.writeString(state,writer.done());
+            try(PrivateFiles legacy=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){
+                Thread.sleep(2200);assertEquals("true",legacy.status(id).get("paused"));legacy.resume(id);
+            }
+            try(PrivateFiles reopened=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){
+                // Pause during the startup delay must cancel the scheduled restoration too.
+                reopened.pause(id);Thread.sleep(2200);assertEquals("true",reopened.status(id).get("paused"));
+            }
+        }
+    }
 }
