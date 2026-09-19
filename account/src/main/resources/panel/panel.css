@@ -208,6 +208,9 @@ a { color: inherit; }
 .cchead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .ccname { font-weight: 700; }
 .ccaddr { font-size: 11px; opacity: .85; margin: 4px 0 8px; }
+.paycard { min-width: 200px; }
+.payamt { font-weight: 600; font-size: 17px; letter-spacing: .2px; }
+.paytx { font-size: 11px; opacity: .75; margin-top: 6px; }
 .ccbtns { display: flex; gap: 8px; }
 
 /* Keyboard and small-window polish using the existing app palette. */

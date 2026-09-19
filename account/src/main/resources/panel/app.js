@@ -39,6 +39,19 @@
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const MEDIA_MARK = '\u0001m\u0001';   // core ChatMedia: SOH-fenced 'm', then mime SOH ref SOH caption
   const CONTACT_MARK = '\u0001c\u0001'; // core ChatContact: SOH-fenced 'c', then key SOH name SOH address
+  // core ChatPay: SOH then 'p' - two chars, NOT SOH-fenced like the two above - then
+  // amount SOH token SOH txid SOH memo. The memo is last, so it may contain anything.
+  const PAY_MARK = '\u0001p';
+  function parsePay(body) {
+    if (!body || !body.startsWith(PAY_MARK)) return null;
+    const rest = body.slice(PAY_MARK.length);
+    const a = rest.indexOf('\u0001'); if (a < 0) return null;
+    const rest2 = rest.slice(a + 1);
+    const b = rest2.indexOf('\u0001'); if (b < 0) return null;
+    const rest3 = rest2.slice(b + 1);
+    const c = rest3.indexOf('\u0001'); if (c < 0) return null;
+    return { amount: rest.slice(0, a), token: rest2.slice(0, b), txid: rest3.slice(0, c), memo: rest3.slice(c + 1) };
+  }
   function parseContact(body) {
     if (!body || !body.startsWith(CONTACT_MARK)) return null;
     const rest = body.slice(CONTACT_MARK.length);
@@ -135,6 +148,8 @@
     return j ? '/media?m=' + encodeURIComponent(j) : '';
   }
   function preview(body) {
+    const p = parsePay(body);
+    if (p) return '💸 ' + p.amount + ' ' + (p.token || 'MINIMA') + (p.memo ? '  ' + p.memo : '');
     const c = parseContact(body);
     if (c) return '👤 Contact: ' + (c.name || '(no name)');
     const m = parseMedia(body);
@@ -412,6 +427,12 @@
       inner += '<div class="ccard"><div class="cchead">' + avatar(c.key, c.name, 'm') + '<div><div class="ccname">' + esc(c.name || '(no name)') + '</div><div class="sub">Shared contact</div></div></div>'
         + '<div class="mono whole ccaddr">' + esc(c.address) + '</div>'
         + '<div class="ccbtns"><button class="btn sm ccadd" data-addr="' + esc(c.address) + '" data-name="' + esc(c.name) + '">Add contact</button><button class="btn sm ghost cccopy" data-addr="' + esc(c.address) + '">Copy</button></div></div>';
+    } else if (parsePay(e.body || '')) {
+      const p = parsePay(e.body);
+      // The txid is shown WHOLE - it exists to be copied into an explorer.
+      inner += '<div class="paycard"><div class="payamt">' + esc((mine ? '\u2191 ' : '\u2193 ') + p.amount + ' ' + (p.token || 'MINIMA')) + '</div>'
+        + (p.memo ? '<div class="body">' + linkText(p.memo) + '</div>' : '')
+        + (p.txid ? '<div class="mono whole paytx">' + esc(p.txid) + '</div>' : '') + '</div>';
     } else inner += '<div class="body">' + linkText(e.body || '') + '</div>';
     let meta = hhmm(e.time);
     if (mine) meta += ' ' + (S.openIsGroup && e.delivered != null && e.state !== 'read' ? e.delivered + ' ' : '') + ticks(e.state);

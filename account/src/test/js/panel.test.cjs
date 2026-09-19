@@ -22,7 +22,7 @@ function harness(fetch) {
   const context = vm.createContext({ fetch, document: { body: element(), createElement: () => ({content: {firstElementChild: element()}}), getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
     window: { icon: () => '', addEventListener() {} }, localStorage: { getItem: () => null },
     setTimeout() {}, clearTimeout() {}, URL, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
-  const expose = `globalThis.panel = { S, api, linkText, bubbleHtml, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
+  const expose = `globalThis.panel = { S, api, linkText, bubbleHtml, parsePay, preview, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
     get busy() { return olderBusy; }, get done() { return olderDone; } };
@@ -111,4 +111,30 @@ test('chat rendering escapes HTML and does not link executable schemes or creden
   const out = h.p.bubbleHtml({body: text, time: 0, id: 'x'});
   assert.ok(out.includes('&lt;img')); assert.ok(!out.includes('<img')); assert.ok(!out.includes('class="chat-link"'));
   assert.ok(h.p.bubbleHtml({body:'https://example.org',time:0,id:'x'}).includes('class="chat-link"'));
+});
+
+test('an in-chat payment renders as a payment, not raw control characters', () => {
+  const h = harness(async () => reply({}));
+  const SOH = '\u0001';
+  const txid = '0x' + 'AB'.repeat(32);
+  const body = SOH + 'p' + '25' + SOH + 'MxUSD' + SOH + txid + SOH + 'lunch';
+  const parsed = h.p.parsePay(body);   // cross-realm object: compare fields, not prototypes
+  assert.equal(parsed.amount, '25');
+  assert.equal(parsed.token, 'MxUSD');
+  assert.equal(parsed.txid, txid);
+  assert.equal(parsed.memo, 'lunch');
+  const html = h.p.bubbleHtml({id: 'm1', time: 100, mine: true, body});
+  assert.match(html, /25 MxUSD/);
+  assert.ok(html.includes(txid), 'the txid is shown whole, never truncated');
+  assert.ok(!html.includes(SOH), 'no control characters leak into the bubble');
+  assert.match(html, /lunch/);
+  // The chat list and notifications read it the same way.
+  assert.match(h.p.preview(body), /25 MxUSD/);
+  // Minima keeps its own label, and a received payment is marked as received.
+  const minima = SOH + 'p' + '5' + SOH + 'MINIMA' + SOH + txid + SOH + '';
+  assert.match(h.p.bubbleHtml({id: 'm2', time: 100, mine: false, body: minima}), /5 MINIMA/);
+  // A plain message, and a malformed payment body, still render as text - not as a payment.
+  assert.equal(h.p.parsePay('plain text'), null);
+  assert.equal(h.p.parsePay(SOH + 'p' + '25' + SOH + 'MxUSD'), null);
+  assert.match(h.p.bubbleHtml({id: 'm3', time: 100, mine: false, body: 'hello'}), /hello/);
 });
