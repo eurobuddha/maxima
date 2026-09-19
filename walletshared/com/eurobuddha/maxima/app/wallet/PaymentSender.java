@@ -81,63 +81,18 @@ public final class PaymentSender {
     }
 
     /**
-     * Has a native-Minima coin of exactly {@code zAmount} landed at our wallet
-     * address? A present coin means the payment is on-chain (confirmed) - the
-     * honest, real-data signal for a received-payment "Confirmed" status.
-     * Matches by amount, so two identical concurrent amounts are indistinguishable
-     * (rare in a chat); best-effort, never throws.
-     */
-    public void hasIncomingCoin(final String zAmount, final Arrival zCb) {
-        final MaximaWallet w = mWallet;
-        if (w == null || zAmount == null || zAmount.isEmpty()) {
-            zCb.onArrived(false);
-            return;
-        }
-        mPub.coins(w.hexAddress(), new WalletPublisher.Cb() {
-            public void onResult(JSONObject r) {
-                boolean found = false;
-                try {
-                    MiniNumber want = new MiniNumber(zAmount);
-                    org.minima.utils.json.JSONObject full =
-                            (org.minima.utils.json.JSONObject) new org.minima.utils.json.parser
-                                    .JSONParser().parse(r.toString());
-                    org.minima.utils.json.JSONArray coins =
-                            (org.minima.utils.json.JSONArray) full.get("response");
-                    if (coins != null) {
-                        for (Object o : coins) {
-                            org.minima.utils.json.JSONObject c =
-                                    (org.minima.utils.json.JSONObject) o;
-                            String tok = String.valueOf(c.get("tokenid"));
-                            if (!"0x00".equals(tok)) {
-                                continue;
-                            }
-                            MiniNumber amt = new MiniNumber(String.valueOf(c.get("amount")));
-                            if (amt.isEqual(want)) {
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
-                zCb.onArrived(found);
-            }
-
-            public void onError(String m) {
-                zCb.onArrived(false);
-            }
-        });
-    }
-
-    /**
      * Verify a RECEIVED payment by its txid - not by amount coincidence. A
      * fabricated TYPE_PAYMENT claim carries an arbitrary txid; only a real
      * on-chain TxPoW with that exact id, carrying an output that pays OUR
-     * address the claimed amount, confirms. This is what makes the received
-     * "Confirmed" badge an on-chain fact rather than the sender's word.
+     * address the claimed amount OF THE CLAIMED TOKEN, confirms. This is what
+     * makes the received "Confirmed" badge an on-chain fact rather than the
+     * sender's word.
+     *
+     * <p>{@code zTokenId} is what closes the cross-token hole: without it a 5
+     * MINIMA output confirms a "5 MxUSD" claim. See {@link TokenAmount#paysUs}.
      */
     public void verifyIncomingPayment(final String zTxid, final String zAmount,
-            final Arrival zCb) {
+            final String zTokenId, final Arrival zCb) {
         final MaximaWallet w = mWallet;
         if (w == null || zTxid == null || zTxid.isEmpty()
                 || zAmount == null || zAmount.isEmpty()) {
@@ -165,22 +120,10 @@ public final class PaymentSender {
                                 : (org.minima.utils.json.JSONObject) body.get("txn");
                         org.minima.utils.json.JSONArray outs = txn == null ? null
                                 : (org.minima.utils.json.JSONArray) txn.get("outputs");
-                        MiniNumber wantN = new MiniNumber(want);
-                        if (outs != null) {
-                            for (Object o : outs) {
-                                org.minima.utils.json.JSONObject out =
-                                        (org.minima.utils.json.JSONObject) o;
-                                String addr = String.valueOf(out.get("address"));
-                                MiniNumber amt = new MiniNumber(
-                                        String.valueOf(out.get("amount")));
-                                // The exact txid resolved to a real TxPoW that
-                                // pays our address the claimed amount.
-                                if (ours.equalsIgnoreCase(addr) && amt.isEqual(wantN)) {
-                                    ok = true;
-                                    break;
-                                }
-                            }
-                        }
+                        // The exact txid resolved to a real TxPoW: does it pay our address the
+                        // claimed amount OF THE CLAIMED TOKEN?
+                        ok = com.eurobuddha.wallet.TokenAmount.paysUs(
+                                outs, ours, zTokenId, new MiniNumber(want));
                     }
                 } catch (Exception ignored) {
                 }

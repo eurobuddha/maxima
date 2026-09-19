@@ -102,9 +102,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
             // Verify by the EXACT txid, never by amount coincidence - an
             // unrelated coin of equal value must not confirm a payment, and a
-            // fabricated payment claim must never confirm at all.
+            // fabricated payment claim must never confirm at all. The token is
+            // part of that: a MINIMA output must not confirm an MxUSD claim.
             mSender.verifyIncomingPayment(tx,
-                    com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body), arrived -> {
+                    com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body),
+                    com.eurobuddha.maxima.core.chat.ChatPay.tokenId(e.body), arrived -> {
                         if (arrived) {
                             markPayConfirmed(tx);
                             runOnUiThread(ChatActivity.this::render);
