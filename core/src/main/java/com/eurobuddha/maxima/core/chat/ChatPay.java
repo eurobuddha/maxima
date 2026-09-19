@@ -20,7 +20,43 @@ public final class ChatPay {
     private static final String MARK = "p";
     private static final char SEP = '\u0001';
 
+    /** The ONE custom token Parlons can send. Two currencies only - Minima and MxUSD. */
+    public static final String TOKENID_MXUSD =
+            "0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90";
+
+    /** The native Minima token id. */
+    public static final String TOKENID_MINIMA = "0x00";
+
+    /** Family rule: this token is ALWAYS called MxUSD - never USDT, never mxUSDT. */
+    public static final String NAME_MXUSD = "MxUSD";
+
+    /** Native Minima, labelled explicitly in every bubble and preview. */
+    public static final String NAME_MINIMA = "MINIMA";
+
     private ChatPay() {
+    }
+
+    /**
+     * Which token a payment body is about. The body carries the token NAME, and with exactly two
+     * currencies the name IS the discriminator - so the body format is untouched, every payment
+     * already stored on disk keeps working, and an old peer (which renders amount + name and
+     * nothing else) is unaffected.
+     *
+     * ponytail: name -> id lookup, not a registry. A THIRD currency means carrying the id
+     * explicitly - a 5th SEP field BEFORE the memo, with parse() tolerating 4-field rows.
+     */
+    public static String tokenId(String zBody) {
+        return NAME_MXUSD.equalsIgnoreCase(tokenName(zBody)) ? TOKENID_MXUSD : TOKENID_MINIMA;
+    }
+
+    /** The label for a token id - the inverse of {@link #tokenId(String)}. */
+    public static String nameFor(String zTokenId) {
+        return TOKENID_MXUSD.equalsIgnoreCase(zTokenId) ? NAME_MXUSD : NAME_MINIMA;
+    }
+
+    /** True for the two token ids Parlons will send. Anything else is refused, never defaulted. */
+    public static boolean isSendable(String zTokenId) {
+        return TOKENID_MINIMA.equals(zTokenId) || TOKENID_MXUSD.equalsIgnoreCase(zTokenId);
     }
 
     public static String wrap(String zAmount, String zTokenName, String zTxid, String zMemo) {

@@ -971,7 +971,7 @@ public final class ChatEngine {
         // Media rides inside a text body, so text() covers text and media; a
         // payment keeps its own type. Same id → the receiver dedups.
         ChatMessage cm = ChatPay.isPayment(e.body)
-                ? ChatMessage.payment(e.id, ChatPay.amount(e.body), "",
+                ? ChatMessage.payment(e.id, ChatPay.amount(e.body), ChatPay.tokenId(e.body),
                         ChatPay.tokenName(e.body), ChatPay.memo(e.body), ChatPay.txid(e.body), e.time)
                 : ChatMessage.text(e.id, e.body, e.time);
         return deliver(c, cm);
@@ -1029,7 +1029,8 @@ public final class ChatEngine {
     /** The broadcast was accepted: tell the peer, so the payment bubble appears
      *  on their side too, and let the receipt/resend machinery confirm it. */
     public boolean completePayment(Contact zTo, Entry zEntry) {
-        ChatMessage cm = ChatMessage.payment(zEntry.id, ChatPay.amount(zEntry.body), "",
+        ChatMessage cm = ChatMessage.payment(zEntry.id, ChatPay.amount(zEntry.body),
+                ChatPay.tokenId(zEntry.body),
                 ChatPay.tokenName(zEntry.body), ChatPay.memo(zEntry.body),
                 ChatPay.txid(zEntry.body), zEntry.time);
         boolean ok = deliver(zTo, cm);

@@ -428,10 +428,47 @@ public class ChatTest {
                 u1.conversation(payer);
         if (pconv.size() == 1
                 && com.eurobuddha.maxima.core.chat.ChatPay.isPayment(pconv.get(0).body)
-                && com.eurobuddha.maxima.core.chat.ChatPay.amount(pconv.get(0).body).equals("7")) {
+                && com.eurobuddha.maxima.core.chat.ChatPay.amount(pconv.get(0).body).equals("7")
+                && com.eurobuddha.maxima.core.chat.ChatPay.tokenId(pconv.get(0).body).equals("0x00")) {
             ok("an inbound payment lands as a payment entry in the thread");
         } else {
             bad("inbound payment wrong: " + pconv.size());
+        }
+
+        // An inbound MxUSD payment keeps its currency: the wire carries the name (and now the id
+        // too), and the local body identifies the token from that name.
+        u1.onInbound(inbound(payer, id.publicKeyHex(),
+                ChatMessage.payment("0xPAY10", "25",
+                        com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MXUSD,
+                        com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD,
+                        "thanks", "0xTXM", System.currentTimeMillis()).encode()));
+        java.util.List<com.eurobuddha.maxima.core.chat.ChatEngine.Entry> tconv =
+                u1.conversation(payer);
+        String mxBody = tconv.isEmpty() ? "" : tconv.get(tconv.size() - 1).body;
+        if (tconv.size() == 2
+                && com.eurobuddha.maxima.core.chat.ChatPay.amount(mxBody).equals("25")
+                && com.eurobuddha.maxima.core.chat.ChatPay.tokenName(mxBody)
+                        .equals(com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD)
+                && com.eurobuddha.maxima.core.chat.ChatPay.tokenId(mxBody)
+                        .equals(com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MXUSD)) {
+            ok("an inbound MxUSD payment keeps its currency");
+        } else {
+            bad("inbound MxUSD payment wrong: n=" + tconv.size()
+                    + " name=" + com.eurobuddha.maxima.core.chat.ChatPay.tokenName(mxBody)
+                    + " id=" + com.eurobuddha.maxima.core.chat.ChatPay.tokenId(mxBody));
+        }
+
+        // The tokenid rides the wire as an additive field, so a future client can read it
+        // directly instead of deriving it from the label.
+        ChatMessage mxWire = ChatMessage.decode(ChatMessage.payment("0xP2", "25",
+                com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MXUSD,
+                com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD, "", "0xTXM",
+                System.currentTimeMillis()).encode());
+        if (mxWire.tokenId.equals(com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MXUSD)
+                && mxWire.tokenName.equals(com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD)) {
+            ok("a token payment carries its tokenid on the wire");
+        } else {
+            bad("payment tokenid lost on the wire: " + mxWire.tokenId);
         }
         // The captured wallet address survives a restart.
         com.eurobuddha.maxima.core.chat.ChatEngine u4 =
