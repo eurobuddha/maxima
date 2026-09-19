@@ -546,6 +546,11 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
      * instances — the WOTS key-reuse fund-loss hazard. Call OFF the EDT.
      */
     private void signAndPublish(DesktopWallet w, String to, MiniNumber amount, PayResult cb) {
+        signAndPublish(w, to, amount, "0x00", cb);
+    }
+
+    private void signAndPublish(DesktopWallet w, String to, MiniNumber amount, String tokenid,
+                                PayResult cb) {
         try {
             // 1. coins for our address (read, via gateway/node).
             final org.json.JSONObject[] resp = new org.json.JSONObject[1];
@@ -569,7 +574,10 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
             org.minima.utils.json.JSONObject full = (org.minima.utils.json.JSONObject)
                     new org.minima.utils.json.parser.JSONParser().parse(resp[0].toString());
             org.minima.utils.json.JSONArray coins = (org.minima.utils.json.JSONArray) full.get("response");
-            List<org.minima.utils.json.JSONObject> sel = CoinSelector.selectToCover(coins, "0x00", amount);
+            // ONE conversion: raw feeds both the selector and the builder, so a token send can
+            // never select against one unit and build against the other.
+            final MiniNumber raw = com.eurobuddha.wallet.TokenAmount.toRaw(coins, tokenid, amount);
+            List<org.minima.utils.json.JSONObject> sel = CoinSelector.selectToCover(coins, tokenid, raw);
             List<TxnFactory.InputCoin> inputs = new ArrayList<>();
             for (org.minima.utils.json.JSONObject cn : sel) {
                 inputs.add(TxnFactory.fromCoinJson(cn, DesktopWallet.KEY_INDEX));
@@ -578,15 +586,18 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
             // 3. build + SIGN locally (this reserves a one-time key use).
             cb.onStatus("Signing on this device…");
             TxnFactory factory = new TxnFactory(w.core());
-            final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, amount,
-                    TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
+            final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, raw,
+                    new org.minima.objects.base.MiniData(tokenid), MiniNumber.ZERO,
+                    "mxw" + System.currentTimeMillis());
 
             // 4. publish the SIGNED txn (relay only) via gateway/node.
             cb.onStatus("Publishing via " + mPub.backendName() + "…");
             mPub.publish(built.getTxnImportCommand(), built.getID(), built.getTxnPostCommand(),
                     new DesktopWalletPublisher.Cb() {
                 public void onResult(org.json.JSONObject r) {
-                    mLedger.add(true, amount.toString(), "MINIMA", to, built.getID(), "0x00");
+                    mLedger.add(true, amount.toString(),
+                            com.eurobuddha.maxima.core.chat.ChatPay.nameFor(tokenid), to,
+                            built.getID(), tokenid);
                     mLastFetch = 0;
                     cb.onTxid(built.getID());
                 }
@@ -624,9 +635,15 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab {
      * payment bubble.
      */
     public void requestPayment(String toAddr, MiniNumber amount, PayResult cb) {
+        requestPayment(toAddr, amount, "0x00", cb);
+    }
+
+    /** As {@link #requestPayment(String, MiniNumber, PayResult)} for a chosen currency
+     *  ({@code "0x00"} = native Minima). {@code amount} is the DISPLAYED token amount. */
+    public void requestPayment(String toAddr, MiniNumber amount, String tokenid, PayResult cb) {
         try {
             DesktopWallet w = ensureWalletOpenBlocking();
-            signAndPublish(w, toAddr, amount, cb);
+            signAndPublish(w, toAddr, amount, tokenid, cb);
         } catch (Exception e) {
             cb.onError(e.getMessage() == null ? "wallet unavailable" : e.getMessage());
         }

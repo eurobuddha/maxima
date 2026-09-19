@@ -1674,7 +1674,24 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         to.setFont(t.semibold(13.5f)); to.setForeground(t.text); to.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(to);
         body.add(Box.createVerticalStrut(10));
-        JTextField amt = k.field("amount (MINIMA)");
+        // Currency: two options, Minima ALWAYS preselected, nothing remembered between sends.
+        JPanel cur = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        cur.setOpaque(false);
+        cur.setAlignmentX(Component.LEFT_ALIGNMENT);
+        final javax.swing.JRadioButton rbMinima =
+                new javax.swing.JRadioButton(com.eurobuddha.maxima.core.chat.ChatPay.NAME_MINIMA, true);
+        final javax.swing.JRadioButton rbMxusd =
+                new javax.swing.JRadioButton(com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD);
+        for (javax.swing.JRadioButton rb : new javax.swing.JRadioButton[]{rbMinima, rbMxusd}) {
+            rb.setOpaque(false);
+            rb.setForeground(t.text);
+            rb.setFont(t.font(12.5f));
+            cur.add(rb);
+        }
+        javax.swing.ButtonGroup grp = new javax.swing.ButtonGroup();
+        grp.add(rbMinima); grp.add(rbMxusd);
+        body.add(cur); body.add(Box.createVerticalStrut(8));
+        JTextField amt = k.field("amount");
         amt.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); amt.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(amt); body.add(Box.createVerticalStrut(8));
         JTextField memo = k.field("note (optional)");
@@ -1703,9 +1720,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             WalletPanel wallet = mHost == null ? null : mHost.wallet();
             if (wallet == null) { status.setText("Wallet unavailable."); return; }
             final String memoText = memo.getText().trim();
+            final String tokenid = rbMxusd.isSelected()
+                    ? com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MXUSD : com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MINIMA;
             send.setButtonEnabled(false);
             status.setText("Preparing…");
-            new Thread(() -> wallet.requestPayment(addr, amount, new WalletPanel.PayResult() {
+            new Thread(() -> wallet.requestPayment(addr, amount, tokenid, new WalletPanel.PayResult() {
                 public void onStatus(String s) {
                     javax.swing.SwingUtilities.invokeLater(() -> status.setText(s));
                 }
@@ -1714,8 +1733,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     // so post the payment bubble — a Maxima NETWORK send — off the EDT,
                     // then marshal only the UI refresh back.
                     new Thread(() -> {
-                        try { node.chat().sendPayment(contact, amount.toString(), "0x00",
-                                "MINIMA", memoText, txid); } catch (Exception ignored) { }
+                        try { node.chat().sendPayment(contact, amount.toString(), tokenid,
+                                com.eurobuddha.maxima.core.chat.ChatPay.nameFor(tokenid), memoText, txid); } catch (Exception ignored) { }
                         javax.swing.SwingUtilities.invokeLater(() -> {
                             mThreadSig = ""; refresh(); d.dispose();
                         });
