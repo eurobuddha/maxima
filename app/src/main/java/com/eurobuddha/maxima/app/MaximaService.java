@@ -241,7 +241,8 @@ public final class MaximaService extends Service {
                                 com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body),
                                 com.eurobuddha.maxima.core.chat.ChatPay.tokenName(e.body),
                                 com.eurobuddha.maxima.app.chat.Names.contact(node, e.sender),
-                                com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body));
+                                com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body),
+                                com.eurobuddha.maxima.core.chat.ChatPay.tokenId(e.body));
                     }
                 }
                 com.eurobuddha.maxima.app.chat.ChatHub.dispatchMessage(e);
@@ -416,7 +417,8 @@ public final class MaximaService extends Service {
                                 com.eurobuddha.maxima.core.chat.ChatPay.amount(e.body),
                                 com.eurobuddha.maxima.core.chat.ChatPay.tokenName(e.body),
                                 com.eurobuddha.maxima.app.chat.Names.contact(jar, e.sender),
-                                com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body));
+                                com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body),
+                                com.eurobuddha.maxima.core.chat.ChatPay.tokenId(e.body));
                     }
                 }
                 com.eurobuddha.maxima.app.chat.ChatHub.dispatchMessage(e);

@@ -1,5 +1,6 @@
 package com.eurobuddha.wallet;
 
+import org.minima.objects.Token;
 import org.minima.objects.base.MiniNumber;
 import org.minima.utils.json.JSONArray;
 import org.minima.utils.json.JSONObject;
@@ -18,6 +19,96 @@ import org.minima.utils.json.JSONObject;
 public final class TokenAmount {
 
     private TokenAmount() {
+    }
+
+    /**
+     * The RAW on-chain amount to hand {@link CoinSelector} and {@link TxnFactory} for a send of
+     * {@code zHuman} of {@code zTokenId}. Native Minima passes straight through (raw == displayed).
+     *
+     * <p>The token's scale is read from the descriptor on OUR OWN coins - the ones we are about to
+     * spend - and then <b>cross-checked against the node's own two views of that same coin</b>
+     * ({@code amount} scaled by 10^scale must equal {@code tokenamount}). That check is what makes
+     * it safe to multiply money by this scale; it uses data the node itself produced, and unlike
+     * recomputing the tokenid from the descriptor it cannot false-fail on a JSON-object token name
+     * whose keys re-serialize in a different order (MxUSD has exactly such a name).
+     *
+     * <p>Every failure throws rather than returning an approximation: an amount finer than the
+     * token's grain is refused, never silently floored.
+     *
+     * @throws IllegalArgumentException if the wallet holds no coin of that token, the descriptor is
+     *         missing or inconsistent, or the amount cannot be represented exactly.
+     */
+    public static MiniNumber toRaw(JSONArray zCoins, String zTokenId, MiniNumber zHuman) {
+        if (zHuman == null || !zHuman.isMore(MiniNumber.ZERO)) {
+            throw new IllegalArgumentException("that amount is not a positive number");
+        }
+        if (Util.isMinima(zTokenId)) {
+            return zHuman;
+        }
+        JSONObject coin = firstCoinOf(zCoins, zTokenId);
+        if (coin == null) {
+            throw new IllegalArgumentException("no coins of token " + zTokenId + " in this wallet");
+        }
+        Token token = TxnFactory.fromCoinJson(coin, 0).getToken();
+        if (token == null) {
+            throw new IllegalArgumentException(
+                    "this coin carries no token descriptor for " + zTokenId + " - not signing");
+        }
+        assertScaleAgreesWithTheNode(coin, token, zTokenId);
+
+        MiniNumber raw = token.getScaledMinimaAmount(zHuman);
+        // Round-trip or refuse. Scaling down by 10^scale (36 for MxUSD) can land below MiniNumber's
+        // precision, and a silently floored amount is a silently wrong payment.
+        if (!token.getScaledTokenAmount(raw).isEqual(zHuman)) {
+            throw new IllegalArgumentException("that amount is finer than this token's smallest unit");
+        }
+        if (!raw.isMore(MiniNumber.ZERO)) {
+            throw new IllegalArgumentException("that amount is too small to send");
+        }
+        return raw;
+    }
+
+    /**
+     * The node reports a token coin twice: {@code amount} (Minima-scaled) and {@code tokenamount}
+     * (human). If our reading of the descriptor's scale cannot turn one into the other, the scale
+     * is not what we think it is - and scale is the number we are about to multiply money by.
+     */
+    private static void assertScaleAgreesWithTheNode(JSONObject zCoin, Token zToken, String zTokenId) {
+        Object shown = zCoin.get("tokenamount");
+        if (shown == null) {
+            throw new IllegalArgumentException(
+                    "this coin of " + zTokenId + " has no tokenamount to check its scale against");
+        }
+        try {
+            MiniNumber raw = new MiniNumber(String.valueOf(zCoin.get("amount")));
+            MiniNumber human = new MiniNumber(String.valueOf(shown));
+            if (!zToken.getScaledTokenAmount(raw).isEqual(human)) {
+                throw new IllegalArgumentException("the token scale for " + zTokenId
+                        + " does not match this coin (" + raw + " raw vs " + human
+                        + " shown) - not signing");
+            }
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                    "this coin of " + zTokenId + " has an unreadable amount - not signing");
+        }
+    }
+
+    /** The first coin of {@code zTokenId} in a {@code coins} response, or null. */
+    private static JSONObject firstCoinOf(JSONArray zCoins, String zTokenId) {
+        if (zCoins == null || zTokenId == null) {
+            return null;
+        }
+        for (Object o : zCoins) {
+            if (!(o instanceof JSONObject)) {
+                continue;
+            }
+            JSONObject c = (JSONObject) o;
+            if (zTokenId.equalsIgnoreCase(String.valueOf(c.get("tokenid")))
+                    && c.get("token") instanceof JSONObject) {
+                return c;
+            }
+        }
+        return null;
     }
 
     /**

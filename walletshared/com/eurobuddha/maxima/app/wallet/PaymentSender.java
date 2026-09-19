@@ -3,9 +3,12 @@ package com.eurobuddha.maxima.app.wallet;
 import android.content.Context;
 
 import com.eurobuddha.wallet.CoinSelector;
+import com.eurobuddha.wallet.TokenAmount;
 import com.eurobuddha.wallet.TxnFactory;
+import com.eurobuddha.wallet.Util;
 
 import org.json.JSONObject;
+import org.minima.objects.base.MiniData;
 import org.minima.objects.base.MiniNumber;
 
 import java.util.ArrayList;
@@ -171,10 +174,22 @@ public final class PaymentSender {
     }
 
     /**
-     * Build, sign and publish a send of {@code zAmount} Minima to {@code zTo}.
+     * Build, sign and publish a send of {@code zAmount} Minima to {@code zTo} - the shape every
+     * caller used before a currency could be chosen.
      * Callbacks arrive on a worker thread; the caller must hop to the UI thread.
      */
     public void send(final String zTo, final MiniNumber zAmount, final Cb zCb) {
+        send(zTo, zAmount, Util.MINIMA_TOKENID, zCb);
+    }
+
+    /**
+     * Send {@code zAmount} of {@code zTokenId} - the amount is the HUMAN (displayed) value, exactly
+     * what the user typed and what the chat bubble will show. For a token that is converted to raw
+     * on-chain units once, in {@link TokenAmount#toRaw}, and the single result feeds both coin
+     * selection and the transaction build so the two cannot disagree about units.
+     */
+    public void send(final String zTo, final MiniNumber zAmount, final String zTokenId,
+            final Cb zCb) {
         final MaximaWallet w = mWallet;
         if (w == null) {
             zCb.onError("Wallet still opening");
@@ -216,8 +231,12 @@ public final class PaymentSender {
                 org.minima.utils.json.JSONArray coins =
                         (org.minima.utils.json.JSONArray) full.get("response");
 
+                // ONE conversion, ONE variable: raw feeds both the selector and the builder, so a
+                // token send can never select against one unit and build against the other.
+                final MiniNumber raw = TokenAmount.toRaw(coins, zTokenId, zAmount);
+
                 List<org.minima.utils.json.JSONObject> sel =
-                        CoinSelector.selectToCover(coins, "0x00", zAmount);
+                        CoinSelector.selectToCover(coins, zTokenId, raw);
                 List<TxnFactory.InputCoin> inputs = new ArrayList<>();
                 for (org.minima.utils.json.JSONObject cn : sel) {
                     inputs.add(TxnFactory.fromCoinJson(cn, MaximaWallet.KEY_INDEX));
@@ -225,8 +244,10 @@ public final class PaymentSender {
 
                 zCb.onProgress("Signing…");
                 TxnFactory factory = new TxnFactory(w.core());
-                final TxnFactory.BuiltTxn built = factory.buildSend(inputs, zTo, zAmount,
-                        TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
+                // Burn stays zero: TxnFactory refuses a burn on a token send, and a native-Minima
+                // burn here was always zero too.
+                final TxnFactory.BuiltTxn built = factory.buildSend(inputs, zTo, raw,
+                        new MiniData(zTokenId), MiniNumber.ZERO,
                         "mxw" + System.currentTimeMillis());
                 // Signed: the txid is fixed now, so the sender can show a pending
                 // bubble immediately instead of waiting for the broadcast.
@@ -245,6 +266,11 @@ public final class PaymentSender {
                         });
             } catch (CoinSelector.InsufficientFundsException ife) {
                 zCb.onError("Not enough confirmed funds");
+            } catch (IllegalArgumentException iae) {
+                // TokenAmount/TxnFactory refusals are user-actionable and already worded for a
+                // person ("that amount is finer than this token's smallest unit") - pass them
+                // through rather than burying them behind "Send failed".
+                zCb.onError(iae.getMessage());
             } catch (Exception e) {
                 zCb.onError("Send failed: " + e.getMessage());
             }

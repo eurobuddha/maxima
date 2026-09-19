@@ -2,6 +2,7 @@ package com.eurobuddha.wallet;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 
@@ -45,6 +46,141 @@ public class TokenAmountTest {
             a.add(o);
         }
         return a;
+    }
+
+    /**
+     * A coins-response entry for a token coin, shaped exactly like the node's: raw Minima-scaled
+     * {@code amount}, human {@code tokenamount}, and the descriptor with MxUSD's real scale of 36
+     * and its real JSON-OBJECT name (the shape that does not survive a byte-exact round trip).
+     */
+    private static JSONObject tokenCoin(String zHuman, String zScale) {
+        JSONObject name = new JSONObject();
+        name.put("name", "USDT");
+        name.put("ticker", "USDT");
+        name.put("url", "https://mxusd.global/svg/USDT.svg");
+        JSONObject tok = new JSONObject();
+        tok.put("coinid", "0x" + "11".repeat(32));
+        tok.put("scale", zScale);
+        tok.put("totalamount", "0.000000000000000000000000001");
+        tok.put("created", "2005172");
+        tok.put("name", name);
+        tok.put("script", "RETURN TRUE");
+
+        JSONObject c = new JSONObject();
+        c.put("coinid", "0x" + "22".repeat(32));
+        c.put("address", OURS);
+        c.put("tokenid", MXUSD);
+        c.put("amount", new BigDecimal(zHuman).movePointLeft(Integer.parseInt(zScale)).toPlainString());
+        c.put("tokenamount", zHuman);
+        c.put("mmrentry", "728");
+        c.put("created", "203728");
+        c.put("storestate", Boolean.FALSE);
+        c.put("token", tok);
+        return c;
+    }
+
+    private static JSONObject minimaCoin(String zAmount) {
+        JSONObject c = new JSONObject();
+        c.put("coinid", "0x" + "33".repeat(32));
+        c.put("address", OURS);
+        c.put("tokenid", "0x00");
+        c.put("amount", zAmount);
+        c.put("mmrentry", "12");
+        c.put("created", "100");
+        c.put("storestate", Boolean.FALSE);
+        return c;
+    }
+
+    @Test
+    public void minimaPassesStraightThrough() {
+        JSONArray coins = outs(minimaCoin("50"));
+        // MiniNumber has no equals() - compare with its own isEqual.
+        assertTrue(TokenAmount.toRaw(coins, "0x00", new MiniNumber("25")).isEqual(new MiniNumber("25")));
+        // No coins needed at all for Minima - raw IS the displayed amount.
+        assertTrue(TokenAmount.toRaw(null, "0x00", new MiniNumber("25")).isEqual(new MiniNumber("25")));
+    }
+
+    /** 25 MxUSD is stored on-chain as 25e-36, and must round-trip back to 25. */
+    @Test
+    public void tokenAmountIsScaledDownByTheTokensScale() {
+        JSONArray coins = outs(tokenCoin("100", "36"), minimaCoin("5"));
+        MiniNumber raw = TokenAmount.toRaw(coins, MXUSD, new MiniNumber("25"));
+        assertTrue(raw.isEqual(new MiniNumber(scaled("25"))));
+        assertTrue(raw.isLess(new MiniNumber("1")));
+        // Case-insensitive token id, as the node returns either case.
+        assertTrue(TokenAmount.toRaw(coins, MXUSD.toLowerCase(), new MiniNumber("25")).isEqual(raw));
+    }
+
+    /** An amount finer than the token's grain is refused, never silently floored. */
+    @Test
+    public void aSubGrainAmountIsRefused() {
+        JSONArray coins = outs(tokenCoin("100", "36"));
+        try {
+            // MiniNumber's precision cannot hold 1e-44 scaled down by another 10^36.
+            TokenAmount.toRaw(coins, MXUSD, new MiniNumber("0.00000000000001"));
+            fail("a sub-grain amount must not be accepted");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("smallest unit"));
+        }
+    }
+
+    @Test
+    public void aTokenWeHoldNoCoinsOfIsRefused() {
+        try {
+            TokenAmount.toRaw(outs(minimaCoin("5")), MXUSD, new MiniNumber("25"));
+            fail("must refuse a token the wallet holds no coins of");
+        } catch (IllegalArgumentException expected) {
+            // The full id, never truncated - it is what the user would have to check.
+            assertTrue(expected.getMessage().contains(MXUSD));
+        }
+    }
+
+    /**
+     * The scale is the number we multiply money by, so it is cross-checked against the node's own
+     * two views of the coin. A descriptor claiming the wrong scale must not sign.
+     */
+    @Test
+    public void aScaleThatDisagreesWithTheCoinIsRefused() {
+        JSONObject coin = tokenCoin("100", "36");
+        JSONObject tok = (JSONObject) coin.get("token");
+        tok.put("scale", "8");                      // descriptor now lies about the scale
+        try {
+            TokenAmount.toRaw(outs(coin), MXUSD, new MiniNumber("25"));
+            fail("must refuse a scale that does not reproduce the coin's own amounts");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("scale"));
+        }
+    }
+
+    @Test
+    public void aCoinWithNoTokenAmountCannotBeScaleChecked() {
+        JSONObject coin = tokenCoin("100", "36");
+        coin.remove("tokenamount");
+        try {
+            TokenAmount.toRaw(outs(coin), MXUSD, new MiniNumber("25"));
+            fail("must refuse a coin whose scale cannot be checked");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("tokenamount"));
+        }
+    }
+
+    @Test
+    public void aNonPositiveAmountIsRefused() {
+        JSONArray coins = outs(tokenCoin("100", "36"));
+        for (String bad : new String[]{"0", "-1"}) {
+            try {
+                TokenAmount.toRaw(coins, MXUSD, new MiniNumber(bad));
+                fail("must refuse " + bad);
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage().contains("positive"));
+            }
+        }
+        try {
+            TokenAmount.toRaw(coins, MXUSD, null);
+            fail("must refuse a null amount");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("positive"));
+        }
     }
 
     @Test
