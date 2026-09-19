@@ -205,9 +205,15 @@ public final class RpcAccountWallet implements AccountWallet {
         mWatch = a;
     }
 
-    /** Build + sign + BROADCAST in one node command. A node-reported refusal is a safe
-     *  {@link Rejected}; a transport failure mid-command is outcome-unknown and is thrown as is. */
     @Override public Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+        return build(zToAddress, zAmount, "0x00");
+    }
+
+    /** Build + sign + BROADCAST in one node command. A node-reported refusal is a safe
+     *  {@link Rejected}; a transport failure mid-command is outcome-unknown and is thrown as is.
+     *  The amount stays the DISPLAYED token amount — the node's own {@code send} scales it. */
+    @Override public Payment build(String zToAddress, MiniNumber zAmount, String zTokenId)
+            throws Exception {
         if (!isOpen()) {
             throw new Rejected("the node wallet is still opening");
         }
@@ -220,7 +226,15 @@ public final class RpcAccountWallet implements AccountWallet {
         if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
             throw new Rejected("refusing to send a malformed amount: " + amount);
         }
-        JSONObject top = cmd("send address:" + zToAddress + " amount:" + amount);
+        // The command parser is space-tokenised and LAST-WINS, so a tokenid carrying a space and
+        // another key: would rewrite the command around it (…amount:1 tokenid:0x00 address:<theirs>).
+        // Validate before interpolating; the full id goes in the refusal, never an abbreviation.
+        String tokenid = zTokenId == null || zTokenId.isEmpty() ? "0x00" : zTokenId;
+        if (!tokenid.matches("0x[0-9A-Fa-f]{2,64}")) {
+            throw new Rejected("refusing to send a malformed tokenid: " + tokenid);
+        }
+        JSONObject top = cmd("send address:" + zToAddress + " amount:" + amount
+                + ("0x00".equals(tokenid) ? "" : " tokenid:" + tokenid));
         if (!Boolean.TRUE.equals(top.get("status"))) {
             throw new Rejected(String.valueOf(top.getOrDefault("error", "the node refused the send")));
         }

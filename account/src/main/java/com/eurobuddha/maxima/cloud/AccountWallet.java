@@ -67,6 +67,22 @@ public interface AccountWallet {
 
     /** Build (and on the node: broadcast) a native-Minima send. Blocking — send lane only. */
     Payment build(String zToAddress, MiniNumber zAmount) throws Exception;
+
+    /**
+     * As {@link #build(String, MiniNumber)} for a specific token ({@code "0x00"} = native Minima).
+     * {@code zAmount} is always the DISPLAYED token amount — the wallet (or the node's own
+     * {@code send}) does any scaling.
+     *
+     * <p>The default FAILS CLOSED: a wallet that cannot send tokens must never quietly send the
+     * same number of Minima instead. Implementations override this as their real body and let the
+     * 2-arg form delegate, so there is one money path per wallet rather than two that can diverge.
+     */
+    default Payment build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception {
+        if (zTokenId == null || zTokenId.isEmpty() || "0x00".equals(zTokenId)) {
+            return build(zToAddress, zAmount);
+        }
+        throw new Rejected("this wallet can only send Minima");
+    }
     /** Broadcast a built payment (no-op where {@link #build} already did). */
     void publish(Payment zPayment) throws Exception;
     /** True if {@link #build} returns a signed-but-unpublished txn a device could broadcast. */

@@ -500,12 +500,39 @@ public final class ParlonsRemote {
      *  Carries a client idempotency key: rpc() RETRIES on a lost reply, and without the key a
      *  retried M_PAY would queue a SECOND build — one tap, two payments. */
     public JSONObject pay(String zPeer, String zAmount, String zMemo) throws Exception {
+        return pay(zPeer, zAmount, zMemo, com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MINIMA);
+    }
+
+    /**
+     * Pay a contact in a specific currency ({@code "0x00"} = native Minima). The amount is the
+     * DISPLAYED token amount the user typed.
+     *
+     * <p>Before offering a non-Minima currency, check {@link #canSendMxusd()}: an older paired node
+     * ignores this field and would pay the same number in MINIMA.
+     */
+    public JSONObject pay(String zPeer, String zAmount, String zMemo, String zTokenId)
+            throws Exception {
         JSONObject p = new JSONObject();
         p.put("peer", zPeer);
         p.put("amount", zAmount);
         p.put("memo", zMemo == null ? "" : zMemo);
         p.put("pid", java.util.UUID.randomUUID().toString());
+        p.put("tokenid", zTokenId == null || zTokenId.isEmpty()
+                ? com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MINIMA : zTokenId);
         return rpc(ParlonsControl.M_PAY, p);
+    }
+
+    /**
+     * Does the paired node understand a non-Minima payment? Fails CLOSED: any error, or a node old
+     * enough not to advertise it, answers false - so a client never hands MxUSD to a node that
+     * would pay MINIMA instead. Blocking (one ping round-trip).
+     */
+    public boolean canSendMxusd() {
+        try {
+            return Boolean.TRUE.equals(ping().get("mxusd"));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Reveal the account's 24-word seed to THIS paired device (explicit confirm required).

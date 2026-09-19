@@ -1345,10 +1345,25 @@ public final class CloudChatActivity extends AppCompatActivity {
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), 0);
+        // Currency: two options, Minima ALWAYS preselected and nothing remembered between sends.
+        final android.widget.RadioGroup currency = new android.widget.RadioGroup(this);
+        currency.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        final android.widget.RadioButton rbMinima = new android.widget.RadioButton(this);
+        rbMinima.setText(com.eurobuddha.maxima.core.chat.ChatPay.NAME_MINIMA);
+        rbMinima.setId(1);
+        final android.widget.RadioButton rbMxusd = new android.widget.RadioButton(this);
+        rbMxusd.setText(com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD);
+        rbMxusd.setId(2);
+        currency.addView(rbMinima);
+        currency.addView(rbMxusd);
+        currency.check(1);
+        box.addView(currency);
         final EditText amt = new EditText(this);
-        amt.setHint("Amount (MINIMA)");
+        amt.setHint("Amount (" + com.eurobuddha.maxima.core.chat.ChatPay.NAME_MINIMA + ")");
         amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                 | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        currency.setOnCheckedChangeListener((g, id) -> amt.setHint("Amount ("
+                + (id == 2 ? com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD : com.eurobuddha.maxima.core.chat.ChatPay.NAME_MINIMA) + ")"));
         box.addView(amt);
         final EditText memo = new EditText(this);
         memo.setHint("Memo (optional)");
@@ -1366,15 +1381,24 @@ public final class CloudChatActivity extends AppCompatActivity {
                         toast("Enter an amount");
                         return;
                     }
+                    final String tokenid = currency.getCheckedRadioButtonId() == 2
+                            ? com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MXUSD : com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MINIMA;
                     toast("Payment building on your node…");
                     CloudSession.connectInteractive(this, new CloudSession.Cb() {
                         public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
                             String error = null;
                             try {
-                                JSONObject res = r.pay(mPeer, amount, note);
-                                Object ok = res.get("ok");
-                                if (!(ok instanceof Boolean) || !((Boolean) ok)) {
-                                    error = String.valueOf(res.get("error"));
+                                // An older node ignores the tokenid and would pay the same number
+                                // in MINIMA - so ask first, and send nothing if it cannot.
+                                if (!com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MINIMA.equals(tokenid) && !r.canSendMxusd()) {
+                                    error = "your Parlons node needs updating before it can send "
+                                            + com.eurobuddha.maxima.core.chat.ChatPay.NAME_MXUSD;
+                                } else {
+                                    JSONObject res = r.pay(mPeer, amount, note, tokenid);
+                                    Object ok = res.get("ok");
+                                    if (!(ok instanceof Boolean) || !((Boolean) ok)) {
+                                        error = String.valueOf(res.get("error"));
+                                    }
                                 }
                             } catch (Exception e) {
                                 error = e.getMessage() == null ? e.toString() : e.getMessage();

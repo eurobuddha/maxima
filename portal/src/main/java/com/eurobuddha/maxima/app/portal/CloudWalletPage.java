@@ -914,10 +914,8 @@ public final class CloudWalletPage implements Page {
                         return new String[]{str(t, "confirmed"), str(t, "sendable")};
                     }
                 }
-                if (!arr.isEmpty() && arr.get(0) instanceof JSONObject) {
-                    JSONObject t = (JSONObject) arr.get(0);
-                    return new String[]{str(t, "confirmed"), str(t, "sendable")};
-                }
+                // No 0x00 row means no Minima - NOT "show the first token's balance as Minima".
+                // With MxUSD in the wallet that fallback would label a token balance as Minima.
             }
         } catch (Exception ignored) {
         }

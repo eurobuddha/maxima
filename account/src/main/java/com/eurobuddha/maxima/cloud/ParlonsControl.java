@@ -579,6 +579,10 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("name", safe(mNode.name()));
             out.put("permanent", safe(permanent()));
             out.put("primary", safe(mNode.primaryAddress()));
+            // Capability flag, read before a client offers a non-Minima payment: an OLDER node
+            // ignores the tokenid on M_PAY and would pay the same number in MINIMA. Absent or
+            // false means "do not offer MxUSD", which fails closed on a stale paired host.
+            out.put("mxusd", true);
             return bytes(out);
         });
 
@@ -1543,6 +1547,16 @@ public final class ParlonsControl implements AutoCloseable {
             String memoRaw = str(in, "memo");
             final String memo = memoRaw.length() > 300 ? memoRaw.substring(0, 300) : memoRaw;
             String pid = str(in, "pid");
+            // Currency: absent means native Minima, so an older client is unchanged. Only the two
+            // currencies Parlons sends are accepted - anything else is refused, never defaulted to
+            // Minima, because silently paying a different currency is a wrong payment.
+            String tokenidRaw = str(in, "tokenid").trim();
+            final String tokenid = tokenidRaw.isEmpty()
+                    ? com.eurobuddha.maxima.core.chat.ChatPay.TOKENID_MINIMA : tokenidRaw;
+            if (!com.eurobuddha.maxima.core.chat.ChatPay.isSendable(tokenid)) {
+                return bytes(err("this node can send MINIMA or MxUSD only, not " + tokenid));
+            }
+            final String tokenName = com.eurobuddha.maxima.core.chat.ChatPay.nameFor(tokenid);
             final Contact c = mNode.contact(peer);
             if (c == null) {
                 return bytes(err("unknown contact " + peer));
@@ -1590,12 +1604,13 @@ public final class ParlonsControl implements AutoCloseable {
                 ChatEngine.Entry e = null;
                 boolean published = false;
                 try {
-                    AccountWallet.Payment built = mWallet.build(to, amt);
-                    e = mChat.beginPayment(c, amt.toString(), "Minima", memo, built.txid);
+                    AccountWallet.Payment built = mWallet.build(to, amt, tokenid);
+                    e = mChat.beginPayment(c, amt.toString(), tokenName, memo, built.txid);
                     mWallet.publish(built);
                     published = true;
                     boolean told = mChat.completePayment(c, e);
-                    mNode.log("payment " + amt + " → " + safe(c.name) + " txid " + built.txid
+                    mNode.log("payment " + amt + " " + tokenName + " → " + safe(c.name)
+                            + " txid " + built.txid
                             + (told ? "" : " (peer not yet notified — resend loop owns it)"));
                 } catch (Exception ex) {
                     String why = ex.getMessage() == null ? ex.toString() : ex.getMessage();
@@ -1622,6 +1637,7 @@ public final class ParlonsControl implements AutoCloseable {
             });
             JSONObject out = ok();
             out.put("state", "building");
+            out.put("tokenid", tokenid);
             return bytes(out);
         });
 

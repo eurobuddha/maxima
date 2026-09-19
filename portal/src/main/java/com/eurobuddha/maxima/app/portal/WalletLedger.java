@@ -128,7 +128,10 @@ public final class WalletLedger {
             e.put("_k", key(SENT, str(ev, "txid"), str(ev, "pid")));
             e.put("direction", SENT);
             e.put("amount", str(ev, "amount"));
-            e.put("token", "MINIMA");
+            // The node reports which currency it sent; older events carry none -> Minima.
+            String sentTok = str(ev, "tokenid");
+            e.put("token", ChatPay.nameFor(sentTok.isEmpty() ? ChatPay.TOKENID_MINIMA : sentTok));
+            e.put("tokenid", sentTok.isEmpty() ? ChatPay.TOKENID_MINIMA : sentTok);
             e.put("counterparty", str(ev, "to"));
             e.put("txid", str(ev, "txid"));
             e.put("time", now(ev));
@@ -142,7 +145,7 @@ public final class WalletLedger {
             e.put("time", now(ev));
             add(c, e);
         } else if ("message".equals(type)) {
-            // An inbound payment message (someone sent US MINIMA) — record as received.
+            // An inbound payment message (someone sent us MINIMA or MxUSD) — record as received.
             String body = str(ev, "body");
             if (ChatPay.isPayment(body)) {
                 JSONObject e = new JSONObject();
@@ -151,6 +154,7 @@ public final class WalletLedger {
                 e.put("direction", RECEIVED);
                 e.put("amount", ChatPay.amount(body));
                 e.put("token", ChatPay.tokenName(body));
+                e.put("tokenid", ChatPay.tokenId(body));
                 String name = str(ev, "name");
                 e.put("counterparty", name.isEmpty() ? str(ev, "peer") : name);
                 e.put("txid", txid);

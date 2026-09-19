@@ -1,6 +1,7 @@
 package com.eurobuddha.maxima.cloud;
 
 import com.eurobuddha.wallet.CoinSelector;
+import com.eurobuddha.wallet.TokenAmount;
 import com.eurobuddha.wallet.TxnFactory;
 
 import org.minima.objects.base.MiniNumber;
@@ -49,6 +50,16 @@ public final class CloudPaymentSender {
      * BLOCKING (gateway read) — call on the send lane, never the pump.
      */
     public Built build(String zToAddress, MiniNumber zAmount) throws Exception {
+        return build(zToAddress, zAmount, "0x00");
+    }
+
+    /**
+     * As {@link #build(String, MiniNumber)} for a specific token. {@code zAmount} is the DISPLAYED
+     * amount the user typed; a token is converted to raw on-chain units ONCE, by
+     * {@link TokenAmount#toRaw}, and that single value feeds both coin selection and the build so
+     * the two cannot disagree about units.
+     */
+    public Built build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception {
         // 1. Spendable coins at our address (gateway node tracks our script + holds proofs).
         JSONObject coinsResp = mGateway.coins(mWallet.hexAddress());
         JSONArray coins = (JSONArray) coinsResp.get("response");
@@ -56,10 +67,12 @@ public final class CloudPaymentSender {
             throw new Exception("could not read the account's coins from the gateway");
         }
 
-        // 2. Select enough native-Minima coins to cover the amount.
+        // 2. Select enough coins OF THAT TOKEN to cover the amount, in raw on-chain units.
+        final String tokenid = zTokenId == null || zTokenId.isEmpty() ? "0x00" : zTokenId;
+        final MiniNumber raw = TokenAmount.toRaw(coins, tokenid, zAmount);
         List<JSONObject> sel;
         try {
-            sel = CoinSelector.selectToCover(coins, "0x00", zAmount);
+            sel = CoinSelector.selectToCover(coins, tokenid, raw);
         } catch (CoinSelector.InsufficientFundsException ife) {
             throw new Exception("not enough confirmed funds in the account wallet");
         }
@@ -74,8 +87,8 @@ public final class CloudPaymentSender {
         // UUID txn row id: millis ids are guessable + collide on the SHARED gateway — a
         // predicted id could be txndelete'd (or pre-imported) by another token holder in the
         // import→post window.
-        TxnFactory.BuiltTxn built = factory.buildSend(inputs, zToAddress, zAmount,
-                TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
+        TxnFactory.BuiltTxn built = factory.buildSend(inputs, zToAddress, raw,
+                new org.minima.objects.base.MiniData(tokenid), MiniNumber.ZERO,
                 "pcw" + java.util.UUID.randomUUID());
         return new Built(built.getID(), built.getTxnImportCommand(), built.getTxnPostCommand());
     }

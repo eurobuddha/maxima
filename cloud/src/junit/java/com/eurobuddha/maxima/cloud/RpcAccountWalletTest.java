@@ -163,6 +163,64 @@ public class RpcAccountWalletTest {
         assertFalse("the injected command never reached the node", commands.stream().anyMatch(c -> c.contains("MxEVIL")));
     }
 
+    private static final String MXUSD =
+            "0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90";
+
+    /** A token send carries tokenid:, in full; the node does the scaling, so the amount is human. */
+    @Test
+    public void aTokenSendCarriesTheTokenidInFull() throws Exception {
+        RpcAccountWallet w = wallet(null);
+        w.open();
+        AccountWallet.Payment p = w.build("MxBBBB", new MiniNumber("25"), MXUSD);
+        assertEquals("0xTX123", p.txid);
+        String sent = commands.get(commands.size() - 1);
+        assertEquals("send address:MxBBBB amount:25 tokenid:" + MXUSD, sent);
+        assertFalse("a token send must never carry a burn", sent.contains("burn:"));
+    }
+
+    /** The Minima command must be byte-for-byte what it always was. */
+    @Test
+    public void aMinimaSendIsUnchanged() throws Exception {
+        RpcAccountWallet w = wallet(null);
+        w.open();
+        w.build("MxBBBB", new MiniNumber("1.5"));
+        assertEquals("send address:MxBBBB amount:1.5", commands.get(commands.size() - 1));
+        // Explicit 0x00, and the empty/null forms, are all the same plain Minima command.
+        w.build("MxBBBB", new MiniNumber("1.5"), "0x00");
+        assertEquals("send address:MxBBBB amount:1.5", commands.get(commands.size() - 1));
+        w.build("MxBBBB", new MiniNumber("1.5"), "");
+        assertEquals("send address:MxBBBB amount:1.5", commands.get(commands.size() - 1));
+        w.build("MxBBBB", new MiniNumber("1.5"), null);
+        assertEquals("send address:MxBBBB amount:1.5", commands.get(commands.size() - 1));
+    }
+
+    /**
+     * The command parser is space-tokenised and LAST-WINS, so a tokenid carrying a space and
+     * another key: would redirect the payment. It must be refused before any command is issued.
+     */
+    @Test
+    public void aMalformedTokenidIsRefusedBeforeAnyCommand() throws Exception {
+        RpcAccountWallet w = wallet(null);
+        w.open();
+        int before = commands.size();
+        for (String evil : new String[]{
+                "0x00 address:MxEVIL",
+                "0xZZ",
+                "notatokenid",
+                "0x00; send address:MxEVIL amount:9"}) {
+            try {
+                w.build("MxBBBB", new MiniNumber("1"), evil);
+                fail("must refuse tokenid " + evil);
+            } catch (AccountWallet.Rejected r) {
+                assertTrue(r.getMessage(), r.getMessage().contains("malformed tokenid"));
+                // The refusal quotes the id IN FULL - it is what the user would have to check.
+                assertTrue(r.getMessage().contains(evil));
+            }
+        }
+        assertEquals("no command reached the node", before, commands.size());
+        assertFalse(commands.stream().anyMatch(c -> c.contains("MxEVIL")));
+    }
+
     @Test
     public void commandsAreUrlEncodedWhole() throws Exception {
         RpcAccountWallet w = wallet(null);

@@ -135,11 +135,17 @@ final class NodeAccountWallet implements AccountWallet {
      *  funds, bad address, locked wallet…) is a safe {@link Rejected}; anything else is
      *  outcome-unknown. */
     @Override public Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+        return build(zToAddress, zAmount, NodeWallet.TOKEN_MINIMA);
+    }
+
+    /** The amount stays the DISPLAYED token amount — the node's own {@code send} scales it. */
+    @Override public Payment build(String zToAddress, MiniNumber zAmount, String zTokenId)
+            throws Exception {
         if (mAddress == null) {
             throw new Rejected("the node wallet is still opening");
         }
         try {
-            NodeWallet.SendResult r = NodeWallet.send(zToAddress, zAmount.toString());
+            NodeWallet.SendResult r = NodeWallet.send(zToAddress, zAmount.toString(), zTokenId);
             return new Payment(r.txid, "", "");
         } catch (NodeWallet.WalletException we) {
             throw new Rejected(we.getMessage());

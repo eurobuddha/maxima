@@ -64,12 +64,17 @@ public final class CloudAccountWallet implements AccountWallet {
     @Override public void setWatchAddress(String zAddress) throws Exception { mGateway.setWatchAddress(zAddress); }
 
     @Override public Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+        return build(zToAddress, zAmount, "0x00");
+    }
+
+    @Override public Payment build(String zToAddress, MiniNumber zAmount, String zTokenId)
+            throws Exception {
         CloudPaymentSender s = mSender;
         if (s == null) {
             throw new Rejected("the account wallet is still opening");
         }
         try {
-            CloudPaymentSender.Built b = s.build(zToAddress, zAmount);
+            CloudPaymentSender.Built b = s.build(zToAddress, zAmount, zTokenId);
             return new Payment(b.txid, b.importCmd(), b.postCmd());
         } catch (Exception e) {
             throw classify(e);
@@ -141,8 +146,9 @@ public final class CloudAccountWallet implements AccountWallet {
             if (arr != null) {
                 for (Object o : arr) {
                     JSONObject t = (JSONObject) o;
-                    if ("0x00".equals(String.valueOf(t.get("tokenid")))
-                            && !String.valueOf(t.get("confirmed")).equals(String.valueOf(t.get("sendable")))) {
+                    // ANY token, not just Minima: a token coin the gateway holds no proof for
+                    // signs fine and then dies at txnbasics, so it needs the same backfill.
+                    if (!String.valueOf(t.get("confirmed")).equals(String.valueOf(t.get("sendable")))) {
                         lagging = true;
                     }
                 }
