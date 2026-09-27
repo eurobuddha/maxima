@@ -99,11 +99,13 @@ public final class CallManager {
     private volatile long mLiveSince;
     private String mPendingOfferSdp;
     private final List<IceCandidate> mPendingIce = new ArrayList<>();
+    private final CallIce mEarlyIce = new CallIce();
     private volatile Listener mListener;
     private Runnable mRingTimeout;
     private boolean mMuted;
     private boolean mSpeaker;
     private String mLastEndedCallId = "";
+    private String mMediaCallId = ""; // main-thread foreground-service ownership
     private Runnable mConnectTimeout;
 
     // ---- video ----
@@ -226,26 +228,28 @@ public final class CallManager {
             mVideo = zVideo;
             setState(State.OUTGOING_RINGING, null);
             armRingTimeout();
-            ensureFactory();
-            createPeer();
-            MediaConstraints mc = new MediaConstraints();
-            mc.mandatory.add(new MediaConstraints.KeyValuePair(
-                    "OfferToReceiveAudio", "true"));
-            if (mVideo) {
+            withCallMedia(() -> {
+                ensureFactory();
+                createPeer();
+                MediaConstraints mc = new MediaConstraints();
                 mc.mandatory.add(new MediaConstraints.KeyValuePair(
-                        "OfferToReceiveVideo", "true"));
-            }
-            final PeerConnection pc = mPc;
-            final String call = mCallId;
-            pc.createOffer(new Sdp("offer-create") {
-                @Override
-                public void onCreateSuccess(SessionDescription sdp) {
-                    mExec.execute(() -> {
-                        if (mPc != pc || !call.equals(mCallId)) return;
-                        mLocalSdp.start(sdp);
-                    });
+                        "OfferToReceiveAudio", "true"));
+                if (mVideo) {
+                    mc.mandatory.add(new MediaConstraints.KeyValuePair(
+                            "OfferToReceiveVideo", "true"));
                 }
-            }, mc);
+                final PeerConnection pc = mPc;
+                final String call = mCallId;
+                pc.createOffer(new Sdp("offer-create") {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sdp) {
+                        mExec.execute(() -> {
+                            if (mPc != pc || !call.equals(mCallId)) { return; }
+                            mLocalSdp.start(sdp);
+                        });
+                    }
+                }, mc);
+            });
         });
     }
 
@@ -255,6 +259,8 @@ public final class CallManager {
 
     public void onSignal(final String zFromKey, final ChatMessage zMsg) {
         mExec.execute(() -> {
+            if (zMsg == null || zMsg.ref == null || zMsg.ref.isEmpty() || zMsg.ref.length() > 256
+                    || zFromKey == null || zMsg.state == null) return;
             String kind = zMsg.state;
             if (java.util.Arrays.asList("offer", "answer", "ice", "busy", "bye").contains(kind)) {
                 EventLog.add("call signal in: " + kind + " call=" + zMsg.ref + " state=" + mState);
@@ -296,6 +302,7 @@ public final class CallManager {
                     mPendingOfferSdp = zMsg.body;
                     mVideo = "video".equals(zMsg.memo);
                     mPendingIce.clear();
+                    mPendingIce.addAll(mEarlyIce.take(zFromKey, zMsg.ref, System.currentTimeMillis()));
                     setState(State.INCOMING_RINGING, null);
                     armRingTimeout();
                     IncomingCallScreen.show(mCtx, zFromKey);
@@ -313,19 +320,18 @@ public final class CallManager {
                     break;
                 }
                 case "ice": {
+                    IceCandidate cand = CallIce.parse(zMsg.body);
+                    if (cand == null) return;
                     if (!zMsg.ref.equals(mCallId) || !zFromKey.equals(mPeerKey)) {
+                        if (mState == State.IDLE && !zMsg.ref.equals(mLastEndedCallId) && contact(zFromKey) != null) {
+                            mEarlyIce.remember(zFromKey, zMsg.ref, cand, System.currentTimeMillis());
+                        }
                         return;
                     }
-                    String[] p = zMsg.body.split("\n", 3);
-                    if (p.length < 3) {
-                        return;
-                    }
-                    IceCandidate cand = new IceCandidate(
-                            p[0], Integer.parseInt(p[1]), p[2]);
                     if (mPc != null && mPc.getRemoteDescription() != null) {
                         boolean added = mPc.addIceCandidate(cand);
                         EventLog.add("call remote ICE: " + iceKind(cand) + " accepted=" + added);
-                    } else {
+                    } else if (mPendingIce.size() < CallIce.LIMIT) {
                         mPendingIce.add(cand);
                         EventLog.add("call remote ICE queued: " + iceKind(cand) + " count=" + mPendingIce.size());
                     }
@@ -371,20 +377,22 @@ public final class CallManager {
             stopRingTimeout();
             setState(State.CONNECTING, null);
             armConnectTimeout();
-            ensureFactory();
-            createPeer();
-            final PeerConnection pc = mPc;
-            final String call = mCallId;
-            setRemote(new SessionDescription(SessionDescription.Type.OFFER, mPendingOfferSdp), () -> {
-                pc.createAnswer(new Sdp("answer-create") {
-                    @Override
-                    public void onCreateSuccess(SessionDescription sdp) {
-                        mExec.execute(() -> {
-                            if (mPc != pc || !call.equals(mCallId)) { return; }
-                            mLocalSdp.start(sdp);
-                        });
-                    }
-                }, new MediaConstraints());
+            withCallMedia(() -> {
+                ensureFactory();
+                createPeer();
+                final PeerConnection pc = mPc;
+                final String call = mCallId;
+                setRemote(new SessionDescription(SessionDescription.Type.OFFER, mPendingOfferSdp), () -> {
+                    pc.createAnswer(new Sdp("answer-create") {
+                        @Override
+                        public void onCreateSuccess(SessionDescription sdp) {
+                            mExec.execute(() -> {
+                                if (mPc != pc || !call.equals(mCallId)) { return; }
+                                mLocalSdp.start(sdp);
+                            });
+                        }
+                    }, new MediaConstraints());
+                });
             });
         });
     }
@@ -444,14 +452,33 @@ public final class CallManager {
                 PeerConnectionFactory.InitializationOptions.builder(mCtx)
                         .createInitializationOptions());
         mEgl = EglBase.create();
-        mFactory = PeerConnectionFactory.builder()
-                .setAudioDeviceModule(JavaAudioDeviceModule.builder(mCtx)
-                        .createAudioDeviceModule())
-                .setVideoEncoderFactory(new DefaultVideoEncoderFactory(
-                        mEgl.getEglBaseContext(), true, true))
-                .setVideoDecoderFactory(new DefaultVideoDecoderFactory(
-                        mEgl.getEglBaseContext()))
-                .createPeerConnectionFactory();
+        JavaAudioDeviceModule audio = JavaAudioDeviceModule.builder(mCtx).createAudioDeviceModule();
+        try {
+            mFactory = PeerConnectionFactory.builder()
+                    .setAudioDeviceModule(audio)
+                    .setVideoEncoderFactory(new DefaultVideoEncoderFactory(
+                            mEgl.getEglBaseContext(), true, true))
+                    .setVideoDecoderFactory(new DefaultVideoDecoderFactory(
+                            mEgl.getEglBaseContext()))
+                    .createPeerConnectionFactory();
+        } finally { audio.release(); }
+    }
+
+    /** Android promotion runs on main before any native microphone/camera is opened. */
+    private void withCallMedia(Runnable ready) {
+        final String call = mCallId;
+        final boolean video = mVideo;
+        mMain.post(() -> {
+            if (!call.equals(mCallId)) return;
+            boolean allowed = MaximaService.beginCallMedia(video);
+            if (allowed) mMediaCallId = call;
+            mExec.execute(() -> {
+                if (!call.equals(mCallId)) return;
+                if (!allowed) { end("microphone/camera service unavailable", true); return; }
+                try { ready.run(); }
+                catch (RuntimeException failure) { end("couldn't start media", true); }
+            });
+        });
     }
 
     private void createPeer() {
@@ -528,13 +555,13 @@ public final class CallManager {
             @Override public void onRenegotiationNeeded() { }
             @Override public void onAddTrack(org.webrtc.RtpReceiver r,
                     org.webrtc.MediaStream[] s) {
-                if (r.track() instanceof VideoTrack) {
-                    mRemoteVideoTrack = (VideoTrack) r.track();
+                final org.webrtc.MediaStreamTrack track = r.track();
+                mExec.execute(() -> {
+                    if (!callAtCreate.equals(mCallId) || !(track instanceof VideoTrack)) return;
+                    mRemoteVideoTrack = (VideoTrack) track;
                     VideoSink sink = mRemoteSink;
-                    if (sink != null) {
-                        mRemoteVideoTrack.addSink(sink);
-                    }
-                }
+                    if (sink != null) mRemoteVideoTrack.addSink(sink);
+                });
             }
         });
         final PeerConnection pc = mPc;
@@ -651,19 +678,25 @@ public final class CallManager {
         if (zSignalBye) {
             signal("bye", "");
         }
+        final String endedCall = mCallId;
         if (mLocalSdp != null) { mLocalSdp.close(); mLocalSdp = null; }
         mLastEndedCallId = mCallId;
         mCallId = "";   // ended: late/duplicate frames must no longer match
         // The lock-screen call notification must die with the call, whether or
         // not the call screen is open to dismiss it.
         IncomingCallScreen.dismiss(mCtx);
+        try {
+            if (mVideoTrack != null && mLocalSink != null) mVideoTrack.removeSink(mLocalSink);
+            if (mRemoteVideoTrack != null && mRemoteSink != null) mRemoteVideoTrack.removeSink(mRemoteSink);
+        } catch (Exception ignored) { }
         if (mPc != null) {
             try {
-                mPc.close();
+                mPc.dispose();
             } catch (Exception ignored) {
             }
             mPc = null;
         }
+        if (mTrack != null) { try { mTrack.dispose(); } catch (Exception ignored) { } }
         if (mSource != null) {
             try {
                 mSource.dispose();
@@ -683,6 +716,7 @@ public final class CallManager {
             }
             mCapturer = null;
         }
+        if (mVideoTrack != null) { try { mVideoTrack.dispose(); } catch (Exception ignored) { } }
         if (mVideoSource != null) {
             try {
                 mVideoSource.dispose();
@@ -702,6 +736,7 @@ public final class CallManager {
         mVideo = false;
         mPendingOfferSdp = null;
         mPendingIce.clear();
+        mEarlyIce.clear();
         mLiveSince = 0;
         mMuted = false;
         AudioManager am = (AudioManager) mCtx.getSystemService(Context.AUDIO_SERVICE);
@@ -714,6 +749,12 @@ public final class CallManager {
         EventLog.add("call " + zReason + (mPeerKey.isEmpty() ? ""
                 : " (" + name(mPeerKey) + ")"));
         mState = State.IDLE;
+        mMain.post(() -> {
+            if (endedCall.equals(mMediaCallId)) {
+                MaximaService.endCallMedia();
+                mMediaCallId = "";
+            }
+        });
     }
 
     private void armRingTimeout() {

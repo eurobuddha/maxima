@@ -58,6 +58,7 @@ public class AccountLifecycleTest {
         for (String name : new String[] {"mCallExec", "mMediaExec", "mPushPool", "mStateFlusher", "mConsoleExec"}) {
             assertTrue(name, ((ExecutorService) field(control, name)).isShutdown());
         }
+        assertTrue("call push lanes", ((ExecutorService) field(field(control, "mCallPush"), "mPool")).isShutdown());
         assertTrue("send lanes", ((ExecutorService) field(field(control, "mSendExec"), "mPool")).isShutdown());
         assertTrue("optional wake worker", ((ExecutorService) field(core.control().wakeProxy(), "mExec")).isShutdown());
     }

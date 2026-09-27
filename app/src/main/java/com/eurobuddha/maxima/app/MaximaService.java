@@ -42,6 +42,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * carrier, is untested.
  */
 public final class MaximaService extends Service {
+    private static MaximaService sInstance; // accessed only on main
+    private com.eurobuddha.maxima.app.call.CallForeground mCallForeground;
+
+    public static boolean beginCallMedia(boolean video) {
+        MaximaService service = sInstance;
+        if (service == null || service.mCallForeground == null) return false;
+        try {
+            service.mCallForeground.start(video, service.buildNotification("Call in progress"));
+            return true;
+        } catch (RuntimeException denied) {
+            android.util.Log.w("ParlonsCall", "foreground media refused", denied);
+            return false;
+        }
+    }
+
+    public static void endCallMedia() {
+        MaximaService service = sInstance;
+        if (service == null || service.mCallForeground == null || !service.mCallForeground.active()) return;
+        try { service.mCallForeground.stop(service.buildNotification("Connected")); }
+        catch (RuntimeException failure) { android.util.Log.w("ParlonsCall", "foreground reset failed", failure); }
+    }
+
 
     public static final String TAG = "MaximaService";
     private static final String CHANNEL_ID = "maxima_transport";
@@ -146,6 +168,8 @@ public final class MaximaService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        sInstance = this;
+        mCallForeground = new com.eurobuddha.maxima.app.call.CallForeground(this, NOTIF_ID);
         Sha3Provider.install();
         createChannel();
 
@@ -511,13 +535,13 @@ public final class MaximaService extends Service {
             // No identity yet (pre-onboarding). Satisfy the FGS contract briefly,
             // then stand down without minting or scheduling belts — onboarding
             // restarts us once a seed exists.
-            try { startForeground(NOTIF_ID, buildNotification("Connecting...")); } catch (Exception ignored) {}
+            try { mCallForeground.refresh(buildNotification("Connecting...")); } catch (Exception ignored) {}
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
         }
         try {
-            startForeground(NOTIF_ID, buildNotification("Connecting..."));
+            mCallForeground.refresh(buildNotification("Connecting..."));
         } catch (Exception e) {
             // Android can refuse the FGS (residual time budget, background
             // start restrictions). Do not crash - the alarm and WorkManager
@@ -910,6 +934,8 @@ public final class MaximaService extends Service {
 
     @Override
     public void onDestroy() {
+        sInstance = null;
+        if (mCallForeground != null && mCallForeground.active()) com.eurobuddha.maxima.app.call.CallManager.get(this).hangup();
         mPumping.set(false);
         if (mPumpThread != null) {
             mPumpThread.interrupt();

@@ -185,6 +185,11 @@ public final class ParlonsControl implements AutoCloseable {
                         return t;
                     },
                     new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+    /** Call signals keep per-device order without waiting behind message/media pushes. */
+    private final com.eurobuddha.maxima.core.util.SerialLanes mCallPush =
+            new com.eurobuddha.maxima.core.util.SerialLanes("parlons-call-push", 16);
+    private final java.util.concurrent.Semaphore mCallPushSlots = new java.util.concurrent.Semaphore(256);
+
     /** State ticks (sent / delivered / read) burst: one push per entry per window, not per tick. */
     private final java.util.Map<String, JSONObject> mStateCoalesce = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean mStateFlushScheduled = new java.util.concurrent.atomic.AtomicBoolean();
@@ -2166,6 +2171,7 @@ public final class ParlonsControl implements AutoCloseable {
         mMediaExec.shutdownNow();
         mConsoleExec.shutdownNow();
         mPushPool.shutdownNow();
+        mCallPush.shutdownNow();
         mStateFlusher.shutdownNow();
         mWake.close();
         mLocalSink = null;
@@ -2296,8 +2302,8 @@ public final class ParlonsControl implements AutoCloseable {
             // Short socket leashes, and an address that failed PUSH_ADDR_FAILS times running is
             // skipped until the device's next RPC refreshes its list.
             final String deviceKey = en.getKey();
-            mPushPool.execute(() -> {
-                if (mClosed) return;
+            Runnable deliver = () -> {
+                if (mClosed || mPairing.device(deviceKey) == null) return;
                 boolean anyDelivered = false;
                 for (String addr : l.addrs) {
                     if (mClosed) return;
@@ -2325,7 +2331,23 @@ public final class ParlonsControl implements AutoCloseable {
                         mWake.wake(d.key, d.wakeProxy, d.apnsToken, d.apnsEnv, kind);
                     }
                 }
-            });
+            };
+            if ("call".equals(kind)) {
+                if (!mCallPushSlots.tryAcquire()) {
+                    mNode.log("call push queue full; signal dropped");
+                    continue;
+                }
+                try {
+                    mCallPush.execute(deviceKey, () -> {
+                        try { deliver.run(); } finally { mCallPushSlots.release(); }
+                    });
+                } catch (java.util.concurrent.RejectedExecutionException closed) {
+                    mCallPushSlots.release();
+                    if (!mClosed) throw closed;
+                }
+            } else {
+                mPushPool.execute(deliver);
+            }
         }
     }
 
@@ -2390,12 +2412,9 @@ public final class ParlonsControl implements AutoCloseable {
      */
     public void forwardCallSignal(String zFromKey, com.eurobuddha.maxima.core.chat.ChatMessage cm) {
         if (mClosed) return;
+        // Early ICE is buffered by clients, so authenticate the contact for every signal.
+        if (mNode.contact(zFromKey) == null) return;
         if ("offer".equals(cm.state)) {
-            // Only a known contact may ring the account's devices — an authenticated stranger
-            // who knows our key must not drive full-screen rings (same rule as the app).
-            if (mNode.contact(zFromKey) == null) {
-                return;
-            }
             if (!anyLive()) {
                 declineCall(zFromKey, cm.ref);
                 return;

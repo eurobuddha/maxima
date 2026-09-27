@@ -72,4 +72,46 @@ public class LocalCallsTest {
         java.lang.reflect.Method live=ParlonsControl.class.getDeclaredMethod("anyLive");live.setAccessible(true);
         assertEquals(false,live.invoke(control));control.setLocalLive(()->true);assertEquals(true,live.invoke(control));
     }
+    @Test public void unknownContactIceCannotReachClientBuffers() {
+        control.setLocalLive(() -> true);
+        control.forwardCallSignal("0x9999", ChatMessage.call("early", "ice", "candidate"));
+        assertTrue(pushed.isEmpty());
+        control.forwardCallSignal("0x1234", ChatMessage.call("early", "ice", "candidate"));
+        assertEquals(1, pushed.size());
+    }
+
+    @Test public void slowOfferCannotBeOvertakenByIceForTheSameDevice() throws Exception {
+        CountDownLatch first = new CountDownLatch(1), releaseOffer = new CountDownLatch(1);
+        CountDownLatch overtaken = new CountDownLatch(1), other = new CountDownLatch(2), delivered = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger sends = new java.util.concurrent.atomic.AtomicInteger();
+        node.rpc().setAttached((host, port, unit, id, timeout) -> {
+            if (port == 9501) {
+                if (sends.incrementAndGet() == 1) {
+                    first.countDown();
+                    assertTrue(releaseOffer.await(5, TimeUnit.SECONDS));
+                } else {
+                    if (releaseOffer.getCount() != 0) overtaken.countDown();
+                    delivered.countDown();
+                }
+            } else { other.countDown(); }
+            return new com.eurobuddha.maxima.core.MaximaSender.Result(
+                    com.eurobuddha.maxima.core.net.Frame.RESPONSE_OK, id, 0);
+        });
+        String address = node.identity().mxIdentity() + "@127.0.0.1:";
+        for (int i = 0; i < 2; i++) {
+            registry.dispatchLocal(new ServiceRegistry.Request(ParlonsControl.M_PING,
+                    "{}".getBytes(StandardCharsets.UTF_8), i == 0 ? phone : local,
+                    Collections.singletonList(address + (9501 + i))));
+        }
+        try {
+            control.forwardCallSignal("0x1234", ChatMessage.call("ordered", "offer", "offer"));
+            assertTrue(first.await(5, TimeUnit.SECONDS));
+            control.forwardCallSignal("0x1234", ChatMessage.call("ordered", "ice", "candidate"));
+            assertTrue("another device remains responsive", other.await(5, TimeUnit.SECONDS));
+            assertFalse("ICE overtook the held offer", overtaken.await(300, TimeUnit.MILLISECONDS));
+            releaseOffer.countDown();
+            assertTrue(delivered.await(5, TimeUnit.SECONDS));
+        } finally { releaseOffer.countDown(); }
+    }
+
 }

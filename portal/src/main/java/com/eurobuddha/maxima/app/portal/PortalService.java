@@ -30,8 +30,31 @@ import java.util.concurrent.TimeUnit;
  * {@link ParlonsRemote}, its push listener, and a heartbeat so the node keeps pushing to us.
  */
 public final class PortalService extends Service {
+    private static PortalService sInstance; // accessed only on main
+    private com.eurobuddha.maxima.app.call.CallForeground mCallForeground;
+
+    public static boolean beginCallMedia(boolean video) {
+        PortalService service = sInstance;
+        if (service == null || service.mCallForeground == null) return false;
+        try {
+            service.mCallForeground.start(video, service.mNotification);
+            return true;
+        } catch (RuntimeException denied) {
+            android.util.Log.w("ParlonsCall", "foreground media refused", denied);
+            return false;
+        }
+    }
+
+    public static void endCallMedia() {
+        PortalService service = sInstance;
+        if (service == null || service.mCallForeground == null || !service.mCallForeground.active()) return;
+        try { service.mCallForeground.stop(service.mNotification); }
+        catch (RuntimeException failure) { android.util.Log.w("ParlonsCall", "foreground reset failed", failure); }
+    }
+
 
     private static final String CHANNEL = "parlons_cloud_svc";
+    private Notification mNotification;
     private ScheduledExecutorService mBeat;
     private ConnectivityManager.NetworkCallback mNetCb;
     /** The default network we last saw; a different one means our relay sockets are dead. */
@@ -50,6 +73,8 @@ public final class PortalService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        sInstance = this;
+        mCallForeground = new com.eurobuddha.maxima.app.call.CallForeground(this, 1);
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm.getNotificationChannel(CHANNEL) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL,
@@ -67,7 +92,8 @@ public final class PortalService extends Service {
                 .setOngoing(true)
                 .setContentIntent(pi)
                 .build();
-        startForeground(1, n);
+        mNotification = n;
+        mCallForeground.refresh(n);
 
         // Connect (reuses the shared remote — the push listener installs with every new
         // connection inside CloudSession.connect), then heartbeat so the node keeps this
@@ -146,6 +172,8 @@ public final class PortalService extends Service {
 
     @Override
     public void onDestroy() {
+        sInstance = null;
+        if (mCallForeground != null && mCallForeground.active()) PortalCallManager.get(this).hangup();
         if (mBeat != null) {
             mBeat.shutdownNow();
         }

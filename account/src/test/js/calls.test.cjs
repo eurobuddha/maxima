@@ -10,7 +10,7 @@ function fixture() {
     addTrack(t) { this.tracks.push(t); }
     async createOffer() { return {type:'offer', sdp:'offer-sdp'}; }
     async createAnswer() { assert.ok(this.remoteDescription); return {type:'answer', sdp:'answer-sdp'}; }
-    async setLocalDescription(sdp) { this.localDescription = sdp; this.onicecandidate({candidate:{sdpMid:'0',sdpMLineIndex:0,candidate:'candidate-local'}}); }
+    async setLocalDescription(sdp) { this.localDescription = sdp; this.onicecandidate({candidate:{sdpMid:'0',sdpMLineIndex:0,candidate:'candidate:local'}}); }
     async setRemoteDescription(sdp) { if (this.wait) await this.wait.promise; this.remoteDescription = sdp; }
     async addIceCandidate(c) { assert.ok(this.remoteDescription); this.ice.push(c); }
     close() { this.closed = true; }
@@ -37,8 +37,8 @@ test('outgoing offer precedes ICE, answer connects, hangup preserves id and rele
 });
 test('early and concurrent ICE wait until remote SDP succeeds',async()=>{
   const f=fixture();await f.calls.start('peer','Peer',false);
-  await f.signal('ice','0\n0\ncandidate-early');const wait=deferred();f.peers[0].wait=wait;
-  const answering=f.signal('answer','answer-sdp');await idle();await f.signal('ice','0\n0\ncandidate-during');
+  await f.signal('ice','0\n0\ncandidate:early');const wait=deferred();f.peers[0].wait=wait;
+  const answering=f.signal('answer','answer-sdp');await idle();await f.signal('ice','0\n0\ncandidate:during');
   assert.equal(f.peers[0].ice.length,0);wait.resolve();await answering;
   assert.equal(f.peers[0].ice.length,2);
 });
@@ -77,6 +77,29 @@ test('ring timeout and permission denial end the exact call',async()=>{
   await f.calls.start('peer','Peer',false);assert.equal(f.calls.current,null);assert.equal(f.timers.size,0);
 });
 
+test('ICE before an offer is retained only for that authenticated peer and call',async()=>{
+  const f=fixture();
+  const ice={kind:'ice',from:'peer',ref:'remote-call',payload:'0\n0\ncandidate:early'};
+  await f.calls.receive({...ice,from:'stranger'}); assert.equal(f.calls.earlyIce.size,0);
+  await f.calls.receive(ice); assert.equal(f.calls.current,null); assert.equal(f.media.length,0);
+  await f.calls.receive(f.offer()); await f.calls.accept('remote-call');
+  assert.equal(f.peers[0].ice.length,1); assert.equal(f.peers[0].ice[0].candidate,'candidate:early');
+});
+test('ICE before an offer expires and both candidate queues have a fixed limit',async()=>{
+  const f=fixture(), ice={kind:'ice',from:'peer',ref:'remote-call',payload:'0\n0\ncandidate:early'};
+  for(let i=0;i<300;i++) await f.calls.receive(ice);
+  assert.equal([...f.calls.earlyIce.values()][0].ice.length,256);
+  f.env.Date.now=()=>190001; await f.calls.receive({...f.offer(),time:190001});
+  assert.equal(f.calls.current.ice.length,0);
+  for(let i=0;i<300;i++) await f.signal('ice','0\n0\ncandidate:queued');
+  assert.equal(f.calls.current.ice.length,256);
+  f.calls.hangup(f.calls.current.id); assert.equal(f.calls.earlyIce.size,0);
+});
+test('invalid ICE indexes and oversized payloads are ignored',async()=>{
+  const f=fixture();await f.calls.receive(f.offer());
+  for(const payload of ['0\n-1\ncandidate:x','0\n65536\ncandidate:x','0\ninvalid\ncandidate:x','0\n0\n','0\n0\ncandidate:'+ 'x'.repeat(8192)]) await f.signal('ice',payload);
+  assert.equal(f.calls.current.ice.length,0);
+});
 test('initial SDP carries gathered ICE once; late ICE keeps the existing wire format', async()=>{
   const f=fixture(); await f.calls.start('peer','Peer',false);
   f.calls.hangup(f.calls.current.id); await idle(); f.sent.length=0;

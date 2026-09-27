@@ -6,6 +6,7 @@
     constructor({ signal, changed, streams, known, env = globalThis }) {
       this.env = env; this.send = signal; this.changed = changed; this.streams = streams;
       this.known = known; this.current = null; this.ended = new Set(); this.ready = false;
+      this.earlyIce = new Map();
       this.client = env.crypto.randomUUID(); this.outbox = Promise.resolve();
     }
     valid(c) { return this.current === c; }
@@ -25,9 +26,24 @@
       this.outbox = task.catch(() => {});
       return task;
     }
+    iceKey(peer, id) { return String(peer).toLowerCase() + '\n' + id; }
+    pruneIce() {
+      const now = this.env.Date.now();
+      for (const [key, value] of this.earlyIce) if (now - value.at >= 90000) this.earlyIce.delete(key);
+    }
+    parseIce(payload) {
+      if (typeof payload !== 'string' || payload.length > 8192) return null;
+      const p = payload.split('\n');
+      if (p.length !== 3 || p[0].length > 256 || !/^[0-9]{1,5}$/.test(p[1]) || Number(p[1]) > 65535
+          || !p[2].trim().startsWith('candidate:') || p[2].trim().length <= 10) return null;
+      return {sdpMid: p[0] === 'null' ? null : p[0], sdpMLineIndex: Number(p[1]), candidate: p[2].trim()};
+    }
     make(id, peer, name, video, offer) {
       const c = { id, peer, name: name || 'Contact', video, offer, ice: [], localIce: [],
         signalled: false, remoteReady: false, muted: false, cameraOff: false };
+      this.pruneIce();
+      const key = this.iceKey(peer, id), early = this.earlyIce.get(key);
+      if (early) { c.ice = early.ice; this.earlyIce.delete(key); }
       this.current = c; return c;
     }
     async start(peer, name, video) {
@@ -56,12 +72,19 @@
         c = this.make(ev.ref, ev.from, ev.name, ev.memo === 'video', ev.payload);
         this.state(c, 'INCOMING_RINGING'); this.timer(c, 45000, 'Missed call'); return;
       }
+      if (!c && ev.kind === 'ice' && ev.ref && ev.ref.length <= 256 && this.known(ev.from) && !this.ended.has(ev.ref)) {
+        const ice = this.parseIce(ev.payload); if (!ice) return;
+        this.pruneIce();
+        const key = this.iceKey(ev.from, ev.ref);
+        let count = 0; for (const pending of this.earlyIce.values()) count += pending.ice.length;
+        if (count >= 256 || (!this.earlyIce.has(key) && this.earlyIce.size >= 8)) return;
+        if (!this.earlyIce.has(key)) this.earlyIce.set(key, {at: this.env.Date.now(), ice: []});
+        this.earlyIce.get(key).ice.push(ice); return;
+      }
       if (!c || ev.ref !== c.id || String(ev.from).toLowerCase() !== c.peer.toLowerCase()) return;
       try {
         if (ev.kind === 'ice') {
-          const p = String(ev.payload).split('\n');
-          if (p.length < 3 || !/^\d+$/.test(p[1])) return;
-          const ice = {sdpMid: p[0] === 'null' ? null : p[0], sdpMLineIndex: Number(p[1]), candidate: p.slice(2).join('\n')};
+          const ice = this.parseIce(ev.payload); if (!ice) return;
           if (c.remoteReady) await c.pc.addIceCandidate(ice);
           else if (c.ice.length < 256) c.ice.push(ice);
         } else if (ev.kind === 'answer' && c.state === 'OUTGOING_RINGING' && c.pc) {
@@ -168,7 +191,7 @@
       if (c.finishGather) c.finishGather();
       this.env.clearTimeout(c.timer); this.ended.add(c.id);
       if (this.ended.size > 100) this.ended.delete(this.ended.values().next().value);
-      this.current = null;
+      this.current = null; this.earlyIce.clear();
       if (c.pc) c.pc.close();
       if (c.media) c.media.getTracks().forEach(t => t.stop());
       this.streams(null, null); c.state = 'ENDED'; c.reason = reason; this.changed(c);
