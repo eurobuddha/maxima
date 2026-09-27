@@ -68,3 +68,15 @@ Both APK signatures match the existing Minima Family certificate, SHA-256 `eca13
 | `parlons-cloud-portal-0.2.77-release.apk` | `821a35b2d84c3dad87dd2bcf612e5717f31cf33b72995f96ce9ec3a9a9c12716` |
 | `parlons-cloud-0.11.109.jar` | `e00348abb1407f631e67cf819912397a10ebf9924ec5fdaf98d944f8b93a9a28` |
 | `parlons-node-0.2.115.jar` | `a69e7a1a4587eb090693f0deda3b08dd077f96152b8c3acbc2da85ecd3b2d33f` |
+
+## Publication evidence
+
+Source commit `ff5f4353da0862b63b231c7ae91bf8ff2485b972` is pushed to `main`. Its [GitHub CI run](https://github.com/eurobuddha/maxima/actions/runs/36339910337) passed.
+
+Published GitHub releases: [Parlons Android 0.6.128](https://github.com/eurobuddha/maxima/releases/tag/v0.6.128), [Cloud Portal 0.2.77](https://github.com/eurobuddha/maxima/releases/tag/portal-v0.2.77), [Cloud host 0.11.109](https://github.com/eurobuddha/maxima/releases/tag/cloud-v0.11.109), and [Node 0.2.115](https://github.com/eurobuddha/maxima/releases/tag/node-v0.2.115). All four releases point at the tested source commit and GitHub reports the artifact digests listed above.
+
+Catalogue commit `36333e7` is pushed. It changes only the two Parlons rows, preserving the separate PandaApps/PandaGet work. The full catalogue gate and pre-push gate each passed **50 entries / 39 binaries**. The GitHub API, public raw catalogue and public IPFS catalogue were read back with the expected Android versions, version codes and hashes. Mirrored APK bytes have the same hashes.
+
+The existing Hetzner publisher published IPFS snapshot `bafybeid7u5xckzqpqwcw25yljb3ogknbpqzqq5prbgf7esq2nbkeeiqlxe` under the existing IPNS name. Direct snapshot read-back matches both new rows. Optional Filebase remote pin-list access remains unavailable; local pinning and public mirror publication succeeded.
+
+No running Parlons server was redeployed and no physical call was placed. The owner will install from the stores for device testing.
