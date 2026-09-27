@@ -11,8 +11,8 @@ android {
         applicationId "com.eurobuddha.maxima.app"
         minSdk 28
         targetSdk 35
-        versionCode 728
-        versionName "0.6.128"
+        versionCode 729
+        versionName "0.6.129"
     }
 
     signingConfigs {
@@ -67,6 +67,7 @@ dependencies {
     implementation project(':files')
     implementation 'com.google.guava:guava:33.4.8-android'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20231013' // Same JSON implementation as :account; Android supplies runtime JSON.
     testImplementation 'org.mockito:mockito-core:5.12.0'
     // WebRTC for voice calls - maintained prebuilt of libwebrtc (audio+video).
     implementation 'io.getstream:stream-webrtc-android:1.1.1'

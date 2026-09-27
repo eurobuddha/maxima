@@ -7,6 +7,9 @@ import android.security.keystore.KeyProperties;
 import android.util.Base64;
 
 import com.eurobuddha.maxima.core.identity.Bip39;
+import com.eurobuddha.maxima.core.codec.MiniData;
+import com.eurobuddha.maxima.core.codec.MiniString;
+import com.eurobuddha.maxima.core.crypto.Hashes;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 
 import java.nio.charset.StandardCharsets;
@@ -42,6 +45,7 @@ public final class SeedStore {
     private static final String PREFS = "maxima_identity";
     private static final String KEY_PHRASE = "phrase_enc";
     private static final String KEY_IV = "phrase_iv";
+    private static final String KEY_ANY_PHRASE = "any_phrase";
     private static final String KEY_NAME = "display_name";
     private static final String KEYSTORE_ALIAS = "maxima_seed_key";
 
@@ -64,9 +68,9 @@ public final class SeedStore {
      *  NEVER mints. This is what the service uses on startup so that a fresh
      *  install can be gated behind onboarding (create-new vs restore) instead of
      *  silently generating an identity the user never gets to write down. */
-    public static MaximaIdentity loadIdentity(Context zCtx) {
+    public static synchronized MaximaIdentity loadIdentity(Context zCtx) {
         String phrase = loadPhrase(zCtx);
-        return phrase == null ? null : MaximaIdentity.fromPhrase(phrase);
+        return phrase == null ? null : deriveIdentity(phrase, usesAnyPhrase(zCtx));
     }
 
     /** Generate and save a brand-new identity.
@@ -81,9 +85,9 @@ public final class SeedStore {
         if (phrase == null) {
             List<String> words = Bip39.generate(24);
             phrase = String.join(" ", words);
-            savePhrase(zCtx, phrase);
+            savePhrase(zCtx, phrase, false);
         }
-        return MaximaIdentity.fromPhrase(phrase);
+        return deriveIdentity(phrase, usesAnyPhrase(zCtx));
     }
 
     /** Load the existing identity, or generate one on first run. Thin shim kept
@@ -113,12 +117,35 @@ public final class SeedStore {
     }
 
     public static ImportResult importPhrase(Context zCtx, String zPhrase) {
-        // Throws on an unknown word, exactly as a Minima node would.
-        String canonical = Bip39.cleanSeedPhrase(zPhrase);
-        boolean checksum = Bip39.checksumValid(
-                java.util.Arrays.asList(canonical.toLowerCase().split(" ")));
-        savePhrase(zCtx, canonical);
-        return new ImportResult(MaximaIdentity.fromPhrase(canonical), checksum);
+        return importPhrase(zCtx, zPhrase, false);
+    }
+
+    /** Minima anyphrase skips ALL normalization, including case and whitespace. */
+    public static synchronized ImportResult importPhrase(Context zCtx, String zPhrase,
+                                                         boolean zAnyPhrase) {
+        if (zPhrase == null || zPhrase.trim().isEmpty()) {
+            throw new IllegalArgumentException("Enter your phrase");
+        }
+        String stored = zAnyPhrase ? zPhrase : Bip39.cleanSeedPhrase(zPhrase);
+        MaximaIdentity identity = deriveIdentity(stored, zAnyPhrase);
+        boolean checksum = !zAnyPhrase && Bip39.checksumValid(
+                java.util.Arrays.asList(stored.toLowerCase(java.util.Locale.ROOT).split(" ")));
+        // Derive successfully before replacing the saved identity.
+        savePhrase(zCtx, stored, zAnyPhrase);
+        return new ImportResult(identity, checksum);
+    }
+
+    public static boolean usesAnyPhrase(Context zCtx) {
+        // Missing on older installations: retain their BIP39 derivation.
+        return prefs(zCtx).getBoolean(KEY_ANY_PHRASE, false);
+    }
+
+    private static MaximaIdentity deriveIdentity(String zPhrase, boolean zAnyPhrase) {
+        // Same raw UTF-8 SHA3 path as Bip39.toNodeSeed, but explicit: even a phrase
+        // made entirely of dictionary words must stay verbatim in anyphrase mode.
+        return zAnyPhrase
+                ? MaximaIdentity.fromSeed(new MiniData(Hashes.sha3(new MiniString(zPhrase).getData())))
+                : MaximaIdentity.fromPhrase(zPhrase);
     }
 
     /** Reveal the phrase for backup. Gate this behind biometric in the UI. */
@@ -132,16 +159,18 @@ public final class SeedStore {
         return zCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    private static void savePhrase(Context zCtx, String zPhrase) {
+    private static void savePhrase(Context zCtx, String zPhrase, boolean zAnyPhrase) {
         try {
             SecretKey key = keystoreKey();
             Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
             c.init(Cipher.ENCRYPT_MODE, key);
             byte[] ct = c.doFinal(zPhrase.getBytes(StandardCharsets.UTF_8));
-            prefs(zCtx).edit()
+            boolean saved = prefs(zCtx).edit()
                     .putString(KEY_PHRASE, Base64.encodeToString(ct, Base64.NO_WRAP))
                     .putString(KEY_IV, Base64.encodeToString(c.getIV(), Base64.NO_WRAP))
-                    .apply();
+                    .putBoolean(KEY_ANY_PHRASE, zAnyPhrase)
+                    .commit();
+            if (!saved) throw new IllegalStateException("Could not save identity");
         } catch (Exception e) {
             throw new IllegalStateException("Could not store seed securely", e);
         }

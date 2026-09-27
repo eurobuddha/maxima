@@ -145,29 +145,36 @@ public final class OnboardingActivity extends AppCompatActivity {
 
     private void promptRestore() {
         EditText input = new EditText(this);
-        input.setHint("paste your 24 words, separated by spaces");
+        input.setHint("Enter your seed phrase");
         input.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setMinLines(3);
         int pad = dp(16);
         input.setPadding(pad, pad, pad, pad);
+        android.widget.CheckBox anyPhrase = new android.widget.CheckBox(this);
+        anyPhrase.setText("Custom phrase (Minima anyphrase)");
+        android.widget.LinearLayout fields = new android.widget.LinearLayout(this);
+        fields.setOrientation(android.widget.LinearLayout.VERTICAL);
+        fields.addView(input);
+        fields.addView(anyPhrase);
 
-        new AlertDialog.Builder(this)
+        AlertDialog restoreDialog = new AlertDialog.Builder(this)
                 .setTitle("Restore from seed phrase")
-                .setMessage("Enter the 24 words from your other device to bring the SAME identity "
-                        + "and address here." + IdentityRestore.KEYUSE_WARNING)
-                .setView(input)
+                .setMessage("Enter your seed phrase. For a nonstandard Minima phrase, select Custom phrase "
+                        + "and preserve every capital letter and space exactly." + IdentityRestore.KEYUSE_WARNING)
+                .setView(fields)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Restore", (d, w) -> {
-                    String phrase = input.getText().toString().trim();
-                    if (phrase.isEmpty()) {
+                    String phrase = input.getText().toString();
+                    if (phrase.trim().isEmpty()) {
                         toast("Enter your phrase");
                         return;
                     }
                     try {
-                        SeedStore.ImportResult r = SeedStore.importPhrase(this, phrase);
-                        String warn = r.checksumValid ? ""
+                        SeedStore.ImportResult r = SeedStore.importPhrase(this, phrase, anyPhrase.isChecked());
+                        String warn = anyPhrase.isChecked() ? "\n\nCustom phrase restored exactly as entered."
+                                : r.checksumValid ? ""
                                 : "\n\nNote: no BIP39 checksum — normal for a phrase from a Minima "
                                 + "node. Restored anyway.";
                         new AlertDialog.Builder(this)
@@ -180,7 +187,11 @@ public final class OnboardingActivity extends AppCompatActivity {
                         toast("Could not restore: " + e.getMessage());
                     }
                 })
-                .show();
+                .create();
+        if (restoreDialog.getWindow() != null) {
+            restoreDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        }
+        restoreDialog.show();
     }
 
     // ---- shared -----------------------------------------------------------

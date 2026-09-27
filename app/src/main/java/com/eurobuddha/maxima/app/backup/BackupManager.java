@@ -37,6 +37,7 @@ public final class BackupManager {
         }
         BackupBundle b = new BackupBundle();
         b.phrase = phrase;
+        b.anyPhrase = SeedStore.usesAnyPhrase(zCtx);
         b.displayName = SeedStore.displayName(zCtx);
         b.mls = MlsStore.get(zCtx);
         b.contacts = new FileStore(new File(zCtx.getFilesDir(), "node")).all(CONTACTS);
@@ -61,7 +62,7 @@ public final class BackupManager {
     /** Become this backup: swap seed/name/MLS, wipe, then seed the fresh node with
      *  contacts + the real key-use counter before the transport restarts. */
     public static void apply(Activity zAct, BackupBundle zBundle) {
-        SeedStore.importPhrase(zAct, zBundle.phrase);
+        SeedStore.importPhrase(zAct, zBundle.phrase, zBundle.anyPhrase);
         SeedStore.setDisplayName(zAct, zBundle.displayName);
         MlsStore.save(zAct, zBundle.mls);
         View post = zAct.getWindow().getDecorView();

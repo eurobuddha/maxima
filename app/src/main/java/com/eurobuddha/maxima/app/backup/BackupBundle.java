@@ -15,10 +15,11 @@ import java.util.Map;
  */
 final class BackupBundle {
 
-    static final int CURRENT_VERSION = 1;
+    static final int CURRENT_VERSION = 2;
 
     int version = CURRENT_VERSION;
     String phrase = "";
+    boolean anyPhrase = false;
     String displayName = "";
     String mls = "";
     /** Contact store, verbatim: store key -> contactToJson value. */
@@ -31,6 +32,7 @@ final class BackupBundle {
             JSONObject o = new JSONObject();
             o.put("version", version);
             o.put("phrase", phrase);
+            o.put("anyPhrase", anyPhrase);
             o.put("displayName", displayName == null ? "" : displayName);
             o.put("mls", mls == null ? "" : mls);
             JSONObject c = new JSONObject();
@@ -55,6 +57,7 @@ final class BackupBundle {
             BackupBundle b = new BackupBundle();
             b.version = o.optInt("version", 0);
             b.phrase = o.optString("phrase", "");
+            b.anyPhrase = o.optBoolean("anyPhrase", false);
             b.displayName = o.optString("displayName", "");
             b.mls = o.optString("mls", "");
             JSONObject c = o.optJSONObject("contacts");
