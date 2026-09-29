@@ -15,9 +15,10 @@ import java.util.Map;
  */
 public final class BackupBundle {
 
-    public static final int CURRENT_VERSION = 1;
+    public static final int CURRENT_VERSION = 2;
 
-    public int version = CURRENT_VERSION;
+    public int version = 1;
+    public boolean anyPhrase;
     public String phrase = "";
     public String displayName = "";
     public String mls = "";
@@ -49,7 +50,8 @@ public final class BackupBundle {
     public String toJson() {
         try {
             JSONObject o = new JSONObject();
-            o.put("version", version);
+            o.put("version", anyPhrase ? 2 : version);
+            o.put("anyPhrase", anyPhrase);
             o.put("phrase", phrase);
             o.put("displayName", displayName == null ? "" : displayName);
             o.put("mls", mls == null ? "" : mls);
@@ -107,6 +109,7 @@ public final class BackupBundle {
             JSONObject o = new JSONObject(zJson);
             BackupBundle b = new BackupBundle();
             b.version = o.optInt("version", 0);
+            b.anyPhrase = b.version >= 2 && o.optBoolean("anyPhrase", false);
             b.phrase = o.optString("phrase", "");
             b.displayName = o.optString("displayName", "");
             b.mls = o.optString("mls", "");

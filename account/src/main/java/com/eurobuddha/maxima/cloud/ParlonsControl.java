@@ -60,6 +60,7 @@ public final class ParlonsControl implements AutoCloseable {
     public static final String M_CONTACT_REMOVE = "parlons.contacts.remove";
     public static final String M_PAY          = "parlons.chat.pay";
     public static final String M_SEED_REVEAL  = "parlons.seed.reveal";
+    public static final String M_IDENTITY_IMPORT = "parlons.identity.import";
     public static final String M_BACKUP_EXPORT = "parlons.backup.export";
     public static final String M_WALLET_SEND  = "parlons.wallet.send";
     public static final String M_WALLET_BUILDSEND = "parlons.wallet.buildsend";
@@ -409,6 +410,13 @@ public final class ParlonsControl implements AutoCloseable {
         mNft = zHost;
     }
 
+    public interface IdentityImport extends AutoCloseable {
+        JSONObject handle(byte[] caller, JSONObject request) throws Exception;
+        void close();
+    }
+    private volatile IdentityImport mIdentityImport;
+    public void setIdentityImport(IdentityImport host) { mIdentityImport = host; }
+
     /** Backup blobs (base64) being paged out to a device, newest last; each dies after
      *  BACKUP_PAGES_TTL_MS whether or not the device came back for the rest. */
     private final java.util.LinkedHashMap<String, String> mBackupPages = new java.util.LinkedHashMap<>();
@@ -536,10 +544,18 @@ public final class ParlonsControl implements AutoCloseable {
         });
         zReg.register(M_PAIR_NEWCODE, req -> {
             requireAuth(req);
-            // The code goes to the operator's ssh (pair-code.txt), NOT back over the wire.
-            mPairing.newBootstrapCode();
+            // Return the freshly persisted code to the paired caller through the same
+            // encrypted RPC reply used for the other owner commands.
+            String code = mPairing.newBootstrapCode();
+            String invite = AccountFiles.invite(permanent(), code);
             JSONObject out = ok();
-            out.put("note", "a fresh bootstrap code was written to the node's pair-code.txt");
+            out.put("code", code);
+            out.put("invite", safe(invite));
+            // Existing iOS/Portal clients display only note. Give them the usable result too.
+            out.put("note", "One-time pairing code: " + code
+                    + (invite == null ? "\nEnter it on the new device with this account's address."
+                            : "\n\nInvite: " + invite)
+                    + "\n\nThis code works once. Minting another code replaces it.");
             return bytes(out);
         });
         zReg.register(M_PAIR_LIST, req -> {
@@ -603,6 +619,7 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("relayOn", s != null && s.relayOn());
             out.put("meshPeers", s == null ? 0 : s.meshPeers());
             out.put("pairedDevices", mPairing.authorizedCount());
+            out.put("identityImport", mIdentityImport != null);
             return bytes(out);
         });
 
@@ -1630,10 +1647,16 @@ public final class ParlonsControl implements AutoCloseable {
             return bytes(out);
         });
 
+        zReg.register(M_IDENTITY_IMPORT, req -> {
+            requireAuth(req);
+            IdentityImport host = mIdentityImport;
+            if (host == null) return bytes(err("Update the Parlons Node server to import an identity from the app."));
+            return bytes(host.handle(req.fromPublicKey, parse(req)));
+        });
+
         // --- identity lifecycle: seed reveal + encrypted backup (user decision: the
         //     passphrase-encrypted PARLONSBK blob may ride the encrypted RPC; RESTORE and
-        //     seed IMPORT stay CLI-only — an RPC restore would let one compromised device
-        //     swap the account out from under the others). ---
+        //     imports use the explicit staged owner-confirmation flow above). ---
         zReg.register(M_SEED_REVEAL, req -> {
             requireAuth(req);
             JSONObject in = parse(req);
@@ -2166,6 +2189,7 @@ public final class ParlonsControl implements AutoCloseable {
     @Override public synchronized void close() {
         if (mClosed) return;
         mClosed = true;
+        if (mIdentityImport != null) mIdentityImport.close();
         mSendExec.shutdownNow();
         mCallExec.shutdownNow();
         mMediaExec.shutdownNow();

@@ -39,6 +39,14 @@ public final class AccountFiles {
         return zPermanent.trim() + "?code=" + zCode.trim();
     }
 
+    /** Shared with Android onboarding; accepts the combined invite used by iOS and the CLI. */
+    public static String[] parseInvite(String text) {
+        String value = text == null ? "" : text.trim();
+        int split = value.indexOf("?code=");
+        return split < 0 ? new String[]{value, ""}
+                : new String[]{value.substring(0, split).trim(), value.substring(split + 6).trim()};
+    }
+
     /**
      * Bring the two files up to date for one account dir.
      * @return true when a file was (re)written
@@ -94,7 +102,7 @@ public final class AccountFiles {
         return t;
     }
 
-    static void writePrivate(Path zFile, byte[] zBytes) throws Exception {
+    public static void writePrivate(Path zFile, byte[] zBytes) throws Exception {
         // FileStore/CloudKeyUses' write-before-rename rule, with owner-only mode from
         // creation. Keep the old file readable until its complete replacement is ready.
         Path target = zFile.toAbsolutePath();

@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.115";
+    public static final String  NODE_VERSION = "0.2.117";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -134,6 +134,7 @@ public final class ParlonsNodeMain {
             dataFolder = new File(System.getProperty("user.home"), ".parlons-node");
         }
         sDataFolder = dataFolder;
+        NodeIdentityImport.applyPending(dataFolder.toPath());
         // -Dparlons.restore=<file.pbk>: bring a PORTABLE ACCOUNT here (a fresh data dir). Writes
         // the paired devices, settings, contacts, chat and the identity (identity.txt) and
         // exits; the next normal start boots the node pinned to that identity - the same MAX#,
@@ -547,6 +548,7 @@ public final class ParlonsNodeMain {
         }
         com.eurobuddha.maxima.cloud.AccountBackup.Source backup = new com.eurobuddha.maxima.cloud.AccountBackup.Source() {
             public String phrase() throws Exception { return identityPhrase(); }
+            public boolean anyPhrase() { return new File(sDataFolder, "identity-anyphrase.txt").isFile(); }
             public java.util.Map<String, Integer> keyUses() { return new java.util.LinkedHashMap<>(); }   // node-owned
         };
         com.eurobuddha.maxima.cloud.ParlonsCore core = new com.eurobuddha.maxima.cloud.ParlonsCore(
@@ -556,6 +558,8 @@ public final class ParlonsNodeMain {
         }
         // The Terminal IDE on a paired device: any node command, run on the console lane.
         core.control().setNodeConsole(NodeWallet::run);
+        core.control().setIdentityImport(new NodeIdentityImport(zDataFolder.toPath(),
+                zIdentity.publicKeyHex(), core.pairing(), core.node()::poolMlsAddresses, () -> System.exit(3)));
         // NFT hosting from the wallet on a paired device (upload over the paired channel).
         final NftStore nft = sNft;
         if (nft != null) {
@@ -714,6 +718,8 @@ public final class ParlonsNodeMain {
 
     /** The ACCOUNT identity phrase: identity.txt if pinned, else the vault. Never logged. */
     private static String identityPhrase() throws Exception {
+        File custom = new File(sDataFolder, "identity-anyphrase.txt");
+        if (custom.isFile()) return java.nio.file.Files.readString(custom.toPath());
         File pin = new File(sDataFolder, "identity.txt");
         if (pin.isFile()) {
             String p = new String(java.nio.file.Files.readAllBytes(pin.toPath()),

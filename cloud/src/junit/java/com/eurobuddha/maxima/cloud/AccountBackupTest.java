@@ -154,6 +154,40 @@ public class AccountBackupTest {
         assertFalse(Files.exists(fresh.resolve(AccountBackup.DEVICES_FILE)));
     }
 
+    @Test public void apkV2CustomPhraseRestoresAndReexportsWithoutNormalization() throws Exception {
+        String raw = "  Café\nMixed CASE!  ";
+        BackupBundle b = BackupBundle.fromJson(new org.json.JSONObject().put("version", 2)
+                .put("anyPhrase", true).put("phrase", raw).toString());
+        Path fresh = tmp("custom");
+        AccountBackup.applyRestore(fresh, b, null, "identity.txt");
+        assertEquals(raw, Files.readString(fresh.resolve("identity-anyphrase.txt")));
+        assertEquals(com.eurobuddha.maxima.core.identity.MaximaIdentity.fromSeed(
+                new com.eurobuddha.maxima.core.codec.MiniData(com.eurobuddha.maxima.core.crypto.Hashes.sha3(
+                raw.getBytes(StandardCharsets.UTF_8)))).publicKeyHex(),
+                com.eurobuddha.maxima.core.identity.MaximaIdentity.fromNodeSecret(Files.readString(fresh.resolve("identity.txt"))).publicKeyHex());
+        byte[] blob = AccountBackup.export(new AccountBackup.Source() {
+            public String phrase() { return raw; }
+            public boolean anyPhrase() { return true; }
+            public Map<String,Integer> keyUses() { return Collections.emptyMap(); }
+        }, fresh, new FileStore(fresh.resolve("node").toFile()), null, "custom", "password".toCharArray());
+        BackupBundle back = AccountBackup.read(blob, "password".toCharArray());
+        assertEquals(2, back.version); assertTrue(back.anyPhrase); assertEquals(raw, back.phrase);
+    }
+
+    @Test public void standardRetryRemovesAnyPartialCustomPhraseMetadata() throws Exception {
+        Path fresh = tmp("retry"); Files.writeString(fresh.resolve("identity-anyphrase.txt"), "stale partial restore");
+        BackupBundle b = new BackupBundle(); b.phrase = PHRASE;
+        AccountBackup.applyRestore(fresh, b, null, "identity.txt");
+        assertFalse(Files.exists(fresh.resolve("identity-anyphrase.txt")));
+    }
+
+    @Test public void customRestoreDoesNotLeavePlaintextInEncryptedTenantLayout() throws Exception {
+        Path fresh = tmp("tenant"); BackupBundle b = new BackupBundle(); b.phrase = "custom"; b.anyPhrase = true;
+        try { AccountBackup.applyRestore(fresh, b, null); fail("unsupported host must reject before writing"); }
+        catch (IllegalArgumentException expected) { }
+        try (java.util.stream.Stream<Path> files = Files.list(fresh)) { assertEquals(0, files.count()); }
+    }
+
     @Test
     public void theWrongPassphraseIsRefused() throws Exception {
         Path live = liveAccount();

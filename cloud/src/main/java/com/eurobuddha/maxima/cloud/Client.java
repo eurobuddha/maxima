@@ -130,17 +130,16 @@ public final class Client {
                 break;
             }
             case "newcode": {
-                String before = localInvite();   // the invite on disk NOW; the fresh one must differ
                 JSONObject o = r.newCode();
                 if (!isOk(o)) { fail(o); break; }
-                System.out.println("new one-time pairing code minted on the account.");
-                String inv = waitLocalInvite(before, 45_000);   // covers an account still attaching after a restart
-                if (inv != null) {
+                String code = String.valueOf(o.getOrDefault("code", ""));
+                String inv = String.valueOf(o.getOrDefault("invite", ""));
+                if (!code.isEmpty()) System.out.println("code   : " + code);
+                if (!inv.isEmpty()) {
                     System.out.println("invite : " + inv);
                     System.out.println("(scan or paste it in the Parlons Cloud app; the code half works once)");
                 } else {
-                    System.out.println("read it on the account's machine:  cat <data>/invite.txt");
-                    System.out.println("(or <data>/pair-code.txt for the code alone)");
+                    System.out.println(o.getOrDefault("note", "The account did not return an invite. Update the account server and try again."));
                 }
                 break;
             }
@@ -547,24 +546,6 @@ public final class Client {
         }
     }
 
-    /** After newcode: the account rewrites pair-code.txt at once and invite.txt within seconds.
-     *  Returns the first invite that differs from {@code zBefore} (the stale one is never handed out). */
-    static String waitLocalInvite(String zBefore, long zMs) throws InterruptedException {
-        long start = System.currentTimeMillis(), until = start + zMs;
-        boolean said = false;
-        while (System.currentTimeMillis() < until) {
-            String inv = localInvite();
-            if (inv != null && !inv.equals(zBefore)) return inv;
-            if (!said && System.currentTimeMillis() - start > 5_000) {
-                System.out.println("(waiting for the account to publish its address - a few seconds after a restart)");
-                said = true;
-            }
-            Thread.sleep(300);
-        }
-        String inv = localInvite();
-        return inv != null && !inv.equals(zBefore) ? inv : null;
-    }
-
     private static void usage() {
         System.out.println("parlons — drive your Parlons Cloud account from the terminal");
         System.out.println();
@@ -573,7 +554,7 @@ public final class Client {
         System.out.println("  pair [<code>]          pair this device (bootstrap code, or pending→approve)");
         System.out.println("  ping                   account name + address");
         System.out.println("  devices                list paired / pending devices");
-        System.out.println("  newcode                mint a fresh one-time pairing code (prints the invite when local)");
+        System.out.println("  newcode                mint and receive a fresh one-time pairing code and invite");
         System.out.println("  invite                 print MAX#…?code=… for the app to scan (account on this machine)");
         System.out.println("  panel                  open the account's web panel in a browser (one-time link)");
         System.out.println("  approve <key>          approve a pending device");

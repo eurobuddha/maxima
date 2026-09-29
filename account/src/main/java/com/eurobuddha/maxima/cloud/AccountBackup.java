@@ -27,6 +27,7 @@ public final class AccountBackup {
     public interface Source {
         /** The 24-word phrase. Never logged by callers. */
         String phrase() throws Exception;
+        default boolean anyPhrase() { return false; }
         /** Winternitz uses per key modifier — empty where the node owns its own counters. */
         Map<String, Integer> keyUses();
     }
@@ -62,6 +63,7 @@ public final class AccountBackup {
                                 String zDisplayName, char[] zPassword) throws Exception {
         BackupBundle b = new BackupBundle();
         b.phrase = zSource.phrase();
+        b.anyPhrase = zSource.anyPhrase();
         b.displayName = zDisplayName == null ? "" : zDisplayName;
         String mls = zNodeStore.get("settings", "staticmls");
         b.mls = mls == null ? "" : mls;
@@ -165,6 +167,8 @@ public final class AccountBackup {
      */
     public static void applyRestore(Path zDataDir, BackupBundle zBundle, KeyUsesImporter zUses,
                                     String zIdentityFile) throws Exception {
+        if (zBundle.anyPhrase && !"identity.txt".equals(zIdentityFile))
+            throw new IllegalArgumentException("Custom-phrase backups currently require a Parlons Node identity restore");
         Path seedFile = zDataDir.resolve(zIdentityFile);
         if (Files.exists(seedFile)) {
             throw new IllegalStateException("this data dir already holds an identity ("
@@ -237,7 +241,15 @@ public final class AccountBackup {
             zUses.importRaiseOnly(zBundle.keyUses);
         }
         try {
-            writePrivate(seedFile, zBundle.phrase.trim());
+            if (zBundle.anyPhrase) {
+                writePrivate(zDataDir.resolve("identity-anyphrase.txt"), zBundle.phrase);
+                writePrivate(seedFile, new com.eurobuddha.maxima.core.codec.MiniData(
+                        com.eurobuddha.maxima.core.crypto.Hashes.sha3(
+                                new com.eurobuddha.maxima.core.codec.MiniString(zBundle.phrase).getData())).to0xString());
+            } else {
+                if ("identity.txt".equals(zIdentityFile)) Files.deleteIfExists(zDataDir.resolve("identity-anyphrase.txt"));
+                writePrivate(seedFile, zBundle.phrase.trim());
+            }
         } catch (Exception e) {
             try { Files.deleteIfExists(seedFile); } catch (Exception ignored) { }
             throw e;

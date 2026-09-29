@@ -211,6 +211,11 @@ public final class ParlonsRemote {
         return o instanceof JSONObject ? (JSONObject) o : new JSONObject();
     }
 
+    /** Import actions carry an idempotency key; do not run the long resolve retry during restart. */
+    public JSONObject identityImport(JSONObject request) throws Exception {
+        return callOnce(ParlonsControl.M_IDENTITY_IMPORT, request);
+    }
+
     // ---- typed commands (thin wrappers over ParlonsControl methods) ----
 
     /** Receives events the cloud PUSHES to this device (messages, ticks, call signals). */

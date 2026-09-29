@@ -84,6 +84,48 @@ public final class CloudSession {
         close(old);
     }
 
+    // A relay accepts one proven route per device key. Close the old connection and hold
+    // both background lanes while the import connects that same key to the new account.
+    private static int sImportConnectionGen = -1;
+
+    static int beginImportConnection(Context c, String expectedAccount) {
+        ParlonsRemote old;
+        int generation;
+        synchronized (LIFECYCLE) {
+            if (!expectedAccount.equals(account(c)) || sImportConnectionGen == sGen)
+                throw new IllegalStateException("Account changed or another import connection is in progress");
+            old = resetLocked(c);
+            generation = sGen;
+            sImportConnectionGen = generation;
+        }
+        close(old);
+        return generation;
+    }
+
+    static void endImportConnection(int generation) {
+        synchronized (LIFECYCLE) {
+            if (sImportConnectionGen == generation) sImportConnectionGen = -1;
+        }
+    }
+
+    /** Adopt only a verified imported account, without a late result replacing another session. */
+    static void adoptImported(Context c, String expectedAccount, String address, ParlonsRemote verified, int generation) {
+        ParlonsRemote old;
+        synchronized (LIFECYCLE) {
+            if (!expectedAccount.equals(account(c)) || generation != sGen || sImportConnectionGen != generation)
+                throw new IllegalStateException("Account changed during import");
+            installPush(c.getApplicationContext(), verified);
+            if (!prefs(c).edit().putString("account", address).putBoolean("paired", true)
+                    .remove("import_id").remove("import_old").remove("import_target")
+                    .remove("import_committing").commit())
+                throw new IllegalStateException("Could not save the imported account connection");
+            old = resetLocked(c);
+            sRemote = verified;
+            cache(c, liveKey(address), verified.liveAddress());
+        }
+        close(old);
+    }
+
     public static void setPaired(Context c, boolean p) {
         prefs(c).edit().putBoolean("paired", p).apply();
     }
@@ -175,6 +217,7 @@ public final class CloudSession {
         final String account, key, warm;
         synchronized (LIFECYCLE) {
             if (gen != sGen) throw new IllegalStateException("connection was reset");
+            if (sImportConnectionGen == sGen) throw new IllegalStateException("Connecting the imported account");
             if (sRemote != null) return sRemote;
             account = account(app);
             key = liveKey(account);
@@ -345,7 +388,7 @@ public final class CloudSession {
                 final ParlonsRemote old;
                 final int gen;
                 synchronized (LIFECYCLE) {
-                    if (requestedGen != sGen) return; // reset superseded this queued recovery
+                    if (requestedGen != sGen || sImportConnectionGen == sGen) return; // reset superseded this queued recovery
                     gen = ++sGen;
                     old = sRemote;
                     sRemote = null;
@@ -376,6 +419,7 @@ public final class CloudSession {
     /** Caller holds LIFECYCLE; no network work or socket closure under this lock. */
     private static ParlonsRemote resetLocked(Context c) {
         sGen++;
+        sImportConnectionGen = -1;
         ParlonsRemote old = sRemote;
         sRemote = null;
         sMedia = null;

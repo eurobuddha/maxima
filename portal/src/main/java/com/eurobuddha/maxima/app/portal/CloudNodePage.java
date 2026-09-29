@@ -352,7 +352,7 @@ public final class CloudNodePage implements Page {
             mRoot.addView(pend);
         }
 
-        TextView newCode = PortalUi.ghost(c, "New pairing code");
+        TextView newCode = PortalUi.ghost(c, "Pair another device");
         newCode.setOnClickListener(v -> newCode());
         LinearLayout.LayoutParams nclp = PortalUi.matchWrap(c);
         nclp.bottomMargin = PortalUi.dp(c, 24);
@@ -477,11 +477,13 @@ public final class CloudNodePage implements Page {
         mAct.toast("Minting…");
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
-                String note = null, error = null;
+                String note = null, error = null, code = "", invite = "";
                 try {
                     JSONObject res = r.newCode();
                     if (bool(res, "ok")) {
                         note = str(res, "note");
+                        code = str(res, "code");
+                        invite = str(res, "invite");
                     } else {
                         error = String.valueOf(res.get("error"));
                     }
@@ -489,16 +491,23 @@ public final class CloudNodePage implements Page {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
                 final String fnote = note, ferr = error;
+                final String fcode = code, finvite = invite;
                 mAct.runOnUiThread(() -> {
                     if (ferr == null) {
-                        new AlertDialog.Builder(mAct)
+                        AlertDialog.Builder dialog = new AlertDialog.Builder(mAct)
                                 .setTitle("New pairing code minted")
                                 .setMessage((fnote == null || fnote.isEmpty())
-                                        ? "A fresh one-time code was written to the node's pair-code.txt. "
-                                        + "Read it over ssh, then enter it on the new device."
+                                        ? (fcode.isEmpty() ? "The account did not return a code. Update the account server and try again."
+                                                : "One-time pairing code: " + fcode)
                                         : fnote)
-                                .setPositiveButton("OK", null)
-                                .show();
+                                .setNegativeButton("Close", null);
+                        if (!finvite.isEmpty()) {
+                            dialog.setPositiveButton("Copy invite", (d, w) -> copy(finvite, "Invite"));
+                            dialog.setNeutralButton("QR", (d, w) -> showQr("Pair a device", finvite));
+                        } else if (!fcode.isEmpty()) {
+                            dialog.setPositiveButton("Copy code", (d, w) -> copy(fcode, "Pairing code"));
+                        }
+                        dialog.show();
                     } else {
                         mAct.toast(ferr);
                     }
@@ -553,14 +562,22 @@ public final class CloudNodePage implements Page {
     }
 
     private void copy(String s) {
+        copy(s, "Address");
+    }
+
+    private void copy(String s, String label) {
         if (s == null || s.isEmpty()) return;
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE);
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("address", s));   // full, never truncated
-        mAct.toast("Address copied");
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(label, s));   // full, never truncated
+        mAct.toast(label + " copied");
     }
 
     private void showQr(String s) {
+        showQr("Permanent address", s);
+    }
+
+    private void showQr(String title, String s) {
         if (s == null || s.isEmpty()) return;
         int px = PortalUi.dp(mAct, 260);
         Bitmap bmp = Qr.encode(s, px);
@@ -569,7 +586,7 @@ public final class CloudNodePage implements Page {
         int pad = PortalUi.dp(mAct, 20);
         iv.setPadding(pad, pad, pad, pad);
         new AlertDialog.Builder(mAct)
-                .setTitle("Permanent address")
+                .setTitle(title)
                 .setView(iv)
                 .setPositiveButton("Close", null)
                 .show();

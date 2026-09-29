@@ -59,7 +59,7 @@ public final class OnboardingActivity extends AppCompatActivity {
                 + "from every device. This phone pairs to it as a secure client. Nobody else can "
                 + "pair without your one-time code, and you can revoke this phone anytime."));
 
-        mAddr = input("Account address (MAX#…)",
+        mAddr = input("Account address or pairing invite (MAX#…)",
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         // Remember the account across attempts — nobody wants to re-enter a 600-char MAX#.
         String saved = CloudSession.account(this);
@@ -70,11 +70,11 @@ public final class OnboardingActivity extends AppCompatActivity {
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         col.addView(card(mAddr));
 
-        Button scan = ghost("Scan account QR");
+        Button scan = ghost("Scan pairing QR");
         scan.setOnClickListener(v -> new IntentIntegrator(this)
                 .setOrientationLocked(false)
                 .setBeepEnabled(false)
-                .setPrompt("Scan your account's address QR")
+                .setPrompt("Scan the pairing QR shown by your server or paired device")
                 .initiateScan());
         col.addView(scan);
 
@@ -142,7 +142,9 @@ public final class OnboardingActivity extends AppCompatActivity {
     }
 
     private void pair() {
-        String a = mAddr.getText().toString().trim();
+        String[] invite = com.eurobuddha.maxima.cloud.AccountFiles.parseInvite(mAddr.getText().toString());
+        String a = invite[0];
+        if (!invite[1].isEmpty()) mCode.setText(invite[1]);
         String c = mCode.getText().toString().trim();
         if (a.isEmpty()) { toast("Enter or scan your account address"); return; }
         CloudSession.setAccount(this, a);
@@ -184,8 +186,10 @@ public final class OnboardingActivity extends AppCompatActivity {
     protected void onActivityResult(int req, int res, Intent data) {
         IntentResult r = IntentIntegrator.parseActivityResult(req, res, data);
         if (r != null && r.getContents() != null) {
-            mAddr.setText(r.getContents().trim());
-            toast("Address scanned");
+            String[] invite = com.eurobuddha.maxima.cloud.AccountFiles.parseInvite(r.getContents());
+            mAddr.setText(invite[0]);
+            mCode.setText(invite[1]);
+            toast(invite[1].isEmpty() ? "Address scanned" : "Address and pairing code scanned");
         } else {
             super.onActivityResult(req, res, data);
         }

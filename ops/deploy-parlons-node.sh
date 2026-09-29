@@ -179,6 +179,9 @@ else
 fi
 REMOTE
 
+# Optional QR renderer, matching get-parlons-cloud.sh; text pairing remains available.
+$SSH 'command -v qrencode >/dev/null 2>&1 || (apt-get install -y -qq qrencode >/dev/null 2>&1) || true'
+
 # ---- 2. user and dirs ----------------------------------------------------
 echo "[2/7] user and directories"
 $SSH 'bash -s' <<'REMOTE'
@@ -222,6 +225,10 @@ fi
 ln -sf $REMOTE_JAR parlons-node.jar
 chmod 644 $REMOTE_JAR
 REMOTE
+
+# One memorable command for first pairing and later inspection.
+scp -q -o ConnectTimeout=20 "$SCRIPT_DIR/parlons-pair" "$TARGET:/opt/maxima/parlons-pair"
+$SSH 'install -m 755 /opt/maxima/parlons-pair /usr/local/bin/parlons-pair'
 
 # ---- 4. systemd ----------------------------------------------------------
 echo "[4/7] systemd unit"
@@ -465,8 +472,6 @@ set -e
 mx=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'identity Mx[0-9A-Z]+' | tail -1 | sed 's/identity //')
 acct=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'account wallet = node wallet: 0x[0-9A-F]+' | tail -1 | grep -oE '0x[0-9A-F]+')
 tok=$(cat /var/lib/parlons-node/gateway-token.txt 2>/dev/null || true)
-perm=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'permanent address MAX#[^ ]+' | tail -1 | sed 's/permanent address //')
-devs=$(journalctl -u parlons-node --no-pager 2>/dev/null | grep -oE 'account up: attached to [0-9]+ relay\(s\), [0-9]+ paired' | tail -1 | grep -oE '[0-9]+ paired' | cut -d' ' -f1)
 
 echo
 echo "  ------------------------------------------------------------"
@@ -474,16 +479,13 @@ echo "   PARLONS NODE"
 echo "  ------------------------------------------------------------"
 [ -n "$acct" ] && { echo "   Account / node wallet address:"; echo; echo "      $acct"; echo; }
 [ -n "$mx" ]   && { echo "   Maxima identity (phones reach the node here):"; echo; echo "      $mx"; echo; }
-if [ -n "$perm" ]; then
-    echo "   Parlons ACCOUNT address (paste into the Parlons Cloud app):"; echo; echo "      $perm"; echo
-    if [ "${devs:-0}" = "0" ]; then
-        echo "   No device paired yet. One-time pairing code (consumed on first pair):"
-        echo "      cat /var/lib/parlons-node/pair-code.txt"
-    else
-        echo "   $devs device(s) paired."
-    fi
-    echo
-fi
+# AccountFiles is refreshed by the CURRENT account, unlike historical journal entries.
+for i in $(seq 1 15); do
+    [ -s /var/lib/parlons-node/account.txt ] && break
+    sleep 2
+done
+/usr/local/bin/parlons-pair || echo '   Pairing address not ready yet. Run: sudo parlons-pair'
+echo '   Show pairing details again: sudo parlons-pair'
 if [ -n "$tok" ]; then
     echo "   Wallet-gateway bearer token (phones' gateway_url = https://<host>/cmd):"
     echo

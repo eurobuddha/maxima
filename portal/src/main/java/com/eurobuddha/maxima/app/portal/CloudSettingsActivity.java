@@ -310,8 +310,8 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         // --- keys & backup: the identity lifecycle, app-parity discipline ---
         body.addView(PortalUi.section(c, "Keys & backup"));
         LinearLayout keys = PortalUi.card(c);
-        keys.addView(PortalUi.label(c, "The 24 words on your node are your identity AND a "
-                + "spendable Minima wallet seed. Back them up like money."));
+        keys.addView(PortalUi.label(c, "Back up your Parlons identity and keep your wallet recovery phrase safe. "
+                + "They can be different after importing an identity or resyncing the wallet."));
         keys.addView(PortalUi.gap(c, 10));
         TextView showSeed = PortalUi.ghost(c, "Show seed phrase");
         showSeed.setTextColor(c.getColor(R.color.ux_error));
@@ -326,12 +326,11 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                 + "node. The portable account bundle: identity, paired devices, settings, "
                 + "contacts and chat history (same .pbk format the phone app reads)."));
         keys.addView(PortalUi.gap(c, 10));
-        keys.addView(PortalUi.label(c, "Move this account to ANY node or server with the same "
-                + "MAX#: on the new host run\n"
-                + "java -jar parlons-cloud.jar --restore backup.pbk\n"
-                + "or, on a Parlons Node, java -Dparlons.restore=backup.pbk -jar parlons-node.jar\n"
-                + "with the old host stopped for good (one identity, one live account). Your "
-                + "paired devices reconnect on their own."));
+        TextView restore = PortalUi.ghost(c, "Import identity or backup…");
+        restore.setOnClickListener(v -> startActivity(new Intent(this, CloudIdentityImportActivity.class)));
+        keys.addView(restore);
+        keys.addView(PortalUi.label(c, "Restore a Parlons phrase or .pbk backup onto this server. "
+                + "You will review the identity before replacing this server’s account."));
         body.addView(keys);
 
         // --- Minima Core on this phone — the same "link to core" path phone users know.
@@ -468,8 +467,8 @@ public final class CloudSettingsActivity extends AppCompatActivity {
     private void confirmShowSeed() {
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Show seed phrase?")
-                .setMessage("These 24 words ARE your account and its wallet. Make sure nobody "
-                        + "is looking. They travel to this phone over the encrypted channel.")
+                .setMessage("This phrase controls your Parlons identity. It may differ from the server’s wallet phrase. "
+                        + "Make sure nobody is looking. It travels to this phone over the encrypted channel.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Show", (d, w) -> fetchAndShowSeed())
                 .show();

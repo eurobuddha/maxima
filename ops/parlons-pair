@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Show the same current combined invite as AccountFiles / the Cloud app's Node tab.
+# Usage: sudo parlons-pair [account-data-directory]
+set -euo pipefail
+DATA="${1:-/var/lib/parlons-node}"
+if [ ! -r "$DATA/account.txt" ]; then
+    echo "Account address is not ready or readable. Run with sudo once Parlons Node is connected." >&2
+    exit 1
+fi
+address=$(tr -d '\r\n' < "$DATA/account.txt")
+case "$address" in MAX\#*\#*@*) ;; *) echo "No valid MAX# account address is available yet." >&2; exit 1 ;; esac
+printf '\nParlons Cloud pairing\n\nAccount MAX# address:\n%s\n\n' "$address"
+if [ ! -s "$DATA/pair-code.txt" ]; then
+    echo 'No unused pairing code. In a paired Cloud app, open Node → Pair another device.'
+    exit 0
+fi
+code=$(tr -d '\r\n' < "$DATA/pair-code.txt")
+if [[ ! "$code" =~ ^[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){2}$ ]]; then
+    echo 'Pairing code is not ready. Try again.' >&2; exit 1
+fi
+invite="$address?code=$code"
+printf 'One-time pairing code: %s\n\nScan this in Parlons Cloud → Scan pairing QR:\n' "$code"
+# Existing get-parlons-cloud.sh QR flow; stdin keeps the invitation out of argv.
+if command -v qrencode >/dev/null 2>&1; then
+    printf '%s' "$invite" | qrencode -t UTF8
+else
+    echo '(Install qrencode for the terminal QR, or paste the complete invite below.)'
+fi
+printf '\nComplete pairing invite (address + code):\n%s\n\n' "$invite"
+echo 'This code is used once. Keep the invite private until you have paired.'

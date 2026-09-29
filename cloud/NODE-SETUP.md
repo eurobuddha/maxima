@@ -841,15 +841,42 @@ same `.pbk` container the phone app reads): the identity phrase, the paired devi
 (`devices.json`), the host settings (`cloud-settings.properties`), every collection and log of the
 node store (contacts, settings, remembered relays, address history) and of the chat store (messages,
 groups, read state, wallet notes), plus the v1 fields every older reader knows - so the phone app's
-restore still takes it (identity + contacts), and an old v1 backup still restores here. Restore is
-OFFLINE and CLI-only by design (a paired device must never be able to swap the account from under
-the others): `java -jar parlons-cloud.jar --restore backup.pbk` on a server, or
-`java -Dparlons.restore=backup.pbk -jar parlons-node.jar` on a Parlons Node (writes `identity.txt`;
-the node's WALLET stays its own vault - resync it to the old phrase from a paired device if the funds
-should follow). The identity file is written LAST and never overwritten; a fresh data dir is
-required. Because the identity is the same, the MAX# is the same: paired devices reconnect without
-re-pairing (the old anchor is down, the fleet's replicated directory - Stage-3 item 1 - resolves
-the key at its new home). One identity, one live account: stop the old host for good.
+restore still takes it (identity + contacts), and an old v1 backup still restores here.
+
+**Import from Android (Portal 0.2.79, Node 0.2.117).** In the paired Cloud app, open
+Settings → Keys & backup → Import identity or backup. Enter the recovery phrase, select
+Custom phrase for Minima anyphrase, or choose an encrypted `.pbk` file (up to 16 MB).
+Custom phrases preserve exact spaces, capitals and UTF-8. Review the new MAX# and confirm
+that the original device/server has stopped this identity. The target node stages and
+validates the account, shuts down, applies it before startup, and keeps this phone paired.
+A phrase restores identity; a backup restores the contacts, chats and devices it contains.
+The target server's connectivity settings and Minima wallet stay unchanged. Media and
+private file payloads are not included in `.pbk` bundles.
+
+The previous identity, chats, media, private files and pairings remain under
+`<data>/account-history/<import-id>/previous/` (owner-only access). Other devices paired
+to the replaced account do not gain access to the imported one. Source devices saved in
+a full backup keep their pairing. If the connection drops, reopen the import screen and
+use Resume: the client saves only the request ID and old/new addresses, and verifies an
+owner-authenticated response from the new account before switching. It never saves the
+phrase or password. A prepared import can be cancelled before confirmation. Process
+interruption during the offline file move is resumed on the next startup. The node's
+service manager must restart exit code 3, as the supplied systemd unit does.
+
+CLI restore into a fresh directory remains available:
+`java -jar parlons-cloud.jar --restore backup.pbk`, or
+`java -Dparlons.restore=backup.pbk -jar parlons-node.jar`. Custom-phrase v2 backups currently
+require the Node `identity.txt` restore path; standalone cloud/tenant restore rejects them
+before writing files. One identity must run on only one host at a time.
+
+**Pairing without searching logs.** The Node installer now installs `sudo parlons-pair`.
+It reads the current `account.txt` and unused `pair-code.txt`, prints the MAX# and code
+together, and renders one combined QR when `qrencode` is installed. The installer also
+shows this invitation on completion. Android's Scan pairing QR fills both fields; pasting
+the complete invite works too. From an already paired app, Node → Pair another device
+returns the fresh code and a copyable/scannable invite directly. Consumed codes are never
+recovered from old logs or stale `invite.txt` files.
+
 **The multi-account host** (optional, self-hostable, replaceable): `parlons-cloud --tenants <dir>`
 runs every `<dir>/<name>/` account - the same layout a bundle restores into - in one process,
 sharing one pool relay (the first tenant's `--relay-port`) and one Tier-2 listener. Seeds can be
@@ -863,7 +890,7 @@ runs their own node, which is why this host is one option among several. Relays 
 connections per source IP (32, `-Dmaxima.relay.maxpersource`), so plan on ~10 tenants per host
 before raising it on relays you run. Decentralization: nothing new is centralised - the bundle
 makes every account movable (principles 2, 3, 6), the host is optional and replaceable (3, 5), and
-restore stays out of the RPC surface (4). Verify: `AccountBackupTest`, `TenantsTest`; live: export
+tenant restore stays offline. Verify: `AccountBackupTest`, `TenantsTest`; live: export
 from a paired device, restore into a fresh dir on another box, start, watch the device reconnect.
 
 ### Bootstrap without a single operator (server 0.4.59, node 0.2.34, app 0.6.77, portal 0.2.22, desktop 1.5.57)

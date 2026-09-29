@@ -42,6 +42,7 @@ public class CloudSessionTest {
             when(edit.putBoolean(anyString(), anyBoolean())).thenAnswer(a -> { writes.put(a.getArgument(0), a.getArgument(1)); return edit; });
             when(edit.remove(anyString())).thenAnswer(a -> { removes.add(a.getArgument(0)); return edit; });
             doAnswer(a -> { removes.forEach(values::remove); values.putAll(writes); return null; }).when(edit).apply();
+            when(edit.commit()).thenAnswer(a -> { removes.forEach(values::remove); values.putAll(writes); return true; });
             return edit;
         });
         Field identity = CloudSession.class.getDeclaredField("sDeviceId");
@@ -186,6 +187,48 @@ public class CloudSessionTest {
             ParlonsRemote fresh = ensure();
             assertTrue(CloudSession.setPaired(app, fresh));
             assertTrue(CloudSession.isPaired(app));
+        }
+    }
+
+    @Test public void importedAccountAdoptionClearsOldCachesAndKeepsVerifiedPairing() throws Exception {
+        try (MockedConstruction<ParlonsRemote> constructed = mockConstruction(ParlonsRemote.class,
+                (remote, context) -> when(remote.liveAddress()).thenReturn("live-A"))) {
+            ParlonsRemote old = ensure();
+            values.put("cache_chats", "old private history"); values.put("import_id", "pending");
+            ParlonsRemote imported = mock(ParlonsRemote.class);
+            when(imported.liveAddress()).thenReturn("live-imported");
+            int generation = CloudSession.beginImportConnection(app, "MAX#account-A");
+            verify(old).close(); assertNull(CloudSession.remoteOrNull());
+            try { ensure(); fail("old account must not reconnect during the import"); }
+            catch (IllegalStateException expected) { }
+            CloudSession.adoptImported(app, "MAX#account-A", "MAX#imported", imported, generation);
+            assertEquals("MAX#imported", CloudSession.account(app)); assertTrue(CloudSession.isPaired(app));
+            assertSame(imported, CloudSession.remoteOrNull()); verify(old).close();
+            assertFalse(values.containsKey("cache_chats")); assertFalse(values.containsKey("import_id"));
+            assertFalse(CloudSession.setPaired(app, old));
+        }
+    }
+    @Test public void lateImportCannotReplaceAnotherSelectedAccount() throws Exception {
+        int generation = CloudSession.beginImportConnection(app, "MAX#account-A");
+        CloudSession.setAccount(app, "MAX#other");
+        try {
+            CloudSession.adoptImported(app, "MAX#account-A", "MAX#imported", mock(ParlonsRemote.class), generation);
+            fail("must reject stale result");
+        } catch (IllegalStateException expected) { }
+        assertEquals("MAX#other", CloudSession.account(app)); assertFalse(CloudSession.isPaired(app));
+    }
+
+    @Test public void failedImportConnectionReleasesTheOldAccountForRetry() throws Exception {
+        try (MockedConstruction<ParlonsRemote> constructed = mockConstruction(ParlonsRemote.class,
+                (remote, context) -> when(remote.liveAddress()).thenReturn("live-A"))) {
+            ParlonsRemote old = ensure();
+            int generation = CloudSession.beginImportConnection(app, "MAX#account-A");
+            CloudSession.reconnect(app, "background heartbeat during import");
+            CloudSession.io().submit(() -> {}).get(5, TimeUnit.SECONDS);
+            assertNull(CloudSession.remoteOrNull());
+            CloudSession.endImportConnection(generation);
+            ParlonsRemote retry = ensure(); assertNotSame(old, retry);
+            verify(old).close(); assertEquals("MAX#account-A", CloudSession.account(app));
         }
     }
 
