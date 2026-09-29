@@ -747,13 +747,34 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             if (row instanceof JPanel) {
                 for (Component c : ((JPanel) row).getComponents()) {
                     if (c instanceof Bubble) {
-                        Dimension d = c.getPreferredSize();
-                        c.setMaximumSize(new Dimension(Math.min(max, d.width), Integer.MAX_VALUE));
+                        fitBubble((Bubble) c, max);
                     }
                 }
             }
         }
         mThread.revalidate();
+    }
+
+    /** Measure wrapping text at the available width before BoxLayout sizes the row. */
+    private void fitBubble(Bubble bubble, int maxWidth) {
+        int textWidth = Math.max(40, maxWidth - bubble.getInsets().left - bubble.getInsets().right);
+        for (Component child : bubble.getComponents()) {
+            if (child instanceof JTextArea) {
+                JTextArea text = (JTextArea) child;
+                int natural = 1;
+                for (String line : text.getText().split("\\n", -1)) {
+                    natural = Math.max(natural, text.getFontMetrics(text.getFont()).stringWidth(line) + 2);
+                }
+                text.setSize(Math.min(textWidth, natural), Short.MAX_VALUE);
+                text.setMinimumSize(new Dimension(1, 1));
+            } else if (child instanceof javax.swing.JEditorPane) {
+                child.setSize(textWidth, Short.MAX_VALUE);
+            }
+        }
+        bubble.invalidate();
+        Dimension preferred = bubble.getPreferredSize();
+        bubble.setMinimumSize(new Dimension(1, preferred.height));
+        bubble.setMaximumSize(new Dimension(Math.min(maxWidth, preferred.width), preferred.height));
     }
 
     /** Two messages cluster if same author, same day, within the 5-min window. */
@@ -968,7 +989,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 metaTxt = time(e.time);
             }
             JLabel meta = new JLabel(metaTxt);
-            meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10));
+            meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10)
+                    .deriveFont(10f * t.textPercent() / 100f));
             meta.setForeground(DKit.alpha(fg, 160));
             meta.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(meta);
@@ -981,8 +1003,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             public void mouseReleased(MouseEvent ev) { if (ev.isPopupTrigger()) showMessageMenu(b, fe, ev.getX(), ev.getY()); }
         });
 
-        Dimension pref = b.getPreferredSize();
-        b.setMaximumSize(new Dimension(Math.min(bubbleMax(), pref.width), Integer.MAX_VALUE));
+        fitBubble(b, bubbleMax());
 
         if (mine) {
             line.add(Box.createHorizontalGlue());
@@ -1105,7 +1126,27 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mInput.getActionMap().put("newline", new AbstractAction() {
             public void actionPerformed(ActionEvent e) { mInput.append("\n"); }
         });
+        ImagePasteSupport.install(mInput, () -> mOpen != null && !mShowList,
+                this::pasteImage);
+        mInput.setToolTipText("Paste an image with Ctrl+V (Command+V on Mac)");
+        for (String shortcut : new String[]{"control V", "meta V"}) {
+            mConvPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                    .put(KeyStroke.getKeyStroke(shortcut), "paste-image-or-text");
+        }
+        mConvPane.getActionMap().put("paste-image-or-text", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { mInput.paste(); }
+        });
         return bar;
+    }
+
+    void textSizeChanged(float ratio) {
+        // Phone-width layout detaches one pane; it still needs the same update.
+        if (mListPane.getParent() == null) Theme.resizeFonts(mListPane, ratio);
+        if (mConvPane.getParent() == null) Theme.resizeFonts(mConvPane, ratio);
+        mLastSig = "";
+        mThreadSig = "";
+        mSearchKey = "";
+        refresh();
     }
 
     // Same six labelled categories as the phone's emoji panel.
@@ -1497,7 +1538,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private javax.swing.JComponent linkedText(String text, Color fg) {
         if (com.eurobuddha.maxima.core.chat.ChatLinks.find(text).isEmpty()) {
-            JTextArea body = new JTextArea(text);
+            DKit.WrapText body = new DKit.WrapText(text);
             body.setFont(t.font(13.5f)); body.setForeground(fg); body.setOpaque(false);
             body.setEditable(false); body.setFocusable(false);
             body.setLineWrap(true); body.setWrapStyleWord(true);
@@ -1514,13 +1555,21 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             offset = link.end;
         }
         html.append(escHtml(text.substring(offset)));
-        javax.swing.JEditorPane view = new javax.swing.JEditorPane();
+        javax.swing.JEditorPane view = new javax.swing.JEditorPane() {
+            @Override public Dimension getMinimumSize() { return new Dimension(1, 1); }
+            @Override public Dimension getPreferredSize() {
+                int width = Math.max(40, getWidth());
+                javax.swing.text.View root = getUI().getRootView(this);
+                root.setSize(width, Integer.MAX_VALUE);
+                return new Dimension(width, (int) Math.ceil(root.getPreferredSpan(javax.swing.text.View.Y_AXIS)));
+            }
+        };
         view.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
         view.setContentType("text/html");
         view.setFont(t.font(13.5f)); view.setForeground(fg);
         view.setOpaque(false); view.setEditable(false); view.setBorder(null);
-        view.setText("<html><body style='color:" + colour + ";margin:0'><div style='width:320px'>"
-                + html.toString().replace("\n", "<br>") + "</div></body></html>");
+        view.setText("<html><body style='color:" + colour + ";margin:0'>"
+                + html.toString().replace("\n", "<br>") + "</body></html>");
         view.setAlignmentX(Component.LEFT_ALIGNMENT);
         view.addHyperlinkListener(event -> {
             if (event.getEventType() != javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) return;
@@ -1862,6 +1911,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private void attachFile() {
         if (mOpen == null) return;
+        final String conversation = mOpen;
+        final boolean group = mOpenGroup;
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setDialogTitle("Send a photo");
         if (fc.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
@@ -1871,25 +1922,72 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 byte[] bytes = java.nio.file.Files.readAllBytes(f.toPath());
                 String mime = java.nio.file.Files.probeContentType(f.toPath());
                 if (mime == null) mime = "application/octet-stream";
-                // Normalise photos exactly as the phone does: upright per EXIF,
-                // downscaled long-edge, re-encoded JPEG — else a phone photo
-                // ships sideways and full-size.
-                if (mime.startsWith("image/")) {
-                    DesktopImagePrep.Result r = DesktopImagePrep.prepare(bytes, mime);
-                    bytes = r.bytes;
-                    if (r.jpeg) mime = "image/jpeg";
-                }
-                if (mOpenGroup) node.chat().sendGroupMedia(mOpen, bytes, mime, "");
-                else {
-                    Contact c = node.port().contact(mOpen);
-                    if (c != null) node.chat().sendMedia(c, bytes, mime, "");
-                }
-                javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
-            } catch (Exception ex) {
-                javax.swing.SwingUtilities.invokeLater(() ->
-                        javax.swing.JOptionPane.showMessageDialog(this, "Couldn't send: " + ex.getMessage()));
-            }
+                sendAttachment(conversation, group, bytes, mime, "");
+            } catch (Exception ex) { attachmentError(ex); }
         }, "chat-attach").start();
+    }
+
+    private void pasteImage(java.awt.datatransfer.Transferable contents) {
+        // Capture the recipient on the EDT before decoding; switching chats must
+        // never redirect an attachment to somebody else.
+        final String conversation = mOpen;
+        final boolean group = mOpenGroup;
+        if (conversation == null || mShowList) return;
+        final String recipient = titleFor(conversation, group);
+        new Thread(() -> {
+            try {
+                java.awt.image.BufferedImage image = ImagePasteSupport.readImage(contents);
+                byte[] png = ImagePasteSupport.png(image);
+                double scale = Math.min(1, Math.min(480d / image.getWidth(), 320d / image.getHeight()));
+                javax.swing.ImageIcon icon = new javax.swing.ImageIcon(image.getScaledInstance(
+                        Math.max(1, (int) (image.getWidth() * scale)),
+                        Math.max(1, (int) (image.getHeight() * scale)), java.awt.Image.SCALE_SMOOTH));
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (!isDisplayable()) return;
+                    JTextArea caption = new JTextArea(3, 28);
+                    caption.setLineWrap(true); caption.setWrapStyleWord(true);
+                    caption.setFont(t.font(13.5f));
+                    JPanel preview = new JPanel(new BorderLayout(0, 12));
+                    preview.add(new JLabel(icon), BorderLayout.CENTER);
+                    JPanel bottom = new JPanel(new BorderLayout(0, 4));
+                    bottom.add(new JLabel("Caption (optional)"), BorderLayout.NORTH);
+                    bottom.add(new JScrollPane(caption), BorderLayout.CENTER);
+                    preview.add(bottom, BorderLayout.SOUTH);
+                    int choice = javax.swing.JOptionPane.showOptionDialog(this, preview,
+                            "Send image to " + recipient, javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                            javax.swing.JOptionPane.PLAIN_MESSAGE, null,
+                            new String[]{"Send", "Cancel"}, "Send");
+                    if (choice != 0) return;
+                    final String text = caption.getText();
+                    new Thread(() -> {
+                        try { sendAttachment(conversation, group, png, "image/png", text); }
+                        catch (Exception ex) { attachmentError(ex); }
+                    }, "chat-paste-send").start();
+                });
+            } catch (Exception ex) { attachmentError(ex); }
+        }, "chat-paste-image").start();
+    }
+
+    /** Both file picking and clipboard images keep the existing media transport. */
+    private void sendAttachment(String conversation, boolean group, byte[] bytes,
+                                String mime, String caption) throws Exception {
+        if (mime.startsWith("image/")) {
+            DesktopImagePrep.Result prepared = DesktopImagePrep.prepare(bytes, mime);
+            bytes = prepared.bytes;
+            if (prepared.jpeg) mime = "image/jpeg";
+        }
+        if (group) node.chat().sendGroupMedia(conversation, bytes, mime, caption);
+        else {
+            Contact contact = node.port().contact(conversation);
+            if (contact == null) throw new IllegalStateException("This contact is no longer available.");
+            node.chat().sendMedia(contact, bytes, mime, caption);
+        }
+        javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
+    }
+
+    private void attachmentError(Exception ex) {
+        javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(
+                this, "Couldn't send image: " + ex.getMessage(), "Image", javax.swing.JOptionPane.ERROR_MESSAGE));
     }
 
     // ---- helpers ----

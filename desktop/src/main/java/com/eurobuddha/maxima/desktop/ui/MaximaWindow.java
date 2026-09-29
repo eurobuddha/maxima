@@ -151,6 +151,15 @@ public final class MaximaWindow {
         root.add(header, BorderLayout.NORTH);
         root.add(mContent, BorderLayout.CENTER);
         mFrame.setContentPane(root);
+        DesktopTextShortcuts.install(mFrame.getRootPane(), percent -> {
+            int previous = t.textPercent();
+            t.resizeText(root, percent == 0 ? 100 : previous + percent);
+            if (t.textPercent() == previous) return;
+            java.util.prefs.Preferences.userRoot().node(DesktopNode.PREFS)
+                    .putInt("textPercent", t.textPercent());
+            chats.textSizeChanged((float) t.textPercent() / previous);
+            pushWidth();
+        });
 
         // Responsive: tell the visible panel the content width on resize.
         mContent.addComponentListener(new ComponentAdapter() {

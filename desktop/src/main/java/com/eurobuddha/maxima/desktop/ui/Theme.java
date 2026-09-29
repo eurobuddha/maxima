@@ -53,7 +53,16 @@ public final class Theme {
     private static Font sBold;
     private static Font sExtrabold;
 
+    private int textPercent;
+    static final int MIN_TEXT_PERCENT = 80, MAX_TEXT_PERCENT = 150;
+
     public Theme(Mode zMode) {
+        this(zMode, java.util.prefs.Preferences.userRoot()
+                .node(DesktopNode.PREFS).getInt("textPercent", 100));
+    }
+
+    Theme(Mode zMode, int percent) {
+        textPercent = clampTextPercent(percent);
         mode = zMode;
         boolean d = zMode == Mode.DARK;
         bg            = c(d ? 0x16181B : 0xF5F4F1);
@@ -109,11 +118,51 @@ public final class Theme {
 
     // ---- fonts ----
 
-    public Font font(float size)          { return regular.deriveFont(size); }
-    public Font medium(float size)        { return medium.deriveFont(size); }
-    public Font semibold(float size)      { return semibold.deriveFont(size); }
-    public Font bold(float size)          { return bold.deriveFont(size); }
-    public Font extrabold(float size)     { return extrabold.deriveFont(size); }
+    public Font font(float size)          { return regular.deriveFont(size * textPercent / 100f); }
+    public Font medium(float size)        { return medium.deriveFont(size * textPercent / 100f); }
+    public Font semibold(float size)      { return semibold.deriveFont(size * textPercent / 100f); }
+    public Font bold(float size)          { return bold.deriveFont(size * textPercent / 100f); }
+    public Font extrabold(float size)     { return extrabold.deriveFont(size * textPercent / 100f); }
+
+    int textPercent() { return textPercent; }
+
+    static int clampTextPercent(int percent) {
+        return Math.max(MIN_TEXT_PERCENT, Math.min(MAX_TEXT_PERCENT, percent));
+    }
+
+    /** Resize existing widgets in place: drafts, selection and wallet ownership survive. */
+    void resizeText(java.awt.Component root, int percent) {
+        int next = clampTextPercent(percent);
+        if (next == textPercent) return;
+        float ratio = (float) next / textPercent;
+        textPercent = next;
+        resizeFonts(root, ratio);
+        root.revalidate();
+        root.repaint();
+    }
+
+    static void resizeFonts(java.awt.Component c, float ratio) {
+        java.awt.Dimension previousPreferred = c.getPreferredSize();
+        java.awt.Dimension previousMax = c.isMaximumSizeSet() ? c.getMaximumSize() : null;
+        if (c.isFontSet() && c.getFont() != null) {
+            c.setFont(c.getFont().deriveFont(c.getFont().getSize2D() * ratio));
+        }
+        if (c instanceof java.awt.Container) {
+            for (java.awt.Component child : ((java.awt.Container) c).getComponents()) {
+                resizeFonts(child, ratio);
+            }
+        }
+        // Text rows often freeze their maximum height at construction time.
+        // Follow preferred sizes for shrink-wrapped labels/pills; keep layout caps.
+        if (c.isMaximumSizeSet() && !(c instanceof javax.swing.JScrollPane)) {
+            java.awt.Dimension preferred = c.getPreferredSize();
+            int width = previousMax.width == previousPreferred.width
+                    ? preferred.width : previousMax.width;
+            int height = previousMax.height == previousPreferred.height
+                    ? preferred.height : Math.max(previousMax.height, preferred.height);
+            c.setMaximumSize(new java.awt.Dimension(width, height));
+        }
+    }
 
     private static synchronized void loadFonts() {
         if (sRegular != null) {

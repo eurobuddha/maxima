@@ -39,11 +39,8 @@ final class DesktopImagePrep {
     static Result prepare(byte[] zBytes, String zMime) {
         try {
             if (zMime == null || !zMime.startsWith("image/")) return new Result(zBytes, false);
-            BufferedImage img = ImageIO.read(new ByteArrayInputStream(zBytes));
+            BufferedImage img = decode(zBytes);
             if (img == null) return new Result(zBytes, false);
-
-            int orientation = readExifOrientation(zBytes);   // 1..8, 1 == normal
-            img = applyOrientation(img, orientation);
 
             int w = img.getWidth();
             int h = img.getHeight();
@@ -78,6 +75,12 @@ final class DesktopImagePrep {
         } catch (Throwable t) {
             return new Result(zBytes, false);
         }
+    }
+
+    /** Decode upright for either the send path or clipboard preview, without recompression. */
+    static BufferedImage decode(byte[] bytes) throws java.io.IOException {
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+        return image == null ? null : applyOrientation(image, readExifOrientation(bytes));
     }
 
     static final class Result {
