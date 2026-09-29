@@ -51,7 +51,24 @@ Isolated checkout: `maxima/build/desktop-input`, branch `feature/desktop-font-pa
 The original dirty checkout is preserved. Desktop version and APP_VERSION both advance
 to 1.5.104; no Android or server source changes are included.
 
-Signing/notarization was blocked by automatic approval review because it uses Keychain
-credentials and uploads artifacts to Apple. Explicit user approval is pending. No release
-was published and no installer was installed. The local `:desktop:installDist` build is
-available for inspection; it is not a signed installer.
+Delivered on 29 September after the user authorized signing, notarization and installers
+for all supported desktop platforms. Source commit: `ae28f26bd44c8e0a80743c1ac6001c1f89f63210`.
+Remote branch: `release/desktop-1.5.104`. Automatic approval review rejected the push to
+`main`; the release branch was approved instead, and `main` remains unchanged.
+
+Installers are in `/Users/eurobuddha/Projects/minima/maxima/dist/`:
+
+- `MaximaNode-1.5.104.dmg` — Apple Silicon; Developer ID signed, app and DMG notarized
+  and stapled, strict signature verification and both Gatekeeper checks passed.
+- `MaximaNode-1.5.104.msi` — Windows x64.
+- `maximanode_1.5.104_amd64.deb` — Linux amd64; built on the Ubuntu CI runner.
+- `SHA256SUMS-desktop-1.5.104.txt` — hashes of all three delivered installers.
+
+Native build run: https://github.com/eurobuddha/maxima/actions/runs/36632644203
+(all three jobs succeeded at the source commit above). Windows/Linux download hashes
+match CI; Linux package metadata reports version 1.5.104 and architecture amd64.
+The Linux payload contains the font-shortcut and image-paste classes.
+
+Delivery receipt and build logs: `publication/desktop-1.5.104/` in this checkout.
+No public GitHub Release was published and no installer was installed. Windows/Linux
+runtime installation and packaged system clipboard interoperability remain untested here.
