@@ -484,8 +484,10 @@ for i in $(seq 1 15); do
     [ -s /var/lib/parlons-node/account.txt ] && break
     sleep 2
 done
-/usr/local/bin/parlons-pair || echo '   Pairing address not ready yet. Run: sudo parlons-pair'
-echo '   Show pairing details again: sudo parlons-pair'
+echo '   In an interactive SSH terminal, set your admin pairing password once:'
+echo '     sudo parlons-pair --set-admin-password'
+echo '   Get an owner invitation: sudo parlons-pair --admin'
+echo '   Get a guest invitation: sudo parlons-pair --guest <name> (hosting service required)'
 if [ -n "$tok" ]; then
     echo "   Wallet-gateway bearer token (phones' gateway_url = https://<host>/cmd):"
     echo

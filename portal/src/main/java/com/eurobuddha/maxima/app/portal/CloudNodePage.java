@@ -55,6 +55,7 @@ public final class CloudNodePage implements Page {
     private boolean mRelayOn;
     private int mMeshPeers;
     private boolean mStatusOk;
+    private boolean mNodeConsole, mHosting, mAdminPassword;
     private final List<Dev> mAuthorized = new ArrayList<>();
     private final List<String> mPending = new ArrayList<>();
 
@@ -105,6 +106,7 @@ public final class CloudNodePage implements Page {
                 long uptime = mUptime;
                 int hosts = mHosts, mesh = mMeshPeers;
                 boolean mailbox = mMailboxHeld, relay = mRelayOn;
+                boolean console = false, hosting = false, adminPassword = false;
                 List<Dev> auth = new ArrayList<>();
                 List<String> pend = new ArrayList<>();
                 try {
@@ -119,6 +121,9 @@ public final class CloudNodePage implements Page {
                         mailbox = bool(s, "mailboxHeld");
                         relay = bool(s, "relayOn");
                         mesh = (int) lng(s, "meshPeers");
+                        console = hasConsole(s);
+                        hosting = bool(s, "hostedAccounts");
+                        adminPassword = bool(s, "adminPairingPassword");
                         CloudSession.cache(mAct, "nodestatus", s.toString());
                     }
                 } catch (Exception e) {
@@ -157,10 +162,12 @@ public final class CloudNodePage implements Page {
                 final long fu = uptime;
                 final int fh = hosts, fm = mesh;
                 final boolean fmail = mailbox, frelay = relay;
+                final boolean fconsole = console, fhosting = hosting, fpassword = adminPassword;
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
                     mBusy = false;
                     mStatusOk = fok;
+                    mNodeConsole = fconsole; mHosting = fhosting; mAdminPassword = fpassword;
                     mName = fn;
                     mPermanent = fp;
                     mVersion = fv;
@@ -193,6 +200,7 @@ public final class CloudNodePage implements Page {
     /** Populate the status snapshot fields from a (cached) node.status JSON. */
     private void applyStatus(JSONObject s) {
         mStatusOk = bool(s, "ok");
+        mNodeConsole = hasConsole(s); mHosting = bool(s, "hostedAccounts"); mAdminPassword = bool(s, "adminPairingPassword");
         mName = str(s, "name");
         mPermanent = str(s, "permanent");
         mVersion = str(s, "version");
@@ -201,6 +209,12 @@ public final class CloudNodePage implements Page {
         mMailboxHeld = bool(s, "mailboxHeld");
         mRelayOn = bool(s, "relayOn");
         mMeshPeers = (int) lng(s, "meshPeers");
+    }
+
+    private static boolean hasConsole(JSONObject status) {
+        // Node 0.2.117 advertised identity import before console capabilities existed.
+        // Only Node installs that provider; explicit capability flags always win.
+        return status.containsKey("nodeConsole") ? bool(status, "nodeConsole") : bool(status, "identityImport");
     }
 
     private void rebuild() {
@@ -304,30 +318,42 @@ public final class CloudNodePage implements Page {
         addr.addView(btns);
         mRoot.addView(addr);
 
-        // --- VPS control panel (the "superior to a phone" surface) ---
-        mRoot.addView(PortalUi.section(c, "Node tools"));
-        LinearLayout tools = PortalUi.card(c);
-        TextView ide = PortalUi.button(c, "Open Terminal IDE");
-        ide.setOnClickListener(v -> mAct.startActivity(
-                new android.content.Intent(mAct, com.eurobuddha.maxima.app.portal.ide.IdeActivity.class)));
-        tools.addView(ide);
-        tools.addView(PortalUi.gap(c, 6));
-        tools.addView(PortalUi.label(c, "The full Minima command line of YOUR node, plus the KISS "
-                + "script IDE and the manual-transaction workbench - every command runs on the node "
-                + "over this paired channel, output complete and copyable."));
-        mRoot.addView(tools);
-        mRoot.addView(PortalUi.gap(c, 12));
+        if (mHosting) {
+            mRoot.addView(PortalUi.section(c, "Hosted accounts"));
+            LinearLayout hosting = PortalUi.card(c);
+            hosting.addView(PortalUi.label(c, "Host friends on this server. Each person gets their own account and invitation, without access to your account or Minima terminal."));
+            TextView manage = PortalUi.button(c, "Manage hosted accounts");
+            manage.setOnClickListener(v -> hostedAction("list", ""));
+            hosting.addView(manage); mRoot.addView(hosting);
+        }
 
-        mRoot.addView(PortalUi.section(c, "Transport & hosts"));
-        LinearLayout ctrl = PortalUi.card(c);
-        TextView open = PortalUi.button(c, "Open control panel");
-        open.setOnClickListener(v -> mAct.startActivity(
-                new android.content.Intent(mAct, CloudNodePanelActivity.class)));
-        ctrl.addView(open);
-        ctrl.addView(PortalUi.gap(c, 6));
-        ctrl.addView(PortalUi.label(c, "Hosts, reachability, relay stats, MLS/location and the "
-                + "live event log — everything a VPS operator runs."));
-        mRoot.addView(ctrl);
+        if (mNodeConsole) {
+            // Server tools are shown only when the server explicitly advertises its console.
+            mRoot.addView(PortalUi.section(c, "Node tools"));
+            LinearLayout tools = PortalUi.card(c);
+            TextView ide = PortalUi.button(c, "Open Terminal IDE");
+            ide.setOnClickListener(v -> mAct.startActivity(
+                    new android.content.Intent(mAct, com.eurobuddha.maxima.app.portal.ide.IdeActivity.class)));
+            tools.addView(ide);
+            tools.addView(PortalUi.gap(c, 6));
+            tools.addView(PortalUi.label(c, "The full Minima command line of YOUR node, plus the KISS "
+                    + "script IDE and the manual-transaction workbench - every command runs on the node "
+                    + "over this paired channel, output complete and copyable."));
+            mRoot.addView(tools);
+            mRoot.addView(PortalUi.gap(c, 12));
+
+            mRoot.addView(PortalUi.section(c, "Transport & hosts"));
+            LinearLayout ctrl = PortalUi.card(c);
+            TextView open = PortalUi.button(c, "Open control panel");
+            open.setOnClickListener(v -> mAct.startActivity(
+                    new android.content.Intent(mAct, CloudNodePanelActivity.class)));
+            ctrl.addView(open);
+            ctrl.addView(PortalUi.gap(c, 6));
+            ctrl.addView(PortalUi.label(c, "Hosts, reachability, relay stats, MLS/location and the "
+                    + "live event log — everything a VPS operator runs."));
+            mRoot.addView(ctrl);
+
+        }
 
         // --- paired devices ---
         mRoot.addView(PortalUi.section(c, "Paired devices (" + mAuthorized.size() + ")"));
@@ -352,12 +378,15 @@ public final class CloudNodePage implements Page {
             mRoot.addView(pend);
         }
 
-        TextView newCode = PortalUi.ghost(c, "Pair another device");
+        TextView newCode = PortalUi.ghost(c, "Pair my other device");
         newCode.setOnClickListener(v -> newCode());
         LinearLayout.LayoutParams nclp = PortalUi.matchWrap(c);
         nclp.bottomMargin = PortalUi.dp(c, 24);
         newCode.setLayoutParams(nclp);
         mRoot.addView(newCode);
+        mRoot.addView(PortalUi.label(c, mHosting
+                ? "Device pairing gives access to this account. To invite a friend, create a separate hosted account."
+                : "Device pairing gives access to this account. Share a device invite only with someone who should control this account."));
     }
 
     private View power(Context c, String title, String desc) {
@@ -473,13 +502,105 @@ public final class CloudNodePage implements Page {
         act(r -> r.revoke(key), "Revoked", "Could not revoke");
     }
 
+    private void hostedAction(String action, String name) {
+        final String account = CloudSession.account(mAct);
+        mAct.toast("Loading hosted accounts…");
+        CloudSession.connect(mAct, new CloudSession.Cb() {
+            public void ok(ParlonsRemote r) {
+                if (!account.equals(CloudSession.account(mAct))) return;
+                JSONObject result = null; String error = null;
+                try {
+                    result = r.hostedAccounts(action, name);
+                    if (!bool(result, "ok")) error = str(result, "error");
+                } catch (Exception e) { error = e.getMessage(); }
+                final JSONObject reply = result; final String failure = error;
+                mAct.runOnUiThread(() -> {
+                    if (mAct.isFinishing() || !account.equals(CloudSession.account(mAct))) return;
+                    if (reply == null || failure != null) { mAct.toast(failure == null ? "Could not reach the host" : failure); return; }
+                    if ("invite".equals(action)) {
+                        String invite = str(reply, "invite");
+                        new AlertDialog.Builder(mAct).setTitle("Invitation for " + name)
+                                .setMessage("This invitation pairs a device to " + name + "’s account. Keep it private until used.\n\n" + invite)
+                                .setPositiveButton("Copy invite", (d,w) -> copy(invite, "Hosted account invite"))
+                                .setNeutralButton("QR", (d,w) -> showQr("Invitation for " + name, invite))
+                                .setNegativeButton("Close", null).show();
+                    } else showHostedAccounts(reply);
+                });
+            }
+            public void err(String message) { mAct.runOnUiThread(() -> {
+                if (!mAct.isFinishing() && account.equals(CloudSession.account(mAct))) mAct.toast(message);
+            }); }
+        });
+    }
+
+    private void showHostedAccounts(JSONObject reply) {
+        JSONArray accounts = (JSONArray) reply.get("accounts");
+        boolean online = bool(reply, "online");
+        List<JSONObject> rows = new ArrayList<>(); List<String> labels = new ArrayList<>();
+        if (accounts != null) for (Object o : accounts) {
+            JSONObject row = (JSONObject) o; rows.add(row);
+            labels.add(str(row, "name") + " — " + str(row, "state"));
+        }
+        AlertDialog.Builder dialog = new AlertDialog.Builder(mAct)
+                .setTitle(online ? "Hosted accounts (" + rows.size() + "/" + lng(reply, "limit") + ")" : "Hosting service offline")
+                .setNegativeButton("Close", null)
+                .setNeutralButton("Refresh", (d,w) -> hostedAction("list", ""));
+        if (rows.isEmpty()) dialog.setMessage(online ? "Create an account for a friend, then share their invitation." : "Ask the server operator to start the hosted-account service.");
+        else dialog.setItems(labels.toArray(new String[0]), (d,i) -> {
+            JSONObject row = rows.get(i); String name = str(row, "name");
+            boolean paused = bool(row, "paused");
+            if (!online) { mAct.toast("Hosting service is offline"); return; }
+            List<String> actions = new ArrayList<>();
+            boolean ready = "running".equals(str(row, "state"));
+            if (ready) actions.add("Show invitation");
+            actions.add(paused ? "Resume account" : "Pause account");
+            new AlertDialog.Builder(mAct).setTitle(name).setItems(actions.toArray(new String[0]), (a,j) -> {
+                if (ready && j == 0) hostedAction("invite", name);
+                else new AlertDialog.Builder(mAct).setTitle(paused ? "Resume " + name + "?" : "Pause " + name + "?")
+                        .setMessage(paused ? "Their account will reconnect on this server." : "Their account will go offline. Its identity and chats will be kept.")
+                        .setNegativeButton("Cancel", null).setPositiveButton(paused ? "Resume" : "Pause",
+                                (x,y) -> hostedAction(paused ? "resume" : "pause", name)).show();
+            }).setNegativeButton("Close", null).show();
+        });
+        if (online) dialog.setPositiveButton("Create account", (d,w) -> {
+            android.widget.EditText field = new android.widget.EditText(mAct);
+            field.setSingleLine(true); field.setHint("Account name, e.g. alice");
+            LinearLayout wrap = new LinearLayout(mAct); int pad = PortalUi.dp(mAct, 20);
+            wrap.setPadding(pad, pad, pad, 0); wrap.addView(field, PortalUi.matchWrap(mAct));
+            new AlertDialog.Builder(mAct).setTitle("Host a friend")
+                    .setMessage("Creates a separate account on your server. The host holds its keys and chat history. Share its invite only with that person.")
+                    .setView(wrap).setNegativeButton("Cancel", null)
+                    .setPositiveButton("Create", (x,y) -> hostedAction("create", field.getText().toString().trim())).show();
+        });
+        dialog.show();
+    }
+
     private void newCode() {
+        if (!mAdminPassword) { newCode(""); return; }
+        android.widget.EditText password = new android.widget.EditText(mAct);
+        password.setSingleLine(true); password.setHint("Admin password");
+        password.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        LinearLayout wrap = new LinearLayout(mAct); int pad = PortalUi.dp(mAct, 20);
+        wrap.setPadding(pad, pad, pad, 0); wrap.addView(password, PortalUi.matchWrap(mAct));
+        new AlertDialog.Builder(mAct).setTitle("Invite a device")
+                .setMessage("Enter the admin password to give another device access to this owner account and Minima terminal. Leave it empty to create a separate hosted account for a friend.")
+                .setView(wrap).setNegativeButton("Cancel", (d,w) -> password.setText(""))
+                .setPositiveButton("Continue", (d,w) -> {
+                    String value = password.getText().toString(); password.setText("");
+                    if (value.isEmpty()) {
+                        if (mHosting) hostedAction("list", "");
+                        else mAct.toast("Hosting is not enabled on this server yet");
+                    } else newCode(value);
+                }).show();
+    }
+
+    private void newCode(String adminPassword) {
         mAct.toast("Minting…");
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String note = null, error = null, code = "", invite = "";
                 try {
-                    JSONObject res = r.newCode();
+                    JSONObject res = r.newCode(adminPassword);
                     if (bool(res, "ok")) {
                         note = str(res, "note");
                         code = str(res, "code");

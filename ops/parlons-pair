@@ -1,8 +1,52 @@
 #!/usr/bin/env bash
 # Show the same current combined invite as AccountFiles / the Cloud app's Node tab.
-# Usage: sudo parlons-pair [account-data-directory]
+# Usage: sudo parlons-pair [--admin | --guest NAME | --set-admin-password]
 set -euo pipefail
-DATA="${1:-/var/lib/parlons-node}"
+DATA=/var/lib/parlons-node
+TENANTS="${PARLONS_HOSTED_DIR:-/var/lib/parlons-tenants}"
+NODE_JAR="${PARLONS_NODE_JAR:-/opt/maxima/parlons-node.jar}"
+CLOUD_JAR="${PARLONS_CLOUD_JAR:-/opt/maxima/parlons-cloud.jar}"
+MODE=auto
+NAME=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --set-admin-password) MODE=set; shift ;;
+        --admin) MODE=admin; shift ;;
+        --guest) [ $# -ge 2 ] || { echo '--guest needs an account name' >&2; exit 2; }; MODE=guest; NAME="$2"; shift 2 ;;
+        --tenants-dir) TENANTS="$2"; shift 2 ;;
+        --data) DATA="$2"; shift 2 ;;
+        -*) echo 'Usage: sudo parlons-pair [--admin | --guest NAME | --set-admin-password] [--data DIR] [--tenants-dir DIR]' >&2; exit 2 ;;
+        *) DATA="$1"; shift ;;
+    esac
+done
+RUN_AS_DIR="$DATA"
+# Run as the data owner so the live service can read every new private file.
+node_java() {
+    if [ "$(id -u)" = 0 ]; then
+        runuser -u "$(stat -c %U "$RUN_AS_DIR")" -- java "$@"
+    else
+        java "$@"
+    fi
+}
+if [ "$MODE" = set ]; then
+    node_java -cp "$NODE_JAR" com.eurobuddha.maxima.cloud.AdminPairingPassword set "$DATA"
+    exit $?
+fi
+if [ "$MODE" != guest ]; then
+    result=0
+    node_java -cp "$NODE_JAR" com.eurobuddha.maxima.cloud.AdminPairingPassword verify "$DATA" || result=$?
+    if [ "$result" = 2 ] && [ "$MODE" = auto ]; then MODE=guest
+    elif [ "$result" != 0 ]; then exit "$result"
+    fi
+fi
+if [ "$MODE" = guest ]; then
+    if [ -z "$NAME" ]; then read -r -p 'Hosted account name: ' NAME; fi
+    [[ "$NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || { echo 'Invalid hosted account name' >&2; exit 2; }
+    [ -d "$TENANTS" ] || { echo 'Enable the hosted-account service first.' >&2; exit 1; }
+    RUN_AS_DIR="$TENANTS"
+    node_java -jar "$CLOUD_JAR" --tenant-new "$TENANTS" "$NAME"
+    DATA="$TENANTS/$NAME"
+fi
 if [ ! -r "$DATA/account.txt" ]; then
     echo "Account address is not ready or readable. Run with sudo once Parlons Node is connected." >&2
     exit 1
@@ -11,7 +55,7 @@ address=$(tr -d '\r\n' < "$DATA/account.txt")
 case "$address" in MAX\#*\#*@*) ;; *) echo "No valid MAX# account address is available yet." >&2; exit 1 ;; esac
 printf '\nParlons Cloud pairing\n\nAccount MAX# address:\n%s\n\n' "$address"
 if [ ! -s "$DATA/pair-code.txt" ]; then
-    echo 'No unused pairing code. In a paired Cloud app, open Node → Pair another device.'
+    echo 'No unused pairing code. Run this command again to get a fresh invitation.'
     exit 0
 fi
 code=$(tr -d '\r\n' < "$DATA/pair-code.txt")

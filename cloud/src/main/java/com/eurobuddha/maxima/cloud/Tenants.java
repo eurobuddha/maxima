@@ -8,7 +8,6 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -42,17 +41,8 @@ public final class Tenants {
 
     /** Tenant data dirs: every readable subdirectory, sorted by name. */
     public static List<Path> list(Path zTenantsDir) throws Exception {
-        List<Path> out = new ArrayList<>();
-        File[] dirs = zTenantsDir.toFile().listFiles(File::isDirectory);
-        if (dirs != null) {
-            Arrays.sort(dirs);
-            for (File d : dirs) {
-                if (!d.getName().startsWith(".")) {
-                    out.add(d.toPath());
-                }
-            }
-        }
-        return out;
+        if (!Files.isDirectory(zTenantsDir)) return new ArrayList<>();
+        return HostedAccounts.directories(zTenantsDir);
     }
 
     /** The unlock passphrase from the console or PARLONS_UNLOCK; null when none was asked for. */
@@ -178,30 +168,36 @@ public final class Tenants {
      * @return the invite, or null when the host did not answer within the wait
      */
     public static String newTenant(Path zTenantsDir, String zName, long zWaitMs) throws Exception {
-        if (zName == null || !zName.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")) {
+        if (!HostedAccounts.validName(zName)) {
             throw new IllegalArgumentException("tenant name: letters, digits, . _ - (1-64 chars)");
         }
-        Path dir = zTenantsDir.resolve(zName);
-        boolean existed = Files.isDirectory(dir);
-        Files.createDirectories(dir);
-        System.out.println((existed ? "tenant exists: " : "tenant folder made: ") + dir);
-        System.out.println("waiting for the host to start it" + (existed ? " (or for its invite)" : "") + "…");
+        HostedAccounts hosted = new HostedAccounts(zTenantsDir,
+                Integer.getInteger("parlons.hosted.limit", HostedAccounts.DEFAULT_LIMIT));
+        org.minima.utils.json.JSONObject request = new org.minima.utils.json.JSONObject();
+        request.put("action", "create"); request.put("name", zName);
+        hosted.handle(request);
+        System.out.println("waiting for hosted account " + zName + " to connect…");
         long deadline = System.currentTimeMillis() + zWaitMs;
-        Path invite = dir.resolve(INVITE_FILE);
         while (System.currentTimeMillis() < deadline) {
-            if (Files.isRegularFile(invite)) {
-                String inv = new String(Files.readAllBytes(invite), StandardCharsets.UTF_8).trim();
-                if (inv.startsWith("MAX#") && inv.contains("?code=")) {
-                    String code = inv.substring(inv.indexOf("?code=") + 6);
-                    String address = inv.substring(0, inv.indexOf("?code="));
-                    System.out.println();
-                    System.out.println("tenant " + zName + " is up.");
-                    System.out.println("  address:   " + address);
-                    System.out.println("  pair code: " + code + "   (one-time)");
-                    System.out.println("  invite:    " + inv);
-                    System.out.println("  Hand the invite to the user as a QR; the iPhone app scans it and pairs.");
-                    return inv;
-                }
+            request.put("action", "list");
+            org.minima.utils.json.JSONObject status = hosted.handle(request);
+            if (!Boolean.TRUE.equals(status.get("online")))
+                throw new IllegalStateException("Hosted-account service is offline");
+            for (Object item : (org.minima.utils.json.JSONArray) status.get("accounts")) {
+                org.minima.utils.json.JSONObject row = (org.minima.utils.json.JSONObject) item;
+                if (!zName.equals(row.get("name"))) continue;
+                if (Boolean.TRUE.equals(row.get("paused")))
+                    throw new IllegalStateException("Hosted account is paused; resume it before issuing an invite");
+                if (!"running".equals(row.get("state"))
+                        || !Files.isRegularFile(zTenantsDir.resolve(zName).resolve(ACCOUNT_FILE))) continue;
+                request.put("action", "invite");
+                org.minima.utils.json.JSONObject invite = hosted.handle(request);
+                String inv = (String) invite.get("invite");
+                System.out.println("  address:   " + invite.get("address"));
+                System.out.println("  pair code: " + invite.get("code") + "   (one-time)");
+                System.out.println("  invite:    " + inv);
+                System.out.println("  A valid invite pairs immediately. Share it only with this account's user.");
+                return inv;
             }
             Thread.sleep(500);
         }
@@ -255,12 +251,14 @@ public final class Tenants {
                 shared = core.relayRuntime();
             }
             cores.put(zTenant, core);
+            publish();
             System.out.println("  tenant " + zTenant.getFileName() + ": " + id.mxIdentity()
                     + (Files.isRegularFile(zTenant.resolve(SEED_ENC)) ? " (seed encrypted at rest)" : ""));
         }
 
         /** One pass: stop marked tenants, start new folders, refresh account/invite files. */
         void poll() {
+            publish();
             long now = System.currentTimeMillis();
             for (java.util.Iterator<java.util.Map.Entry<Path, ParlonsCore>> it = cores.entrySet().iterator(); it.hasNext();) {
                 java.util.Map.Entry<Path, ParlonsCore> e = it.next();
@@ -299,7 +297,17 @@ public final class Tenants {
             }
         }
 
+        void publish() {
+            try {
+                List<String> running = new ArrayList<>(), failed = new ArrayList<>();
+                for (Path p : cores.keySet()) running.add(p.getFileName().toString());
+                for (Path p : failedAt.keySet()) failed.add(p.getFileName().toString());
+                HostedAccounts.publishStatus(dir, running, failed);
+            } catch (Exception e) { System.err.println("Could not update hosting status"); }
+        }
+
         void shutdownAll() {
+            try { Files.deleteIfExists(dir.resolve(HostedAccounts.STATUS_FILE)); } catch (Exception ignored) { }
             for (ParlonsCore c : cores.values()) {
                 try { c.shutdown(); } catch (Exception ignored) { }
             }
@@ -314,6 +322,7 @@ public final class Tenants {
                 + " tenant(s) under " + zTenantsDir + (dirs.isEmpty()
                 ? " - none yet; make <dir>/<name>/ (or `--tenant-new`) and it starts within 5 s" : ""));
         Host host = new Host(zTenantsDir, zBase, zUnlock);
+        host.publish();
         Runtime.getRuntime().addShutdownHook(new Thread(host::shutdownAll, "parlons-tenants-shutdown"));
         for (Path dir : dirs) {
             if (stopRequested(dir)) {
@@ -329,6 +338,7 @@ public final class Tenants {
         while (true) {
             Thread.sleep(POLL_MS);
             host.poll();
+            host.publish();
         }
     }
 

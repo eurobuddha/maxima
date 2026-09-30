@@ -104,19 +104,32 @@ public class TenantsTest {
     @Test
     public void newTenantWaitsForTheHostAndPrintsTheInvite() throws Exception {
         Path tenants = Files.createTempDirectory("parlons-tenants5");
-        // no host running: the folder is made, the wait ends without an invite
+        // A stopped host must not create accounts or hand out stale invitations.
+        try { Tenants.newTenant(tenants, "dave", 600); fail(); }
+        catch (IllegalStateException expected) { }
+        assertFalse(Files.exists(tenants.resolve("dave")));
+        HostedAccounts.publishStatus(tenants, java.util.Collections.emptyList(), java.util.Collections.emptyList());
+        // An online host that has not started this account yet times out cleanly.
         assertEquals(null, Tenants.newTenant(tenants, "dave", 600));
         assertTrue(Files.isDirectory(tenants.resolve("dave")));
         // a "host" that answers while we wait
         Thread host = new Thread(() -> {
             try {
                 Thread.sleep(300);
-                Files.write(tenants.resolve("dave").resolve(Tenants.INVITE_FILE),
-                        "MAX#0xAB#MxA@h:1?code=AA11-BB22-CC33\n".getBytes(StandardCharsets.UTF_8));
+                Files.writeString(tenants.resolve("dave/account.txt"), "MAX#0xAB#MxA@h:1");
+                Files.writeString(tenants.resolve("dave/pair-code.txt"), "AABB-CCDD-EEFF");
+                Files.writeString(tenants.resolve("dave/invite.txt"), "MAX#stale?code=USED");
+                HostedAccounts.publishStatus(tenants, java.util.Arrays.asList("dave"), java.util.Collections.emptyList());
             } catch (Exception ignored) { }
         });
         host.start();
-        assertEquals("MAX#0xAB#MxA@h:1?code=AA11-BB22-CC33", Tenants.newTenant(tenants, "dave", 5_000));
+        assertEquals("MAX#0xAB#MxA@h:1?code=AABB-CCDD-EEFF", Tenants.newTenant(tenants, "dave", 5_000));
+        host.join();
+        // Reinviting an existing account after its code was consumed gets a fresh valid code.
+        Files.delete(tenants.resolve("dave/pair-code.txt"));
+        String fresh = Tenants.newTenant(tenants, "dave", 5_000);
+        assertTrue(fresh.startsWith("MAX#0xAB#MxA@h:1?code="));
+        assertFalse(fresh.endsWith("AABB-CCDD-EEFF"));
         try { Tenants.newTenant(tenants, "../evil", 10); fail(); } catch (IllegalArgumentException expected) { }
     }
 

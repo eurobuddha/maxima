@@ -13,6 +13,9 @@
 #
 #   ops/deploy-parlons-tenants.sh <ssh-target> [--jar FILE] [--heap 512m] [--memmax 768M]
 #                                 [--dir /var/lib/parlons-tenants] [--peers h:p,h:p]
+#                                 [--manage-from-node]
+# --manage-from-node connects the owner UI in Node 0.2.118+ to this service and restarts
+# parlons-node after adding a drop-in; its existing ExecStart and data are preserved.
 #
 # What it does, in order:
 #   1. installs a headless JRE if java is missing
@@ -35,10 +38,12 @@ MEMMAX=768M      # cgroup ceiling (JVM heap + metaspace + threads + direct buffe
 DIR=/var/lib/parlons-tenants
 PEERS=""         # comma-separated fleet host:ports (optional seeds; built-ins are used anyway)
 JAR=""
+MANAGE_NODE=false
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --manage-from-node) MANAGE_NODE=true; shift ;;
         --jar)    JAR="$2"; shift 2 ;;
         --heap)   HEAP="$2"; shift 2 ;;
         --memmax) MEMMAX="$2"; shift 2 ;;
@@ -47,6 +52,14 @@ while [ $# -gt 0 ]; do
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
+
+# Paths enter systemd and remote shell text; accept only plain absolute directory paths.
+[[ "$DIR" =~ ^/[A-Za-z0-9_./-]+$ ]] && [[ "$DIR" != *'/../'* ]] && [[ "$DIR" != */.. ]] \
+    || { echo "--dir must be a plain absolute directory path" >&2; exit 2; }
+if [ "$MANAGE_NODE" = true ]; then
+    ssh -o ConnectTimeout=20 -o BatchMode=yes "$TARGET" 'systemctl cat parlons-node >/dev/null' \
+        || { echo "Install Parlons Node 0.2.118 or later before enabling its hosting UI" >&2; exit 1; }
+fi
 
 # Default to the newest built jar so this follows the repo without an edit per release.
 if [ -z "$JAR" ]; then
@@ -139,7 +152,7 @@ EnvironmentFile=/etc/parlons-tenants.env
 # No pool relay and no direct listener: the host attaches to the fleet outbound only,
 # so it opens no inbound port and can sit next to a Parlons Node on the same box.
 ExecStart=/usr/bin/java -Xmx$HEAP -jar /opt/maxima/parlons-cloud.jar \\
-    --tenants $DIR --no-relay --no-direct --unlock env${PEERS:+ --peers $PEERS}
+    --tenants $DIR --no-relay --no-direct --no-panel --unlock env${PEERS:+ --peers $PEERS}
 Restart=on-failure
 RestartSec=10
 
@@ -199,6 +212,23 @@ fi
 REMOTE
 
 echo
+if [ "$MANAGE_NODE" = true ]; then
+    $SSH "bash -s" <<REMOTE
+set -e
+mkdir -p /etc/systemd/system/parlons-node.service.d
+conf=/etc/systemd/system/parlons-node.service.d/hosted-accounts.conf
+[ ! -f "\$conf" ] || cp -a "\$conf" "\$conf.bak"
+cat > "\$conf" <<UNIT
+[Service]
+Environment="PARLONS_HOSTED_DIR=$DIR"
+ReadWritePaths=$DIR
+UNIT
+systemctl daemon-reload
+systemctl restart parlons-node
+REMOTE
+    echo "  Owner Cloud app: Node -> Hosted accounts -> Manage hosted accounts"
+fi
+
 echo "  Add a user:   ops/tenant-new.sh $TARGET <name>      (prints the invite the phone scans)"
 echo "  Stop one:     touch $DIR/<name>/.stop   (remove the marker to start it again)"
 echo "  Back up:      /etc/parlons-tenants.env (unlock passphrase) + each tenant's bundle"

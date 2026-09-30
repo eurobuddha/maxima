@@ -699,6 +699,11 @@
     const body = el('<div class="pagebody"></div>'); page.appendChild(body);
     const pair = el('<div class="card"><div class="h">Pair a phone</div><div class="sub" id="invText">No pairing code is outstanding.</div><div class="qr" id="invQr" hidden></div><div class="mono whole" id="invTxt" style="font-size:11px;margin-top:6px"></div><div class="frow"><button class="btn sm" id="newCode">New pairing code</button><button class="btn ghost sm" id="copyInv" hidden>' + ic('copy') + 'Copy invite</button></div></div>');
     body.appendChild(pair);
+    const adminInput = document.createElement('input'); adminInput.type = 'password';
+    adminInput.placeholder = 'Admin password'; adminInput.autocomplete = 'off'; adminInput.hidden = true;
+    pair.insertBefore(adminInput, pair.querySelector('.frow'));
+    try { const status = await api('node.status'); adminInput.hidden = !status.adminPairingPassword; }
+    catch (e) { /* old servers keep their existing invitation behavior */ }
     const devs = el('<div class="card"><div class="h">Devices</div><div id="devRows"></div></div>'); body.appendChild(devs);
     async function refreshInvite() {
       try {
@@ -724,7 +729,7 @@
         if (!rows.children.length) rows.innerHTML = '<div class="sub">none</div>';
       } catch (e) { toast(e.message, 'err'); }
     }
-    pair.querySelector('#newCode').addEventListener('click', async () => { try { await api('pair.newcode'); toast('New code minted'); setTimeout(refreshInvite, 900); } catch (e) { toast(e.message, 'err'); } });
+    pair.querySelector('#newCode').addEventListener('click', async () => { try { const adminPassword = adminInput.value; adminInput.value = ''; await api('pair.newcode', { adminPassword }); toast('New code minted'); setTimeout(refreshInvite, 900); } catch (e) { toast(e.message, 'err'); } });
     refreshInvite(); refreshDevices();
   }
 

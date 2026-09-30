@@ -412,7 +412,13 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_PING, new JSONObject());
     }
 
-    /** VPS-node telemetry for the Node tab: uptime, version, hosts, mailboxHeld, relayOn, meshPeers, pairedDevices. */
+    /** Owner-only management of separate hosted accounts. */
+    public JSONObject hostedAccounts(String action, String name) throws Exception {
+        JSONObject in = new JSONObject(); in.put("action", action); in.put("name", name);
+        return rpc(ParlonsControl.M_HOSTED_ACCOUNTS, in);
+    }
+
+    /** VPS-node telemetry and the capabilities available to this account. */
     public JSONObject nodeStatus() throws Exception {
         return rpc(ParlonsControl.M_NODE_STATUS, new JSONObject());
     }
@@ -659,7 +665,12 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_PAIR_REVOKE, p);
     }
 
-    /** Mint a fresh one-time bootstrap code on the node (written to its pair-code.txt, never returned). */
+    /** Mint and return an owner invitation after checking the server's admin password. */
+    public JSONObject newCode(String adminPassword) throws Exception {
+        JSONObject in = new JSONObject(); in.put("adminPassword", adminPassword);
+        return rpc(ParlonsControl.M_PAIR_NEWCODE, in);
+    }
+
     public JSONObject newCode() throws Exception {
         return rpc(ParlonsControl.M_PAIR_NEWCODE, new JSONObject());
     }

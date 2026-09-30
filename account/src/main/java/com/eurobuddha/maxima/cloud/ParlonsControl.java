@@ -77,6 +77,7 @@ public final class ParlonsControl implements AutoCloseable {
     public static final String M_WALLET_USES  = "parlons.wallet.uses";
     /** Re-point the account WALLET at a new phrase; the identity stays (node accounts only). */
     public static final String M_WALLET_RESYNC = "parlons.wallet.resync";
+    public static final String M_HOSTED_ACCOUNTS = "parlons.hosted.accounts";
     public static final String M_NODE_CMD     = "parlons.node.cmd";      // Terminal IDE: any node command
     public static final String M_NFT_PUT      = "parlons.nft.put";       // host NFT art on the node (chunked)
     public static final String M_NFT_NEWCOL   = "parlons.nft.newcollection";
@@ -383,6 +384,14 @@ public final class ParlonsControl implements AutoCloseable {
         org.minima.utils.json.JSONObject run(String zCommand) throws Exception;
     }
 
+    private volatile AdminPairingPassword mAdminPairingPassword;
+    public void setAdminPairingPassword(AdminPairingPassword guard) { mAdminPairingPassword = guard; }
+
+    private volatile HostedAccounts mHostedAccounts;
+
+    /** Installed only on the server owner account, never on a hosted friend account. */
+    public void setHostedAccounts(HostedAccounts hosted) { mHostedAccounts = hosted; }
+
     private volatile NodeConsole mConsole;
 
     public void setNodeConsole(NodeConsole zConsole) {
@@ -544,6 +553,14 @@ public final class ParlonsControl implements AutoCloseable {
         });
         zReg.register(M_PAIR_NEWCODE, req -> {
             requireAuth(req);
+            AdminPairingPassword guard = mAdminPairingPassword;
+            if (guard != null) {
+                char[] password = str(parse(req), "adminPassword").toCharArray();
+                try {
+                    if (!guard.verify(password)) return bytes(err("Admin password required for an owner-account invitation. Use Hosted accounts to invite a friend."));
+                } catch (IllegalStateException e) { return bytes(err(e.getMessage())); }
+                finally { java.util.Arrays.fill(password, '\0'); }
+            }
             // Return the freshly persisted code to the paired caller through the same
             // encrypted RPC reply used for the other owner commands.
             String code = mPairing.newBootstrapCode();
@@ -620,6 +637,9 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("meshPeers", s == null ? 0 : s.meshPeers());
             out.put("pairedDevices", mPairing.authorizedCount());
             out.put("identityImport", mIdentityImport != null);
+            out.put("nodeConsole", mConsole != null);
+            out.put("adminPairingPassword", mAdminPairingPassword != null);
+            out.put("hostedAccounts", mHostedAccounts != null);
             return bytes(out);
         });
 
@@ -2014,6 +2034,14 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("state", "resyncing");
             out.put("note", "the node restarts when the resync finishes (about a minute); same account, new wallet address");
             return bytes(out);
+        });
+        zReg.register(M_HOSTED_ACCOUNTS, req -> {
+            requireAuth(req);
+            HostedAccounts hosted = mHostedAccounts;
+            if (hosted == null) return bytes(err("Hosting management is available only on the server owner account"));
+            try { return bytes(hosted.handle(parse(req))); }
+            catch (IllegalArgumentException | IllegalStateException e) { return bytes(err(e.getMessage())); }
+            catch (Exception e) { return bytes(err("Could not update hosted accounts. Check the host service and directory permissions.")); }
         });
         zReg.register(M_NODE_CMD, req -> {
             requireAuth(req);

@@ -19,7 +19,7 @@ cd ~/Projects/minima/maxima
 # -> node/build/libs/parlons-node.jar  (self-contained, ~14 MB)
 ```
 
-Optionally stamp a version into the name for the deploy history:
+Stamp the release version into the filename before deployment:
 `cp node/build/libs/parlons-node.jar dist/parlons-node-<ver>.jar`.
 
 ## 2. Size the box
@@ -122,11 +122,23 @@ still yours: the phrase derives it in any Parlons wallet.
 Since node 0.2.0 every Parlons Node also runs the Parlons **account** — the exact
 `ParlonsCore` that `parlons-cloud.jar` runs — on the node's identity, with the node's own
 wallet behind it and the cape as its relay. So a Parlons Node is pairable from the Parlons
-Cloud app: the deploy summary prints the permanent account address and where the one-time
-pairing code lives (`/var/lib/parlons-node/pair-code.txt`). Knobs: `-Dparlons.account=false`
+Cloud app. Since 0.2.118, set an admin pairing password in an interactive SSH terminal
+with `sudo parlons-pair --set-admin-password`, then run `sudo parlons-pair --admin`
+to show the current address and a one-time QR invitation. A valid code pairs immediately;
+it does not require another device's approval. The code remains in the private file
+`/var/lib/parlons-node/pair-code.txt` until consumed. Knobs: `-Dparlons.account=false`
 (relay/gateway only), `-Dparlons.account.name`, `-Dparlons.account.relays`,
 `-Dparlons.account.direct`. Data layout matches the cloud's, which is what makes the
 migration above a plain copy.
+
+To host friends, install the separate tenant service with
+`ops/deploy-parlons-tenants.sh <box> --jar dist/parlons-cloud-0.11.112.jar --manage-from-node`.
+Then `sudo parlons-pair --guest alice` issues an invite for Alice's own account.
+`sudo parlons-pair` offers the same choice: admin password for your account, or Enter
+for a guest account. Android Cloud 0.2.80 also exposes **Node → Hosted accounts** to
+the paired server owner. Guest accounts cannot use the owner terminal or manage
+other hosted accounts. See [Hosted accounts](../docs/guide/hosted.md) for setup,
+access boundaries, and pause/resume. This does not change fleet routing.
 
 ## 3e. Minima's own startup flags (node 0.2.1+)
 

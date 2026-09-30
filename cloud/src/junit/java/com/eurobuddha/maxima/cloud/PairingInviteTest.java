@@ -109,6 +109,55 @@ public class PairingInviteTest {
         assertEquals(Boolean.FALSE, reply.get("ok"));
     }
 
+    @Test public void hostedGuestCannotManageOwnerAccountsOrUseNodeConsole() throws Exception {
+        java.nio.file.Path root = temp.newFolder("hosted").toPath();
+        HostedAccounts.publishStatus(root, Collections.emptyList(), Collections.emptyList());
+        control.setHostedAccounts(new HostedAccounts(root, 2));
+        control.setNodeConsole(command -> { JSONObject result = new JSONObject(); result.put("command", command); return result; });
+        JSONObject create = new JSONObject(); create.put("action", "create"); create.put("name", "alice");
+        RpcEnvelope refused = registry.dispatch("guest", new ServiceRegistry.Request(ParlonsControl.M_HOSTED_ACCOUNTS,
+                create.toString().getBytes(StandardCharsets.UTF_8), newcomer, Collections.emptyList()));
+        assertTrue(refused.isError()); assertFalse(Files.exists(root.resolve("alice")));
+        JSONObject adminStatus = rpc(registry, owner, ParlonsControl.M_NODE_STATUS, new JSONObject());
+        assertEquals(true, adminStatus.get("hostedAccounts")); assertEquals(true, adminStatus.get("nodeConsole"));
+        assertEquals(true, rpc(registry, owner, ParlonsControl.M_HOSTED_ACCOUNTS, create).get("ok"));
+
+        DevicePairing guestPairing = new DevicePairing(root.resolve("alice"));
+        assertEquals(DevicePairing.Result.AUTHORIZED,
+                guestPairing.requestPair(newcomer, "Alice phone", guestPairing.newBootstrapCode()));
+        ParlonsControl guest = new ParlonsControl(node, null, guestPairing, null);
+        ServiceRegistry guestRegistry = new ServiceRegistry(); guest.registerOn(guestRegistry);
+        try {
+            JSONObject status = rpc(guestRegistry, newcomer, ParlonsControl.M_NODE_STATUS, new JSONObject());
+            assertEquals(false, status.get("hostedAccounts")); assertEquals(false, status.get("nodeConsole"));
+            assertEquals(false, rpc(guestRegistry, newcomer, ParlonsControl.M_HOSTED_ACCOUNTS, create).get("ok"));
+            JSONObject command = new JSONObject(); command.put("cmd", "vault");
+            assertEquals(false, rpc(guestRegistry, newcomer, ParlonsControl.M_NODE_CMD, command).get("ok"));
+            assertTrue(registry.dispatch("guest-console", new ServiceRegistry.Request(ParlonsControl.M_NODE_CMD,
+                    command.toString().getBytes(StandardCharsets.UTF_8), newcomer, Collections.emptyList())).isError());
+        } finally { guest.close(); }
+    }
+
+    @Test public void adminInvitationNeedsPasswordButValidCodeStillPairsImmediately() throws Exception {
+        AdminPairingPassword guard = new AdminPairingPassword(temp.getRoot().toPath());
+        guard.set("synthetic admin password".toCharArray()); control.setAdminPairingPassword(guard);
+        JSONObject empty = rpc(registry, owner, ParlonsControl.M_PAIR_NEWCODE, new JSONObject());
+        assertEquals(false, empty.get("ok")); assertFalse(pairing.hasBootstrapCode());
+        JSONObject input = new JSONObject(); input.put("adminPassword", "synthetic admin password");
+        JSONObject accepted = rpc(registry, owner, ParlonsControl.M_PAIR_NEWCODE, input);
+        assertEquals(true, accepted.get("ok"));
+        assertFalse(accepted.toString().contains("synthetic admin password"));
+        assertEquals(DevicePairing.Result.AUTHORIZED, pairing.requestPair(newcomer, "new owner phone", (String)accepted.get("code")));
+        assertFalse(pairing.hasBootstrapCode());
+    }
+
+    private JSONObject rpc(ServiceRegistry target, byte[] key, String method, JSONObject input) throws Exception {
+        RpcEnvelope response = target.dispatch("capability-test", new ServiceRegistry.Request(method,
+                input.toString().getBytes(StandardCharsets.UTF_8), key, Collections.emptyList()));
+        assertFalse(response.isError());
+        return (JSONObject) new JSONParser().parse(new String(response.getPayload(), StandardCharsets.UTF_8));
+    }
+
     private JSONObject mint() throws Exception {
         RpcEnvelope reply = dispatch(owner);
         assertTrue(reply.isResponse());
