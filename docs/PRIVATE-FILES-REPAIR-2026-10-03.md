@@ -40,7 +40,7 @@ Evidence logs are in `build/file-transfer-repair-2026-10-03/`. Versioned artifac
 | Node | 0.2.119 | `parlons-node-0.2.119.jar` |
 | Cloud host | 0.11.113 | `parlons-cloud-0.11.113.jar` |
 
-Desktop source metadata is reserved at 1.5.105 because 1.5.104 installers already exist. Desktop compilation was checked; no desktop installer was produced. These are local builds: no device installation, fleet rollout or store publication was performed. Existing node listeners support the corrected connector without a server-side protocol change; the participant opening the torrent connection must run the repaired code.
+The follow-up publication includes Desktop 1.5.105 and preserves the separately delivered 1.5.104 text-size and image-paste changes. Its 13 desktop tests passed. The repair commit is `6656939`; the combined release commit is `6c89738`, pushed to `main`. Existing node listeners support the corrected connector without a server-side protocol change; the participant opening the torrent connection must run the repaired code.
 
 ## Code Review
 
@@ -54,4 +54,31 @@ No blocking findings in the repair. The new large-file tests use JUnit temporary
 
 ### Verdict
 
-Approve the source repair and local builds. Do not describe them as installed or publicly released.
+Approve the source repair and release builds. Publication evidence is recorded below; device installation and fleet rollout remain separate actions.
+
+## Release coverage
+
+The shared `:files` library is built into Android, standalone Desktop, Node and Cloud. Cloud Portal and browser panels use the paired account host for torrent transfers, so their Node or Cloud host must also be updated. Both desktop wrappers bundle Node and require new installers:
+
+- Parlons Android 0.6.131; Cloud Portal 0.2.81; Desktop 1.5.105 (Mac, Windows, Linux).
+- Parlons Node 0.2.119 and Cloud host 0.11.113.
+- MinimaClassic Desktop 0.7.71 (`minimaDesk` commit `3365ae3`), bundling Node 0.2.119.
+- minimaCore Desktop 0.17.28 (commit `a6e4d3d`), with Node 0.2.119 and its SHA-256 pinned together.
+
+Reused `desktop/release-mac.sh` and `.github/workflows/desktop-node.yml`; the wrappers' existing signed-build, node-fetch and platform-publish scripts; and the shared catalogue's `scripts/publish-app.py` / `check.py`. Only catalogue rows are staged, preserving pre-existing graph changes. The live Hetzner IPFS publisher matches the inspected `tools/dappstore/build_ipfs_store.sh` byte-for-byte.
+
+GitHub JVM/panel regression run `37146915463` passed, including the new files tests. Standalone desktop matrix `37147426459` and MinimaClassic matrix `37147521958` passed all three platforms. Local wrapper checks passed: MinimaClassic 12 tests plus TypeScript checking, minimaCore 9 relevant RPC/Parlons tests. Public Node and Cloud JAR downloads match the tested local hashes.
+
+minimaCore matrix `37147623258` passed on all three platforms, including its existing wallet, update, network-fetch, PandaPools, AtomiX and Casino gates. All three local Mac installers passed their projects' signature, hardened-runtime, stapled-ticket and Gatekeeper verification. Both wrapper Mac app bundles contain Node JAR SHA-256 `a9b9501c83878836f7cdcec9a299a686326fdb6013bab90d51e2dedaadac6105`; minimaCore CI independently checked the same committed digest on every platform.
+
+### Store publication
+
+Catalogue commit `c78a625` is pushed to `minima-core-apks/main`. Exactly eleven affected rows changed: both Android APKs and three platforms each for Parlons Desktop, MinimaClassic Desktop and minimaCore Desktop. Unrelated catalogue rows and pre-existing graph changes were preserved. The full gate and pre-push gate passed **50 entries / 39 binaries**. GitHub API and public raw read-back matched all eleven rows, including versions, version codes, URLs and hashes. GitHub's latest-release endpoint returns `v0.6.131`.
+
+Both desktop in-app feeds were read back with all three current platform files and the same hashes as the catalogue. The catalogue update was pushed after the user correctly reported that 0.6.129 was still offered; the APK release had been live while catalogue verification was still running.
+
+The IPFS mirror is published and locally pinned at `bafybeielvrjthma23cfl23r27vmpdrlmlft64e5uf7kv7dzeadsiqjhyhu`. Public gateway read-back matched all eleven versions, codes and hashes. Mirrored Android APK bytes match the signed GitHub releases. The publisher's existing optional Filebase pin-list warning remains; local pinning and public IPNS publication succeeded.
+
+The iOS private-files implementation was also checked in `_worktrees/parlons-ios-private-files/ParlonsKit/Sources/ParlonsKit/Account/PrivateFiles.swift` and `App/Sources/Chats/PrivateFileView.swift`: it uses `parlons.files` RPC on the paired host, with no local torrent connector. Its repair therefore comes from upgrading that Node/Cloud host, as for browser clients. No additional iOS binary change is needed for this connector defect.
+
+This work publishes updates; it does not install them on user devices or restart/upgrade running account hosts.
