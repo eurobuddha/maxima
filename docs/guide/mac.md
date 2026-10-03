@@ -21,6 +21,15 @@ Give yourself a name: the three-dot menu at the top right opens **Settings**; th
 - **Contacts** tab, card **Your Maxima address**, button **Share my address**: a QR for a phone to scan and the full address to copy.
 - **Add contact**: paste the other person's address (`Mx…@host:port` or `MAX#…`) and click **Introduce myself**. There is no camera on the desktop; people scan you, you paste them. They appear once their device answers.
 
+### Text size and image paste
+
+Use **Ctrl +** / **Ctrl −** to increase or decrease text size, and **Ctrl 0** to reset it.
+On a Mac, **Command** works too. The chosen size is remembered after quitting.
+
+In a conversation, copy a screenshot or image and paste with **Command V** (or **Ctrl V**).
+A preview lets you add a caption and choose **Send** or **Cancel**. You can also copy an image
+file in Finder and paste it. Regular text copy and paste still work.
+
 ### Help the network
 
 **Network** tab. **Check / make me reachable** asks your router for a public port (9536) and proves it from outside before advertising it; if the router refuses, **Set up manual port-forward** tells you the exact rule. **Run as a relay** carries other people's sealed traffic on port 9535 and grows the network. Nothing listens on your Mac until you turn one of these on.
