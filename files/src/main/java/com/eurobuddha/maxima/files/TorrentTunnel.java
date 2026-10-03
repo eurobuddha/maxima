@@ -83,7 +83,7 @@ final class TorrentTunnel implements AutoCloseable {
                             byte[] request=new byte[65];request[0]=(byte)PrivateStreams.TYPE;
                             System.arraycopy(token.getBytes(StandardCharsets.US_ASCII),0,request,1,64);
                             Frame.write(out,request);out.flush();
-                            if(in.read()!=1)throw new IOException("Private transfer unavailable");
+                            awaitReady(in);
                             byte[] hello=new byte[68];new DataInputStream(l.getInputStream()).readFully(hello);
                             Arrays.fill(hello,20,28,(byte)0);out.write(hello);out.flush();
                             byte[] reply=new byte[68];in.readFully(reply);
@@ -97,6 +97,25 @@ final class TorrentTunnel implements AutoCloseable {
         });
         return listen.getLocalPort();
     }
+    /** A node relay sends an MLS offer after its greeting; a phone endpoint does not.
+     * Consume that one bounded control frame before the raw stream acceptance byte.
+     * Reading only one byte here used to mistake the offer's length prefix for rejection. */
+    static void awaitReady(DataInputStream in)throws IOException {
+        int first=in.readUnsignedByte();
+        if(first==1)return;
+        if(first!=0)throw new IOException("Private transfer unavailable");
+        int length=(in.readUnsignedByte()<<16)|(in.readUnsignedByte()<<8)|in.readUnsignedByte();
+        if(length<2 || length>com.eurobuddha.maxima.core.msg.MaximaCTRLMessage.MAX_FRAME_SIZE)
+            throw new IOException("Invalid transfer control frame");
+        byte[] frame=new byte[length];in.readFully(frame);
+        if(Frame.typeOf(frame)!=Frame.MSG_MAXIMA_CTRL)
+            throw new IOException("Unexpected transfer control frame");
+        com.eurobuddha.maxima.core.msg.MaximaCTRLMessage control=
+                com.eurobuddha.maxima.core.msg.MaximaCTRLMessage.fromBytes(Arrays.copyOfRange(frame,1,length));
+        if(control.getType().getAsInt()!=com.eurobuddha.maxima.core.msg.MaximaCTRLMessage.TYPE_MLS
+                || in.read()!=1)throw new IOException("Private transfer unavailable");
+    }
+
     synchronized void disconnect(int port) {
         for (ServerSocket listener : new ArrayList<>(listeners)) if (listener.getLocalPort() == port) {
             listeners.remove(listener); try { listener.close(); } catch (IOException ignored) { }

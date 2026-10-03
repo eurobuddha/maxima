@@ -38,7 +38,7 @@ jobs:
         # (no SDK on the runner). gradle.properties pins a local Android Studio
         # JBR path that does not exist here, so point Gradle at the runner JDK.
         run: |
-          ./gradlew :core:check :server:test :maxjar:test :cloud:test :node:test :wakeproxy:test :desktop:test \
+          ./gradlew :core:check :files:test :server:test :maxjar:test :cloud:test :node:test :wakeproxy:test :desktop:test \
             -PskipAndroid=true \
             -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon
 
