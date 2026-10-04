@@ -28,12 +28,13 @@ public final class PrivateTorrent implements AutoCloseable {
     private final Map<String, Torrent> torrents = new ConcurrentHashMap<>();
     private final Map<String,Run> runs = new ConcurrentHashMap<>();
     private static final class Run {
+        final java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
         final java.util.concurrent.CountDownLatch stopped = new java.util.concurrent.CountDownLatch(1);
         boolean stopping; Thread thread;
-        synchronized void enter() { thread=Thread.currentThread();if(stopping)thread.interrupt(); }
+        synchronized void enter() { thread=Thread.currentThread();if(stopping)thread.interrupt();entered.countDown(); }
         synchronized void cancel() { stopping=true;if(thread!=null)thread.interrupt(); }
         synchronized boolean active() { return !stopping; }
-        synchronized void finished() { thread=null;stopped.countDown(); }
+        synchronized void finished() { thread=null;entered.countDown();stopped.countDown(); }
     }
     private final boolean testLoopback;
     private final int port;
@@ -108,9 +109,19 @@ public final class PrivateTorrent implements AutoCloseable {
         runtime.service(IPeerRegistry.class).addPeer(t.getTorrentId(),InetPeer.builder(address,port).build());
     }
     public synchronized void pause(String id) {
-        BtClient c=clients.remove(id); Torrent t=torrents.remove(id);Run run=runs.get(id);
+        BtClient c=clients.get(id); Torrent t=torrents.get(id);Run run=runs.get(id);
         if(c!=null){
-            if(run!=null)run.cancel();
+            if(run!=null){
+                run.cancel();
+                // Bt.stop completes its processing future. If its task is still queued,
+                // CompletableFuture skips the task entirely and no stopped event fires.
+                // Let preparation enter (or fail) before stopping that future.
+                try {
+                    if(!run.entered.await(8,java.util.concurrent.TimeUnit.SECONDS))
+                        throw new IllegalStateException("Transfer is still starting; retry shortly");
+                }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Transfer stop interrupted",e);}
+            }
+            clients.remove(id);torrents.remove(id);
             c.stop();
             if(t!=null)runtime.service(bt.net.IPeerConnectionPool.class).visitConnections(t.getTorrentId(),bt.net.PeerConnection::closeQuietly);
             if(run!=null)try{

@@ -100,3 +100,18 @@ reports failure if the target cannot be retrieved.
 
 Approve the local implementation. Build evidence and synthetic UI captures are in
 `build/chat-actions-2026-10-04/`.
+
+### Publication check: queued transfer shutdown
+
+Release CI exposed a rapid resume/close race in `PrivateTorrent`: Bt completes its
+processing future when stopped, so a still-queued task never runs its finalizer or
+emits the stopped event. Reused the processing callback and stop-event latch, adding
+a preparation latch so stop waits until the task has entered or failed. Reviewed
+the upstream `DefaultClient`, `ChainProcessor`, finalizer and callers; cancellation
+still waits for descriptor closure before reuse. No blocking review findings remain.
+
+All 21 private-file tests passed, including a new 12-cycle immediate pause/restart
+test. The complete local JVM suite passed: core 263, files 21, server 73, maxjar 1,
+Cloud 90, Node 20, WakeProxy 20 and Desktop 13 (601 tests), plus 63 parity checks.
+The APK and host JARs were rebuilt before publication. Native Desktop 1.5.107
+supersedes the initial 1.5.106 build. Final publication evidence follows below.

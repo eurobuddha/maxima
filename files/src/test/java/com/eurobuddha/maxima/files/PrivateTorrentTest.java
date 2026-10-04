@@ -56,6 +56,16 @@ public class PrivateTorrentTest {
             catch(IOException expected) { }
         }
     }
+    @Test(timeout=30000) public void immediatePauseAllowsTheSameTransferToRestart() throws Exception {
+        Path seed=Files.createTempDirectory("private-immediate-pause-");
+        ChatFile file=prepare(seed,new byte[]{1,2,3});
+        try(PrivateTorrent torrent=new PrivateTorrent(port(),true)){
+            for(int i=0;i<12;i++){
+                torrent.start(file,seed,(x,y)->{},()->{},message->fail(message));
+                torrent.pause(file.id);
+            }
+        }
+    }
     @Test(timeout=60000) public void sharedParlonsPortTransfersAndResumes() throws Exception {
         Path seed=Files.createTempDirectory("private-tunnel-seed-"), download=Files.createTempDirectory("private-tunnel-download-");
         byte[] plain=new byte[3*1024*1024+19];new Random(15).nextBytes(plain);ChatFile f=prepare(seed,plain);
