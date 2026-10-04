@@ -17,4 +17,21 @@ public class ChatLinksTest {
         assertTrue(ChatLinks.find("javascript:alert(1) file:///tmp/x data:text/html,x https://user:pass@example.org https://").isEmpty());
         assertTrue(ChatLinks.find("just plain text and an Mx123 address").isEmpty());
     }
+    @Test public void bareDomainsKeepPathsAndDefaultToHttps() {
+        String text = "See example.com, (docs.example.co.uk:8443/a_(b)?x=1&y=2#part).";
+        java.util.List<ChatLinks.Link> links = ChatLinks.find(text);
+        assertEquals(2, links.size());
+        assertEquals("https://example.com", links.get(0).url);
+        assertEquals("example.com", text.substring(links.get(0).start, links.get(0).end));
+        assertEquals("https://docs.example.co.uk:8443/a_(b)?x=1&y=2#part", links.get(1).url);
+    }
+    @Test public void bareDomainsDoNotLinkInsideEmailsSchemesOrBadHosts() {
+        assertTrue(ChatLinks.find("user@example.com mailto:user@example.com ftp://example.com file://example.com javascript:example.com https://user:pass@example.com").isEmpty());
+        assertTrue(ChatLinks.find("example.com_foo example.com1 -example.com bad-.example.com 1.23 0.6.131").isEmpty());
+        assertTrue(ChatLinks.find(null).isEmpty());
+    }
+    @Test public void excessiveDomainLabelsRemainPlainText() {
+        assertTrue(ChatLinks.find("a.".repeat(10000) + "com").isEmpty());
+        assertTrue(ChatLinks.find("a".repeat(64) + ".com").isEmpty());
+    }
 }

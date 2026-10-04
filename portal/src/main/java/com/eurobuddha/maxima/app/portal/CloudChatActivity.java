@@ -773,9 +773,10 @@ public final class CloudChatActivity extends AppCompatActivity {
         String mime = media ? com.eurobuddha.maxima.core.chat.ChatMedia.mime(m.body) : "";
         boolean img = media && !mime.startsWith("audio");
         boolean hasImg = img && mImageCache.get(m.id) != null;
-        if (!media) {
-            items.add("Copy");
-        }
+        String text = pay ? com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body)
+                : media ? (mime.startsWith("audio/") ? "" : com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body)) : com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body)
+                        ? com.eurobuddha.maxima.core.chat.ChatContact.address(m.body) : m.body;
+        if (text != null && !text.isEmpty()) items.add(media ? "Copy caption" : com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body) ? "Copy contact address" : "Copy message");
         if (pay) {
             items.add("Copy transaction id");
         }
@@ -788,10 +789,10 @@ public final class CloudChatActivity extends AppCompatActivity {
                 .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
                     String pick = items.get(which);
                     switch (pick) {
-                        case "Copy":
-                            copyText(pay ? com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body)
-                                    : media ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body)
-                                    : m.body);
+                        case "Copy contact address":
+                        case "Copy message":
+                        case "Copy caption":
+                            copyText(text);
                             break;
                         case "Copy transaction id":
                             copyText(com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body));
@@ -2038,7 +2039,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             if (!pay && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)
                     && !com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body)
                     && h.body.getVisibility() == View.VISIBLE) {
-                com.eurobuddha.maxima.app.chat.ChatLinkText.bind(h.body, h.body.getText().toString());
+                com.eurobuddha.maxima.app.chat.ChatLinkText.bind(h.body, h.body.getText().toString(), () -> bubbleMenu(m));
             }
 
             String meta = stamp(m.time);

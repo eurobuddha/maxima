@@ -9,7 +9,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function linkText(text) {
     text = String(text || '');
-    const re = /\b(?:https?:\/\/|www\.)[^\s<>"\x00-\x1f\x7f]+/gi;
+    const re = /(?<![\p{L}\p{N}_@./:+%\-])(?:[a-z][a-z0-9+.-]*:\/\/[^\s<>"\x00-\x1f\x7f]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){1,126}[a-z]{2,63}(?::[0-9]{1,5})?(?:[/?#][^\s<>"\x00-\x1f\x7f]*)?)(?![a-z0-9_\-])/giu;
     let html = '', offset = 0, match;
     while ((match = re.exec(text))) {
       const token = match[0], balance = [0, 0, 0];
@@ -26,10 +26,10 @@
         break;
       }
       const raw = token.slice(0, end);
-      const href = /^www\./i.test(raw) ? 'https://' + raw : raw;
+      const href = raw.includes('://') ? raw : 'https://' + raw;
       try {
         const url = new URL(href);
-        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) continue;
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.hostname.length > 253 || url.username || url.password) continue;
         html += esc(text.slice(offset, match.index)) + '<a class="chat-link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">' + esc(raw) + '</a>';
         offset = match.index + raw.length;
       } catch (_) {}
@@ -228,7 +228,8 @@
     const h = location.hash.replace(/^#/, '') || 'chats';
     const [route, arg] = h.split('/');
     if (route === 'chat' && arg) { openChat(decodeURIComponent(arg)); if (S.route !== 'chats') { S.route = 'chats'; renderChats(); } setTab('chats'); return; }
-    S.open = null; S.msgs = []; ++openSeq; olderBusy = false;
+    closeSheet();
+    S.open = null; S.msgs = []; ++openSeq; olderBusy = false; seekingMessage = false; searchTarget = null;
     $('chatpane').innerHTML = '<div class="ground"><div class="groundText">Pick a conversation.</div></div>';
     S.route = route; setTab(route);
     $('app').classList.remove('chat');
@@ -289,7 +290,12 @@
       if (seq !== searchSeq || !box.isConnected || S.search.trim().toLowerCase() !== q) return;
       for (const m of (r.messages || [])) {
         const row = el('<div role="button" tabindex="0" class="conv">' + avatar(m.peer, m.name, 'l') + '<div class="mid"><div class="name">' + esc(m.name) + '</div><div class="prev">' + esc((m.mine ? 'You: ' : '') + m.body) + '</div></div><div class="right"><div class="time">' + esc(listTime(m.time)) + '</div></div></div>');
-        row.addEventListener('click', () => go('#chat/' + encodeURIComponent(m.peer)));
+        const visit = () => {
+          searchTarget = { peer: m.peer, id: m.id, time: Number(m.time) };
+          const hash = '#chat/' + encodeURIComponent(m.peer);
+          if (location.hash === hash) openChat(m.peer); else go(hash);
+        };
+        row.addEventListener('click', visit);
         box.appendChild(row);
       }
     } catch (e) { /* best effort */ }
@@ -308,9 +314,12 @@
   }
 
   // ---------- the chat screen ----------
-  let openSeq = 0, olderBusy = false, olderDone = false;
+  let openSeq = 0, olderBusy = false, olderDone = false, searchTarget = null, seekingMessage = false;
   async function openChat(peer) {
     const seq = ++openSeq;
+    closeSheet();
+    const target = searchTarget && searchTarget.peer === peer ? searchTarget : null;
+    searchTarget = null; seekingMessage = !!target;
     S.open = peer; S.msgs = []; olderDone = false; olderBusy = false;
     const sum = S.summaries.find((s) => s.peer === peer);
     S.openIsGroup = !!(sum && sum.group);
@@ -331,7 +340,7 @@
     $('cCall').addEventListener('click', () => startCall(false));
     $('cMore').addEventListener('click', () => S.openIsGroup ? groupInfo(peer) : contactInfo(peer));
     $('sendBtn').addEventListener('click', sendDraft);
-    $('emojiBtn').addEventListener('click', () => { const d = $('draft'); d.focus(); });
+    $('emojiBtn').addEventListener('click', showEmojiPicker);
     $('draft').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } });
     $('draft').addEventListener('input', () => { const t = $('draft'); t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; });
     $('photoBtn').addEventListener('click', () => $('photoFile').click());
@@ -353,7 +362,8 @@
     } catch (e) { if (seq !== openSeq) return; const box = $('msgs'); box.innerHTML = ''; retryCard(box, 'Could not load messages', e.message, () => openChat(peer)); }
     if (seq !== openSeq) return;
     const box = $('msgs');
-    box.addEventListener('scroll', () => { if (box.scrollTop < 40) loadOlder(peer); toBottomBtn(); });
+    box.addEventListener('scroll', () => { if (box.scrollTop < 40 && !seekingMessage) loadOlder(peer); toBottomBtn(); });
+    if (target) await findMessage(target, seq);
   }
   async function subtitle(peer) {
     const sub = $('csub'); if (!sub) return;
@@ -370,18 +380,37 @@
     if (!far && b) b.remove();
   }
   async function loadOlder(peer) {
-    if (peer !== S.open || olderBusy || olderDone || !S.msgs.length) return;
+    if (peer !== S.open || olderBusy || olderDone || !S.msgs.length) return false;
     const seq = openSeq;
     olderBusy = true;
     try {
       const r = await api('chat.conversation', { peer, limit: 100, before: Number(S.msgs[0].time) });
       if (seq !== openSeq || peer !== S.open) return;
       const more = (r.messages || []).slice().sort((a, b) => Number(a.time) - Number(b.time));
-      if (!more.length) { olderDone = true; return; }
+      if (!more.length) { olderDone = true; return false; }
       const box = $('msgs'), before = box.scrollHeight;
-      S.msgs = more.concat(S.msgs); renderMsgs(false); box.scrollTop = box.scrollHeight - before;
-    } catch (e) { } finally { if (seq === openSeq) olderBusy = false; }
+      const ids = new Set(S.msgs.map(m => m.id));
+      const unique = more.filter(m => !ids.has(m.id));
+      if (!unique.length) { olderDone = true; return false; }
+      S.msgs = unique.concat(S.msgs); renderMsgs(false); box.scrollTop = box.scrollHeight - before;
+      return true;
+    } catch (e) { return false; } finally { if (seq === openSeq) olderBusy = false; }
   }
+  async function findMessage(target, seq) {
+    try {
+      while (seq === openSeq && S.open === target.peer && !S.msgs.some(m => m.id === target.id)) {
+        if (!S.msgs.length || Number(S.msgs[0].time) < target.time || !await loadOlder(target.peer)) break;
+      }
+      if (seq !== openSeq || S.open !== target.peer) return;
+      const row = [...$('msgs').querySelectorAll('.mrow')].find(r => r.dataset.id === target.id);
+      if (!row) { toast('Could not load that message. Search again to retry.', 'err'); return; }
+      row.classList.add('search-hit');
+      row.scrollIntoView({ block: 'center' });
+      setTimeout(() => row.classList.remove('search-hit'), 5000);
+      toBottomBtn();
+    } finally { if (seq === openSeq) seekingMessage = false; }
+  }
+
   // ChatActivity.ticks: ✗ failed · ✓✓ read (tick_read colour) · ✓✓ delivered · ✓ sent · ⋯ pending
   function ticks(state) {
     if (state === 'failed') return '✗';
@@ -415,11 +444,11 @@
     } else inner += '<div class="body">' + linkText(e.body || '') + '</div>';
     let meta = hhmm(e.time);
     if (mine) meta += ' ' + (S.openIsGroup && e.delivered != null && e.state !== 'read' ? e.delivered + ' ' : '') + ticks(e.state);
-    return '<div class="mrow ' + (mine ? 'mine' : 'theirs') + '" data-id="' + esc(e.id) + '"><div class="bubble">' + inner + '<div class="meta">' + meta + '</div></div></div>';
+    return '<div class="mrow ' + (mine ? 'mine' : 'theirs') + '" data-id="' + esc(e.id) + '"><div class="bubble">' + inner + '<div class="meta"><button class="message-actions" aria-label="Message actions" title="Message actions">⋯</button> ' + meta + '</div></div></div>';
   }
   function renderMsgs(scrollToEnd) {
     const box = $('msgs'); if (!box) return;
-    const atEnd = scrollToEnd || (box.scrollHeight - box.scrollTop - box.clientHeight < 80);
+    const atEnd = !seekingMessage && (scrollToEnd || (box.scrollHeight - box.scrollTop - box.clientHeight < 80));
     let html = '', lastDay = '';
     for (const e of S.msgs) {
       const d = dayStart(e.time);
@@ -427,6 +456,16 @@
       html += bubbleHtml(e);
     }
     box.innerHTML = html;
+    const entriesById = new Map(S.msgs.map(entry => [entry.id, entry]));
+    box.querySelectorAll('.mrow').forEach(row => {
+      const entry = entriesById.get(row.dataset.id);
+      row.querySelector('.message-actions').addEventListener('click', () => messageActions(entry, row));
+      row.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        const link = event.target.closest('a.chat-link');
+        if (link) linkActions(link.href); else messageActions(entry, row);
+      });
+    });
     box.querySelectorAll('canvas[data-wave]').forEach(drawWave);
     box.querySelectorAll('.audio').forEach(wireAudio);
     box.querySelectorAll('.private-file-card').forEach(button => button.addEventListener('click', () => {
@@ -447,6 +486,37 @@
     if (atEnd) box.scrollTop = box.scrollHeight;
     toBottomBtn();
   }
+  function copyableMessage(entry) {
+    const media = parseMedia(entry.body || ''), contact = parseContact(entry.body || '');
+    if (contact) return { label: 'Copy contact address', text: contact.address };
+    if (media) return { label: 'Copy caption', text: media.mime.startsWith('audio/') ? '' : media.caption };
+    return { label: 'Copy message', text: entry.body || '' };
+  }
+  function messageActions(entry, row) {
+    if (!entry) return;
+    const item = copyableMessage(entry), links = [...new Set([...row.querySelectorAll('a.chat-link')].map(a => a.href))];
+    sheet('<div class="h">Message actions</div>'
+      + (item.text ? '<button class="btn full message-copy">' + esc(item.label) + '</button>' : '')
+      + links.map((url, index) => '<button class="btn ghost full whole message-link" data-index="' + index + '">' + esc(url) + '</button>').join('')
+      + (!item.text && !links.length ? '<div class="sub">No text to copy.</div>' : ''), sh => {
+      const button = sh.querySelector('.message-copy');
+      if (button) button.onclick = () => { closeSheet(); copy(item.text); };
+      sh.querySelectorAll('.message-link').forEach(b => b.onclick = () => linkActions(links[Number(b.dataset.index)]));
+    });
+  }
+  function linkActions(url) {
+    sheet('<div class="h">Link</div><div class="mono whole">' + esc(url) + '</div>'
+      + '<a class="btn full" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open link</a>'
+      + '<button class="btn full link-copy">Copy link</button><button class="btn ghost full link-share">'
+      + (navigator.share ? 'Share link' : 'Copy link to share') + '</button>', sh => {
+      sh.querySelector('.link-copy').onclick = () => { closeSheet(); copy(url); };
+      sh.querySelector('.link-share').onclick = async () => {
+        try { if (navigator.share) await navigator.share({ url }); else await copy(url); closeSheet(); }
+        catch (e) { if (e.name !== 'AbortError') toast('Could not share this link. Use Copy link instead.', 'err'); }
+      };
+    });
+  }
+
   // Same conversation order and bounded navigation as the native photo viewers.
   function chatPhotos(messages) {
     const seen = new Set();
@@ -559,6 +629,26 @@
     S.msgs.sort((a, b) => Number(a.time) - Number(b.time));
     renderMsgs(false);
   }
+  // Same categories and glyphs as ChatActivity / ChatsPanel, without a network dependency.
+  const EMOJI = [["Smileys", "😀 😂 🤣 😊 😇 😉 😍 🥰 😘 😜 🤪 🤔 🤐 😐 🙄 😬 😴 🥵 🥶 🤯 😳 🥺 😢 😭 😡 🤬 🤢 🥳 😎 🤓 🙈 🙉 🙊 💀 🤡 💩"], ["Gestures", "👍 👎 👌 ✌️ 🤞 🤟 🤘 👊 ✊ 👏 🙌 👐 🤲 🤝 🙏 💪 ☝️ 👆 👇 👈 👉 🖐️ 🤙 👋"], ["Hearts", "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💋 💌"], ["Animals & nature", "🐶 🐱 🐭 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐵 🐔 🐧 🦆 🦅 🦉 🦋 🐝 🐢 🐙 🐳 🐬 🌵 🌲 🌻 🌹 🍂 ☀️ 🌙 ⭐ 🌈 ⚡ 🔥 ❄️ 🌊"], ["Food & drink", "🍎 🍌 🍇 🍓 🍋 🥑 🍕 🍔 🍟 🌭 🌮 🍜 🍣 🍦 🍰 🍫 🍿 ☕ 🍺 🍷 🥂 🍵"], ["Objects & symbols", "🎉 🎁 🎈 ⚽ 🏀 🎸 🎮 🎲 🚗 ✈️ 🚀 ⛵ 🏠 💡 🔑 💰 💎 ⏰ 📱 💻 🎧 📷 ✅ ❌ ❗ ❓ 💯 🎖️ 🏆 🚩"]];
+  function insertEmoji(draft, glyph) {
+    const start = draft.selectionStart, end = draft.selectionEnd;
+    draft.setRangeText(glyph, start, end, 'end');
+    draft.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function showEmojiPicker() {
+    const draft = $('draft');
+    if (!draft) return;
+    sheet('<div class="h">Emoji</div>' + EMOJI.map(([name, glyphs]) =>
+      '<div class="emoji-category">' + esc(name) + '</div><div class="emoji-grid">' + glyphs.split(' ').map(glyph =>
+        '<button class="emoji-choice" aria-label="' + esc(glyph) + '">' + esc(glyph) + '</button>').join('') + '</div>').join(''), sh => {
+      sh.querySelectorAll('.emoji-choice').forEach(button => button.onclick = () => {
+        if (draft.isConnected) insertEmoji(draft, button.textContent);
+      });
+    });
+    sheetFocus = draft;
+  }
+
   async function sendDraft() {
     const peer = S.open, seq = openSeq; if (!peer) return;
     const body = $('draft').value.trim(); if (!body) return;

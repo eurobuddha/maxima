@@ -9,7 +9,8 @@ import java.util.regex.Pattern;
 /** Web links in literal chat text. Never interprets HTML or fetches previews. */
 public final class ChatLinks {
     private ChatLinks() {}
-    private static final Pattern WEB = Pattern.compile("(?i)\\b(?:https?://|www\\.)[^\\s<>\\\"\\p{Cntrl}]+");
+    // Consume explicit schemes whole so a rejected URL cannot expose a link inside it.
+    private static final Pattern WEB = Pattern.compile("(?i)(?<![\\p{L}\\p{N}_@./:+%\\-])(?:[a-z][a-z0-9+.-]*://[^\\s<>\\\"\\p{Cntrl}]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.){1,126}[a-z]{2,63}(?::[0-9]{1,5})?(?:[/?#][^\\s<>\\\"\\p{Cntrl}]*)?)(?![a-z0-9_\\-])");
     public static final class Link {
         public final int start, end;
         public final String url;
@@ -17,6 +18,7 @@ public final class ChatLinks {
     }
     public static List<Link> find(String text) {
         List<Link> links = new ArrayList<>();
+        if (text == null || text.isEmpty()) return links;
         Matcher m = WEB.matcher(text);
         while (m.find()) {
             int end = m.end();
@@ -36,10 +38,10 @@ public final class ChatLinks {
                 break;
             }
             String raw=text.substring(m.start(),end);
-            String url=raw.regionMatches(true,0,"www.",0,4)?"https://"+raw:raw;
+            String url=raw.contains("://") ? raw : "https://"+raw;
             try {
                 URI uri=URI.create(url);
-                if (uri.getHost()!=null && uri.getRawUserInfo()==null &&
+                if (uri.getHost()!=null && uri.getHost().length() <= 253 && uri.getRawUserInfo()==null &&
                         ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())))
                     links.add(new Link(m.start(),end,url));
             } catch(IllegalArgumentException ignored) {}

@@ -998,10 +998,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
         // Right-click a bubble for the message menu (copy / copy txid / open image / info).
         final ChatEngine.Entry fe = e;
-        b.addMouseListener(new MouseAdapter() {
-            public void mousePressed(MouseEvent ev) { if (ev.isPopupTrigger()) showMessageMenu(b, fe, ev.getX(), ev.getY()); }
-            public void mouseReleased(MouseEvent ev) { if (ev.isPopupTrigger()) showMessageMenu(b, fe, ev.getX(), ev.getY()); }
-        });
+        installMessageMenu(b, fe);
 
         fitBubble(b, bubbleMax());
 
@@ -1016,6 +1013,58 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         return line;
     }
 
+    private void installMessageMenu(Component component, ChatEngine.Entry entry) {
+        component.addMouseListener(new MouseAdapter() {
+            private void popup(MouseEvent event) {
+                if (!event.isPopupTrigger()) return;
+                String url = null;
+                if (component instanceof javax.swing.JEditorPane) {
+                    javax.swing.JEditorPane editor = (javax.swing.JEditorPane) component;
+                    if (editor.getDocument() instanceof javax.swing.text.html.HTMLDocument) {
+                        int at = editor.viewToModel2D(event.getPoint());
+                        if (at >= 0) {
+                            javax.swing.text.AttributeSet attrs = ((javax.swing.text.html.HTMLDocument) editor.getDocument())
+                                    .getCharacterElement(at).getAttributes();
+                            Object anchor = attrs.getAttribute(javax.swing.text.html.HTML.Tag.A);
+                            if (anchor instanceof javax.swing.text.AttributeSet) {
+                                Object href = ((javax.swing.text.AttributeSet) anchor).getAttribute(javax.swing.text.html.HTML.Attribute.HREF);
+                                if (href != null) url = href.toString();
+                            }
+                        }
+                    }
+                }
+                if (url != null) {
+                    javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+                    addLinkActions(menu, url);
+                    menu.show(component, event.getX(), event.getY());
+                } else showMessageMenu(component, entry, event.getX(), event.getY());
+            }
+            public void mousePressed(MouseEvent event) { popup(event); }
+            public void mouseReleased(MouseEvent event) { popup(event); }
+        });
+        if (component instanceof java.awt.Container)
+            for (Component child : ((java.awt.Container) component).getComponents()) installMessageMenu(child, entry);
+    }
+
+    private void addLinkActions(javax.swing.JComponent menu, String url) {
+        javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open link");
+        open.addActionListener(a -> openLink(url)); menu.add(open);
+        javax.swing.JMenuItem copy = new javax.swing.JMenuItem("Copy link");
+        copy.addActionListener(a -> clip(url)); menu.add(copy);
+        // Swing has no portable OS share sheet. Copying supplies the URL to any app.
+        javax.swing.JMenuItem share = new javax.swing.JMenuItem("Copy link to share");
+        share.addActionListener(a -> { clip(url); info("Link copied. Paste it into the conversation or app you want to share with."); });
+        menu.add(share);
+    }
+
+    private void openLink(String url) {
+        if (!url.regionMatches(true, 0, "http://", 0, 7) && !url.regionMatches(true, 0, "https://", 0, 8)) return;
+        new Thread(() -> {
+            try { java.awt.Desktop.getDesktop().browse(java.net.URI.create(url)); }
+            catch (Exception ex) { javax.swing.SwingUtilities.invokeLater(() -> info("Could not open the browser.")); }
+        }, "chat-open-link").start();
+    }
+
     private void showMessageMenu(Component anchor, ChatEngine.Entry e, int x, int y) {
         javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
         boolean media = ChatMedia.isMedia(e.body);
@@ -1026,10 +1075,15 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             ca.addActionListener(a -> clip(com.eurobuddha.maxima.core.chat.ChatContact.address(e.body)));
             m.add(ca);
         }
-        if (!media && !pay && !card) {
-            javax.swing.JMenuItem copy = new javax.swing.JMenuItem("Copy text");
-            copy.addActionListener(a -> clip(e.body));
-            m.add(copy);
+        String text = media ? (ChatMedia.mime(e.body).startsWith("audio/") ? "" : ChatMedia.caption(e.body))
+                : pay ? ChatPay.preview(e.body) : card ? "" : e.body;
+        if (text != null && !text.isEmpty()) {
+            javax.swing.JMenuItem copy = new javax.swing.JMenuItem(media ? "Copy caption" : "Copy message");
+            copy.addActionListener(a -> clip(text)); m.add(copy);
+            for (com.eurobuddha.maxima.core.chat.ChatLinks.Link link : com.eurobuddha.maxima.core.chat.ChatLinks.find(text)) {
+                javax.swing.JMenu linkMenu = new javax.swing.JMenu(link.url);
+                addLinkActions(linkMenu, link.url); m.add(linkMenu);
+            }
         }
         if (pay) {
             String txid = ChatPay.txid(e.body);
@@ -1547,10 +1601,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
         StringBuilder html = new StringBuilder();
         String colour = String.format("#%06x", fg.getRGB() & 0xffffff);
+        String linkColour = fg.getRed() + fg.getGreen() + fg.getBlue() > 450 ? "#87ceff" : "#0058a6";
         int offset = 0;
         for (com.eurobuddha.maxima.core.chat.ChatLinks.Link link : com.eurobuddha.maxima.core.chat.ChatLinks.find(text)) {
             html.append(escHtml(text.substring(offset, link.start)));
-            html.append("<a style='color:").append(colour).append("' href=\"").append(escHtml(link.url))
+            html.append("<a style='color:").append(linkColour).append("' href=\"").append(escHtml(link.url))
                     .append("\">").append(escHtml(text.substring(link.start, link.end))).append("</a>");
             offset = link.end;
         }
@@ -1573,12 +1628,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         view.setAlignmentX(Component.LEFT_ALIGNMENT);
         view.addHyperlinkListener(event -> {
             if (event.getEventType() != javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) return;
-            final String url = event.getDescription();
-            if (!url.regionMatches(true, 0, "http://", 0, 7) && !url.regionMatches(true, 0, "https://", 0, 8)) return;
-            new Thread(() -> {
-                try { java.awt.Desktop.getDesktop().browse(java.net.URI.create(url)); }
-                catch (Exception ex) { javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(this, "Could not open the browser.")); }
-            }, "chat-open-link").start();
+            openLink(event.getDescription());
         });
         return view;
     }

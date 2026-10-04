@@ -14,6 +14,7 @@
   --accent: #2A2E33; --accentpress: #3B4049; --onaccent: #FFFFFF; --selected: rgba(0,0,0,.067);
   --success: #4F9B72; --error: #C0503C; --pending: #B98A3C;
   --bin: #FFFFFF; --bintext: #23262B; --bout: #31353C; --bouttext: #FFFFFF; --boutsub: #B6B9C1; --tickread: #6B6F76;
+  --chatlink: #0058a6;
   --mono: "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
 }
 :root[data-theme="dark"] {
@@ -23,7 +24,7 @@
   --text: #E6E8EA; --subtext: #9A9EA6;
   --accent: #E9E9EB; --accentpress: #CFCFD3; --onaccent: #23262B; --selected: rgba(255,255,255,.08);
   --success: #5AAE80; --error: #FF6B5C; --pending: #E6A23C;
-  --bin: #23272C; --bintext: #E6E8EA; --bout: #333840; --bouttext: #F1F2F3; --boutsub: #ADB1B9; --tickread: #9A9EA6;
+  --chatlink: #87ceff; --bin: #23272C; --bintext: #E6E8EA; --bout: #333840; --bouttext: #F1F2F3; --boutsub: #ADB1B9; --tickread: #9A9EA6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -33,7 +34,7 @@
     --text: #E6E8EA; --subtext: #9A9EA6;
     --accent: #E9E9EB; --accentpress: #CFCFD3; --onaccent: #23262B; --selected: rgba(255,255,255,.08);
     --success: #5AAE80; --error: #FF6B5C; --pending: #E6A23C;
-    --bin: #23272C; --bintext: #E6E8EA; --bout: #333840; --bouttext: #F1F2F3; --boutsub: #ADB1B9; --tickread: #9A9EA6;
+    --chatlink: #87ceff; --bin: #23272C; --bintext: #E6E8EA; --bout: #333840; --bouttext: #F1F2F3; --boutsub: #ADB1B9; --tickread: #9A9EA6;
   }
 }
 
@@ -256,4 +257,13 @@ button:disabled { cursor: default; opacity: .55; }
 .file-progress {accent-color:var(--text)}
 .sheet:has(.file-status) .actions {gap:8px;flex-wrap:wrap}
 
-.bubble .chat-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.bubble .chat-link { color: var(--chatlink); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+
+.mrow.mine .bubble .chat-link { color: #87ceff; }
+.message-actions { color: inherit; background: transparent; padding: 2px 8px; border-radius: 6px; font-size: 18px; line-height: 20px; }
+.message-actions:hover, .message-actions:focus-visible { background: var(--press); }
+.search-hit .bubble { outline: 3px solid var(--chatlink); outline-offset: 3px; }
+.emoji-category { margin: 16px 0 6px; color: var(--subtext); font-weight: 600; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; }
+.emoji-choice { background: transparent; border-radius: 6px; font-size: 25px; min-height: 40px; }
+.emoji-choice:hover, .emoji-choice:focus-visible { background: var(--press); }

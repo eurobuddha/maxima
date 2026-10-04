@@ -13,19 +13,19 @@ public final class MainActivity extends Activity {
             TextView bubble = new TextView(this);
             bubble.setTextColor(android.graphics.Color.BLACK);
             bubble.setTextIsSelectable(true);
-            com.eurobuddha.maxima.app.chat.ChatLinkText.bind(bubble, "Open https://example.org and www.example.org.");
+            com.eurobuddha.maxima.app.chat.ChatLinkText.bind(bubble, "Open https://example.org and example.org.", () -> {});
             android.text.Spanned spans = (android.text.Spanned) bubble.getText();
             if (spans.getSpans(0,spans.length(),android.text.style.URLSpan.class).length != 2
                     || !bubble.getLinksClickable()
-                    || bubble.getLinkTextColors().getDefaultColor() != android.graphics.Color.BLACK)
+                    || bubble.getLinkTextColors().getDefaultColor() != android.graphics.Color.rgb(0, 88, 166))
                 throw new AssertionError("Link spans, taps or light theme colour failed");
             com.eurobuddha.maxima.app.chat.ChatLinkText.reset(bubble);
             bubble.setTextIsSelectable(false); bubble.setText("Private file");
             if (bubble.getMovementMethod() != null || bubble.getLinksClickable())
                 throw new AssertionError("Recycled file bubble retained link handling");
             bubble.setTextIsSelectable(true); bubble.setTextColor(android.graphics.Color.WHITE);
-            com.eurobuddha.maxima.app.chat.ChatLinkText.bind(bubble, "https://example.org");
-            if (bubble.getLinkTextColors().getDefaultColor() != android.graphics.Color.WHITE)
+            com.eurobuddha.maxima.app.chat.ChatLinkText.bind(bubble, "https://example.org", () -> {});
+            if (bubble.getLinkTextColors().getDefaultColor() != android.graphics.Color.rgb(135, 206, 255))
                 throw new AssertionError("Dark outgoing link colour failed");
             android.util.Log.i("PrivateFilesCheck", "PASS: native chat link spans, movement, recycling and light/dark colours");
         } catch (Throwable e) {

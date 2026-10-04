@@ -21,11 +21,11 @@ function harness(fetch) {
   const renders = { page: 0, list: 0, messages: 0 };
   const context = vm.createContext({ fetch, document: { body: element(), createElement: () => ({content: {firstElementChild: element()}}), getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
     window: { icon: () => '', addEventListener() {} }, localStorage: { getItem: () => null },
-    setTimeout() {}, clearTimeout() {}, URL, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
-  const expose = `globalThis.panel = { S, api, linkText, bubbleHtml, chatPhotos, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
+    setTimeout() {}, clearTimeout() {}, Event: class { constructor(type) { this.type = type; } }, URL, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
+  const expose = `globalThis.panel = { S, api, linkText, bubbleHtml, chatPhotos, copyableMessage, insertEmoji, findMessage, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
-    get busy() { return olderBusy; }, get done() { return olderDone; } };
+    get seq() { return openSeq; }, get busy() { return olderBusy; }, get done() { return olderDone; } };
     renderChats = () => { renders.page++; }; renderChatsList = () => { renders.list++; }; renderMsgs = () => { renders.messages++; };`;
   assert.match(source, /  boot\(\);\s*\}\)\(\);\s*$/);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/panel/private-files.js'), 'utf8'), context);
@@ -111,4 +111,48 @@ test('chat rendering escapes HTML and does not link executable schemes or creden
   const out = h.p.bubbleHtml({body: text, time: 0, id: 'x'});
   assert.ok(out.includes('&lt;img')); assert.ok(!out.includes('<img')); assert.ok(!out.includes('class="chat-link"'));
   assert.ok(h.p.bubbleHtml({body:'https://example.org',time:0,id:'x'}).includes('class="chat-link"'));
+});
+
+test('bare domains retain paths without extracting hosts from email or rejected schemes', () => {
+  const h = harness();
+  assert.match(h.p.linkText('Visit example.com/path?x=1&y=2.'), /href="https:\/\/example.com\/path\?x=1&amp;y=2"/);
+  for (const text of ['user@example.com', 'mailto:user@example.com', 'ftp://example.com', 'file://example.com', 'javascript:example.com', 'https://user:pass@example.com', 'example.com_foo', 'example.com1', '-example.com', 'bad-.example.com', '0.6.131'])
+    assert.ok(!h.p.linkText(text).includes('<a '), text);
+});
+test('copy actions use visible captions and addresses rather than protocol metadata', () => {
+  const h = harness();
+  assert.equal(h.p.copyableMessage({body: 'hello'}).text, 'hello');
+  assert.equal(h.p.copyableMessage({body: '\u0001m\u0001image/jpeg\u0001data:image/jpeg;base64,AA==\u0001Holiday'}).text, 'Holiday');
+  assert.equal(h.p.copyableMessage({body: '\u0001m\u0001audio/ogg\u0001ref\u00013|abc'}).text, '');
+  assert.equal(h.p.copyableMessage({body: '\u0001c\u0001key\u0001Name\u0001MAX#address'}).text, 'MAX#address');
+});
+test('emoji insertion replaces the selection and preserves a multi-codepoint glyph', () => {
+  const h = harness(), draft = { value: 'hello world!', selectionStart: 6, selectionEnd: 11,
+    setRangeText(text, a, b) { this.value = this.value.slice(0,a) + text + this.value.slice(b); this.selectionStart = this.selectionEnd = a + text.length; },
+    dispatchEvent(event) { this.event = event.type; } };
+  h.p.insertEmoji(draft, '❤️'); h.p.insertEmoji(draft, '😀');
+  assert.equal(draft.value, 'hello ❤️😀!'); assert.equal(draft.event, 'input');
+});
+test('search navigation loads history and scrolls to the exact result', async () => {
+  let count = 0;
+  const h = harness(async () => { count++; return reply({messages: [{id:'target',time:1,body:'needle'}]}); });
+  h.p.select('peer'); const row = element(); row.dataset = {id:'target'};
+  row.classList.add = key => { row.highlight = key; }; row.scrollIntoView = options => { row.scrolled = options.block; };
+  h.node('msgs').querySelectorAll = () => [row];
+  await h.p.findMessage({peer:'peer',id:'target',time:1}, h.p.seq);
+  assert.equal(count, 1); assert.equal(row.scrolled, 'center'); assert.equal(row.highlight, 'search-hit');
+});
+test('search navigation stops after changing conversations or a failed history request', async () => {
+  const d = deferred(), h = harness(() => d.promise); h.p.select('first');
+  const pending = h.p.findMessage({peer:'first',id:'target',time:1}, h.p.seq);
+  h.p.select('second'); d.resolve(reply({messages:[{id:'target',time:1}]})); await pending;
+  assert.deepEqual(Array.from(h.p.S.msgs, m => m.id), ['second']);
+  let count = 0; const bad = harness(async () => { count++; throw Error('offline'); }); bad.p.select('first');
+  await bad.p.findMessage({peer:'first',id:'target',time:1}, bad.p.seq);
+  assert.equal(count, 1); assert.match(bad.node('toast').textContent, /Could not load/);
+});
+
+test('excessive domain labels remain literal text', () => {
+  const h = harness();
+  assert.ok(!h.p.linkText('a.'.repeat(10000) + 'com').includes('<a '));
 });

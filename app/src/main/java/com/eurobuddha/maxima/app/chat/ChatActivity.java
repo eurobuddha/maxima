@@ -1796,13 +1796,20 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private void showMessageMenu(ChatEngine.Entry e) {
         boolean media = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body);
         final String copyText = media
-                ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body) : e.body;
+                ? (com.eurobuddha.maxima.core.chat.ChatMedia.mime(e.body).startsWith("audio/") ? ""
+                        : com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body))
+                : com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
+                        ? com.eurobuddha.maxima.core.chat.ChatContact.address(e.body)
+                : com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
+                        ? com.eurobuddha.maxima.core.chat.ChatPay.preview(e.body) : e.body;
+        final String copyLabel = media ? "Copy caption" : com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
+                ? "Copy contact address" : "Copy message";
         final boolean haveImage = media && mImageCache.get(e.id) != null;
         final String txid = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
                 ? com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body) : "";
         final List<String> items = new ArrayList<>();
         if (copyText != null && !copyText.isEmpty()) {
-            items.add("Copy");
+            items.add(copyLabel);
         }
         if (!txid.isEmpty()) {
             items.add("Copy transaction id");
@@ -1815,7 +1822,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         new AlertDialog.Builder(this)
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     String choice = items.get(which);
-                    if ("Copy".equals(choice)) {
+                    if (copyLabel.equals(choice)) {
                         android.content.ClipboardManager cm =
                                 getSystemService(android.content.ClipboardManager.class);
                         cm.setPrimaryClip(
@@ -2178,7 +2185,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (!pay && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body)
                 && !com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
                 && h.body.getVisibility() == View.VISIBLE) {
-            ChatLinkText.bind(h.body, h.body.getText().toString());
+            ChatLinkText.bind(h.body, h.body.getText().toString(), () -> showMessageMenu(e));
         }
 
         // Timestamp + ticks only on the last of a run (iMessage-style).
