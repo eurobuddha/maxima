@@ -27,6 +27,7 @@ public final class PrivateTorrent implements AutoCloseable {
     private final Map<String, BtClient> clients = new ConcurrentHashMap<>();
     private final Map<String, Torrent> torrents = new ConcurrentHashMap<>();
     private final Map<String,Run> runs = new ConcurrentHashMap<>();
+    private final Map<bt.metainfo.TorrentId,Run> stoppingEvents = new ConcurrentHashMap<>();
     private static final class Run {
         final java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
         final java.util.concurrent.CountDownLatch stopped = new java.util.concurrent.CountDownLatch(1);
@@ -56,7 +57,9 @@ public final class PrivateTorrent implements AutoCloseable {
         config.setShutdownHookTimeout(Duration.ofSeconds(3));
         config.setMaxConcurrentlyActivePeerConnectionsPerTorrent(8);
         runtime = BtRuntime.builder(config).disableStandardExtensions().disableAutomaticShutdown()
-                .module(new ClosedSwarmModule()).build();
+                .module(new ClosedSwarmModule(id -> {
+                    Run run=stoppingEvents.remove(id);if(run!=null)run.finished();
+                })).build();
         runtime.startup();
     }
     public int port() { return port; }
@@ -93,7 +96,7 @@ public final class PrivateTorrent implements AutoCloseable {
         if(clients.size()>=4)throw new IOException("Pause another transfer first (4 active transfers maximum)");
         Torrent torrent=validate(file);
         Run run=new Run();runs.put(file.id,run);
-        runtime.service(bt.event.EventSource.class).onTorrentStopped(torrent.getTorrentId(), e -> run.finished());
+        stoppingEvents.put(torrent.getTorrentId(),run);
         BtClient client=Bt.client(runtime).afterFilesChosen(run::enter).storage(new FileSystemStorage(directory,2)).torrent(()->torrent)
                 .afterDownloaded(t -> {if(run.active())complete.run();}).build();
         torrents.put(file.id,torrent); clients.put(file.id,client);

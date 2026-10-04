@@ -66,6 +66,16 @@ public class PrivateTorrentTest {
             }
         }
     }
+    @Test public void restartNotificationRunsAfterEventListenerCleanup() throws Exception {
+        Path seed=Files.createTempDirectory("private-stop-event-");
+        bt.metainfo.TorrentId id=PrivateTorrent.validate(prepare(seed,new byte[]{1})).getTorrentId();
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        bt.event.EventBus[] bus=new bt.event.EventBus[1];
+        bus[0]=new ClosedSwarmModule(stopped -> bus[0].onTorrentStopped(stopped,event -> calls.incrementAndGet())).events();
+        bus[0].fireTorrentStopped(id);
+        bus[0].fireTorrentStopped(id);
+        assertEquals("The next run's listener survives the previous run's cleanup",1,calls.get());
+    }
     @Test(timeout=60000) public void sharedParlonsPortTransfersAndResumes() throws Exception {
         Path seed=Files.createTempDirectory("private-tunnel-seed-"), download=Files.createTempDirectory("private-tunnel-download-");
         byte[] plain=new byte[3*1024*1024+19];new Random(15).nextBytes(plain);ChatFile f=prepare(seed,plain);
