@@ -112,6 +112,71 @@ still waits for descriptor closure before reuse. No blocking review findings rem
 
 All 21 private-file tests passed, including a new 12-cycle immediate pause/restart
 test. The complete local JVM suite passed: core 263, files 21, server 73, maxjar 1,
-Cloud 90, Node 20, WakeProxy 20 and Desktop 13 (601 tests), plus 63 parity checks.
+Cloud 90, Node 20, WakeProxy 20 and Desktop 13 (501 tests), plus 63 parity checks.
 The APK and host JARs were rebuilt before publication. Native Desktop 1.5.107
 supersedes the initial 1.5.106 build. Final publication evidence follows below.
+
+The final Linux CI run `37241482024` passed all 502 JVM tests (including 22 file
+tests), all 31 panel tests and 63 parity checks. It caught a second upstream event
+cleanup race in the repeated-pause regression: `EventBus.fireTorrentStopped` removes
+listeners after notifying them. `ClosedSwarmModule` now reuses that event bus and
+signals completion after its cleanup returns. The deterministic listener-lifecycle
+test and repeated restart test both pass. Final source is `3d1634d8`; desktop CI
+`37241514682` passed on all three platforms. Android 0.6.133, Node 0.2.121, Cloud
+0.11.115 and Desktop 1.5.108 supersede the intermediate candidates above. Portal
+remains 0.2.82 and iOS source remains 0.1.36 / 34.
+
+The final Android runtime check passed all eight `PrivateTorrentTest` cases on
+the S10+ in the isolated `com.eurobuddha.filescheck` app, including loopback transfer,
+resume and both lifecycle regressions. The harness now declares the same Guice
+4.2.3 no-AOP dependency used by `:files`, because the new event-bus regression
+references its module type at compile time. Production dependencies are unchanged.
+
+Wrapper release commits: minimaDesk `ef213b5` (0.7.73), minimaCore `f007392`
+(0.17.30). Their three-platform CI runs `37242009002` and `37242011216` passed.
+Both signed Mac app bundles contain the Node 0.2.121 JAR with SHA-256
+`d74dd8946801ab809c258269d7c0a1cd0825afa8f8ef791c3e06026444133738`.
+All three final Mac products passed strict signature, stapled-ticket and Gatekeeper
+checks. Superseded intermediate GitHub releases are marked as prereleases.
+
+### Published releases — 5 October 2026
+
+| Product | Release |
+| --- | --- |
+| Parlons Android | 0.6.133 / code 733 |
+| Parlons Cloud Portal | 0.2.82 / code 282 |
+| Parlons Desktop (Mac, Windows, Linux) | 1.5.108 |
+| Parlons Node | 0.2.121 |
+| Parlons Cloud host | 0.11.115 |
+| minimaDesk / MinimaClassic (all three platforms) | 0.7.73 |
+| minimaCore Desktop (all three platforms) | 0.17.30 |
+| iOS source | 0.1.36 / build 34, pushed to master |
+
+GitHub release assets and all 11 affected PandaApps/PandaGet/minimaCore App Store
+rows are published. Catalogue commits `cbfeec2` and `ba21eba` passed the full gate:
+50 entries and 39 binaries checked against their hashes and APK metadata/signers.
+The public raw catalogue was read back and all 11 version, versionCode, URL and
+SHA-256 fields matched. Both public wrapper updater feeds contain all three final
+platforms and match the catalogue. Mac rows point to the signed local installers
+that replaced CI's Mac assets. Android `v0.6.133` is GitHub's latest main release.
+
+iOS source commit `b4e11fa` is on `eurobuddha/parlons-ios` master. No Apple App Store
+submission was made; that publishing setup remains separate. No production phone
+app was installed and no running Node/Cloud host was upgraded.
+
+Publication logs, CI XML reports, public catalogues, updater feeds and signed-artifact
+checksums are saved under `build/chat-actions-2026-10-04/publication/`.
+
+The final IPFS snapshot is
+`bafybeifdixdywspw4i3dij5ix2ugo2zm6ov3rfob7ubpre43x2enar4zvm`, published under
+IPNS `k51qzi5uqu5dk9g8mlhkab3t2h3195r4mwf6gdgpzte3cwhjn708w89y8b6axi`.
+All 11 public gateway entries matched the final catalogue's versions, codes,
+filenames and hashes. The Android APK was also downloaded from the public IPFS
+gateway and matched SHA-256
+`01a811dec4461e2c7518f4c62e256a4c361faf78d7790fd7bdac5262e8385992`.
+The existing publisher reported its known optional Filebase pin-list warning;
+local pinning, IPNS publication and the public gateway succeeded.
+
+The root `maxima/dist/` sharing folder contains the final APKs, host JARs and native
+desktop installers with refreshed SHA256SUMS entries. Unrelated source and graph
+changes in the root checkout and sibling repositories were preserved.
