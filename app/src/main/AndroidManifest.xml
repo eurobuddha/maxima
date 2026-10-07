@@ -4,7 +4,7 @@
     <!-- Needed to reach the Minima Core node app on Android 11+; without this
          a targeted setPackage() broadcast is silently dropped. -->
     <queries>
-        <package android:name="org.minimarex.minimacore" />
+        <package android:name="com.eurobuddha.minimacore" />
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />

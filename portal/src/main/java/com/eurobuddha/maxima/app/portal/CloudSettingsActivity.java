@@ -338,13 +338,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         //     (resync your wallet to a new seed there; the cloud seed stays your identity). ---
         body.addView(PortalUi.section(c, "Minima Core on this phone"));
         LinearLayout core = PortalUi.card(c);
-        boolean coreInstalled;
-        try {
-            getPackageManager().getPackageInfo("org.minimarex.minimacore", 0);
-            coreInstalled = true;
-        } catch (Exception e) {
-            coreInstalled = false;
-        }
+        boolean coreInstalled = com.eurobuddha.maxima.app.wallet.WalletPublisher.coreInstalled(this);
         if (coreInstalled) {
             core.addView(PortalUi.title(c, "Minima Core is installed ✓"));
             core.addView(PortalUi.label(c,
@@ -353,7 +347,9 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             TextView openCore = PortalUi.ghost(c, "Open Minima Core");
             openCore.setOnClickListener(v -> {
                 Intent i = getPackageManager()
-                        .getLaunchIntentForPackage("org.minimarex.minimacore");
+                        .getLaunchIntentForPackage("com.eurobuddha.minimacore");
+                if (i == null) i = getPackageManager().getLaunchIntentForPackage("com.eurobuddha.minimablock");
+                if (i == null) i = getPackageManager().getLaunchIntentForPackage("com.eurobuddha.pandamonium");
                 if (i != null) {
                     startActivity(i);
                 }

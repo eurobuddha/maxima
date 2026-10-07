@@ -734,13 +734,7 @@ public final class CloudWalletPage implements Page {
     /** The detach flow (user decision: the new seed lives ON THE DEVICE): sweep everything to
      *  a Minima Core wallet on this phone, then watch that address from the cloud. */
     private void detachFlow() {
-        boolean coreInstalled;
-        try {
-            mAct.getPackageManager().getPackageInfo("org.minimarex.minimacore", 0);
-            coreInstalled = true;
-        } catch (Exception e) {
-            coreInstalled = false;
-        }
+        boolean coreInstalled = com.eurobuddha.maxima.app.wallet.WalletPublisher.coreInstalled(mAct);
         if (!coreInstalled) {
             new AlertDialog.Builder(mAct)
                     .setTitle("Minima Core needed")

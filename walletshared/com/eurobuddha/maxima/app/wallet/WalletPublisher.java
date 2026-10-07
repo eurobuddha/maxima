@@ -46,7 +46,7 @@ public final class WalletPublisher {
      *  stored this literal string; treat it as "the default" so such phones follow the fleet. */
     static final String LEGACY_GATEWAY_URL = "https://relay.privateprivate.org/cmd";
 
-    private static final String CORE_PKG = "org.minimarex.minimacore";
+    private static final String CORE_PKG = "com.eurobuddha.minimacore";
 
     /**
      * Gateways DISCOVERED with the relays (a Parlons Node's cape advertises its node's gateway
@@ -162,12 +162,11 @@ public final class WalletPublisher {
 
     /** Is minimaCore installed on this phone at all? */
     public static boolean coreInstalled(Context zCtx) {
-        try {
-            zCtx.getPackageManager().getPackageInfo(CORE_PKG, 0);
-            return true;
-        } catch (Exception e) {
-            return false;
+        for (String target : new String[]{CORE_PKG, "com.eurobuddha.minimablock", "com.eurobuddha.pandamonium"}) {
+            try { zCtx.getPackageManager().getPackageInfo(target, 0); return true; }
+            catch (android.content.pm.PackageManager.NameNotFoundException absent) { }
         }
+        return false;
     }
 
     /** Which backend answers right now (for the UI). */
