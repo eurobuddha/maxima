@@ -88,20 +88,38 @@ public final class PrivateTorrent implements AutoCloseable {
         if(count!=(t.getSize()+FileCrypto.PIECE-1)/FileCrypto.PIECE)throw new IOException("Invalid piece count");
         return t;
     }
-    public synchronized void start(ChatFile file, Path directory, BiConsumer<Integer,Integer> progress,
-                                   Runnable complete, java.util.function.Consumer<String> failure) throws Exception {
-        if(clients.containsKey(file.id)) return;
-        Run prior=runs.get(file.id);
-        if(prior!=null && prior.stopped.getCount()!=0)throw new IOException("Transfer is still stopping; retry shortly");
-        if(clients.size()>=4)throw new IOException("Pause another transfer first (4 active transfers maximum)");
-        Torrent torrent=validate(file);
-        Run run=new Run();runs.put(file.id,run);
-        stoppingEvents.put(torrent.getTorrentId(),run);
-        BtClient client=Bt.client(runtime).afterFilesChosen(run::enter).storage(new FileSystemStorage(directory,2)).torrent(()->torrent)
-                .afterDownloaded(t -> {if(run.active())complete.run();}).build();
-        torrents.put(file.id,torrent); clients.put(file.id,client);
-        client.startAsync(state -> progress.accept(state.getPiecesComplete(),state.getPiecesTotal()),500)
-                .whenComplete((ignored,error)->{ if(error!=null && clients.get(file.id)==client)failure.accept("Transfer interrupted; tap Resume"); });
+    public void start(ChatFile file, Path directory, BiConsumer<Integer,Integer> progress,
+                      Runnable complete, java.util.function.Consumer<String> failure) throws Exception {
+        final Run run;
+        final BtClient client;
+        final java.util.concurrent.CompletableFuture<?> processing;
+        synchronized(this) {
+            if(clients.containsKey(file.id)) return;
+            Run prior=runs.get(file.id);
+            if(prior!=null && prior.stopped.getCount()!=0)throw new IOException("Transfer is still stopping; retry shortly");
+            if(clients.size()>=4)throw new IOException("Pause another transfer first (4 active transfers maximum)");
+            Torrent torrent=validate(file);
+            run=new Run();runs.put(file.id,run);
+            stoppingEvents.put(torrent.getTorrentId(),run);
+            client=Bt.client(runtime).afterFilesChosen(run::enter).storage(new FileSystemStorage(directory,2)).torrent(()->torrent)
+                    .afterDownloaded(t -> {if(run.active())complete.run();}).build();
+            torrents.put(file.id,torrent); clients.put(file.id,client);
+            processing=client.startAsync(state -> progress.accept(state.getPiecesComplete(),state.getPiecesTotal()),500);
+        }
+        // An already completed future invokes this inline, so attach outside our monitor too.
+        processing.whenComplete((ignored,error)->processingEnded(file.id,client,run,failure));
+    }
+    private void processingEnded(String id, BtClient client, Run run, java.util.function.Consumer<String> failure) {
+        // Bt's TerminateOnErrorProcessingStage logs I/O failures and completes normally.
+        // A sharing client should run until explicitly paused, even after download completes.
+        String message="Transfer interrupted; tap Resume";
+        synchronized(this) {
+            if(clients.get(id)!=client || !run.active())return;
+            try { pause(id); }
+            catch(RuntimeException e) { message="Transfer interrupted; cleanup is still pending. Retry Resume shortly"; }
+        }
+        // PrivateFiles takes its own monitor. Never call it while holding the engine monitor.
+        failure.accept(message);
     }
     public void peer(String id, String host, int port) throws Exception {
         Torrent t=torrents.get(id);

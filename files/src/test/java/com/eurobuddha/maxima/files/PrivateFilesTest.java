@@ -43,6 +43,53 @@ public class PrivateFilesTest {
             assertFalse(Files.exists(f.root.resolve("files/uploads").resolve(id)));
         }
     }
+    private static Map<String,String> awaitUpload(Fixture f,String id,boolean failed)throws Exception {
+        long until=System.currentTimeMillis()+10000;
+        Map<String,String> status;
+        do {
+            status=f.call("action","status","id",id);
+            if(failed ? "Failed".equals(status.get("status")) : status.containsKey("fileId") && "true".equals(status.get("ready")))return status;
+            Thread.sleep(25);
+        }while(System.currentTimeMillis()<until);
+        throw new AssertionError("Upload did not reach expected state: "+status);
+    }
+    @Test(timeout=30000) public void failedPreparationRetainsUploadAndResumesAfterCapacityIsFreed()throws Exception {
+        try(Fixture f=new Fixture()) {
+            List<String> active=new ArrayList<>();
+            for(int i=0;i<4;i++)active.add(f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"active.txt","text/plain",f.peer.publicKeyHex(),false));
+            String id=FileCrypto.randomHex(16);
+            f.call("action","begin","id",id,"size","3","name","retry.txt","peer",f.peer.publicKeyHex());
+            f.call("action","append","id",id,"offset","0","data","YWJj");
+            f.call("action","finish","id",id);
+            assertTrue(awaitUpload(f,id,true).get("error").contains("4 active"));
+            Path staged=f.root.resolve("files/uploads").resolve(id);
+            assertArrayEquals(new byte[]{97,98,99},Files.readAllBytes(staged));
+            assertTrue("Failed preparations remain accessible after closing the sheet",f.call("action","list").get("transfers").contains(id));
+            f.files.pause(active.get(0));
+            f.call("action","resume","id",id);
+            f.call("action","finish","id",id); // lost-reply retry must not send twice
+            Map<String,String> ready=awaitUpload(f,id,false);
+            String fileId=ready.get("fileId");
+            assertFalse(Files.exists(staged));assertEquals(5,f.files.list().size());
+            try(InputStream in=f.files.open(fileId)){assertArrayEquals(new byte[]{97,98,99},in.readAllBytes());}
+            f.call("action","finish","id",id);
+            f.call("action","resume","id",id);
+            assertEquals(fileId,f.call("action","status","id",id).get("fileId"));
+            assertEquals(5,f.files.list().size());
+        }
+    }
+    @Test(timeout=15000) public void removingFailedPreparationDeletesRetainedInput()throws Exception {
+        try(Fixture f=new Fixture()) {
+            String id=FileCrypto.randomHex(16);
+            f.call("action","begin","id",id,"size","1","name","retry.txt","peer","removed-contact");
+            f.call("action","append","id",id,"offset","0","data","AQ==");f.call("action","finish","id",id);
+            awaitUpload(f,id,true);
+            assertTrue(Files.exists(f.root.resolve("files/uploads").resolve(id)));
+            f.call("action","remove","id",id);
+            assertFalse(Files.exists(f.root.resolve("files/uploads").resolve(id)));
+            assertFalse(f.call("action","list").get("transfers").contains(id));
+        }
+    }
     @Test public void arbitraryOffersCannotCreateDownloads()throws Exception {
         try(Fixture f=new Fixture()){
             Path source=Files.createDirectory(f.root.resolve("source"));ChatFile offer=PrivateTorrentTest.prepare(source,new byte[]{1,2,3});
@@ -77,6 +124,28 @@ public class PrivateFilesTest {
                 assertEquals("true",reopened.status(id).get("paused"));
                 assertEquals("true",reopened.status(id).get("ready"));
                 reopened.remove(id);assertTrue(reopened.list().isEmpty());assertFalse(Files.exists(f.root.resolve("files").resolve(id)));
+            }
+        }
+    }
+    @Test(timeout=25000) public void engineStorageFailureBecomesVisibleAndCanResume()throws Exception {
+        try(Fixture f=new Fixture()) {
+            String id=f.files.send(new ByteArrayInputStream(new byte[]{7}),1,"recover.txt","text/plain",f.peer.publicKeyHex(),false);
+            f.files.pause(id);f.files.close();
+            Path dir=f.root.resolve("files").resolve(id),payload=dir.resolve("payload.bin");
+            byte[] encrypted=Files.readAllBytes(payload);
+            Files.deleteIfExists(dir.resolve("verified.bin"));Files.delete(payload);Files.createDirectory(payload);
+            try(PrivateFiles reopened=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))) {
+                reopened.resume(id);
+                long until=System.currentTimeMillis()+5000;
+                while(!"Failed".equals(reopened.status(id).get("status")) && System.currentTimeMillis()<until)Thread.sleep(20);
+                assertEquals("Failed",reopened.status(id).get("status"));
+                assertEquals("true",reopened.status(id).get("paused"));
+                assertFalse(reopened.status(id).get("error").isEmpty());
+                Files.delete(payload);Files.write(payload,encrypted);reopened.resume(id);
+                until=System.currentTimeMillis()+5000;
+                while(!"true".equals(reopened.status(id).get("ready")) && System.currentTimeMillis()<until)Thread.sleep(20);
+                assertEquals("true",reopened.status(id).get("ready"));
+                try(InputStream in=reopened.open(id)){assertArrayEquals(new byte[]{7},in.readAllBytes());}
             }
         }
     }

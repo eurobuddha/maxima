@@ -72,7 +72,10 @@ test('late send refresh cannot leak the previous conversation into a reopened ch
   assert.deepEqual(Array.from(h.p.S.msgs, x => x.id), ['first']); assert.equal(h.renders.messages, 0);
 });
 test('file upload retains its original recipient and group flag after navigation', async () => {
-  const d = deferred(), calls = [], h = harness(async (url, options) => { calls.push(JSON.parse(options.body)); return reply({ok: true}); });
+  const d = deferred(), calls = [], h = harness(async (url, options) => {
+    const p = JSON.parse(options.body); calls.push(p);
+    return reply({ok: true, offset: p.action === 'begin' ? '0' : '1'});
+  });
   h.p.select('group', true);
   const upload = h.p.sendFile({type: 'text/plain', name: 'hello.txt', size: 1, slice: () => ({arrayBuffer: () => d.promise})}, false);
   h.p.select('person', false); d.resolve(new Uint8Array([65]).buffer); await upload;

@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
 
       - name: Run panel regression tests
-        run: node --test account/src/test/js/panel.test.cjs
+        run: node --test account/src/test/js/*.test.cjs
 
       - name: Run JVM unit tests
         shell: bash

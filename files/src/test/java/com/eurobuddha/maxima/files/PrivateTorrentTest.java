@@ -66,6 +66,26 @@ public class PrivateTorrentTest {
             }
         }
     }
+    @Test(timeout=20000) public void storageFailureIsReportedAndSameTransferCanRestart() throws Exception {
+        Path seed=Files.createTempDirectory("private-failure-seed-"), download=Files.createTempDirectory("private-failure-download-");
+        ChatFile file=prepare(seed,new byte[]{1});
+        Files.createDirectory(download.resolve("payload.bin")); // deterministic storage-open failure
+        CountDownLatch failed=new CountDownLatch(1),done=new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger failures=new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean callbackHeldLock=new java.util.concurrent.atomic.AtomicBoolean();
+        try(PrivateTorrent torrent=new PrivateTorrent(port(),true)) {
+            torrent.start(file,download,(x,y)->{},done::countDown,error->{callbackHeldLock.set(Thread.holdsLock(torrent));failures.incrementAndGet();failed.countDown();});
+            assertTrue("Bt's normal completion after an I/O error must report failure",failed.await(5,TimeUnit.SECONDS));
+            assertEquals(1,done.getCount());
+            assertFalse("Failure callbacks must not hold the engine monitor",callbackHeldLock.get());
+            Files.delete(download.resolve("payload.bin"));
+            Files.copy(seed.resolve("payload.bin"),download.resolve("payload.bin"));
+            torrent.start(file,download,(x,y)->{},done::countDown,error->failures.incrementAndGet());
+            assertTrue("The stopped client must not block a retry",done.await(5,TimeUnit.SECONDS));
+            torrent.pause(file.id);
+            assertEquals("Explicit pause must not report another failure",1,failures.get());
+        }
+    }
     @Test public void restartNotificationRunsAfterEventListenerCleanup() throws Exception {
         Path seed=Files.createTempDirectory("private-stop-event-");
         bt.metainfo.TorrentId id=PrivateTorrent.validate(prepare(seed,new byte[]{1})).getTorrentId();

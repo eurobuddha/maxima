@@ -39,7 +39,7 @@ public final class FileCommands implements AutoCloseable {
                         if(!Long.toString(old.size).equals(in.get("size")) || !Objects.equals(old.name,in.get("name"))
                                 || !Objects.equals(old.peer,in.get("peer")) || old.group!=Boolean.parseBoolean(in.get("group"))
                                 || !Objects.equals(old.mime,in.getOrDefault("mime","application/octet-stream")))throw new IOException("Conflicting upload retry");
-                        return result("id",id,"offset",Long.toString(old.offset));
+                        synchronized(old){old.touched=System.currentTimeMillis();return result("id",id,"offset",Long.toString(old.offset));}
                     }
                     Upload u=new Upload(staging.resolve(id),in);
                     String zero="0000000000000000000000000000000000000000000000000000000000000000";
@@ -55,7 +55,10 @@ public final class FileCommands implements AutoCloseable {
             case "append":{
                 Upload u=upload(id);String encoded=in.getOrDefault("data","");if(encoded.length()>PrivateFiles.BLOCK*4/3+4)throw new IOException("Upload block too large");
                 byte[] data=Base64.getDecoder().decode(encoded);long offset=Long.parseLong(in.get("offset"));
-                synchronized(u){u.touched=System.currentTimeMillis();if(u.finishing)throw new IOException("Upload already submitted");
+                synchronized(u){
+                    if(uploads.get(id)!=u)throw new IOException("Upload expired; choose the file again");
+                    u.touched=System.currentTimeMillis();
+                    if(u.finishing || !u.fileId.isEmpty() || !u.error.isEmpty())throw new IOException("Upload already submitted");
                     if(data.length==0 || offset<0 || offset>u.offset || offset+data.length>u.size)throw new IOException("Invalid upload offset");
                     try(RandomAccessFile file=new RandomAccessFile(u.path.toFile(),"rw")){
                         file.seek(offset);
@@ -65,26 +68,31 @@ public final class FileCommands implements AutoCloseable {
                     }return result("id",id,"offset",Long.toString(u.offset));
                 }
             }
-            case "finish":{
-                Upload u=upload(id);synchronized(u){if(u.offset!=u.size)throw new IOException("Upload is incomplete");
-                    if(!u.finishing){u.finishing=true;
-                        try{work.execute(()->{try{u.fileId=files.send(Files.newInputStream(u.path),u.size,u.name,u.mime,u.peer,u.group);}
-                            catch(Exception e){u.error=e.getMessage()==null?"Could not prepare file":e.getMessage();}
-                            finally{u.touched=System.currentTimeMillis();try{Files.deleteIfExists(u.path);}catch(Exception ignored){}}});}
-                        catch(RejectedExecutionException e){u.finishing=false;throw new IOException("Busy; retry shortly");}
-                    }return result("id",id,"status","Preparing");}
-            }
+            case "finish":return prepare(id,upload(id));
             case "status":{
-                Upload u=uploads.get(id);if(u!=null){if(!u.error.isEmpty())return result("id",id,"status","Failed","error",u.error);
-                    if(u.fileId.isEmpty())return result("id",id,"status",u.finishing?"Preparing":"Uploading","done",Long.toString(u.offset),"size",Long.toString(u.size),"ready","false");
-                    Map<String,String> m=files.status(u.fileId);m.put("fileId",u.fileId);m.put("ok","true");return m;}
+                Upload u=uploads.get(id);if(u!=null)return uploadStatus(id,u);
                 Map<String,String> m=files.status(id);m.put("ok","true");return m;
             }
             case "download":return result("id",files.receive(in.get("ref"),in.get("peer"),Boolean.parseBoolean(in.get("group"))));
             case "pause":files.pause(id);return result();
-            case "resume":files.resume(id);return result();
-            case "remove":{Upload u=uploads.get(id);if(u!=null && !u.error.isEmpty()){uploads.remove(id);return result();}files.remove(id);return result();}
-            case "cancelUpload":{Upload u=upload(id);synchronized(u){if(u.finishing)throw new IOException("Preparation already started");uploads.remove(id);Files.deleteIfExists(u.path);}return result();}
+            case "resume":{
+                Upload u=uploads.get(id);
+                if(u!=null){synchronized(u){if(u.fileId.isEmpty())return prepare(id,u);id=u.fileId;}}
+                files.resume(id);return result();
+            }
+            case "remove":{
+                Upload u=uploads.get(id);
+                if(u!=null){synchronized(u){
+                    if(u.finishing)throw new IOException("Preparation is still running");
+                    if(u.fileId.isEmpty()){Files.deleteIfExists(u.path);uploads.remove(id,u);return result();}
+                    id=u.fileId;
+                }}
+                files.remove(id);return result();
+            }
+            case "cancelUpload":{Upload u=upload(id);synchronized(u){
+                if(u.finishing || !u.fileId.isEmpty())throw new IOException("Preparation already started");
+                Files.deleteIfExists(u.path);uploads.remove(id,u);
+            }return result();}
             case "read":{
                 long offset=Long.parseLong(in.getOrDefault("offset","0"));
                 long size=Long.parseLong(files.status(id).get("size"));if(offset<0||offset>size)throw new IOException("Invalid download offset");
@@ -94,15 +102,56 @@ public final class FileCommands implements AutoCloseable {
                 return result("data",Base64.getEncoder().encodeToString(data),"next",Long.toString(offset+data.length),"size",Long.toString(size),"name",files.name(id));
             }
             case "list":{
-                StringBuilder json=new StringBuilder("[");for(Map<String,String> m:files.list()){
+                List<Map<String,String>> entries=files.list();
+                // Complete uploads that failed preparation remain resumable from the transfer list.
+                for(Map.Entry<String,Upload> entry:uploads.entrySet()) {
+                    Upload u=entry.getValue();synchronized(u){
+                        if(u.fileId.isEmpty() && u.offset==u.size)entries.add(uploadStatus(entry.getKey(),u));
+                    }
+                }
+                StringBuilder json=new StringBuilder("[");for(Map<String,String> m:entries){
                     if(json.length()>1)json.append(',');com.eurobuddha.maxima.core.util.Json.Writer w=new com.eurobuddha.maxima.core.util.Json.Writer();m.forEach(w::put);json.append(w.done());}
                 return result("transfers",json.append(']').toString());
             }
             default:throw new IOException("Unknown file action");
         }
     }
+    private Map<String,String> prepare(String id,Upload u)throws IOException {
+        synchronized(u) {
+            if(closed || uploads.get(id)!=u)throw new IOException("Upload expired; choose the file again");
+            if(u.offset!=u.size)throw new IOException("Upload is incomplete");
+            if(!u.fileId.isEmpty())return result("id",id,"fileId",u.fileId);
+            if(!u.finishing) {
+                u.finishing=true;u.error="";u.touched=System.currentTimeMillis();
+                try { work.execute(()->{
+                    String error="";
+                    try {
+                        String fileId=files.send(Files.newInputStream(u.path),u.size,u.name,u.mime,u.peer,u.group);
+                        synchronized(u){u.fileId=fileId;}
+                        // Keep the original input on failure, so Resume can retry preparation.
+                        try{Files.deleteIfExists(u.path);}catch(IOException ignored){}
+                    }catch(Exception e){error=e.getMessage()==null?"Could not prepare file":e.getMessage();}
+                    finally{synchronized(u){u.error=error;u.finishing=false;u.touched=System.currentTimeMillis();}}
+                }); }
+                catch(RejectedExecutionException e){u.finishing=false;u.error="Busy; tap Resume";throw new IOException(u.error);}
+            }
+            return result("id",id,"status","Preparing");
+        }
+    }
+    private Map<String,String> uploadStatus(String id,Upload u)throws IOException {
+        synchronized(u) {
+            if(!u.fileId.isEmpty()) {
+                Map<String,String> m=files.status(u.fileId);m.put("fileId",u.fileId);m.put("ok","true");return m;
+            }
+            return result("id",id,"name",u.name,"status",!u.error.isEmpty()?"Failed":u.finishing?"Preparing":"Uploading",
+                    "error",u.error,"done",Long.toString(u.offset),"size",Long.toString(u.size),"ready","false",
+                    "paused",Boolean.toString(!u.error.isEmpty()));
+        }
+    }
     private Upload upload(String id)throws IOException{Upload u=uploads.get(id);if(u==null)throw new IOException("Upload expired; choose the file again");return u;}
-    private void sweep(){long now=System.currentTimeMillis();uploads.entrySet().removeIf(e->{Upload u=e.getValue();if(!u.finishing && now-u.touched>30*60*1000L){try{Files.deleteIfExists(u.path);}catch(Exception ignored){}return true;}
-        return (!u.fileId.isEmpty() || !u.error.isEmpty()) && now-u.touched>30*60*1000L;});}
+    private void sweep(){long now=System.currentTimeMillis();uploads.entrySet().removeIf(e->{Upload u=e.getValue();synchronized(u){
+        if(!u.finishing && now-u.touched>30*60*1000L){try{Files.deleteIfExists(u.path);}catch(Exception ignored){}return true;}
+        return false;
+    }});}
     @Override public void close(){closed=true;work.shutdownNow();for(Upload u:uploads.values())try{Files.deleteIfExists(u.path);}catch(Exception ignored){}uploads.clear();}
 }
