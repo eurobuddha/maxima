@@ -7,7 +7,7 @@ plugins {
 // A fresh artifact line. macOS jpackage requires a major version >= 1
 // (independent of the relay protocol version). 1.1.0 adds the windowed chat
 // client alongside the relay node — kept in step with DesktopMain.APP_VERSION.
-version = '1.5.108'
+version = '1.5.109'
 
 /*
  * The desktop node bundles its own JRE via jpackage, so it is not bound to the
@@ -52,6 +52,8 @@ sourceSets {
         java {
             srcDir '../app/src/main/java'
             srcDir '../walletfile'
+            srcDir '../desktoplinks'
+            include 'com/eurobuddha/maxima/desktoplinks/**'
             include 'com/eurobuddha/maxima/desktop/**'
             include 'org/minima/**'
             include 'com/eurobuddha/wallet/**'
@@ -63,7 +65,7 @@ sourceSets {
             exclude 'com/eurobuddha/wallet/TokenMeta.java'      // calls IconResolver (token-icon resolve is app-only for now)
         }
     }
-    test { java.srcDir '../walletfile-test' }
+    test { java.srcDir '../walletfile-test'; java.srcDir '../desktoplinks-test' }
 }
 
 application {
@@ -94,7 +96,7 @@ runtime {
     // (org.minima.database.MinimaDB) needs java.sql — without it the packaged
     // app crashes on 'Run as Maxima classic' with NoClassDefFoundError: java.sql.
     modules = ['java.base', 'java.desktop', 'java.naming', 'java.management',
-               'jdk.crypto.ec', 'java.sql', 'java.sql.rowset']
+               'jdk.crypto.ec', 'jdk.httpserver', 'java.sql', 'java.sql.rowset']
 
     // Omit --compress: its syntax changed in newer JDKs (--compress=2 -> zip-N),
     // so leaving it out keeps one build file working across JDK 17/21/26.
@@ -148,4 +150,11 @@ runtime {
             installerOptions = ['--linux-shortcut', '--vendor', 'eurobuddha']
         }
     }
+}
+
+// Disposable host-adapter integration harness; no account dependency in the shipped desktop.
+dependencies { testImplementation project(':account') }
+tasks.register('docsFixtureClasspath') {
+    dependsOn testClasses
+    doLast { file("$buildDir/docs-fixture-classpath.txt").text = sourceSets.test.runtimeClasspath.asPath }
 }

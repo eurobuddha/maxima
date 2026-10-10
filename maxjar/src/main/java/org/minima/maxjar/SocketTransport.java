@@ -341,7 +341,9 @@ public class SocketTransport implements MaximaTransport {
 					// were offline, just delivered it, and asks us to prove we
 					// hold the routing key so it can DELETE the copies.
 					if (ctrl.getType().getValue() == CTRL_MAILBOX_INFO) {
-						answerMailboxChallenge(zPeer, ctrl);
+						Message barrier = new Message("MAXJAR_MAILBOX_BARRIER");
+                        barrier.addObject("ack", (Runnable) () -> answerMailboxChallenge(zPeer, ctrl));
+                        Main.getInstance().getMaxima().PostMessage(barrier);
 						continue;
 					}
 					Message msg = new Message(MaximaManager.MAXIMA_CTRLMESSAGE);

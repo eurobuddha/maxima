@@ -329,6 +329,8 @@ public final class DesktopJarEngine implements ChatPort {
 			}
 			Inbound in = mInbound;
 			if (in == null) {
+                if ("com.eurobuddha.minimadocs.invite.v1".equals(app))
+                    throw new IllegalStateException("Invitation sink not ready");
 				// No sink yet - buffer, don't drop. Dropping here while the
 				// transport ACKs the relay's delete challenge destroys held
 				// offline mail.
@@ -361,7 +363,9 @@ public final class DesktopJarEngine implements ChatPort {
 						rand != null && rand.startsWith("0x") ? rand : "0x00");
 				in.onMessage(m, String.valueOf(zJson.get("msgid")));
 			} catch (Exception e) {
-				com.eurobuddha.maxima.desktop.ui.DesktopEventLog.add("jar inbound map: " + e);
+				if ("com.eurobuddha.minimadocs.invite.v1".equals(app))
+                    throw new IllegalStateException("Invitation persistence failed", e);
+                com.eurobuddha.maxima.desktop.ui.DesktopEventLog.add("jar inbound map: " + e);
 			}
 		} else if ("MAXIMACONTACTS".equals(zEvent)) {
 			Runnable r = mContactsChanged;
