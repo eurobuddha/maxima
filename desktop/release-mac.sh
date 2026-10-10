@@ -41,6 +41,9 @@ rm -f "$DMG"
   --dest "$OUT" --vendor eurobuddha --mac-package-identifier com.eurobuddha.maxima.node \
   --mac-sign --mac-signing-key-user-name "$USER_NAME"
 [ -f "$DMG" ] || { echo "jpackage produced no $DMG"; ls "$OUT"; exit 1; }
+# jpackage does not sign the DMG container on every JDK. Sign it explicitly.
+codesign --force --sign "$IDENTITY" --timestamp "$DMG"
+codesign --verify --strict "$DMG"
 echo "notarizing $DMG (profile $PROFILE)…"
 xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
 xcrun stapler staple "$DMG"

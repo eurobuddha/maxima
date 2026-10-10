@@ -304,4 +304,24 @@ public class ParlonsLocalTest {
         assertFalse(p.isAuthorized(k));
         assertFalse("revoked stays revoked until a fresh key is minted", p.authorizeLocal(k, "pc", false));
     }
+    @Test public void companionApprovalRequiresAnAuthorizedOwnerSession() throws Exception {
+        com.eurobuddha.maxima.core.MaximaNode node = new com.eurobuddha.maxima.core.MaximaNode(
+                com.eurobuddha.maxima.core.identity.MaximaIdentity.fromPhrase(
+                        com.eurobuddha.maxima.core.identity.Bip39.generate(24)), "test", 0);
+        try (com.eurobuddha.maxima.desktoplinks.MinimaDocsLink docs =
+                new com.eurobuddha.maxima.desktoplinks.MinimaDocsLink(node, dir, "core")) {
+            docs.start(); local.setDocsLink(docs);
+            assertEquals(401, call("POST", "/api/minimadocs/approve", null, null, "{}", null).code);
+            String cookie = signIn();
+            assertEquals(405, call("GET", "/api/minimadocs/approve", cookie, null, null, null).code);
+            Resp approval = call("POST", "/api/minimadocs/approve", cookie, null, "{}", null);
+            assertEquals(200, approval.code); assertTrue(new org.json.JSONObject(approval.body).getString("link").startsWith("minimadocs://parlons/v1?"));
+            assertFalse(approval.body.contains("token"));
+            assertEquals(200, call("POST", "/api/minimadocs/revoke", cookie, null, "{}", null).code);
+            assertTrue(pairing.revoke(key, new com.eurobuddha.maxima.core.codec.MiniData(key).to0xString()));
+            assertEquals(403, call("POST", "/api/minimadocs/approve", cookie, null, "{}", null).code);
+            assertEquals(403, call("POST", "/api/minimadocs/revoke", cookie, null, "{}", null).code);
+        } finally { node.stop(); }
+    }
+
 }

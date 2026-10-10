@@ -54,6 +54,7 @@ public final class DesktopNode {
     private final boolean mJar;
     private MaximaNode mNode;                 // built-in engine (null in classic mode)
     private DesktopJarEngine mJarEngine;      // classic engine (null in built-in mode)
+    private final com.eurobuddha.maxima.desktoplinks.MinimaDocsLink mDocs;
     private final ChatPort mPort;             // the active engine
     private final ChatEngine mChat;
     private final MediaService mMedia;
@@ -146,9 +147,6 @@ public final class DesktopNode {
             mChat.setStore(new FileStore(new File(base, "chat")));
             mChat.setMediaService(mMedia);
             mChat.setListener(fanout());
-            jar.setInbound((msg, msgid) -> {
-                try { mChat.onInbound(msg, msgid == null ? "" : msgid); } catch (Exception ignored) { }
-            });
             jar.setContactsChanged(() -> { DesktopEventLog.add("contacts changed (classic)"); fireChanged(); });
             DesktopEventLog.add("ENGINE: classic Maxima (jar)");
         } else {
@@ -170,10 +168,19 @@ public final class DesktopNode {
             mChat.setMediaService(mMedia);
             mChat.setListener(fanout());
             mNode.setLogListener(DesktopEventLog::add);
-            mNode.setMessageListener((msg, msgid) -> {
-                mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
-            });
             DesktopEventLog.add("ENGINE: built-in");
+        }
+        try { mDocs = new com.eurobuddha.maxima.desktoplinks.MinimaDocsLink(mPort, zDataDir, "desktop"); }
+        catch (Exception e) { throw new IllegalStateException("Cannot open minimaDocs connection storage", e); }
+        if (mJar) {
+            mJarEngine.setInbound((msg, id) -> {
+                if (!mDocs.receive(msg)) mChat.onInbound(msg, id == null ? "" : id);
+            });
+        } else {
+            mNode.setRetainedMessageValidator(com.eurobuddha.maxima.desktoplinks.MinimaDocsLink::retainedInvitation);
+            mNode.setMessageListener((msg, id) -> {
+                if (!mDocs.receive(msg)) mChat.onInbound(msg, id == null ? "" : id.to0xString());
+            });
         }
         applySavedMls();   // re-pin a static MLS across restarts (phone parity)
         // Restore active shares at startup, without requiring the file dialog to be opened.
@@ -202,6 +209,8 @@ public final class DesktopNode {
             }
         };
     }
+
+    public com.eurobuddha.maxima.desktoplinks.MinimaDocsLink docsLink() { return mDocs; }
 
     public MaximaNode node()       { return mNode; }          // null in classic mode
     public ChatPort port()         { return mPort; }          // the active engine (either)
@@ -404,6 +413,7 @@ public final class DesktopNode {
 
     /** Attach to relays (built-in) / confirm the classic engine is up, then pump. */
     public int start() {
+        try { mDocs.start(); } catch (Exception e) { throw new IllegalStateException("Cannot start minimaDocs connection service", e); }
         if (!mJar && mNode != null) {
             // The store composes the seeds (yours, then the compiled-in list only if it is on);
             // relays remembered by discovery were loaded by setStore() and sit on top.
@@ -497,6 +507,7 @@ public final class DesktopNode {
         if (mFileCommands != null) { mFileCommands.close(); mFileCommands = null; }
         if (mPrivateFiles != null) { mPrivateFiles.close(); mPrivateFiles = null; }
         mRunning = false;
+        mDocs.close();
         if (mMaint != null) {
             mMaint.shutdownNow();
         }

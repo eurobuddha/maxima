@@ -49,6 +49,7 @@ public final class ParlonsCore {
     private final Path mDataDir;
     private final Config mCfg;
 
+    private final com.eurobuddha.maxima.desktoplinks.MinimaDocsLink mDocs;
     private final MaximaNode mNode;
     private final RelayGossipClient mGossip;
     private final MediaService mMedia;
@@ -155,8 +156,11 @@ public final class ParlonsCore {
         } catch (java.io.IOException e) { throw new IllegalStateException("Cannot open private file storage", e); }
         // (listener wired AFTER mControl below — it fans events out through the control push)
         mNode.setLogListener(s -> log("node: " + s));   // log() tees into the ring itself
+        try { mDocs = new com.eurobuddha.maxima.desktoplinks.MinimaDocsLink(mNode, zDataDir, "core"); }
+        catch (Exception e) { throw new IllegalStateException("Cannot open minimaDocs connection storage", e); }
+        mNode.setRetainedMessageValidator(com.eurobuddha.maxima.desktoplinks.MinimaDocsLink::retainedInvitation);
         mNode.setMessageListener((msg, msgid) -> {
-            mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
+            if (!mDocs.receive(msg)) mChat.onInbound(msg, msgid == null ? "" : msgid.to0xString());
         });
 
         // The owner control channel: paired devices drive the account over the encrypted
@@ -430,6 +434,7 @@ public final class ParlonsCore {
     }
 
     private int startOnce() {
+        try { mDocs.start(); } catch (Exception e) { throw new IllegalStateException("Cannot start minimaDocs connection service", e); }
         mRunning = true;
         mStartedAt = System.currentTimeMillis();
         openAccountWallet();
@@ -592,6 +597,8 @@ public final class ParlonsCore {
     }
 
     /** The local web panel, or null when none is configured / it could not bind. */
+    public com.eurobuddha.maxima.desktoplinks.MinimaDocsLink docsLink() { return mDocs; }
+
     public ParlonsLocal local() {
         return mLocal;
     }
@@ -628,6 +635,7 @@ public final class ParlonsCore {
             ParlonsLocal local = new ParlonsLocal(mNode.services(), key, mDataDir, zPort,
                     () -> mNode.permanentAddress(), mPairing, mMedia, this::log);
             local.setPrivateFiles(mPrivateFiles);
+            local.setDocsLink(mDocs);
             local.start();
             mLocal = local;
             mControl.setLocalSink(local.sink());
@@ -969,6 +977,7 @@ public final class ParlonsCore {
     public synchronized void shutdown() {
         if (mStopped) return;
         mStopped = true;
+        mDocs.close();
         mRunning = false;
         mOwnRelayGeneration.incrementAndGet();
         mControl.close();

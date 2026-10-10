@@ -6,10 +6,10 @@ set -euo pipefail
 DMG="${1:?usage: verify-mac.sh <dmg>}"
 [ -f "$DMG" ] || { echo "no such dmg: $DMG"; exit 1; }
 echo "== dmg: $DMG"
-# The DMG container itself need not carry a signature — Gatekeeper judges the notarization ticket stapled to the
-# DMG and the signed, notarized app inside it (jpackage signs the container only in some configurations).
-DINFO=$(codesign -dv "$DMG" 2>&1 || true)   # captured first: `codesign | grep -q` under pipefail fails a PASSING check
-echo "$DINFO" | grep -q 'Developer ID' && echo "ok: dmg container signed with Developer ID" || echo "note: dmg container unsigned (fine — ticket + signed app inside decide)"
+# Both the installer container and its app must carry a Developer ID signature.
+DINFO=$(codesign -dv --verbose=2 "$DMG" 2>&1 || true)
+echo "$DINFO" | grep -q 'Authority=Developer ID Application' || { echo "FAIL: dmg container not signed with Developer ID Application"; exit 1; }
+codesign --verify --strict "$DMG" && echo "ok: dmg container signature verified"
 xcrun stapler validate "$DMG" > /dev/null && echo "ok: notarization ticket stapled to the dmg"
 DASSESS=$(spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG" 2>&1 || true)
 echo "$DASSESS" | grep -q 'accepted' || { echo "FAIL: Gatekeeper rejects the dmg: $DASSESS"; exit 1; }

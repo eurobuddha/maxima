@@ -911,6 +911,19 @@
     const name = el('<div class="card"><div class="ctitle2">Profile</div><div class="h">Your name</div><div class="sub">What your contacts see.</div><div class="frow"><input class="field" id="setName" value="' + esc(S.me.name) + '"><button class="btn sm" id="saveName">Save</button></div></div>');
     name.querySelector('#saveName').addEventListener('click', async () => { const v = name.querySelector('#setName').value.trim(); if (!v) return; try { await api('identity.setname', { name: v }); S.me.name = v; toast('Saved'); } catch (e) { toast(e.message, 'err'); } });
     body.appendChild(name);
+    const docs = el('<div class="card"><div class="ctitle2">Connected apps</div><div class="h">minimaDocs</div><div class="sub">View, add and remove contacts and exchange document invitations with this account.</div><div class="sub" id="docsAccount"></div><div class="sub" id="docsStatus"></div><div class="frow"><button class="btn sm" id="docsConnect">Connect minimaDocs</button><button class="btn ghost sm" id="docsRevoke">Revoke minimaDocs</button></div><textarea class="field" id="docsLink" readonly hidden aria-label="minimaDocs connection link"></textarea><div class="sub" id="docsHint"></div></div>');
+    docs.querySelector('#docsAccount').textContent = (S.me.name || 'My account') + ' · minimaCore / Parlons account';
+    const docsLink = docs.querySelector('#docsLink'); let expiry;
+    async function docsStatus() { try { const r = await api('minimadocs/status'); if (docs.isConnected) docs.querySelector('#docsStatus').textContent = r.connections + ' connected workspace(s)'; } catch (e) { docs.querySelector('#docsStatus').textContent = e.message; } }
+    docs.querySelector('#docsConnect').addEventListener('click', async () => {
+      if (!confirm('Allow minimaDocs to manage contacts and exchange document invitations for ' + (S.me.name || 'this account') + '?')) return;
+      try { const r = await api('minimadocs/approve'); if (!docs.isConnected) return; docsLink.value = r.link; docsLink.hidden = false; docsLink.select(); docs.querySelector('#docsHint').textContent = 'Copy into minimaDocs People. Expires in two minutes; works once.'; clearTimeout(expiry); expiry = setTimeout(() => { docsLink.value = ''; docsLink.hidden = true; docs.querySelector('#docsHint').textContent = 'Link expired. Create another to connect.'; docsStatus(); }, 120000); } catch (e) { toast(e.message, 'err'); }
+    });
+    docs.querySelector('#docsRevoke').addEventListener('click', async () => {
+      if (!confirm('Disconnect all minimaDocs workspaces from this account? Document access is unchanged.')) return;
+      try { await api('minimadocs/revoke'); clearTimeout(expiry); docsLink.value = ''; docsLink.hidden = true; docs.querySelector('#docsHint').textContent = 'Access revoked.'; docsStatus(); } catch (e) { toast(e.message, 'err'); }
+    });
+    body.appendChild(docs); docsStatus();
     const priv = el('<div class="card"><div class="ctitle2">Privacy</div><div class="sw"><div class="lbl">Read receipts<small>Your contacts see when you have read their messages.</small></div><button class="switch' + (s.readReceipts ? ' on' : '') + '" id="rr"></button></div></div>');
     wireSwitch(priv.querySelector('#rr'), 'Read receipts', (on) => api('settings.set', { readReceipts: on }), () => 'Saved');
     body.appendChild(priv);

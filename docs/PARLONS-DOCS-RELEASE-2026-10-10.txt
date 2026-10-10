@@ -1,0 +1,11 @@
+Parlons Desktop 1.5.109 / Parlons Node 0.2.122
+
+Merged the minimaDocs companion integration onto 9d4f9394 (current main), retaining the published chat links, private-file transfers, pairing and identity-import fixes. The original local checkout and unrelated work remain untouched.
+
+Both built-in and classic desktop engines and the included account expose explicit, revocable minimaDocs approval, scoped contacts and persistent invitations. Shared private writes retain public AccountFiles.writePrivate for existing callers. Classic mailbox acknowledgement waits for successful invitation persistence.
+
+Validation: 415 Java tests, zero failures/errors/skips; live minimaDocs integration 3/3, including account separation, restart/revocation, exact DOCX/XLSX delivery, read-only permissions and both host UIs.
+
+Code review: the stale pre-merge installer was rejected for publication because it omitted 20 current main commits. Merge conflicts preserved private-file panel wiring and public private-write access. No remaining major findings in the merged integration. The signed host installers must be rebuilt from this source; the earlier local hashes are superseded.
+
+Node SHA-256: baf0194a39d79d044faeb44f997a1d58a9632fe37095ef0959d989d9208fe677

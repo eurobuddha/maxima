@@ -77,12 +77,27 @@ public class Main {
 		return mTransport;
 	}
 
-	public void PostNotifyEvent(String zEvent, JSONObject zData) {
-		if (mListener != null) {
-			try {
-				mListener.onNotifyEvent(zEvent, zData);
-			} catch (Exception ignored) {
-			}
+	// Failed application writes stay pending until a mailbox barrier can retry them.
+	// The relay retains its encrypted copy while any notification is not durable.
+	private final java.util.Map<String, JSONObject> mPending = new java.util.LinkedHashMap<>();
+	private boolean mPendingOverflow;
+	public synchronized void PostNotifyEvent(String event, JSONObject data) {
+		if (mListener == null) return;
+		try { mListener.onNotifyEvent(event, data); }
+		catch (RuntimeException failed) {
+			if (!"MAXIMA".equals(event)) return;
+			String id = String.valueOf(data.get("msgid"));
+			if (mPending.size() >= 500 && !mPending.containsKey(id)) mPendingOverflow = true;
+			else mPending.put(id, data);
 		}
+	}
+
+	/** Called on the classic manager lane, after all messages preceding a drain challenge. */
+	public synchronized boolean flushNotifications() {
+		for (String id : new java.util.ArrayList<>(mPending.keySet())) {
+			try { mListener.onNotifyEvent("MAXIMA", mPending.get(id)); mPending.remove(id); }
+			catch (RuntimeException failed) { return false; }
+		}
+		return !mPendingOverflow;
 	}
 }

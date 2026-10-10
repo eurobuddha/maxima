@@ -374,6 +374,11 @@ public class MaximaManager extends MessageProcessor {
 	
 	@Override
 	protected void processMessage(Message zMessage) throws Exception {
+        // maxjar adapter barrier: never acknowledge a drain before application persistence.
+        if (zMessage.getMessageType().equals("MAXJAR_MAILBOX_BARRIER")) {
+            if (Main.getInstance().flushNotifications()) ((Runnable) zMessage.getObject("ack")).run();
+            return;
+        }
 		
 		//Get the MaximaDB
 		MaximaDB maxdb = MinimaDB.getDB().getMaximaDB();

@@ -1435,9 +1435,17 @@ public final class MaximaNode implements ChatPort {
     /** Content understood by ChatEngine as history, never an action or a mutable control.
      *  It still has a finite past horizon and cannot gain extra future clock skew. Relay
      *  storage time is not authenticated on this wire: use the signed sender timestamp. */
-    private static boolean isRetainedChat(MaximaMessage zMessage, long time) {
+    private java.util.function.Predicate<MaximaMessage> mRetainedMessage = message -> false;
+
+    /** Host-owned passive inbox admission; never use for commands or automatic actions. */
+    public void setRetainedMessageValidator(java.util.function.Predicate<MaximaMessage> validator) {
+        mRetainedMessage = java.util.Objects.requireNonNull(validator);
+    }
+
+    private boolean isRetainedChat(MaximaMessage zMessage, long time) {
         long now = System.currentTimeMillis();
         if (time > now || time < now - Mailbox.DEFAULT_TTL_MS) return false;
+        if (mRetainedMessage.test(zMessage)) return true;
         String app = zMessage.mApplication.toString();
         if (!ChatMessage.APPLICATION.equals(app) && !ClassicChat.APPLICATION.equals(app)) return false;
         try {

@@ -49,7 +49,7 @@ sourceSets {
             exclude 'com/eurobuddha/wallet/TokenMeta.java'      // calls IconResolver
         }
     }
-    test { java.srcDirs = ['src/junit/java', '../walletfile-test'] }
+    test { java.srcDirs = ['src/junit/java', '../walletfile-test', '../desktoplinks-test'] }
 }
 
 application {

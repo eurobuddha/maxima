@@ -75,3 +75,7 @@ tasks.register('fatJar', Jar) {
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC', 'META-INF/INDEX.LIST'
     }
 }
+
+// Artifact and boot metadata have one release version.
+version = "0.2.122"
+tasks.named("fatJar") { archiveVersion = project.version }

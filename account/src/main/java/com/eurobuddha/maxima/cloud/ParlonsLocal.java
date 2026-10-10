@@ -96,6 +96,8 @@ public final class ParlonsLocal {
     private final MediaService mMedia;
     private final Consumer<String> mLog;
 
+    private com.eurobuddha.maxima.desktoplinks.MinimaDocsLink mDocs;
+    public void setDocsLink(com.eurobuddha.maxima.desktoplinks.MinimaDocsLink docs) { mDocs = docs; }
     private HttpServer mServer;
     private ExecutorService mExec;
     /** The ticket currently in {@code panel-ticket.txt} (unused). */
@@ -340,6 +342,26 @@ public final class ParlonsLocal {
             return;
         }
         String method = ex.getRequestMethod();
+        if (zName.startsWith("minimadocs/")) {
+            if (!mPairing.isAuthorized(mLocalKey)) { fail(ex, 403, "Local device revoked"); return; }
+            if (!"POST".equals(method)) { fail(ex, 405, "POST only"); return; }
+            String ct = ex.getRequestHeaders().getFirst("Content-Type");
+            if (ct == null || !ct.matches("(?i)application/json(?:\\s*;.*)?")) { fail(ex, 415, "JSON required"); return; }
+            byte[] body = ex.getRequestBody().readNBytes(32769);
+            if (body.length > 32768) { fail(ex, 413, "Request too large"); return; }
+            if (mDocs == null) { fail(ex, 503, "Companion service unavailable"); return; }
+            JSONObject out = new JSONObject(); out.put("ok", true);
+            try {
+                switch (zName) {
+                    case "minimadocs/status": out.put("connections", mDocs.approvals()); break;
+                    case "minimadocs/approve": out.put("link", mDocs.approve()); break;
+                    case "minimadocs/revoke": mDocs.revoke(); break;
+                    default: fail(ex, 404, "Unknown operation"); return;
+                }
+                json(ex, 200, out);
+            } catch (Exception unavailable) { fail(ex, 503, "Could not update minimaDocs access"); }
+            return;
+        }
         switch (zName) {
             case "logout": {
                 mSessions.remove(session);

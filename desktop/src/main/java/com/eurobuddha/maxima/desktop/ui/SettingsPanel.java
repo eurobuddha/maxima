@@ -100,6 +100,33 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(nameCard);
         mBody.add(k.vgap(14));
 
+        mBody.add(k.sectionLabel("Connected apps"));
+        mBody.add(k.vgap(8));
+        DKit.RoundPanel apps = k.card();
+        apps.add(k.sub("minimaDocs can view, add and remove contacts and exchange document invitations."));
+        apps.add(k.sub("Account: " + node.port().name() + " · Parlons Desktop"));
+        apps.add(k.sub(node.docsLink().approvals() + " connected minimaDocs workspace(s)"));
+        JPanel actions = rowX();
+        DKit.HoverButton connectDocs = k.primaryButton("Connect minimaDocs");
+        connectDocs.onClick(() -> {
+            try {
+                JPanel content = new JPanel(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+                content.add(k.sub("Paste into minimaDocs People. This link expires in two minutes and works once."));
+                content.add(k.copyField("Connection link", node.docsLink().approve(), false));
+                dialog("Connect minimaDocs · " + node.port().name(), content, 640);
+            } catch (Exception e) { javax.swing.JOptionPane.showMessageDialog(this, "Could not create link. Revoke old connections and retry."); }
+        });
+        DKit.HoverButton revokeDocs = k.ghostButton("Revoke minimaDocs");
+        revokeDocs.onClick(() -> {
+            int answer = javax.swing.JOptionPane.showConfirmDialog(this,
+                    "Disconnect every minimaDocs workspace from this Parlons account? Document access is unchanged.",
+                    "Revoke minimaDocs", javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE);
+            if (answer != javax.swing.JOptionPane.OK_OPTION) return;
+            try { node.docsLink().revoke(); rebuild(); }
+            catch (Exception e) { javax.swing.JOptionPane.showMessageDialog(this, "Revocation could not be saved. Please retry."); }
+        });
+        actions.add(connectDocs); actions.add(revokeDocs); apps.add(actions); mBody.add(apps); mBody.add(k.vgap(14));
+
         // ---- privacy ----
         mBody.add(k.sectionLabel("Privacy"));
         mBody.add(k.vgap(8));

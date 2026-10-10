@@ -38,3 +38,6 @@ dependencies {
     compileOnly 'org.bouncycastle:bcprov-jdk15on:1.69'   // BackupCrypto scrypt — host-supplied at runtime
     api 'org.json:json:20231013'                 // BackupBundle
 }
+
+// Desktop-only companion HTTP service; never compiled into Android :core.
+sourceSets.main.java.srcDir '../desktoplinks'
