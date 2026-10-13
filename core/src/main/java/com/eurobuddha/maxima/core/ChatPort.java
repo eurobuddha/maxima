@@ -50,6 +50,15 @@ public interface ChatPort {
 	default void noteCapable(String zPublicKey) {
 	}
 
+	/**
+	 * Add (or return the existing) keets-only contact: a KeetChat peer known by
+	 * keets pubkey alone, no Maxima identity, no handshake. Engines without a
+	 * contact book they can write (or without keets at all) return null.
+	 */
+	default Contact storeKeetsContact(String zPubkey, String zName) {
+		return null;
+	}
+
 	/** Remove a contact (and tell them, classic-style). */
 	boolean removeContact(String zPublicKey);
 

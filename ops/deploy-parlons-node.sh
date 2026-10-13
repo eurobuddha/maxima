@@ -18,6 +18,7 @@
 #       [--peers h:p,h:p] [--blobstore 1024] [--replace-relay]
 #       [--seed-from /path/on/vps/seed.txt --archive 65.109.31.226:8001]
 #       [--node-args "-host 1.2.3.4 -archive -port 9111"]
+#       [--keets]
 #   ops/deploy-parlons-node.sh root@1.2.3.4 --rootnode 65.109.31.226:9001
 #
 # --node-args passes Minima's OWN startup flags to the embedded node (through Minima's own
@@ -88,6 +89,7 @@ REPLACE_RELAY="false"
 SEED_FROM=""
 ARCHIVE="65.109.31.226:8001"
 NODE_ARGS=""
+KEETS="false"
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -105,6 +107,7 @@ while [ $# -gt 0 ]; do
         --seed-from)      SEED_FROM="$2"; shift 2 ;;
         --archive)        ARCHIVE="$2"; shift 2 ;;
         --node-args)      NODE_ARGS="$2"; shift 2 ;;
+        --keets)          KEETS="true"; shift ;;
         --relay-port)     RELAY_PORT="$2"; shift 2 ;;
         --gateway-port)   GW_PORT="$2"; shift 2 ;;
         --public)         PUBLIC_BASE="$2"; shift 2 ;;
@@ -159,6 +162,13 @@ case "$NODE_ARGS" in *'"'*) echo "--node-args must not contain double quotes (th
 # The whole property is ONE argv token to the JVM, so it is double-quoted in the unit (systemd
 # honours quotes). Built here as a plain string: quotes inside a ${var:+…} expansion in the
 # heredoc would be treated as shell quoting (stripped) or written as literal backslashes.
+# --keets: KeetChat interop. The sidecar is uploaded in step 3b; the embedded node
+# spawns it with the box's `node` runtime and the account's chat engine gains the
+# keets transport + inbox bridge. No inbound firewall port: hyperswarm holepunches.
+if [ "$KEETS" = "true" ]; then
+    NODE_ARGS="$NODE_ARGS -keets -keetssidecar /opt/maxima/keets-sidecar/index.js"
+    NODE_ARGS="${NODE_ARGS# }"
+fi
 ARGS_OPT="\"-Dparlons.node.args=$NODE_ARGS\""
 PUBLIC_OPT=""; [ -n "$PUBLIC_BASE" ] && PUBLIC_OPT="-Dparlons.node.public=$PUBLIC_BASE"
 
@@ -229,6 +239,24 @@ REMOTE
 # One memorable command for first pairing and later inspection.
 scp -q -o ConnectTimeout=20 "$SCRIPT_DIR/parlons-pair" "$TARGET:/opt/maxima/parlons-pair"
 $SSH 'install -m 755 /opt/maxima/parlons-pair /usr/local/bin/parlons-pair'
+
+# ---- 3b. keets sidecar ---------------------------------------------------
+if [ "$KEETS" = "true" ]; then
+    echo "[3b ] keets sidecar"
+    SIDECAR="${SIDECAR:-$REPO/../keets/sidecar}"
+    [ -f "$SIDECAR/index.js" ] || { echo "no keets sidecar at $SIDECAR (pass SIDECAR=/path)" >&2; exit 1; }
+    [ -d "$SIDECAR/node_modules" ] || { echo "sidecar node_modules missing - run: (cd $SIDECAR && npm ci --omit=dev)" >&2; exit 1; }
+    $SSH 'command -v node >/dev/null 2>&1' || { echo "the box has no \`node\` runtime - install nodejs first (the keets sidecar runs on it)" >&2; exit 1; }
+    tar -C "$SIDECAR" -czf /tmp/keets-sidecar.tgz --exclude "prebuilds/android*" --exclude "prebuilds/ios*" .
+    scp -q -o ConnectTimeout=20 /tmp/keets-sidecar.tgz "$TARGET:/tmp/keets-sidecar.tgz"
+    rm -f /tmp/keets-sidecar.tgz
+    $SSH 'set -e; rm -rf /opt/maxima/keets-sidecar.new; mkdir -p /opt/maxima/keets-sidecar.new
+tar -xzf /tmp/keets-sidecar.tgz -C /opt/maxima/keets-sidecar.new; rm -f /tmp/keets-sidecar.tgz
+rm -rf /opt/maxima/keets-sidecar.old
+[ -d /opt/maxima/keets-sidecar ] && mv /opt/maxima/keets-sidecar /opt/maxima/keets-sidecar.old
+mv /opt/maxima/keets-sidecar.new /opt/maxima/keets-sidecar
+echo "      sidecar $(node -e "console.log(require(\"/opt/maxima/keets-sidecar/package.json\").version)") at /opt/maxima/keets-sidecar"'
+fi
 
 # ---- 4. systemd ----------------------------------------------------------
 echo "[4/7] systemd unit"

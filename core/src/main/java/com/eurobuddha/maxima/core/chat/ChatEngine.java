@@ -721,6 +721,13 @@ public final class ChatEngine {
         mMedia = zMedia;
     }
 
+    /** The keets side-channel (KeetChat interop), set by hosts with a node. */
+    private volatile KeetsTransport mKeets;
+
+    public void setKeetsTransport(KeetsTransport zKeets) {
+        mKeets = zKeets;
+    }
+
     /**
      * Send a photo/video/audio: publish it to the self-hosted media mesh, then
      * send a normal chat message whose body carries the manifest ref. Blocking
@@ -1193,6 +1200,11 @@ public final class ChatEngine {
      *  the every-mailbox redundancy. */
     private boolean deliver(Contact zTo, ChatMessage zMsg, boolean zGroup) {
         try {
+            // KEETS: a KeetChat peer, addressed by keets pubkey alone. The
+            // node's keets command is the whole transport - no Maxima leg.
+            if (zTo.isKeets()) {
+                return deliverKeets(zTo, zMsg);
+            }
             // THE BRIDGE: a classic peer (MaxSolo on a stock node) speaks the
             // maxsolo wire, not ours. Only human-visible content crosses -
             // receipts/roster/address are our protocol alone and would be
@@ -1335,6 +1347,138 @@ public final class ChatEngine {
             default:
                 return true;
         }
+    }
+
+    /** Deliver to a KeetChat peer over keets. Mirrors the classic bridge:
+     *  Parlons-only control types no-op successfully, photos cross at full
+     *  fidelity via the keets media mesh. */
+    private boolean deliverKeets(Contact zTo, ChatMessage zMsg) {
+        KeetsTransport kt = mKeets;
+        if (kt == null) {
+            return false;   // no keets on this host - the entry fails honestly
+        }
+        try {
+            String pk = zTo.publicKey.toLowerCase();
+            if (zMsg.type == ChatMessage.TYPE_GROUP_TEXT
+                    || zMsg.type == ChatMessage.TYPE_ROSTER
+                    || zMsg.type == ChatMessage.TYPE_CALL) {
+                return true;
+            }
+            if (zMsg.type == ChatMessage.TYPE_TEXT && ChatMedia.isMedia(zMsg.body)) {
+                byte[] bytes = mediaBytes(zMsg.body);
+                String caption = ChatMedia.caption(zMsg.body);
+                if (bytes != null) {
+                    String mime = ChatMedia.mime(zMsg.body);
+                    String ext = mime != null && mime.contains("png") ? ".png" : ".jpg";
+                    String url = kt.publish("/parlons/img-" + System.currentTimeMillis() + ext, bytes);
+                    return kt.send(pk, KeetsWire.image(zMsg.id, mNode.name(), zMsg.time, url, caption));
+                }
+                ChatMessage fb = ChatMessage.text(zMsg.id,
+                        caption.isEmpty() ? "[photo]" : caption + " [photo]", zMsg.time);
+                return kt.send(pk, KeetsWire.encode(fb, mNode.name()));
+            }
+            String wire = KeetsWire.encode(zMsg, mNode.name());
+            if (wire == null) {
+                return true;   // no keets equivalent (e.g. a DELIVERED receipt)
+            }
+            return kt.send(pk, wire);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** The plain bytes of one of OUR media bodies (data: or mx1: ref), or null. */
+    private byte[] mediaBytes(String zMediaBody) {
+        try {
+            String ref = ChatMedia.ref(zMediaBody);
+            if (ref == null) {
+                return null;
+            }
+            if (ref.startsWith("data:")) {
+                int comma = ref.indexOf(',');
+                return comma < 0 ? null : java.util.Base64.getMimeDecoder()
+                        .decode(ref.substring(comma + 1).trim());
+            }
+            if (!ref.startsWith("mx1:") || mMedia == null) {
+                return null;
+            }
+            String json = new String(java.util.Base64.getUrlDecoder()
+                    .decode(ref.substring(4)), StandardCharsets.UTF_8);
+            return mMedia.fetch(
+                    com.eurobuddha.maxima.core.media.MediaManifest.decode(json));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * An inbound keets payload, from the node bridge. {@code zTransportId}
+     * gives legacy plain-text payloads a stable dedup id. Returns true when
+     * consumed - the bridge acks only then. payaddr-req never reaches here
+     * (the bridge answers it with the node wallet, contacts-gated).
+     */
+    public boolean onKeetsInbound(String zFromPubkey, String zPayload, String zTransportId) {
+        awaitLoaded();
+        String from = Keys.norm(zFromPubkey);
+        KeetsWire.Msg k = KeetsWire.decode(zPayload);
+        if (k == null) {
+            // Legacy plain text - accepted, exactly as KeetChat accepts it.
+            mNode.storeKeetsContact(from, "");
+            handleText(from, ChatMessage.text("keets:" + zTransportId, zPayload,
+                    System.currentTimeMillis()));
+            return true;
+        }
+        if ("image".equals(k.state)) {
+            mNode.storeKeetsContact(from, k.name);
+            ChatMessage im = ChatMessage.text(k.id, ingestKeetsImage(k.ref, k.body), k.ts);
+            handleText(from, im);
+            return true;
+        }
+        ChatMessage cm = KeetsWire.toChatMessage(k);
+        if (cm == null) {
+            return true;   // unknown state: consumed, never stored
+        }
+        switch (cm.type) {
+            case ChatMessage.TYPE_TEXT:
+                mNode.storeKeetsContact(from, k.name);
+                handleText(from, cm);
+                return true;
+            case ChatMessage.TYPE_PAYMENT:
+                mNode.storeKeetsContact(from, k.name);
+                handlePayment(from, cm);
+                return true;
+            case ChatMessage.TYPE_RECEIPT:
+                if (mNode.contact(from) != null) {
+                    handleReceipt(from, cm);
+                }
+                return true;
+            case ChatMessage.TYPE_ADDRESS:
+                if (mNode.contact(from) != null) {
+                    handleAddress(from, cm);
+                }
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** An inbound keets photo as one of OUR media bodies: fetch the bytes over
+     *  keets and republish locally (the ingestClassicImage pattern). When the
+     *  fetch fails, the caption plus the FULL keets:// ref - never truncated -
+     *  so the photo stays one copy-paste away. */
+    private String ingestKeetsImage(String zRef, String zCaption) {
+        KeetsTransport kt = mKeets;
+        try {
+            if (kt != null && mMedia != null && zRef != null && !zRef.isEmpty()) {
+                byte[] bytes = kt.fetch(zRef);
+                if (bytes != null && bytes.length > 0) {
+                    return ChatMedia.wrap("image/jpeg", publishRef(bytes, "image/jpeg"), zCaption);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return ((zCaption == null || zCaption.isEmpty()) ? "[photo]" : zCaption + " [photo]")
+                + (zRef == null || zRef.isEmpty() ? "" : " " + zRef);
     }
 
     /** A contact told us their wallet receive address. Store it silently - it

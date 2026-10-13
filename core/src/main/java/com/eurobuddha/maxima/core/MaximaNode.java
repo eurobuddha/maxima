@@ -435,6 +435,27 @@ public final class MaximaNode implements ChatPort {
         }
     }
 
+    /** A keets-only contact (KeetChat peer): keyed by its keets pubkey, kind
+     *  "keets", never part of the Maxima handshake/self-heal machinery. An
+     *  existing contact keeps its user-chosen name; a real sender name only
+     *  fills one we never named (mirrors KeetChat's own contact rule). */
+    @Override
+    public Contact storeKeetsContact(String zPubkey, String zName) {
+        String key = Keys.norm(zPubkey);
+        Contact c = mContacts.get(key);
+        if (c == null) {
+            c = new Contact(key);
+            c.kind = "keets";
+            c.name = (zName == null || zName.isEmpty()) ? key : zName;
+            storeContact(c);
+        } else if (("noname".equals(c.name) || c.name.equals(key))
+                && zName != null && !zName.isEmpty()) {
+            c.name = zName;
+            storeContact(c);
+        }
+        return c;
+    }
+
     /** Add or update a contact and persist it. */
     public void storeContact(Contact zContact) {
         mContacts.put(Keys.norm(zContact.publicKey), zContact);

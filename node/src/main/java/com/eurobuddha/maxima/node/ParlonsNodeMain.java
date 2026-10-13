@@ -581,6 +581,14 @@ public final class ParlonsNodeMain {
             });
         }
         int hosts = core.start();
+        // KeetChat interop: when the embedded node runs keets, this account's chat
+        // engine gains the keets transport and the node's single inbox drainer.
+        if (org.minima.system.params.GeneralParams.KEETS_ENABLED) {
+            KeetsChatBridge keets = new KeetsChatBridge(core);
+            core.chat().setKeetsTransport(keets);
+            keets.start();
+            System.out.println("[parlons-node] keets chat bridge up (KeetChat interop)");
+        }
         // account.txt + invite.txt beside the account's files: what a person reads to pair a device.
         com.eurobuddha.maxima.cloud.AccountFiles.startRefresher(core.pairing().codeFile().getParent(),
                 () -> core.node().permanentAddress(), 3_000);

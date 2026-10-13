@@ -939,9 +939,20 @@ public final class ParlonsControl implements AutoCloseable {
         });
         zReg.register(M_CONTACT_ADD, req -> {
             requireAuth(req);
-            String address = str(parse(req), "address");
+            JSONObject in = parse(req);
+            String address = str(in, "address").trim();
             if (address.isEmpty()) {
                 return bytes(err("address required"));
+            }
+            // A bare keets pubkey (0x + 64 hex - what the KeetChat QR carries)
+            // is a keets-only contact: no Maxima handshake exists for it.
+            if (address.matches("(?i)0x[0-9a-f]{64}")) {
+                String name = str(in, "name").trim();
+                Contact kc = mNode.storeKeetsContact(address, name);
+                if (kc == null) {
+                    return bytes(err("this engine cannot store keets contacts"));
+                }
+                return bytes(ok());
             }
             mNode.introduce(address, true);
             return bytes(ok());

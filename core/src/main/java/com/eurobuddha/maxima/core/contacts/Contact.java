@@ -77,6 +77,12 @@ public final class Contact {
         }
     }
 
+    /** A keets-only contact: a KeetChat peer addressed by keets pubkey, with no
+     *  Maxima identity. {@link #publicKey} IS the keets pubkey (0x + 64 hex). */
+    public boolean isKeets() {
+        return "keets".equals(kind);
+    }
+
     public boolean isClassic() {
         return capabilities.isClassic();
     }
