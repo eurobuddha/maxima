@@ -12,6 +12,12 @@ public interface KeetsTransport {
     /** Send a wire payload (KeetsWire JSON) to a keets pubkey (0x + 64 hex). */
     boolean send(String zPubkey, String zPayload) throws Exception;
 
+    /** This node's own keets pubkey (0x + 64 hex) - what a KeetChat user adds
+     *  as a contact. Null until known. */
+    default String myPubkey() {
+        return null;
+    }
+
     /** Publish bytes on the keets media mesh; returns the keets:// url. */
     String publish(String zPath, byte[] zBytes) throws Exception;
 

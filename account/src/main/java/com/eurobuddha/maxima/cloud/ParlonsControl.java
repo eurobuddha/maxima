@@ -617,6 +617,10 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("name", safe(mNode.name()));
             out.put("permanent", safe(permanent()));
             out.put("primary", safe(mNode.primaryAddress()));
+            String kpk = mChat.keetsPubkey();
+            if (kpk != null) {
+                out.put("keets", kpk);   // what a KeetChat user adds as a contact - always FULL
+            }
             return bytes(out);
         });
 
@@ -627,6 +631,10 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("name", safe(mNode.name()));
             out.put("permanent", safe(permanent()));
             out.put("primary", safe(mNode.primaryAddress()));
+            String kpk = mChat.keetsPubkey();
+            if (kpk != null) {
+                out.put("keets", kpk);   // what a KeetChat user adds as a contact - always FULL
+            }
             StatusSource s = mStatus;
             int hosts = s == null ? 0 : s.hosts();
             out.put("uptime", s == null ? 0L : s.uptimeMillis());
@@ -947,6 +955,10 @@ public final class ParlonsControl implements AutoCloseable {
             // A bare keets pubkey (0x + 64 hex - what the KeetChat QR carries)
             // is a keets-only contact: no Maxima handshake exists for it.
             if (address.matches("(?i)0x[0-9a-f]{64}")) {
+                if (!mChat.hasKeets()) {
+                    return bytes(err("this account's host has no keets transport - "
+                            + "keets contacts need a keets-enabled Parlons Node"));
+                }
                 String name = str(in, "name").trim();
                 Contact kc = mNode.storeKeetsContact(address, name);
                 if (kc == null) {

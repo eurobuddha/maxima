@@ -35,6 +35,7 @@ final class KeetsChatBridge implements KeetsTransport {
     /* contacts-gated, so bounded by the contact book */
     private final Map<String, Long> mPayAddrAnswered = new HashMap<>();
     private volatile boolean mRunning = true;
+    private volatile String mPubkey;
     private String mLastErr = "";
 
     KeetsChatBridge(ParlonsCore zCore) {
@@ -51,7 +52,32 @@ final class KeetsChatBridge implements KeetsTransport {
         mRunning = false;
     }
 
+    @Override
+    public String myPubkey() {
+        return mPubkey;
+    }
+
     private void loop() {
+        // The keets identity is stable (datadir keypair) - fetch once, announce
+        // once: this pubkey is what a KeetChat user adds as a contact.
+        while (mRunning && mPubkey == null) {
+            try {
+                JSONObject info = NodeWallet.response(NodeWallet.run("keets action:info"));
+                String pk = String.valueOf(info.getOrDefault("pubkey", ""));
+                if (pk.matches("(?i)0x[0-9a-f]{64}")) {
+                    mPubkey = pk;
+                    System.out.println("[parlons-node] keets identity: " + pk
+                            + " (a KeetChat user adds this as a contact)");
+                    break;
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                Thread.sleep(POLL_MS);
+            } catch (InterruptedException e) {
+                return;
+            }
+        }
         while (mRunning) {
             try {
                 pollOnce();

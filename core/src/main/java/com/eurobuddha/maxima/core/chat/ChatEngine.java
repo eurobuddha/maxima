@@ -728,6 +728,17 @@ public final class ChatEngine {
         mKeets = zKeets;
     }
 
+    /** True when this host can actually deliver to keets contacts. */
+    public boolean hasKeets() {
+        return mKeets != null;
+    }
+
+    /** This node's keets pubkey (what a KeetChat user adds), or null. */
+    public String keetsPubkey() {
+        KeetsTransport kt = mKeets;
+        return kt == null ? null : kt.myPubkey();
+    }
+
     /**
      * Send a photo/video/audio: publish it to the self-hosted media mesh, then
      * send a normal chat message whose body carries the manifest ref. Blocking
