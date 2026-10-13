@@ -892,7 +892,11 @@ public final class ChatEngine {
             // word for a classic contact.
             if (!e.isGroup()) {
                 Contact cc = mNode.contact(e.peer);
-                if (cc != null && cc.isClassic()) {
+                // Classic peers have no receipt protocol; keets peers send READ
+                // on open but never DELIVERED, and a successful keets send is
+                // already durable (direct, or sealed fleet mailbox) - resending
+                // either every beat for 24h would be pure spam.
+                if (cc != null && (cc.isClassic() || cc.isKeets())) {
                     continue;
                 }
             }
@@ -940,6 +944,9 @@ public final class ChatEngine {
                 // 1:1 classic guard in resendUndelivered). Track that in a
                 // SEPARATE set: deliveredBy must hold only real confirmations,
                 // or a reader (e.g. desktop ticks) shows a false delivered.
+                if (c.isKeets()) {
+                    continue;   // no group protocol over keets - never fanned out
+                }
                 if (c.isClassic() && e.classicSent().contains(k)) {
                     continue;
                 }
@@ -1370,7 +1377,10 @@ public final class ChatEngine {
                 if (bytes != null) {
                     String mime = ChatMedia.mime(zMsg.body);
                     String ext = mime != null && mime.contains("png") ? ".png" : ".jpg";
-                    String url = kt.publish("/parlons/img-" + System.currentTimeMillis() + ext, bytes);
+                    // Path keyed by MESSAGE id: republishing the same entry
+                    // (manual retry, redelivery) overwrites, never accumulates.
+                    String url = kt.publish("/parlons/img-"
+                            + zMsg.id.replaceAll("[^A-Za-z0-9_-]", "") + ext, bytes);
                     return kt.send(pk, KeetsWire.image(zMsg.id, mNode.name(), zMsg.time, url, caption));
                 }
                 ChatMessage fb = ChatMessage.text(zMsg.id,
@@ -1768,6 +1778,19 @@ public final class ChatEngine {
             // delivered tick to a red cross and re-arm the resend ladder.
             if (!Receipt.FAILED.equals(zMsg.state)) {
                 setState(e, zMsg.state);
+                if (zMsg.upto) {
+                    // Coalesced 1:1 receipt (KeetChat sends ONE, referencing its
+                    // newest): everything of ours to this peer up to that
+                    // message shares the state.
+                    for (Entry older : new ArrayList<>(mMessages.values())) {
+                        if (older != e && older.mine && !older.isGroup()
+                                && zFrom.equalsIgnoreCase(older.peer)
+                                && older.time <= e.time
+                                && !Receipt.READ.equals(older.state)) {
+                            setState(older, zMsg.state);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1777,7 +1800,7 @@ public final class ChatEngine {
         List<String> current = new java.util.ArrayList<>();
         for (String m : g.others(mNode.publicKeyHex())) {
             Contact mc = mNode.contact(m);
-            if (mc == null || !mc.isClassic()) {
+            if (mc == null || !(mc.isClassic() || mc.isKeets())) {
                 current.add(m);
             }
         }

@@ -142,8 +142,9 @@ final class KeetsChatBridge implements KeetsTransport {
 
     @Override
     public boolean send(String zPubkey, String zPayload) throws Exception {
-        if (zPayload == null) {
-            return false;
+        if (zPayload == null || zPubkey == null
+                || !zPubkey.matches("(?i)0x[0-9a-f]{64}")) {
+            return false;   // never interpolate a malformed target into the command
         }
         String hex = new MiniData(zPayload.getBytes(StandardCharsets.UTF_8)).to0xString();
         JSONObject res = NodeWallet.run("keets action:send to:" + zPubkey.toLowerCase()
@@ -168,6 +169,9 @@ final class KeetsChatBridge implements KeetsTransport {
         }
     }
 
+    /** Never heap-load an attacker-sized blob: chat photos are ~200KB. */
+    private static final long MAX_FETCH_BYTES = 8 * 1024 * 1024;
+
     @Override
     public byte[] fetch(String zUrl) throws Exception {
         File tmp = File.createTempFile("keets-fetch", ".bin");
@@ -176,6 +180,10 @@ final class KeetsChatBridge implements KeetsTransport {
                     + " file:" + tmp.getAbsolutePath());
             if (!Boolean.TRUE.equals(res.get("status"))) {
                 throw new Exception("keets fetch failed: " + res.get("error"));
+            }
+            long len = tmp.length();
+            if (len > MAX_FETCH_BYTES) {
+                throw new Exception("keets fetch too large: " + len + " bytes");
             }
             return Files.readAllBytes(tmp.toPath());
         } finally {
