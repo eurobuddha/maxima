@@ -77,6 +77,7 @@ public final class MaximaService extends Service {
     public static com.eurobuddha.maxima.files.FileCommands files() { return sFileCommands; }
     private static volatile AndroidContribution sPolicy;
     private static volatile com.eurobuddha.maxima.core.chat.ChatEngine sChat;
+    private static volatile com.eurobuddha.maxima.app.keets.KeetsIpcTransport sKeets;
     private static volatile com.eurobuddha.maxima.app.direct.DirectReachability sDirect;
     private static volatile com.eurobuddha.maxima.app.direct.LanDiscovery sLan;
     private static volatile com.eurobuddha.maxima.app.relay.RelayHost sRelay;
@@ -252,6 +253,15 @@ public final class MaximaService extends Service {
             sFileCommands = new com.eurobuddha.maxima.files.FileCommands(sPrivateFiles, new java.io.File(getFilesDir(), "private-files/uploads").toPath());
         } catch (java.io.IOException e) { EventLog.add("Private file storage unavailable: " + e.getMessage()); }
         chat.setMediaService(sMedia);   // photos/videos in chat, self-hosted
+        // keets via the phone's minimaCore node (broadcast IPC). Registration is
+        // async; until the node answers, keetsPubkey() stays null and keets-only
+        // contacts simply can't be added yet. Inbound rides KeetsNotifyReceiver.
+        try {
+            sKeets = new com.eurobuddha.maxima.app.keets.KeetsIpcTransport(this);
+            chat.setKeetsTransport(sKeets);
+        } catch (Exception e) {
+            EventLog.add("keets transport unavailable: " + e.getMessage());
+        }
         final MaximaNode node = sNode;
         chat.setListener(new com.eurobuddha.maxima.core.chat.ChatEngine.Listener() {
             public void onMessage(com.eurobuddha.maxima.core.chat.ChatEngine.Entry e) {
@@ -934,6 +944,11 @@ public final class MaximaService extends Service {
 
     @Override
     public void onDestroy() {
+        com.eurobuddha.maxima.app.keets.KeetsIpcTransport kt = sKeets;
+        if (kt != null) {
+            sKeets = null;
+            try { kt.destroy(); } catch (Exception ignored) { }
+        }
         sInstance = null;
         if (mCallForeground != null && mCallForeground.active()) com.eurobuddha.maxima.app.call.CallManager.get(this).hangup();
         mPumping.set(false);

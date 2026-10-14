@@ -380,6 +380,16 @@ public final class ContactsPage implements Page {
         copyHolder.setOrientation(LinearLayout.VERTICAL);
         body.addView(copyHolder, new LinearLayout.LayoutParams(-1, -2));
 
+        // KeetChat identity: the phone node's keets pubkey - what a KeetChat
+        // user adds as a contact. Independent of the Maxima address resolve,
+        // shown in FULL, copyable.
+        com.eurobuddha.maxima.core.chat.ChatEngine keetsCe = MaximaService.chat();
+        String keetsPk = keetsCe == null ? null : keetsCe.keetsPubkey();
+        if (keetsPk != null) {
+            body.addView(copyField("Your KeetChat address (keets)", keetsPk,
+                    "KeetChat address copied"), new LinearLayout.LayoutParams(-1, -2));
+        }
+
         final TextView shareBtn = primaryButton("Share…");
         LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, -2);
         sbp.topMargin = dp(12);
@@ -486,13 +496,32 @@ public final class ContactsPage implements Page {
             mAct.toast("Paste their Mx…@host:port address");
             return false;
         }
-        if (!addr.startsWith("Mx") && !addr.startsWith("MAX#")) {
-            mAct.toast("Not a Parlons address");
-            return false;
-        }
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             mAct.toast("Transport not running");
+            return false;
+        }
+        // A bare keets pubkey (0x + 64 hex - the KeetChat QR / identity dialog):
+        // a keets-only contact, no Maxima handshake. Needs the phone's keets-enabled
+        // minimaCore node; without it the engine has no keets transport.
+        if (addr.matches("(?i)0x[0-9a-f]{64}")) {
+            com.eurobuddha.maxima.core.chat.ChatEngine ce = MaximaService.chat();
+            if (ce == null || !ce.hasKeets()) {
+                mAct.toast("KeetChat contacts need the minimaCore node app (enable Parlons in its Apps tab)");
+                return false;
+            }
+            com.eurobuddha.maxima.core.contacts.Contact kc = node.storeKeetsContact(addr, "");
+            if (kc == null) {
+                mAct.toast("This engine can't store KeetChat contacts");
+                return false;
+            }
+            mAct.toast("KeetChat contact added — say hello!");
+            mLastSignature = "";
+            render();
+            return true;
+        }
+        if (!addr.startsWith("Mx") && !addr.startsWith("MAX#")) {
+            mAct.toast("Not a Parlons address");
             return false;
         }
         EventLog.add("introducing ourselves to " + addr.substring(Math.max(0, addr.indexOf('@'))));
@@ -701,6 +730,10 @@ public final class ContactsPage implements Page {
     }
 
     private String statusLabel(Contact c) {
+        if (c.isKeets()) {
+            // keets presence is per-message (direct vs mailbox), not polled
+            return "KeetChat";
+        }
         long ls = c.lastSeen;
         if (ls <= 0) {
             return "offline";
@@ -710,6 +743,9 @@ public final class ContactsPage implements Page {
     }
 
     private String peerPill(Contact c) {
+        if (c.isKeets()) {
+            return "keets";
+        }
         if (c.kind != null && c.kind.equalsIgnoreCase("core")) {
             return "core";
         }

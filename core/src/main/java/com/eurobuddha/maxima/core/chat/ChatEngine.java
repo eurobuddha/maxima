@@ -1386,13 +1386,18 @@ public final class ChatEngine {
                 byte[] bytes = mediaBytes(zMsg.body);
                 String caption = ChatMedia.caption(zMsg.body);
                 if (bytes != null) {
-                    String mime = ChatMedia.mime(zMsg.body);
-                    String ext = mime != null && mime.contains("png") ? ".png" : ".jpg";
-                    // Path keyed by MESSAGE id: republishing the same entry
-                    // (manual retry, redelivery) overwrites, never accumulates.
-                    String url = kt.publish("/parlons/img-"
-                            + zMsg.id.replaceAll("[^A-Za-z0-9_-]", "") + ext, bytes);
-                    return kt.send(pk, KeetsWire.image(zMsg.id, mNode.name(), zMsg.time, url, caption));
+                    try {
+                        String mime = ChatMedia.mime(zMsg.body);
+                        String ext = mime != null && mime.contains("png") ? ".png" : ".jpg";
+                        // Path keyed by MESSAGE id: republishing the same entry
+                        // (manual retry, redelivery) overwrites, never accumulates.
+                        String url = kt.publish("/parlons/img-"
+                                + zMsg.id.replaceAll("[^A-Za-z0-9_-]", "") + ext, bytes);
+                        return kt.send(pk, KeetsWire.image(zMsg.id, mNode.name(), zMsg.time, url, caption));
+                    } catch (Exception publishFailed) {
+                        // e.g. media too large for an IPC transport - fall
+                        // through to the caption, like the classic bridge
+                    }
                 }
                 ChatMessage fb = ChatMessage.text(zMsg.id,
                         caption.isEmpty() ? "[photo]" : caption + " [photo]", zMsg.time);

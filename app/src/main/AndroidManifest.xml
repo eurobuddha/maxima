@@ -5,6 +5,8 @@
          a targeted setPackage() broadcast is silently dropped. -->
     <queries>
         <package android:name="com.eurobuddha.minimacore" />
+        <package android:name="com.eurobuddha.minimablock" />
+        <package android:name="com.eurobuddha.pandamonium" />
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -123,6 +125,13 @@
         <!-- OUTWARD IPC: how Minima Core and other companion apps use us as
              their transport. Mirrors the minimaapi broadcast pattern so it is
              familiar to anything already talking to the node. -->
+        <receiver
+            android:name=".keets.KeetsNotifyReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.eurobuddha.minimacore.NOTIFY" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".ipc.MaximaApiReceiver"
             android:exported="true"
