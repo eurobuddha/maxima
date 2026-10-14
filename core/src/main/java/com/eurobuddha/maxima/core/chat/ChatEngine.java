@@ -723,9 +723,21 @@ public final class ChatEngine {
 
     /** The keets side-channel (KeetChat interop), set by hosts with a node. */
     private volatile KeetsTransport mKeets;
+    private volatile boolean mKeetsAutoCreate = true;
 
     public void setKeetsTransport(KeetsTransport zKeets) {
         mKeets = zKeets;
+    }
+
+    /**
+     * Whether an inbound keets message from an unknown pubkey creates the
+     * contact. True (default) where Parlons is the host's only chat UI
+     * (node, desktop, minimaDesk). The Android app sets false: there the
+     * minimaCore node app has its own KeetChat, and auto-creating would
+     * mirror its conversations into Parlons as inbound-only half-threads.
+     */
+    public void setKeetsAutoCreate(boolean zAutoCreate) {
+        mKeetsAutoCreate = zAutoCreate;
     }
 
     /** True when this host can actually deliver to keets contacts. */
@@ -1446,6 +1458,14 @@ public final class ChatEngine {
     public boolean onKeetsInbound(String zFromPubkey, String zPayload, String zTransportId) {
         awaitLoaded();
         String from = Keys.norm(zFromPubkey);
+        // Contacts-only mode (Android): the node app's own KeetChat holds every
+        // conversation the user did not bring into Parlons - auto-creating a
+        // contact here would half-mirror those threads (inbound only, no sends).
+        // A chat lives in the app where the user added the contact; strangers'
+        // messages stay in the node app, which already stored them pre-ack.
+        if (!mKeetsAutoCreate && mNode.contact(from) == null) {
+            return true;
+        }
         KeetsWire.Msg k = KeetsWire.decode(zPayload);
         if (k == null) {
             // Legacy plain text - accepted, exactly as KeetChat accepts it.

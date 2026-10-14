@@ -259,6 +259,10 @@ public final class MaximaService extends Service {
         try {
             sKeets = new com.eurobuddha.maxima.app.keets.KeetsIpcTransport(this);
             chat.setKeetsTransport(sKeets);
+            // The node app (minimaCore) has its own KeetChat UI on this phone:
+            // a keets chat lives in the app where the user added the contact,
+            // so Parlons only accepts keets messages from ITS contacts.
+            chat.setKeetsAutoCreate(false);
         } catch (Exception e) {
             EventLog.add("keets transport unavailable: " + e.getMessage());
         }
