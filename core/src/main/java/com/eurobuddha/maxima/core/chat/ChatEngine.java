@@ -1419,8 +1419,11 @@ public final class ChatEngine {
                     }
                 }
                 String kind = isAudio ? "[voice note]" : "[photo]";
+                // an audio caption is "M:SS|waveformhex" - the peer should see
+                // the duration, never the raw waveform hex
+                String shown = isAudio ? caption.split("\\|")[0] : caption;
                 ChatMessage fb = ChatMessage.text(zMsg.id,
-                        caption.isEmpty() ? kind : caption + " " + kind, zMsg.time);
+                        shown.isEmpty() ? kind : shown + " " + kind, zMsg.time);
                 return kt.send(pk, KeetsWire.encode(fb, mNode.name()));
             }
             String wire = KeetsWire.encode(zMsg, mNode.name());
