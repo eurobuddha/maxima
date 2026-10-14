@@ -169,6 +169,11 @@ if [ "$KEETS" = "true" ]; then
     NODE_ARGS="$NODE_ARGS -keets -keetssidecar /opt/maxima/keets-sidecar/index.js"
     NODE_ARGS="${NODE_ARGS# }"
 fi
+# The sidecar is a Node.js child inside this unit's sandbox: libuv needs netlink
+# for interface discovery, or every socket(AF_NETLINK) dies with EPERM.
+KEETS_AF=""
+[ "$KEETS" = "true" ] && KEETS_AF=" AF_NETLINK"
+
 ARGS_OPT="\"-Dparlons.node.args=$NODE_ARGS\""
 PUBLIC_OPT=""; [ -n "$PUBLIC_BASE" ] && PUBLIC_OPT="-Dparlons.node.public=$PUBLIC_BASE"
 
@@ -331,7 +336,7 @@ SystemCallErrorNumber=EPERM
 
 # ---- network: block cloud-metadata + link-local so an RCE can't steal
 #      instance credentials. The node still reaches public peers + phones. ----
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX$KEETS_AF
 IPAddressDeny=169.254.0.0/16 fe80::/10
 
 # ---- resource ceilings ----
