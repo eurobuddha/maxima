@@ -169,4 +169,13 @@ public final class KeetsWire {
                 .put("state", "image")
                 .put("ref", zKeetsUrl).done();
     }
+
+    /** Outbound voice note: state:audio, body carries the shared
+     *  "M:SS|waveformhex" caption so every flavour draws the shape. */
+    public static String audio(String zId, String zMyName, long zTs,
+                               String zKeetsUrl, String zCaption) {
+        return base(zId, zMyName, zTs, zCaption)
+                .put("state", "audio")
+                .put("ref", zKeetsUrl).done();
+    }
 }

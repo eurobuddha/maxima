@@ -102,6 +102,19 @@ public class KeetsWireTest {
     }
 
     @Test
+    public void audioCarriesDurationWaveBodyAndRef() {
+        String wire = KeetsWire.audio("kc-9-a", "Rig", 1791990000000L,
+                "keets://aa/chat/vn-1.ogg?hash=bb", "0:14|1888888988898888db88f8898bdd8889");
+        KeetsWire.Msg k = KeetsWire.decode(wire);
+        org.junit.Assert.assertEquals("audio", k.state);
+        org.junit.Assert.assertEquals("keets://aa/chat/vn-1.ogg?hash=bb", k.ref);
+        org.junit.Assert.assertEquals("0:14|1888888988898888db88f8898bdd8889", k.body);
+        org.junit.Assert.assertEquals("kc-9-a", k.id);
+        // audio is ingested before toChatMessage (like image): unknown there stays null
+        org.junit.Assert.assertNull(KeetsWire.toChatMessage(k));
+    }
+
+    @Test
     public void nonDialectReturnsNull() {
         assertNull(KeetsWire.decode("just some plain text"));
         assertNull(KeetsWire.decode("{\"t\":1,\"id\":\"x\",\"body\":\"ours, not keets\"}"));
