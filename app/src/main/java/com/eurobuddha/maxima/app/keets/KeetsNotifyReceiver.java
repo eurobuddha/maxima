@@ -51,15 +51,15 @@ public final class KeetsNotifyReceiver extends BroadcastReceiver {
         if (ce == null) {
             return;   // service not up yet - the message is safe in the node's KeetChat
         }
-        // onKeetsInbound blocks on the history load and may send a receipt -
-        // never on the receiver's main thread.
-        final BroadcastReceiver.PendingResult pr = goAsync();
+        // onKeetsInbound blocks on the history load, may send a receipt, and an
+        // image ingest holds an IPC fetch for up to 90s - never on the receiver's
+        // main thread, and never under goAsync(): holding the PendingResult that
+        // long ANRs the app (proven on-device 2026-10-14). MaximaService is
+        // running (ce != null), so the process outlives the receiver anyway.
         new Thread(() -> {
             try {
                 ce.onKeetsInbound(from, payload, id);
             } catch (Exception ignored) {
-            } finally {
-                pr.finish();
             }
         }, "keets-notify").start();
     }
