@@ -212,6 +212,73 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(nodeCard);
         mBody.add(k.vgap(14));
 
+        // ---- node link: KeetChat via a local minimaCore Desktop node ----
+        mBody.add(k.sectionLabel("Node link (KeetChat)"));
+        mBody.add(k.vgap(8));
+        DKit.RoundPanel linkCard = k.card();
+        javax.swing.JTextField linkUrl = new javax.swing.JTextField(
+                com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.configuredUrl());
+        if (linkUrl.getText().isEmpty()) {
+            linkUrl.setText(com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.DEFAULT_URL);
+        }
+        javax.swing.JPasswordField linkPw = new javax.swing.JPasswordField(
+                com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.configuredPassword());
+        javax.swing.JLabel linkState = new javax.swing.JLabel(
+                node.chat().hasKeets()
+                        ? (node.chat().keetsPubkey() != null
+                                ? "Linked \u2014 KeetChat contacts available"
+                                : "Linked \u2014 waiting for the node's keets")
+                        : "Not linked \u2014 KeetChat contacts unavailable");
+        linkState.setFont(t.font(11f));
+        linkState.setForeground(t.subtext);
+        javax.swing.JButton linkSave = new javax.swing.JButton("Save & connect");
+        javax.swing.JButton linkClear = new javax.swing.JButton("Clear");
+        linkSave.addActionListener(ev -> {
+            com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.save(
+                    linkUrl.getText().trim(), new String(linkPw.getPassword()));
+            linkState.setText("Connecting\u2026");
+            node.restartKeets();
+            new Thread(() -> {
+                try { Thread.sleep(2500); } catch (InterruptedException ignored) { }
+                String kpk = node.chat().keetsPubkey();
+                javax.swing.SwingUtilities.invokeLater(() -> linkState.setText(
+                        kpk != null ? "Linked \u2014 KeetChat contacts available"
+                                    : "Linked \u2014 node answered no keets identity yet"));
+            }, "keets-link-check").start();
+        });
+        linkClear.addActionListener(ev -> {
+            com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.clear();
+            linkState.setText("Not linked \u2014 KeetChat contacts unavailable");
+        });
+        javax.swing.JPanel linkRow = new javax.swing.JPanel();
+        linkRow.setOpaque(false);
+        linkRow.setLayout(new BoxLayout(linkRow, BoxLayout.Y_AXIS));
+        javax.swing.JLabel linkHint = new javax.swing.JLabel(
+                "A minimaCore Desktop node on THIS machine (0.18.4+). Its chat app owns"
+                + " the inbox and relays KeetChat messages here.");
+        linkHint.setFont(t.font(11f));
+        linkHint.setForeground(t.subtext);
+        linkRow.add(linkHint);
+        linkRow.add(k.vgap(6));
+        linkRow.add(k.kvLine("RPC URL", ""));
+        linkRow.add(linkUrl);
+        linkRow.add(k.vgap(6));
+        linkRow.add(k.kvLine("RPC password (if set)", ""));
+        linkRow.add(linkPw);
+        linkRow.add(k.vgap(8));
+        javax.swing.JPanel linkBtns = new javax.swing.JPanel(
+                new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0));
+        linkBtns.setOpaque(false);
+        linkBtns.add(linkSave);
+        linkBtns.add(linkClear);
+        linkRow.add(linkBtns);
+        linkRow.add(k.vgap(6));
+        linkRow.add(linkState);
+        linkRow.setBorder(new EmptyBorder(10, 12, 10, 12));
+        linkCard.add(linkRow);
+        mBody.add(linkCard);
+        mBody.add(k.vgap(14));
+
         // ---- keys & security ----
         mBody.add(k.sectionLabel("Keys & security"));
         mBody.add(k.vgap(8));

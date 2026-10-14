@@ -185,6 +185,50 @@ public final class DesktopNode {
         applySavedMls();   // re-pin a static MLS across restarts (phone parity)
         // Restore active shares at startup, without requiring the file dialog to be opened.
         if(mNode!=null)try{files();}catch(Exception e){DesktopEventLog.add("Private file storage unavailable: "+e.getMessage());}
+        startKeets();      // KeetChat interop via the linked minimaCore node, when configured
+    }
+
+    /**
+     * keets via the user's LOCAL minimaCore Desktop node (Settings -> Node link).
+     * Built-in engine only - the jar engine has no keets contact store. All node
+     * traffic is off-EDT; failures leave keets off and chat otherwise untouched.
+     */
+    private volatile com.eurobuddha.maxima.desktop.keets.KeetsCompanionServer mKeetsServer;
+
+    /** (Re)start the keets link - also called from Settings after the node
+     *  link is saved, so KeetChat comes up without an app restart. */
+    public void restartKeets() {
+        com.eurobuddha.maxima.desktop.keets.KeetsCompanionServer ks = mKeetsServer;
+        if (ks != null) {
+            mKeetsServer = null;
+            try { ks.stop(); } catch (Exception ignored) { }
+        }
+        startKeets();
+    }
+
+    private void startKeets() {
+        if (mJar) {
+            return;
+        }
+        com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink link =
+                com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.configured();
+        if (link == null) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                com.eurobuddha.maxima.desktop.keets.KeetsNodeLinkTransport kt =
+                        new com.eurobuddha.maxima.desktop.keets.KeetsNodeLinkTransport(link);
+                mChat.setKeetsTransport(kt);
+                com.eurobuddha.maxima.desktop.keets.KeetsCompanionServer srv =
+                        new com.eurobuddha.maxima.desktop.keets.KeetsCompanionServer(mChat);
+                String url = srv.start();
+                srv.register(kt.nodeDataDir(), url);
+                mKeetsServer = srv;
+            } catch (Exception e) {
+                // node link down / keets off on that node - keets stays unavailable
+            }
+        }, "keets-link-start").start();
     }
 
     private ChatEngine.Listener fanout() {
@@ -506,6 +550,11 @@ public final class DesktopNode {
     public synchronized void shutdown() {
         if (mFileCommands != null) { mFileCommands.close(); mFileCommands = null; }
         if (mPrivateFiles != null) { mPrivateFiles.close(); mPrivateFiles = null; }
+        com.eurobuddha.maxima.desktop.keets.KeetsCompanionServer ks = mKeetsServer;
+        if (ks != null) {
+            mKeetsServer = null;
+            try { ks.stop(); } catch (Exception ignored) { }
+        }
         mRunning = false;
         mDocs.close();
         if (mMaint != null) {

@@ -324,6 +324,13 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                 } else {
                     fields.add(k.copyField("maxima address", ip, false));
                 }
+                // KeetChat identity (keets pubkey via the linked node) - what a
+                // KeetChat user adds as a contact. Shown in FULL, copyable.
+                String kpk = node.chat().keetsPubkey();
+                if (kpk != null) {
+                    fields.add(k.vgap(8));
+                    fields.add(k.copyField("KeetChat address (keets)", kpk, false));
+                }
                 copyHolder.add(fields, BorderLayout.CENTER);
                 copyHolder.revalidate();
                 d.pack();
@@ -464,6 +471,25 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private boolean introduce(String address) {
+        // A bare keets pubkey (0x + 64 hex - the KeetChat QR / identity dialog):
+        // a keets-only contact, no Maxima handshake. Needs the linked
+        // minimaCore Desktop node (Settings -> Node link).
+        if (address.matches("(?i)0x[0-9a-f]{64}")) {
+            if (!node.chat().hasKeets()) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "KeetChat contacts need a linked minimaCore Desktop node\n"
+                        + "(Settings \u2192 Node link), with keets enabled there.");
+                return false;
+            }
+            com.eurobuddha.maxima.core.contacts.Contact kc = node.port().storeKeetsContact(address, "");
+            if (kc == null) {
+                javax.swing.JOptionPane.showMessageDialog(this, "This engine can't store KeetChat contacts.");
+                return false;
+            }
+            refresh();
+            javax.swing.JOptionPane.showMessageDialog(this, "KeetChat contact added \u2014 say hello!");
+            return true;
+        }
         // Accept BOTH forms the phone accepts: a live Mx…@host:port address AND a
         // permanent MAX#… address (which the engine resolves through the MLS).
         boolean ok = !address.isEmpty()
@@ -549,7 +575,8 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
     private JComponent peerPill(Contact c) {
         String label;
         boolean core;
-        if (c.isClassic()) { label = "classic"; core = false; }
+        if (c.isKeets()) { label = "keets"; core = true; }
+        else if (c.isClassic()) { label = "classic"; core = false; }
         else if ("core".equals(c.kind)) { label = "core"; core = true; }
         else return null;
         DKit.RoundPanel p = k.round(core ? DKit.alpha(t.accent, 45) : t.input, 999);
@@ -564,12 +591,14 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
     }
 
     private String softwareLabel(Contact c) {
+        if (c.isKeets()) return "KeetChat (keets)";
         if (c.isClassic()) return "Classic Maxima";
         if ("core".equals(c.kind)) return "Minima Core";
         return "Parlons app";
     }
 
     private String presence(Contact c) {
+        if (c.isKeets()) return "KeetChat";
         long ls = c.lastSeen;
         if (ls <= 0) return "offline";
         long d = System.currentTimeMillis() - ls;
