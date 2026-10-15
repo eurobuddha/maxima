@@ -84,6 +84,9 @@ public final class KeetsNodeLinkTransport implements KeetsTransport {
 
     @Override
     public byte[] fetch(String zUrl) throws Exception {
+        if (!KeetsTransport.validRef(zUrl)) {
+            throw new Exception("invalid keets ref");
+        }
         File tmp = File.createTempFile("keets-fetch", ".bin");
         try {
             ok(mLink.cmd("keets action:fetch url:" + zUrl + " file:" + tmp.getAbsolutePath()));

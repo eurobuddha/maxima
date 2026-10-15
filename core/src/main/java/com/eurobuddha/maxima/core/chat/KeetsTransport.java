@@ -23,4 +23,14 @@ public interface KeetsTransport {
 
     /** Fetch a keets:// url back to bytes (P2P, cached by the sidecar). */
     byte[] fetch(String zUrl) throws Exception;
+
+    /** True iff zUrl is a well-formed keets:// ref (one token, no whitespace).
+     *  Inbound refs are attacker-supplied and every transport interpolates
+     *  them into a node command whose tokenizer splits on whitespace with
+     *  last-key-wins - an embedded space would let a hostile ref rewrite the
+     *  command (e.g. into an action:publish of a node file). Enforced both at
+     *  the ingest choke point and inside each fetch() implementation. */
+    static boolean validRef(String zUrl) {
+        return zUrl != null && zUrl.matches("keets://\\S+");
+    }
 }

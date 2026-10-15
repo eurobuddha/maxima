@@ -1532,7 +1532,7 @@ public final class ChatEngine {
     private String ingestKeetsImage(String zRef, String zCaption) {
         KeetsTransport kt = mKeets;
         try {
-            if (kt != null && mMedia != null && zRef != null && !zRef.isEmpty()) {
+            if (kt != null && mMedia != null && KeetsTransport.validRef(zRef)) {
                 byte[] bytes = kt.fetch(zRef);
                 if (bytes != null && bytes.length > 0) {
                     return ChatMedia.wrap("image/jpeg", publishRef(bytes, "image/jpeg"), zCaption);
@@ -1549,7 +1549,7 @@ public final class ChatEngine {
     private String ingestKeetsAudio(String zRef, String zCaption) {
         KeetsTransport kt = mKeets;
         try {
-            if (kt != null && mMedia != null && zRef != null && !zRef.isEmpty()) {
+            if (kt != null && mMedia != null && KeetsTransport.validRef(zRef)) {
                 byte[] bytes = kt.fetch(zRef);
                 if (bytes != null && bytes.length > 0) {
                     String clean = zRef.split("\\?")[0].toLowerCase();

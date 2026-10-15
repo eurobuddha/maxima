@@ -200,6 +200,9 @@ final class KeetsChatBridge implements KeetsTransport {
 
     @Override
     public byte[] fetch(String zUrl) throws Exception {
+        if (!KeetsTransport.validRef(zUrl)) {
+            throw new Exception("invalid keets ref");
+        }
         File tmp = File.createTempFile("keets-fetch", ".bin");
         try {
             JSONObject res = NodeWallet.run("keets action:fetch url:" + zUrl

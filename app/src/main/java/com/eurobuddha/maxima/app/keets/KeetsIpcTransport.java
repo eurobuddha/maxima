@@ -106,12 +106,21 @@ public final class KeetsIpcTransport implements KeetsTransport {
         return r.getJSONObject("response").getString("url");
     }
 
+    /** Never heap-decode an attacker-sized blob: chat photos are ~200KB. */
+    private static final int MAX_FETCH_HEX_CHARS = 16 * 1024 * 1024;   // 8MB of bytes
+
     @Override
     public byte[] fetch(String zUrl) throws Exception {
+        if (!com.eurobuddha.maxima.core.chat.KeetsTransport.validRef(zUrl)) {
+            throw new Exception("invalid keets ref");
+        }
         // no file: here - the node can't read our sandbox; inline datahex replies
         // over 100K chars come back via the IPC's own content:// file hand-off
         JSONObject r = sync("keets action:fetch url:" + zUrl);
         String hx = r.getJSONObject("response").getString("datahex");
+        if (hx.length() > MAX_FETCH_HEX_CHARS) {
+            throw new Exception("keets fetch too large: " + (hx.length() / 2) + " bytes");
+        }
         if (hx.startsWith("0x") || hx.startsWith("0X")) {
             hx = hx.substring(2);
         }
