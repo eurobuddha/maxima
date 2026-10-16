@@ -1,5 +1,7 @@
 package com.eurobuddha.maxima.app.portal;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+
 import android.content.Context;
 import android.graphics.Typeface;
 import android.view.Gravity;
@@ -39,9 +41,9 @@ final class PortalUi {
     }
 
     /** Uppercase section eyebrow above a card group. */
-    static TextView section(Context c, String s) {
+    static TextView section(Context c, CharSequence s) {
         TextView t = new TextView(c);
-        t.setText(s.toUpperCase());
+        Language.setText(t, Language.upper(s));
         t.setTextColor(c.getColor(R.color.ux_subtext));
         t.setTextSize(12);
         t.setLetterSpacing(0.08f);
@@ -50,26 +52,26 @@ final class PortalUi {
         return t;
     }
 
-    static TextView title(Context c, String s) {
+    static TextView title(Context c, CharSequence s) {
         TextView t = new TextView(c);
-        t.setText(s);
+        Language.setText(t, s);
         t.setTextColor(c.getColor(R.color.ux_text));
         t.setTextSize(17);
         t.setTypeface(t.getTypeface(), Typeface.BOLD);
         return t;
     }
 
-    static TextView label(Context c, String s) {
+    static TextView label(Context c, CharSequence s) {
         TextView t = new TextView(c);
-        t.setText(s);
+        Language.setText(t, s);
         t.setTextColor(c.getColor(R.color.ux_subtext));
         t.setTextSize(13);
         return t;
     }
 
-    static TextView value(Context c, String s) {
+    static TextView value(Context c, CharSequence s) {
         TextView t = new TextView(c);
-        t.setText(s);
+        Language.setText(t, s);
         t.setTextColor(c.getColor(R.color.ux_text));
         t.setTextSize(15);
         t.setTextIsSelectable(true);   // RULE 1: full value, copyable
@@ -77,7 +79,7 @@ final class PortalUi {
     }
 
     /** A label→value row (label left in subtext, value right, tabular). */
-    static View kv(Context c, String k, String v) {
+    static View kv(Context c, CharSequence k, CharSequence v) {
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -88,7 +90,7 @@ final class PortalUi {
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         row.addView(kl, klp);
         TextView vv = new TextView(c);
-        vv.setText(v);
+        Language.setText(vv, v);
         vv.setTextColor(c.getColor(R.color.ux_text));
         vv.setTextSize(15);
         vv.setGravity(Gravity.END);
@@ -97,9 +99,9 @@ final class PortalUi {
     }
 
     /** A filled accent action button. */
-    static TextView button(Context c, String s) {
+    static TextView button(Context c, CharSequence s) {
         TextView b = new TextView(c);
-        b.setText(s);
+        Language.setText(b, s);
         b.setTextColor(c.getColor(R.color.ux_on_accent));
         b.setTextSize(15);
         b.setTypeface(b.getTypeface(), Typeface.BOLD);
@@ -114,9 +116,9 @@ final class PortalUi {
     }
 
     /** A subtle bordered (outline) button. */
-    static TextView ghost(Context c, String s) {
+    static TextView ghost(Context c, CharSequence s) {
         TextView b = new TextView(c);
-        b.setText(s);
+        Language.setText(b, s);
         b.setTextColor(c.getColor(R.color.ux_accent));
         b.setTextSize(15);
         b.setGravity(Gravity.CENTER);

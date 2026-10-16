@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.R;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -31,38 +35,38 @@ public final class CoinDetailDialog {
 
         // status chips line
         TextView chips = new TextView(act);
-        StringBuilder st = new StringBuilder(c.sendable ? "SENDABLE" : "LOCKED / TRACK-ONLY");
-        if (c.storestate) st.append("  ·  STORES STATE");
-        if (c.spent) st.append("  ·  SPENT");
-        chips.setText(st.toString());
+        Language.TextBuilder st = new Language.TextBuilder().append(c.sendable ? Language.upper(msg(R.string.l10n_wallet_sendable)) : msg(R.string.l10n_node_wallet_locked_watch));
+        if (c.storestate) st.append("  ·  ").append(msg(R.string.l10n_node_wallet_stores_state));
+        if (c.spent) st.append("  ·  ").append(msg(R.string.l10n_node_wallet_spent));
+        Language.setText(chips, st.build());
         chips.setTextColor(c.sendable ? Design.success() : Design.amber());
         chips.setTextSize(10f);
         chips.setLetterSpacing(0.08f);
         chips.setPadding(0, dp(act, 2), 0, dp(act, 8));
         box.addView(chips);
 
-        addCopyKv(act, box, "Coin ID", c.coinid);
-        addCopyKv(act, box, "Address", c.address);
+        addCopyKv(act, box, msg(R.string.l10n_node_wallet_coin_id), c.coinid);
+        addCopyKv(act, box, msg(R.string.l10n_common_address), c.address);
         if (c.miniaddress != null && !c.miniaddress.isEmpty() && !c.miniaddress.equals(c.address)) {
-            addCopyKv(act, box, "Mx address", c.miniaddress);
+            addCopyKv(act, box, msg(R.string.l10n_node_wallet_mx_address), c.miniaddress);
         }
-        addCopyKv(act, box, "Token ID", c.tokenid);
+        addCopyKv(act, box, msg(R.string.l10n_wallet_token_id), c.tokenid);
         if (!Util.isMinima(c.tokenid) && c.rawAmount != null && !c.rawAmount.equals(c.amount)) {
-            addCopyKv(act, box, "Raw amount (Minima scale)", c.rawAmount);
+            addCopyKv(act, box, msg(R.string.l10n_node_wallet_raw_amount), c.rawAmount);
         }
         if (c.created != null && !c.created.isEmpty()) {
             long age = c.ageBlocks(act.chainBlock());
-            String detail = c.created + (age >= 0 ? "   (" + age + " blocks ago)" : "");
-            addCopyKv(act, box, "Created block", detail);
+            CharSequence detail = age >= 0 ? msg(R.string.l10n_node_wallet_block_age, c.created, age) : c.created;
+            addCopyKv(act, box, msg(R.string.l10n_node_wallet_created_block), detail, c.created);
         }
         if (c.mmrentry != null && !c.mmrentry.isEmpty()) {
-            addCopyKv(act, box, "MMR entry", c.mmrentry);
+            addCopyKv(act, box, msg(R.string.l10n_node_wallet_mmr_entry), c.mmrentry);
         }
 
         // ---- state variables ----
         if (!c.state.isEmpty()) {
             TextView sl = new TextView(act);
-            sl.setText("STATE VARIABLES (" + c.state.size() + ")");
+            Language.setText(sl, msg(R.string.l10n_node_wallet_state_variables, c.state.size()));
             sl.setTextColor(Design.dim());
             sl.setTextSize(11f);
             sl.setLetterSpacing(0.1f);
@@ -73,7 +77,7 @@ public final class CoinDetailDialog {
                 String port = s[0], data = s[1] == null ? "" : s[1];
                 boolean embedded = EMBED.matcher(data).matches() && data.length() > 8;
                 String shown = data.length() > 120 ? data.substring(0, 117) + "…" : data;
-                addCopyKv(act, box, "Port " + port + (embedded ? "  ·  embedded image" : ""), shown, data);
+                addCopyKv(act, box, Language.join(msg(R.string.l10n_node_wallet_port, port), embedded ? Language.join("  ·  ", msg(R.string.l10n_node_wallet_embedded)) : ""), shown, data);
 
                 if (embedded) {
                     // Render the on-chain art inline (strip the [] wrapper → data URI).
@@ -96,7 +100,7 @@ public final class CoinDetailDialog {
         actions.setPadding(0, dp(act, 12), 0, 0);
         box.addView(actions);
 
-        sheet.action("Close", Sheet.Style.SECONDARY, null);
+        sheet.action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null);
         final android.app.Dialog dlg = sheet.show();
 
         if (!Util.isMinima(c.tokenid) && Util.isValidHexId(c.tokenid)
@@ -116,9 +120,9 @@ public final class CoinDetailDialog {
                             ? c.tokenName : meta.name;
                     String idx = StateNft.stamped(c.raw);
                     String display = collection + (idx != null ? " #" + idx : "");
-                    actions.addView(actionBtn(act, "Transfer", false,
+                    actions.addView(actionBtn(act, msg(R.string.l10n_node_wallet_transfer), false,
                             v -> { dlg.dismiss(); StateNftActions.transferDialog(act, c.tokenid, display, c.raw); }));
-                    actions.addView(actionBtn(act, "Bury", true,
+                    actions.addView(actionBtn(act, msg(R.string.l10n_node_wallet_bury), true,
                             v -> { dlg.dismiss(); StateNftActions.buryDialog(act, c.tokenid, collection, display, c.raw); }));
                 }
                 @Override public void onError(String message) { /* no actions offered */ }
@@ -134,10 +138,10 @@ public final class CoinDetailDialog {
         return false;
     }
 
-    private static android.widget.TextView actionBtn(WalletActivity act, String label, boolean danger,
+    private static android.widget.TextView actionBtn(WalletActivity act, CharSequence label, boolean danger,
                                                      android.view.View.OnClickListener click) {
         android.widget.TextView b = new android.widget.TextView(act);
-        b.setText(label);
+        Language.setText(b, label);
         b.setTextSize(13f);
         b.setTypeface(Design.typefaceBold());
         b.setGravity(Gravity.CENTER);
@@ -152,21 +156,21 @@ public final class CoinDetailDialog {
     }
 
     /** Label + monospace value row; tapping copies the full value to the clipboard. */
-    private static void addCopyKv(WalletActivity act, LinearLayout box, String label, String shown) {
+    private static void addCopyKv(WalletActivity act, LinearLayout box, CharSequence label, String shown) {
         addCopyKv(act, box, label, shown, shown);
     }
 
-    private static void addCopyKv(WalletActivity act, LinearLayout box, String label,
-                                  String shown, String full) {
+    private static void addCopyKv(WalletActivity act, LinearLayout box, CharSequence label,
+                                  CharSequence shown, String full) {
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(11f);
         l.setPadding(0, dp(act, 8), 0, dp(act, 1));
         box.addView(l);
 
         TextView v = new TextView(act);
-        v.setText(shown);
+        Language.setText(v, shown);
         v.setTextColor(Design.text());
         v.setTextSize(12f);
         v.setTypeface(Typeface.MONOSPACE);
@@ -174,11 +178,11 @@ public final class CoinDetailDialog {
         v.setOnClickListener(x -> copy(act, label, full));
     }
 
-    static void copy(Context ctx, String label, String value) {
+    static void copy(Context ctx, CharSequence label, String value) {
         if (value == null || value.isEmpty()) return;
         ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(ClipData.newPlainText(label, value));
-        Toast.makeText(ctx, label + " copied", Toast.LENGTH_SHORT).show();
+        Toast.makeText(ctx, msg(R.string.l10n_node_wallet_copied, label), Toast.LENGTH_SHORT).show();
     }
 
     private static int dp(WalletActivity act, int v) {

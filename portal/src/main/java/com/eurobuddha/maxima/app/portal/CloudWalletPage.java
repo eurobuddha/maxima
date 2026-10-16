@@ -10,7 +10,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.appcompat.app.AlertDialog;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 
 import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.R;
@@ -39,6 +41,8 @@ public final class CloudWalletPage implements Page {
     private volatile boolean mBusy;
     private long mLastLoad;
     private boolean mBuilt;
+    private EditText mWatchField;
+    private TextView mWatchError;
 
     private String mAddress = "";
     /** From parlons.wallet.address: node accounts can move the wallet to a new phrase. */
@@ -51,6 +55,7 @@ public final class CloudWalletPage implements Page {
     private long mBalanceAt;              // when the balance reply landed ("updated Ns ago")
     private boolean mWholeWallet;         // node account: figures are the WHOLE wallet, every address
     private String mError = "";
+    private boolean mChatOnly;
     private JSONArray mTokens;            // non-Minima tokens (whole-wallet rows on a node account)
     private int mUses = -1;               // one-time-signature counter (from walletUses)
     private int mMaxUses = CloudWallet.MAX_USES;
@@ -76,7 +81,7 @@ public final class CloudWalletPage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Wallet";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_wallet);
     }
 
     @Override
@@ -93,14 +98,22 @@ public final class CloudWalletPage implements Page {
         // are still in flight.
         if (!mBuilt) {
             mRoot.removeAllViews();
-            mRoot.addView(PortalUi.section(mAct, "Wallet"));
+            mRoot.addView(PortalUi.section(mAct, m(R.string.l10n_nav_wallet)));
             LinearLayout loading = PortalUi.card(mAct);
-            loading.addView(PortalUi.label(mAct, "Opening your account wallet…"));
+            loading.addView(PortalUi.label(mAct, m(R.string.l10n_cloud_wallet_opening)));
             mRoot.addView(loading);
         }
         mBusy = true;
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
+                try {
+                    if (Boolean.TRUE.equals(r.nodeStatus().get("chatOnly"))) {
+                        mAct.runOnUiThread(() -> {
+                            mChatOnly = true; mBusy = false; mLastLoad = System.currentTimeMillis(); rebuild();
+                        });
+                        return;
+                    }
+                } catch (Exception ignored) { /* Older hosts still enforce their own wallet permissions. */ }
                 String addr = "";
                 String confirmed = "";
                 String sendable = "";
@@ -186,6 +199,7 @@ public final class CloudWalletPage implements Page {
                 final int fu = uses, fm = maxUses;
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
+                    mChatOnly = false;
                     mBusy = false;
                     mAddress = fa;
                     mCanResync = fcr;
@@ -218,54 +232,70 @@ public final class CloudWalletPage implements Page {
         boolean first = !mBuilt;
         mBuilt = true;
         Context c = mAct;
-        // Never a blank screen: while the account address is still deriving on the node and no
-        // watch address is set, show a loading card instead of nothing.
-        if (mAddress.isEmpty() && mError.isEmpty()) {
+        if (mChatOnly) {
+            mWatchField = null;
+            mWatchError = null;
             mRoot.removeAllViews();
-            mRoot.addView(PortalUi.section(c, "Wallet"));
+            mRoot.addView(PortalUi.section(c, m(R.string.l10n_cloud_wallet_chat_only)));
             LinearLayout card = PortalUi.card(c);
-            card.addView(PortalUi.label(c, first ? "Opening your account wallet…" : "Loading…"));
+            card.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_chat_only_help)));
             mRoot.addView(card);
             return;
         }
+        // Never a blank screen: while the account address is still deriving on the node and no
+        // watch address is set, show a loading card instead of nothing.
+        if (mAddress.isEmpty() && mError.isEmpty() && mWatchField == null) {
+            mRoot.removeAllViews();
+            mRoot.addView(PortalUi.section(c, m(R.string.l10n_nav_wallet)));
+            LinearLayout card = PortalUi.card(c);
+            card.addView(PortalUi.label(c, first ? m(R.string.l10n_cloud_wallet_opening) : m(R.string.l10n_common_loading)));
+            mRoot.addView(card);
+            return;
+        }
+        if (mAddress.isEmpty() && mWatchField != null) {
+            // As in Contacts, retain the input, selection and IME composition on refresh.
+            updateWatchError();
+            return;
+        }
+        mWatchField = null;
+        mWatchError = null;
         mRoot.removeAllViews();
 
         if (mAddress.isEmpty()) {
             // No watch address yet — offer to set one (the device's cold receive address).
-            mRoot.addView(PortalUi.section(c, "Wallet"));
+            mRoot.addView(PortalUi.section(c, m(R.string.l10n_nav_wallet)));
             LinearLayout card = PortalUi.card(c);
-            card.addView(PortalUi.title(c, "Watch-only wallet"));
+            card.addView(PortalUi.title(c, m(R.string.l10n_cloud_wallet_watch_only)));
             card.addView(PortalUi.gap(c, 6));
-            card.addView(PortalUi.label(c, "Set your wallet's RECEIVE address and your cloud node will "
-                    + "show its balance — read-only. Your spend keys never leave your device; the node "
-                    + "can watch, never spend."));
+            card.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_watch_help)));
             card.addView(PortalUi.gap(c, 12));
             EditText field = new EditText(c);
-            field.setHint("Mx… receive address");
+            mWatchField = field;
+            Language.hint(field, m(R.string.l10n_cloud_wallet_watch_hint));
             field.setTextColor(c.getColor(R.color.ux_text));
             field.setHintTextColor(c.getColor(R.color.ux_subtext));
             field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
             field.setTextSize(13);
             card.addView(field);
             card.addView(PortalUi.gap(c, 8));
-            TextView set = PortalUi.button(c, "Set watch address");
+            TextView set = PortalUi.button(c, m(R.string.l10n_cloud_wallet_set_watch));
             set.setOnClickListener(v -> setWatch(field.getText().toString().trim()));
             card.addView(set);
             mRoot.addView(card);
-            if (!mError.isEmpty() && !mError.toLowerCase().contains("no watch")) {
-                mRoot.addView(PortalUi.label(c, mError));
-            }
+            mWatchError = PortalUi.label(c, "");
+            mRoot.addView(mWatchError);
+            updateWatchError();
             return;
         }
 
         // --- balance ---
-        mRoot.addView(PortalUi.section(c, mWholeWallet ? "Balance · whole wallet" : "Total balance"));
+        mRoot.addView(PortalUi.section(c, mWholeWallet ? m(R.string.l10n_cloud_wallet_whole_balance) : m(R.string.l10n_cloud_wallet_total_balance)));
         LinearLayout bal = PortalUi.card(c);
         TextView big = new TextView(c);
         // Headline = SENDABLE (what can actually be spent); `confirmed` includes coins locked in
         // contracts and overstates it - the rule every wallet in the family follows.
         String headline = mWholeWallet ? tidy(mSendable) : mConfirmed;
-        big.setText(headline.isEmpty() ? (mError.isEmpty() ? "…" : "unavailable") : headline);
+        Language.setText(big, headline.isEmpty() ? (mError.isEmpty() ? "…" : m(R.string.l10n_cloud_wallet_unavailable)) : headline);
         big.setTextColor(c.getColor(R.color.ux_text));
         big.setTextSize(34);
         big.setTypeface(big.getTypeface(), Typeface.BOLD);
@@ -274,28 +304,28 @@ public final class CloudWalletPage implements Page {
         if (mWholeWallet) {
             // The PandaPools / AtomiX breakdown line, zeros included - a hidden zero is what makes
             // an all-in-a-pool wallet read as "0" with no explanation.
-            unit.setText(mSendable.isEmpty() ? "MINIMA · sendable, across every address of your node's wallet"
-                    : "MINIMA sendable  ·  confirmed " + tidy(mConfirmed) + "  ·  locked ≈ " + locked(mConfirmed, mSendable)
-                    + "  ·  unconfirmed " + tidy(mUnconfirmed) + (mCoins >= 0 ? "  ·  " + mCoins + " coin" + (mCoins == 1 ? "" : "s") : "")
-                    + "  ·  updated " + ago(mBalanceAt));
+            CharSequence summary = mSendable.isEmpty() ? m(R.string.l10n_cloud_wallet_whole_unit)
+                    : Language.join(m(R.string.l10n_cloud_wallet_whole_breakdown,
+                            tidy(mConfirmed), locked(mConfirmed, mSendable), tidy(mUnconfirmed)),
+                            mCoins >= 0 ? Language.join("  ·  ", Language.count(R.plurals.l10n_cloud_wallet_coins, mCoins)) : "",
+                            "  ·  ", m(R.string.l10n_cloud_wallet_updated, ago(mBalanceAt)));
+            Language.setText(unit, summary);
         } else {
-            // Honest custody line: the ACCOUNT's own wallet signs on the node; a device-set watch
-            // address is the read-only mode.
-            unit.setText(mSendable.isEmpty() ? "MINIMA · your account's wallet"
-                    : mSendable + " sendable · keys live on your cloud node");
+            Language.setText(unit, mSendable.isEmpty() ? m(R.string.l10n_cloud_wallet_account_unit)
+                    : m(R.string.l10n_cloud_wallet_cloud_sendable, mSendable));
         }
         unit.setTextColor(c.getColor(R.color.ux_subtext));
         unit.setTextSize(13);
         bal.addView(unit);
         if (!mError.isEmpty()) {
-            TextView why = PortalUi.label(c, "Balance unavailable: " + mError);
+            TextView why = PortalUi.label(c, m(R.string.l10n_cloud_wallet_balance_error , SystemMessages.message(mError)));
             why.setTextColor(c.getColor(R.color.ux_error));
             bal.addView(why);
         }
         mRoot.addView(bal);
 
         // --- receive ---
-        mRoot.addView(PortalUi.section(c, "Receive address"));
+        mRoot.addView(PortalUi.section(c, m(R.string.l10n_cloud_wallet_receive_address)));
         LinearLayout rec = PortalUi.card(c);
         TextView val = PortalUi.value(c, mAddress);
         val.setTextSize(13);
@@ -303,13 +333,13 @@ public final class CloudWalletPage implements Page {
         rec.addView(PortalUi.gap(c, 10));
         LinearLayout btns = new LinearLayout(c);
         btns.setOrientation(LinearLayout.HORIZONTAL);
-        TextView copy = PortalUi.ghost(c, "Copy");
+        TextView copy = PortalUi.ghost(c, m(R.string.l10n_common_copy));
         LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp1.rightMargin = PortalUi.dp(c, 6);
         copy.setOnClickListener(v -> copy(mAddress));
         btns.addView(copy, lp1);
-        TextView qr = PortalUi.ghost(c, "Show QR");
+        TextView qr = PortalUi.ghost(c, m(R.string.l10n_contacts_show_qr));
         LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp2.leftMargin = PortalUi.dp(c, 6);
@@ -320,12 +350,12 @@ public final class CloudWalletPage implements Page {
 
         // --- other tokens held (only for the account's own wallet, not a device watch address) ---
         if (mTokens != null && !mTokens.isEmpty()) {
-            mRoot.addView(PortalUi.section(c, "Tokens"));
+            mRoot.addView(PortalUi.section(c, m(R.string.l10n_wallet_tokens)));
             LinearLayout tc = PortalUi.card(c);
             for (int i = 0; i < mTokens.size(); i++) {
                 if (!(mTokens.get(i) instanceof JSONObject)) continue;
                 JSONObject t = (JSONObject) mTokens.get(i);
-                String name = tokenName(t);
+                CharSequence name = tokenName(t);
                 String amt = mWholeWallet ? tidy(str(t, "sendable").isEmpty() ? str(t, "confirmed") : str(t, "sendable")) : str(t, "confirmed");
                 String tid = str(t, "tokenid");
                 LinearLayout row = new LinearLayout(c);
@@ -335,7 +365,7 @@ public final class CloudWalletPage implements Page {
                 LinearLayout left = new LinearLayout(c);
                 left.setOrientation(LinearLayout.VERTICAL);
                 TextView nm = new TextView(c);
-                nm.setText(name);
+                Language.setText(nm, name);
                 nm.setTextColor(c.getColor(R.color.ux_text));
                 nm.setTextSize(15);
                 nm.setTypeface(nm.getTypeface(), Typeface.BOLD);
@@ -343,11 +373,12 @@ public final class CloudWalletPage implements Page {
                 if (mWholeWallet) {
                     String lk = locked(str(t, "confirmed"), str(t, "sendable").isEmpty() ? str(t, "confirmed") : str(t, "sendable"));
                     String un = tidy(str(t, "unconfirmed"));
-                    String sub = "sendable" + ("0".equals(lk) || "—".equals(lk) ? "" : "  ·  locked ≈ " + lk)
-                            + ("0".equals(un) || un.isEmpty() ? "" : "  ·  unconfirmed " + un)
-                            + (str(t, "coins").isEmpty() ? "" : "  ·  " + str(t, "coins") + " coins");
+                    Language.TextBuilder sub = new Language.TextBuilder().append(m(R.string.l10n_wallet_sendable));
+                    if (!"0".equals(lk) && !"—".equals(lk)) sub.append("  ·  ").append(m(R.string.l10n_cloud_wallet_locked_amount, lk));
+                    if (!"0".equals(un) && !un.isEmpty()) sub.append("  ·  ").append(m(R.string.l10n_cloud_wallet_unconfirmed_amount, un));
+                    if (!str(t, "coins").isEmpty()) sub.append("  ·  ").append(coinCount(str(t, "coins")));
                     TextView subv = new TextView(c);
-                    subv.setText(sub);
+                    Language.setText(subv, sub.build());
                     subv.setTextColor(c.getColor(R.color.ux_subtext));
                     subv.setTextSize(11);
                     left.addView(subv);
@@ -367,7 +398,7 @@ public final class CloudWalletPage implements Page {
                 val2.setGravity(android.view.Gravity.END);
                 row.addView(val2);
                 final String ftid = tid;
-                row.setOnClickListener(v -> copy(ftid, "Token id copied"));
+                row.setOnClickListener(v -> copy(ftid, m(R.string.l10n_cloud_wallet_token_copied)));
                 tc.addView(row);
             }
             mRoot.addView(tc);
@@ -375,65 +406,56 @@ public final class CloudWalletPage implements Page {
 
         // --- key uses (the sacred one-time-signature counter) ---
         if (mUses >= 0) {
-            mRoot.addView(PortalUi.section(c, "Signing key"));
+            mRoot.addView(PortalUi.section(c, m(R.string.l10n_cloud_wallet_signing_key)));
             LinearLayout kc = PortalUi.card(c);
             TextView u = new TextView(c);
-            u.setText(mUses + " / " + mMaxUses + " signatures used");
+            Language.setText(u, m(R.string.l10n_cloud_wallet_uses, mUses, mMaxUses));
             u.setTextColor(c.getColor(R.color.ux_text));
             u.setTextSize(16);
             u.setTypeface(u.getTypeface(), Typeface.BOLD);
             kc.addView(u);
             kc.addView(PortalUi.gap(c, 4));
-            kc.addView(PortalUi.label(c, "Each key signs a fixed number of times. When it runs low, "
-                    + "detach to a fresh wallet. Only raise this if you've signed with this seed on "
-                    + "ANOTHER device — a wrong count can reuse a one-time key and leak it."));
+            kc.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_uses_help)));
             kc.addView(PortalUi.gap(c, 8));
-            TextView adj = PortalUi.ghost(c, "Set signatures used…");
+            TextView adj = PortalUi.ghost(c, m(R.string.l10n_cloud_wallet_set_uses_action));
             adj.setOnClickListener(v -> usesSheet());
             kc.addView(adj);
             mRoot.addView(kc);
         }
 
         // --- send from the account wallet (also powers the wallet-detach sweep) ---
-        mRoot.addView(PortalUi.section(c, mCanResync ? "Wallet" : "Send"));
+        mRoot.addView(PortalUi.section(c, mCanResync ? m(R.string.l10n_nav_wallet) : m(R.string.l10n_chat_send)));
         LinearLayout sendCard = PortalUi.card(c);
         if (mCanResync) {
             // A Parlons Node account: the full wallet (tokens, NFTs, send, receive, coins,
             // history, mint) runs on the node over the paired channel.
-            TextView open = PortalUi.button(c, "Open wallet");
+            TextView open = PortalUi.button(c, m(R.string.l10n_cloud_wallet_open_wallet));
             open.setOnClickListener(v -> mAct.startActivity(new android.content.Intent(mAct,
                     com.eurobuddha.maxima.app.portal.wallet.WalletActivity.class)));
             sendCard.addView(open);
             sendCard.addView(PortalUi.gap(c, 6));
-            sendCard.addView(PortalUi.label(c, "Balances with token icons, NFT gallery, send "
-                    + "(quick or coin control), receive with QR, every coin, on-chain history "
-                    + "and minting - all on your node, signed there, nothing leaves the box."));
+            sendCard.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_open_help)));
         } else {
-            TextView send = PortalUi.button(c, "Send MINIMA");
+            TextView send = PortalUi.button(c, m(R.string.l10n_wallet_send_minima));
             send.setOnClickListener(v -> sendSheet());
             sendCard.addView(send);
             sendCard.addView(PortalUi.gap(c, 8));
-            TextView detach = PortalUi.ghost(c, "Detach wallet to this phone…");
+            TextView detach = PortalUi.ghost(c, m(R.string.l10n_cloud_wallet_detach_action));
             detach.setOnClickListener(v -> detachFlow());
             sendCard.addView(detach);
             sendCard.addView(PortalUi.gap(c, 6));
-            sendCard.addView(PortalUi.label(c, "Detach = move ALL funds to a wallet whose seed "
-                    + "lives on this phone (Minima Core). Your cloud identity stays; the VPS "
-                    + "goes cold and keeps a watch-only view."));
+            sendCard.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_detach_help)));
         }
         if (mCanResync) {   // node accounts only: a cloud wallet IS the identity seed
             sendCard.addView(PortalUi.gap(c, 8));
-            TextView resync = PortalUi.ghost(c, "Resync wallet to a new phrase…");
+            TextView resync = PortalUi.ghost(c, m(R.string.l10n_cloud_wallet_resync_action));
             resync.setOnClickListener(v -> resyncFlow());
             sendCard.addView(resync);
             sendCard.addView(PortalUi.gap(c, 6));
-            sendCard.addView(PortalUi.label(c, "Resync = the node's wallet moves to a NEW 24-word "
-                    + "phrase (its signing keys used up, or you want a fresh seed). Your identity, "
-                    + "devices and contacts stay; funds at the old phrase stay with the old phrase."));
+            sendCard.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_resync_help)));
             if (!mResyncError.isEmpty()) {
                 sendCard.addView(PortalUi.gap(c, 6));
-                TextView bad = PortalUi.label(c, "Last resync did NOT go through - the wallet is "
-                        + "unchanged. " + mResyncError);
+                TextView bad = PortalUi.label(c, m(R.string.l10n_cloud_wallet_resync_error , SystemMessages.message(mResyncError)));
                 bad.setTextColor(c.getColor(R.color.ux_error));
                 sendCard.addView(bad);
             }
@@ -443,7 +465,7 @@ public final class CloudWalletPage implements Page {
         // --- history: this device's ledger (sends + received payments seen while paired) ---
         java.util.List<WalletLedger.Entry> ledger = WalletLedger.entries(mAct);
         if (!ledger.isEmpty()) {
-            mRoot.addView(PortalUi.section(c, "History"));
+            mRoot.addView(PortalUi.section(c, m(R.string.l10n_wallet_history)));
             LinearLayout hc = PortalUi.card(c);
             int shown = 0;
             for (WalletLedger.Entry e : ledger) {
@@ -462,7 +484,7 @@ public final class CloudWalletPage implements Page {
         }
 
         if (!mError.isEmpty()) {
-            mRoot.addView(PortalUi.label(c, "Balance note: " + mError));
+            mRoot.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_balance_note , mError)));
         }
     }
 
@@ -486,13 +508,13 @@ public final class CloudWalletPage implements Page {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView who = new TextView(c);
-        who.setText(failed ? "Send failed"
-                : (sent ? "To " : "From ") + shortWho(e.counterparty));
+        Language.setText(who, failed ? m(R.string.l10n_cloud_wallet_send_failed)
+                : m(sent ? R.string.l10n_cloud_wallet_to : R.string.l10n_cloud_wallet_from, shortWho(e.counterparty)));
         who.setTextColor(c.getColor(R.color.ux_text));
         who.setTextSize(15);
         col.addView(who);
         TextView when = new TextView(c);
-        when.setText(e.time > 0 ? stamp(e.time) : "");
+        Language.setText(when, e.time > 0 ? Language.stamp(e.time, "MMMdHm") : "");
         when.setTextColor(c.getColor(R.color.ux_subtext));
         when.setTextSize(12);
         col.addView(when);
@@ -511,55 +533,37 @@ public final class CloudWalletPage implements Page {
         return row;
     }
 
+    private void updateWatchError() {
+        boolean visible = !mError.isEmpty() && !mError.toLowerCase(java.util.Locale.ROOT).contains("no watch");
+        Language.setText(mWatchError, visible ? m(R.string.l10n_cloud_wallet_balance_error, SystemMessages.message(mError)) : "");
+        mWatchError.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
     private void ledgerDetail(WalletLedger.Entry e) {
         boolean failed = WalletLedger.FAILED.equals(e.direction);
         boolean sent = WalletLedger.SENT.equals(e.direction) || failed;
-        StringBuilder sb = new StringBuilder();
-        sb.append(failed ? "Send failed\n\n" : (sent ? "Sent\n\n" : "Received\n\n"));
-        if (!e.amount.isEmpty()) {
-            sb.append("Amount:\n").append(e.amount).append(" ")
-                    .append(e.token.isEmpty() ? "MINIMA" : e.token).append("\n\n");
-        }
-        if (!e.counterparty.isEmpty()) {
-            sb.append(sent ? "To:\n" : "From:\n").append(e.counterparty).append("\n\n");   // full
-        }
-        if (e.time > 0) {
-            sb.append("When:\n").append(fullStamp(e.time)).append("\n\n");
-        }
-        if (!e.memo.isEmpty()) {
-            sb.append("Note:\n").append(e.memo).append("\n\n");
-        }
-        if (!e.txid.isEmpty()) {
-            sb.append("Transaction id:\n").append(e.txid).append("\n\n");   // full, never truncated
-        }
-        if (!e.error.isEmpty()) {
-            sb.append("Error:\n").append(e.error).append("\n\n");
-        }
-        AlertDialog d = new AlertDialog.Builder(mAct)
-                .setTitle("Transaction")
-                .setMessage(sb.toString().trim())
-                .setPositiveButton("Close", null)
-                .setNeutralButton(e.txid.isEmpty() ? null : "Copy txid",
-                        e.txid.isEmpty() ? null : (di, w) -> copy(e.txid, "Transaction id copied"))
-                .show();
+        Language.TextBuilder sb = new Language.TextBuilder();
+        sb.append(m(failed ? R.string.l10n_cloud_wallet_send_failed : sent ? R.string.l10n_wallet_sent : R.string.l10n_wallet_received)).append("\n\n");
+        if (!e.amount.isEmpty()) sb.append(m(R.string.l10n_wallet_amount)).append(":\n")
+                .append(e.amount).append(" ").append(e.token.isEmpty() ? "MINIMA" : e.token).append("\n\n");
+        if (!e.counterparty.isEmpty()) sb.append(m(sent ? R.string.l10n_wallet_to : R.string.l10n_wallet_from))
+                .append(":\n").append(e.counterparty).append("\n\n");
+        if (e.time > 0) sb.append(m(R.string.l10n_wallet_when)).append(":\n")
+                .append(Language.stamp(e.time, "yMMMMEEEEdHms")).append("\n\n");
+        if (!e.memo.isEmpty()) sb.append(m(R.string.l10n_cloud_wallet_note)).append(":\n").append(e.memo).append("\n\n");
+        if (!e.txid.isEmpty()) sb.append(m(R.string.l10n_wallet_transaction_id)).append(":\n").append(e.txid).append("\n\n");
+        if (!e.error.isEmpty()) sb.append(m(R.string.l10n_cloud_wallet_error)).append(":\n").append(SystemMessages.message(e.error));
+        new LanguageDialog(mAct).setTitle(m(R.string.l10n_wallet_transaction)).setMessage(sb.build())
+                .setPositiveButton(m(R.string.l10n_language_close), null)
+                .setNeutralButton(e.txid.isEmpty() ? null : m(R.string.l10n_android_chat_copy_tx),
+                        e.txid.isEmpty() ? null : (di, w) -> copy(e.txid, m(R.string.l10n_android_chat_tx_copied))).show();
     }
 
-    private static String shortWho(String s) {
-        if (s == null || s.isEmpty()) return "someone";
-        // A name stays whole; a raw address is long — show a readable head but the DETAIL sheet
-        // and copy always carry the full value (never a truncated identifier the user acts on).
-        if (s.startsWith("Mx") || s.startsWith("0x") || s.startsWith("MAX#")) {
+    private static CharSequence shortWho(String s) {
+        if (s == null || s.isEmpty()) return m(R.string.l10n_cloud_wallet_someone);
+        if (s.startsWith("Mx") || s.startsWith("0x") || s.startsWith("MAX#"))
             return s.length() > 16 ? s.substring(0, 16) + "…" : s;
-        }
         return s;
-    }
-
-    private static String stamp(long t) {
-        return android.text.format.DateFormat.format("d MMM · HH:mm", t).toString();
-    }
-
-    private static String fullStamp(long t) {
-        return android.text.format.DateFormat.format("EEE d MMM yyyy, HH:mm:ss", t).toString();
     }
 
     /** Send from the ACCOUNT wallet to any Minima address — one confirm naming amount+address
@@ -570,10 +574,10 @@ public final class CloudWalletPage implements Page {
         int pad = PortalUi.dp(mAct, 20);
         box.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
         final EditText addr = new EditText(mAct);
-        addr.setHint("Mx… or 0x… address");
+        Language.hint(addr, m(R.string.l10n_cloud_wallet_address_hint));
         addr.setSingleLine(true);
         box.addView(addr);
-        TextView scan = PortalUi.ghost(mAct, "Scan QR");
+        TextView scan = PortalUi.ghost(mAct, m(R.string.l10n_common_scan_qr));
         scan.setOnClickListener(v -> mAct.scanTo(text -> {
             if (text != null && !text.trim().isEmpty()) {
                 addr.setText(text.trim());   // scanned address drops straight into the field
@@ -581,30 +585,29 @@ public final class CloudWalletPage implements Page {
         }));
         box.addView(scan);
         final EditText amt = new EditText(mAct);
-        amt.setHint("Amount (MINIMA)");
+        Language.hint(amt, m(R.string.l10n_android_chat_amount));
         amt.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         box.addView(amt);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Send MINIMA")
-                .setMessage("Signed on your cloud node with one guarded key use.")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_wallet_send_minima))
+                .setMessage(m(R.string.l10n_cloud_wallet_sign_help))
                 .setView(box)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Continue", (d, w) -> confirmSend(
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_common_continue), (d, w) -> confirmSend(
                         addr.getText().toString().trim(), amt.getText().toString().trim()))
                 .show();
     }
 
     private void confirmSend(String zTo, String zAmount) {
         if (zTo.isEmpty() || zAmount.isEmpty()) {
-            mAct.toast("Address and amount needed");
+            mAct.toast(tr(R.string.l10n_cloud_wallet_address_amount));
             return;
         }
-        new AlertDialog.Builder(mAct)
-                .setTitle("Send " + zAmount + " MINIMA?")
-                .setMessage("To:\n" + zTo + "\n\nThis signs and broadcasts a real transaction "
-                        + "and cannot be undone.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Sign & send", (d, w) -> doWalletSend(zTo, zAmount, null))
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_android_chat_send_amount , zAmount))
+                .setMessage(m(R.string.l10n_cloud_wallet_confirm_send , zTo))
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_desktop_chat_sign_send), (d, w) -> doWalletSend(zTo, zAmount, null))
                 .show();
     }
 
@@ -615,11 +618,11 @@ public final class CloudWalletPage implements Page {
      *  unconditionally, so a failed sweep can't hide the account's real balance. */
     private void doWalletSend(String zTo, String zAmount, final String zWatchOnSuccess) {
         if (mSending) {
-            mAct.toast("A send is already in progress…");
+            mAct.toast(tr(R.string.l10n_cloud_wallet_send_in_progress));
             return;
         }
         mSending = true;
-        mAct.toast("Signing on your node…");
+        mAct.toast(tr(R.string.l10n_cloud_wallet_signing));
         final String pid = java.util.UUID.randomUUID().toString();
         final PortalHub.Listener[] holder = new PortalHub.Listener[1];
         // Arm BEFORE the RPC: sally SIGNS, then pushes 'walletbuilt' carrying the signed blob for
@@ -632,25 +635,25 @@ public final class CloudWalletPage implements Page {
                 final String importcmd = String.valueOf(ev.get("importcmd"));
                 final String postcmd = String.valueOf(ev.get("postcmd"));
                 final String txid = String.valueOf(ev.get("txid"));
-                mAct.runOnUiThread(() -> mAct.toast("Broadcasting via " + mPub.backendName() + "…"));
+                mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_cloud_wallet_broadcasting , SystemMessages.message(mPub.backendName()))));
                 mPub.publish(importcmd, txid, postcmd, new WalletPublisher.Cb() {
                     public void onResult(org.json.JSONObject r2) {
                         mAct.runOnUiThread(() -> {
                             mSending = false;
-                            mAct.toast("Sent");
+                            mAct.toast(tr(R.string.l10n_wallet_sent));
                             if (zWatchOnSuccess != null) setWatch(zWatchOnSuccess);
                             mLastLoad = 0;
                             render();
                         });
                     }
                     public void onError(String m) {
-                        mAct.runOnUiThread(() -> { mSending = false; mAct.toast("Broadcast failed: " + m); });
+                        mAct.runOnUiThread(() -> { mSending = false; mAct.toast(tr(R.string.l10n_cloud_wallet_broadcast_failed , m)); });
                     }
                 });
             } else if ("walletfail".equals(type)) {
                 PortalHub.remove(holder[0]);
                 final String why = String.valueOf(ev.get("error"));
-                mAct.runOnUiThread(() -> { mSending = false; mAct.toast("Send failed: " + why); });
+                mAct.runOnUiThread(() -> { mSending = false; mAct.toast(tr(R.string.l10n_wallet_send_failed , SystemMessages.message(why))); });
             }
         };
         PortalHub.add(holder[0]);
@@ -669,7 +672,7 @@ public final class CloudWalletPage implements Page {
                 if (error != null) {
                     final String err = error;
                     PortalHub.remove(holder[0]);
-                    mAct.runOnUiThread(() -> { mSending = false; mAct.toast("Send failed: " + err); });
+                    mAct.runOnUiThread(() -> { mSending = false; mAct.toast(tr(R.string.l10n_wallet_send_failed , SystemMessages.message(err))); });
                 }
                 // success → wait for the walletbuilt push (the listener above finishes the send)
             }
@@ -677,7 +680,7 @@ public final class CloudWalletPage implements Page {
                 PortalHub.remove(holder[0]);
                 mAct.runOnUiThread(() -> {
                     mSending = false;
-                    mAct.toast("Send failed: " + m);
+                    mAct.toast(tr(R.string.l10n_wallet_send_failed , SystemMessages.message(m)));
                 });
             }
         });
@@ -686,7 +689,7 @@ public final class CloudWalletPage implements Page {
     /** Re-point the NODE wallet at a new phrase; identity untouched (node accounts only). */
     private void resyncFlow() {
         final android.widget.EditText field = new android.widget.EditText(mAct);
-        field.setHint("24 words, space separated");
+        Language.hint(field, m(R.string.l10n_cloud_wallet_phrase_hint));
         field.setMinLines(3);
         field.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -695,17 +698,15 @@ public final class CloudWalletPage implements Page {
         android.widget.FrameLayout wrap = new android.widget.FrameLayout(mAct);
         wrap.setPadding(pad, pad / 2, pad, 0);
         wrap.addView(field);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Resync wallet to a new phrase")
-                .setMessage("The node's WALLET moves to this phrase; your identity, paired devices "
-                        + "and contacts stay exactly as they are. Funds at the current address stay "
-                        + "with the current phrase. The node restarts (about a minute).")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_cloud_wallet_resync_title))
+                .setMessage(m(R.string.l10n_cloud_wallet_resync_warning))
                 .setView(wrap)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Resync", (d, w) -> {
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_cloud_wallet_resync), (d, w) -> {
                     final String phrase = field.getText().toString().trim();
                     if (phrase.split("\\s+").length != 24) {
-                        android.widget.Toast.makeText(mAct, "That is not 24 words", android.widget.Toast.LENGTH_SHORT).show();
+                        android.widget.Toast.makeText(mAct, tr(R.string.l10n_cloud_wallet_phrase_invalid), android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
                     CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
@@ -715,16 +716,16 @@ public final class CloudWalletPage implements Page {
                                 org.minima.utils.json.JSONObject o = r.walletResync(phrase);
                                 Object okv = o.get("ok");
                                 msg = (okv instanceof Boolean && (Boolean) okv)
-                                        ? "Resync started - the node restarts in about a minute; same account, new wallet address"
-                                        : "Refused: " + o.getOrDefault("error", o);
+                                        ? tr(R.string.l10n_cloud_wallet_resync_started)
+                                        : tr(R.string.l10n_cloud_wallet_refused , SystemMessages.message(String.valueOf(o.getOrDefault("error", o))));
                             } catch (Exception e) {
-                                msg = "Could not reach the node: " + e.getMessage();
+                                msg = tr(R.string.l10n_cloud_wallet_unreachable , SystemMessages.message(e.getMessage()));
                             }
                             final String fm = msg;
                             mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, fm, android.widget.Toast.LENGTH_LONG).show());
                         }
                         public void err(String m) {
-                            mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, "Could not reach the node: " + m, android.widget.Toast.LENGTH_LONG).show());
+                            mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, tr(R.string.l10n_cloud_wallet_unreachable , SystemMessages.message(m)), android.widget.Toast.LENGTH_LONG).show());
                         }
                     });
                 })
@@ -736,12 +737,10 @@ public final class CloudWalletPage implements Page {
     private void detachFlow() {
         boolean coreInstalled = com.eurobuddha.maxima.app.wallet.WalletPublisher.coreInstalled(mAct);
         if (!coreInstalled) {
-            new AlertDialog.Builder(mAct)
-                    .setTitle("Minima Core needed")
-                    .setMessage("The detached wallet lives in Minima Core on this phone — its "
-                            + "seed never touches the VPS. Install it first (Settings → Minima "
-                            + "Core on this phone), create a wallet there, then come back.")
-                    .setPositiveButton("OK", null)
+            new LanguageDialog(mAct)
+                    .setTitle(m(R.string.l10n_cloud_wallet_core_needed))
+                    .setMessage(m(R.string.l10n_cloud_wallet_core_help))
+                    .setPositiveButton(m(R.string.l10n_common_ok), null)
                     .show();
             return;
         }
@@ -750,43 +749,37 @@ public final class CloudWalletPage implements Page {
         int pad = PortalUi.dp(mAct, 20);
         box.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
         final EditText addr = new EditText(mAct);
-        addr.setHint("Mx… address from Minima Core");
+        Language.hint(addr, m(R.string.l10n_cloud_wallet_core_address));
         addr.setSingleLine(true);
         box.addView(addr);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Detach wallet to this phone")
-                .setMessage("1. In Minima Core: Wallet → Receive → copy your address.\n"
-                        + "2. Paste it below. ALL sendable funds sweep to it in one "
-                        + "transaction, and the cloud switches to watching that address.\n\n"
-                        + "Your cloud IDENTITY is untouched — chats, calls and contacts keep "
-                        + "working exactly as before.")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_cloud_wallet_detach_title))
+                .setMessage(m(R.string.l10n_cloud_wallet_detach_warning))
                 .setView(box)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Continue", (d, w) -> confirmDetach(
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_common_continue), (d, w) -> confirmDetach(
                         addr.getText().toString().trim()))
                 .show();
     }
 
     private void confirmDetach(String zTo) {
         if (!zTo.matches("Mx[0-9A-Z]+") && !zTo.matches("0x[0-9A-Fa-f]{64}")) {
-            mAct.toast("That doesn't look like a full Minima address");
+            mAct.toast(tr(R.string.l10n_cloud_wallet_invalid_address));
             return;
         }
         String amount = mSendable.isEmpty() ? "" : mSendable;
         if (amount.isEmpty() || "0".equals(amount)) {
-            mAct.toast("Nothing sendable right now — sync first or wait for confirmations");
+            mAct.toast(tr(R.string.l10n_cloud_wallet_nothing_sendable));
             return;
         }
         final String amt = amount;
-        new AlertDialog.Builder(mAct)
-                .setTitle("Sweep " + amt + " MINIMA?")
-                .setMessage("Everything sendable goes to:\n" + zTo + "\n\nThe cloud then "
-                        + "watches this address read-only. This signs a real transaction and "
-                        + "cannot be undone.")
-                .setNegativeButton("Cancel", null)
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_cloud_wallet_sweep_title , amt))
+                .setMessage(m(R.string.l10n_cloud_wallet_sweep_warning , zTo))
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
                 // Watch flips ONLY after the sweep's walletsent push — a failed sweep must not
                 // hide the account's real balance behind an empty watch address.
-                .setPositiveButton("Sweep & detach", (d, w) -> doWalletSend(zTo, amt, zTo))
+                .setPositiveButton(m(R.string.l10n_cloud_wallet_sweep), (d, w) -> doWalletSend(zTo, amt, zTo))
                 .show();
     }
 
@@ -794,28 +787,26 @@ public final class CloudWalletPage implements Page {
      *  Double-guarded: naming the danger, then confirming the exact new value. */
     private void usesSheet() {
         final EditText field = new EditText(mAct);
-        field.setHint("New used count (> " + mUses + ")");
+        Language.hint(field, m(R.string.l10n_cloud_wallet_uses_hint, mUses));
         field.setInputType(InputType.TYPE_CLASS_NUMBER);
         int pad = PortalUi.dp(mAct, 20);
         field.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Set signatures used")
-                .setMessage("ONLY if this seed has signed transactions on another device. The "
-                        + "counter can only go UP — setting it too low risks reusing a key and "
-                        + "leaking it. Current: " + mUses + ".")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_cloud_wallet_set_uses))
+                .setMessage(m(R.string.l10n_cloud_wallet_uses_warning , mUses))
                 .setView(field)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Continue", (d, w) -> {
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_common_continue), (d, w) -> {
                     String s = field.getText().toString().trim();
                     int to;
                     try {
                         to = Integer.parseInt(s);
                     } catch (Exception e) {
-                        mAct.toast("Enter a whole number");
+                        mAct.toast(tr(R.string.l10n_cloud_wallet_whole_number));
                         return;
                     }
                     if (to <= mUses) {
-                        mAct.toast("Must be higher than the current " + mUses);
+                        mAct.toast(tr(R.string.l10n_cloud_wallet_higher_count , mUses));
                         return;
                     }
                     confirmUses(to);
@@ -824,17 +815,16 @@ public final class CloudWalletPage implements Page {
     }
 
     private void confirmUses(final int zTo) {
-        new AlertDialog.Builder(mAct)
-                .setTitle("Raise to " + zTo + "?")
-                .setMessage("This permanently marks " + zTo + " signatures as used and cannot be "
-                        + "undone. Do this only to match a seed already used elsewhere.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Raise counter", (d, w) -> doRaiseUses(zTo))
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_cloud_wallet_raise_title , zTo))
+                .setMessage(m(R.string.l10n_cloud_wallet_raise_warning , zTo))
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_cloud_wallet_raise), (d, w) -> doRaiseUses(zTo))
                 .show();
     }
 
     private void doRaiseUses(final int zTo) {
-        mAct.toast("Updating counter…");
+        mAct.toast(tr(R.string.l10n_cloud_wallet_updating));
         CloudSession.connectInteractive(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
@@ -848,23 +838,23 @@ public final class CloudWalletPage implements Page {
                 }
                 final String err = error;
                 mAct.runOnUiThread(() -> {
-                    mAct.toast(err == null ? "Counter raised" : "Could not raise: " + err);
+                    mAct.toast(err == null ? tr(R.string.l10n_cloud_wallet_raised) : tr(R.string.l10n_cloud_wallet_raise_failed , SystemMessages.message(err)));
                     mLastLoad = 0;
                     render();
                 });
             }
             public void err(String m) {
-                mAct.runOnUiThread(() -> mAct.toast("Could not raise: " + m));
+                mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_cloud_wallet_raise_failed , SystemMessages.message(m))));
             }
         });
     }
 
     private void setWatch(String address) {
         if (address.isEmpty()) {
-            mAct.toast("Enter a receive address");
+            mAct.toast(tr(R.string.l10n_cloud_wallet_receive_required));
             return;
         }
-        mAct.toast("Setting…");
+        mAct.toast(tr(R.string.l10n_cloud_wallet_setting));
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
@@ -880,16 +870,16 @@ public final class CloudWalletPage implements Page {
                 final String err = error;
                 mAct.runOnUiThread(() -> {
                     if (err == null) {
-                        mAct.toast("Watch address set");
+                        mAct.toast(tr(R.string.l10n_cloud_wallet_watch_set));
                         mLastLoad = 0;
                         render();
                     } else {
-                        mAct.toast("Could not set: " + err);
+                        mAct.toast(tr(R.string.l10n_cloud_wallet_watch_failed , SystemMessages.message(err)));
                     }
                 });
             }
             public void err(String m) {
-                mAct.runOnUiThread(() -> mAct.toast("Could not set: " + m));
+                mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_cloud_wallet_watch_failed , SystemMessages.message(m))));
             }
         });
     }
@@ -959,13 +949,13 @@ public final class CloudWalletPage implements Page {
         }
     }
 
-    static String ago(long at) {
-        if (at <= 0) return "never";
-        long s = (System.currentTimeMillis() - at) / 1000;
-        if (s < 5) return "just now";
-        if (s < 60) return s + "s ago";
-        if (s < 3600) return (s / 60) + "m ago";
-        return (s / 3600) + "h ago";
+    static CharSequence ago(long at) {
+        return at <= 0 ? m(R.string.l10n_ios_never_seen) : Language.since(at);
+    }
+
+    private static CharSequence coinCount(String value) {
+        try { return Language.count(R.plurals.l10n_cloud_wallet_coins, Integer.parseInt(value)); }
+        catch (NumberFormatException invalid) { return Language.join(m(R.string.l10n_wallet_coins), ": ", value); }
     }
 
     /** All tokens EXCEPT Minima (0x00) from the gateway balance JSON — the "Tokens" section. */
@@ -987,7 +977,7 @@ public final class CloudWalletPage implements Page {
     }
 
     /** A token's display name — the "token" field may be a bare string or a {name:…} object. */
-    private static String tokenName(JSONObject t) {
+    private static CharSequence tokenName(JSONObject t) {
         Object tok = t.get("token");
         if (tok instanceof JSONObject) {
             Object n = ((JSONObject) tok).get("name");
@@ -995,7 +985,7 @@ public final class CloudWalletPage implements Page {
         } else if (tok != null && !String.valueOf(tok).isEmpty()) {
             return String.valueOf(tok);
         }
-        return "Token";
+        return m(R.string.l10n_wallet_token);
     }
 
     private static int num(JSONObject o, String k) {
@@ -1004,15 +994,15 @@ public final class CloudWalletPage implements Page {
     }
 
     private void copy(String s) {
-        copy(s, "Address copied");
+        copy(s, m(R.string.l10n_native_contacts_address_copied));
     }
 
-    private void copy(String s, String toast) {
+    private void copy(String s, CharSequence toast) {
         if (s == null || s.isEmpty()) return;
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(android.content.ClipData.newPlainText("value", s));   // full, never truncated
-        mAct.toast(toast);
+        mAct.toast(toast.toString());
     }
 
     private void showQr(String s) {
@@ -1023,12 +1013,15 @@ public final class CloudWalletPage implements Page {
         iv.setImageBitmap(bmp);
         int pad = PortalUi.dp(mAct, 20);
         iv.setPadding(pad, pad, pad, pad);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Receive address")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_cloud_wallet_receive_address))
                 .setView(iv)
-                .setPositiveButton("Close", null)
+                .setPositiveButton(m(R.string.l10n_language_close), null)
                 .show();
     }
+
+    private static Language.Message m(int resource, Object... arguments) { return Language.msg(resource, arguments); }
+    private String tr(int resource, Object... arguments) { return Language.text(mAct, resource, arguments); }
 
     private static String str(JSONObject o, String k) {
         Object v = o.get(k);

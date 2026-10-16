@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:tools="http://schemas.android.com/tools" xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageHelpPreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageAccountDialogsPreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageNodePreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageScriptPreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageIdePreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageNodeWalletPreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageWalletPreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageChatPreviewActivity" tools:targetApi="29"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguagePreviewActivity"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageTransferPreviewActivity"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+        <activity android:name="com.eurobuddha.maxima.app.i18n.LanguageCallPreviewActivity"
+            android:configChanges="locale|layoutDirection|screenLayout" android:exported="true" />
+    </application>
+</manifest>

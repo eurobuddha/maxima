@@ -1,6 +1,9 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
 import android.app.Activity;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 import android.content.Context;
 import android.net.Uri;
 
@@ -26,8 +29,8 @@ final class NodeHost {
 
     interface Cb {
         void done(String url, String path, String sha256);
-        void fail(String why);
-        default void progress(String note) { }
+        void fail(CharSequence why);
+        default void progress(CharSequence note) { }
     }
 
     private NodeHost() {}
@@ -84,7 +87,7 @@ final class NodeHost {
                 }
                 bytes = raw;
             } catch (Exception e) {
-                act.runOnUiThread(() -> cb.fail(e.getMessage() == null ? e.toString() : e.getMessage()));
+                act.runOnUiThread(() -> cb.fail(SystemMessages.message(e.getMessage() == null ? e.toString() : e.getMessage())));
                 return;
             }
             CloudSession.connectInteractive(act, new CloudSession.Cb() {
@@ -92,11 +95,10 @@ final class NodeHost {
                     NodeApi.WALLET.execute(() -> {
                         try {
                             JSONObject o = r.nftPut(bytes, ext, "", 0, (sent, total) ->
-                                    act.runOnUiThread(() -> cb.progress("Uploading to your node… "
-                                            + (sent * 100 / Math.max(1, total)) + "%")));
+                                    act.runOnUiThread(() -> cb.progress(msg(R.string.l10n_node_mint_upload_progress, sent * 100 / Math.max(1, total)))));
                             if (!Boolean.TRUE.equals(o.get("ok"))) {
                                 final String why = String.valueOf(o.getOrDefault("error", "the node refused the upload"));
-                                act.runOnUiThread(() -> cb.fail(why));
+                                act.runOnUiThread(() -> cb.fail(SystemMessages.message(why)));
                                 return;
                             }
                             final String url = String.valueOf(o.getOrDefault("url", ""));
@@ -105,12 +107,12 @@ final class NodeHost {
                             act.runOnUiThread(() -> cb.done(url, path, sha));
                         } catch (Exception e) {
                             final String why = e.getMessage() == null ? e.toString() : e.getMessage();
-                            act.runOnUiThread(() -> cb.fail(why));
+                            act.runOnUiThread(() -> cb.fail(SystemMessages.message(why)));
                         }
                     });
                 }
                 @Override public void err(String m) {
-                    act.runOnUiThread(() -> cb.fail("Can't reach your node: " + m));
+                    act.runOnUiThread(() -> cb.fail(msg(R.string.l10n_node_mint_node_unreachable, SystemMessages.message(m))));
                 }
             });
         });

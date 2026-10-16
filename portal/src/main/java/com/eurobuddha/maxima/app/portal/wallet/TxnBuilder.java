@@ -1,5 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.R;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -23,11 +26,11 @@ public class TxnBuilder {
     }
 
     /** Live build progress (so the UI shows staged logs, not one static line). */
-    public interface Progress { void stage(String label); }
+    public interface Progress { void stage(CharSequence label); }
 
     private Progress progress;
     public TxnBuilder onProgress(Progress p) { this.progress = p; return this; }
-    private void stage(String s) { if (progress != null) progress.stage(s); }
+    private void stage(CharSequence s) { if (progress != null) progress.stage(s); }
 
     /** An output to create. */
     public static class Out {
@@ -78,7 +81,7 @@ public class TxnBuilder {
     }
 
     public void run() {
-        stage("Building transaction…");
+        stage(msg(R.string.l10n_node_send_building));
         act.node().cmd("txncreate id:" + txid, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) { addInput(0); }
             @Override public void onError(String message) { fail(message); }
@@ -87,7 +90,7 @@ public class TxnBuilder {
 
     private void addInput(int i) {
         if (i >= inputs.size()) { addOutput(0); return; }
-        stage("Adding inputs (" + (i + 1) + "/" + inputs.size() + ")…");
+        stage(msg(R.string.l10n_node_send_adding_inputs, i + 1, inputs.size()));
         act.node().cmd("txninput id:" + txid + " coinid:" + inputs.get(i).coinid, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) { addInput(i + 1); }
             @Override public void onError(String message) { fail(message); }
@@ -96,7 +99,7 @@ public class TxnBuilder {
 
     private void addOutput(int i) {
         if (i >= outputs.size()) { sign(); return; }
-        stage("Adding outputs (" + (i + 1) + "/" + outputs.size() + ")…");
+        stage(msg(R.string.l10n_node_send_adding_outputs, i + 1, outputs.size()));
         Out o = outputs.get(i);
         String cmd = "txnoutput id:" + txid + " amount:" + o.amount + " address:" + o.address
                 + (minima ? "" : " tokenid:" + tokenid);
@@ -107,7 +110,7 @@ public class TxnBuilder {
     }
 
     private void sign() {
-        stage("Signing & posting (proof-of-work — can take a moment)…");
+        stage(msg(R.string.l10n_node_send_signing_posting));
         // Burn is only valid for Minima sends and only when > 0 (matches the dapp's signAndPost).
         String burnParam = "";
         if (minima && burn != null && !burn.isEmpty()) {

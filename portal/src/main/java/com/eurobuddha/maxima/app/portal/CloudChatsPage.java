@@ -1,6 +1,9 @@
 package com.eurobuddha.maxima.app.portal;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
 import android.content.Intent;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,9 +21,7 @@ import com.eurobuddha.maxima.cloud.ParlonsRemote;
 import org.minima.utils.json.JSONArray;
 import org.minima.utils.json.JSONObject;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -36,7 +37,11 @@ public final class CloudChatsPage implements Page {
         String key;
         String name;
         String preview;
-        String time;
+        String last;
+        String previewKind;
+        String previewText;
+        boolean mine;
+        long time;
         int unread;
         boolean group;
     }
@@ -68,9 +73,8 @@ public final class CloudChatsPage implements Page {
     private String mQuery = "";
     private volatile boolean mBusy;
     private long mLastLoad;
+    private String mRenderedLanguage = "";
 
-    private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
-    private final SimpleDateFormat mDay = new SimpleDateFormat("d MMM", Locale.UK);
 
     public CloudChatsPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -106,7 +110,7 @@ public final class CloudChatsPage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Chats";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_chats);
     }
 
     private void open(Row r) {
@@ -119,16 +123,16 @@ public final class CloudChatsPage implements Page {
 
     /** Long-press a chat → Mark as read (if unread) / Clear messages (local, with confirm). */
     private void rowMenu(Row r) {
-        java.util.List<String> items = new ArrayList<>();
+        java.util.List<CharSequence> items = new ArrayList<>();
         if (r.unread > 0) {
-            items.add("Mark as read");
+            items.add(Language.msg(R.string.l10n_native_chat_mark_read));
         }
-        items.add("Clear messages");
-        new androidx.appcompat.app.AlertDialog.Builder(mAct)
+        items.add(Language.msg(R.string.l10n_native_chat_clear_messages));
+        new LanguageDialog(mAct)
                 .setTitle(r.name)
                 .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
-                    if ("Mark as read".equals(items.get(which))) {
-                        act(rr -> rr.markRead(r.key), "Marked read");
+                    if (r.unread > 0 && which == 0) {
+                        act(rr -> rr.markRead(r.key), tr(R.string.l10n_native_chat_marked_read));
                     } else {
                         confirmClear(r);
                     }
@@ -137,13 +141,12 @@ public final class CloudChatsPage implements Page {
     }
 
     private void confirmClear(Row r) {
-        new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                .setTitle("Clear this chat?")
-                .setMessage("Removes the messages from your account only. It does NOT unsend "
-                        + "them or leave a group, and can't be undone.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Clear", (d, w) -> act(rr -> rr.clearConversation(r.key),
-                        "Chat cleared"))
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_chat_clear_title))
+                .setMessage(Language.msg(R.string.l10n_native_chat_clear_cloud))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_clear), (d, w) -> act(rr -> rr.clearConversation(r.key),
+                        tr(R.string.l10n_native_chat_cleared)))
                 .show();
     }
 
@@ -166,14 +169,14 @@ public final class CloudChatsPage implements Page {
                 }
                 final String err = error;
                 mAct.runOnUiThread(() -> {
-                    android.widget.Toast.makeText(mAct, err == null ? okMsg : "Failed: " + err,
+                    android.widget.Toast.makeText(mAct, err == null ? okMsg : tr(R.string.l10n_native_chat_operation_failed, err),
                             android.widget.Toast.LENGTH_SHORT).show();
                     mLastLoad = 0;
                     render();
                 });
             }
             public void err(String m) {
-                mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, "Failed: " + m,
+                mAct.runOnUiThread(() -> android.widget.Toast.makeText(mAct, tr(R.string.l10n_native_chat_operation_failed, m),
                         android.widget.Toast.LENGTH_SHORT).show());
             }
         });
@@ -182,6 +185,11 @@ public final class CloudChatsPage implements Page {
     /** Called on the 2s UI tick. Kicks a background refresh, throttled so we don't hammer the node. */
     @Override
     public void render() {
+        if (!Language.code().equals(mRenderedLanguage)) {
+            mRenderedLanguage = Language.code();
+            for (Row row : mAll) row.preview = preview(row);
+            applyFilter();
+        }
         if (mBusy) {
             return;
         }
@@ -205,7 +213,7 @@ public final class CloudChatsPage implements Page {
             }
             if (mAll.isEmpty()) {
                 mEmpty.setVisibility(View.VISIBLE);
-                mEmpty.setText("Loading your conversations…");
+                Language.setText(mEmpty, Language.msg(R.string.l10n_chat_loading_chats));
             }
         }
         mBusy = true;
@@ -232,7 +240,7 @@ public final class CloudChatsPage implements Page {
                         applyFilter();
                     } else if (mAll.isEmpty()) {
                         mEmpty.setVisibility(View.VISIBLE);
-                        mEmpty.setText("Couldn't load chats:\n" + err);
+                        Language.setText(mEmpty, Language.msg(R.string.l10n_native_chat_load_failed, err));
                     }
                 });
             }
@@ -242,7 +250,7 @@ public final class CloudChatsPage implements Page {
                     mBusy = false;
                     if (mAll.isEmpty()) {
                         mEmpty.setVisibility(View.VISIBLE);
-                        mEmpty.setText("Can't reach your account.\n" + m);
+                        Language.setText(mEmpty, Language.msg(R.string.l10n_native_chat_unreachable, m));
                     }
                 });
             }
@@ -272,7 +280,7 @@ public final class CloudChatsPage implements Page {
                 mAct.runOnUiThread(() -> {
                     if (keys.isEmpty()) {
                         android.widget.Toast.makeText(mAct,
-                                "Add some contacts first — a group needs members",
+                                tr(R.string.l10n_native_chat_need_members),
                                 android.widget.Toast.LENGTH_LONG).show();
                         return;
                     }
@@ -281,7 +289,7 @@ public final class CloudChatsPage implements Page {
                     int pad = (int) (20 * mAct.getResources().getDisplayMetrics().density);
                     box.setPadding(pad, pad / 2, pad, 0);
                     final EditText nameField = new EditText(mAct);
-                    nameField.setHint("Group name");
+                    Language.hint(nameField, Language.msg(R.string.l10n_chat_group_name));
                     nameField.setSingleLine(true);
                     box.addView(nameField);
                     final boolean[] picked = new boolean[keys.size()];
@@ -294,11 +302,11 @@ public final class CloudChatsPage implements Page {
                     }
                     android.widget.ScrollView scroll = new android.widget.ScrollView(mAct);
                     scroll.addView(box);
-                    new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                            .setTitle("New group")
+                    new LanguageDialog(mAct)
+                            .setTitle(Language.msg(R.string.l10n_chat_new_group))
                             .setView(scroll)
-                            .setNegativeButton("Cancel", null)
-                            .setPositiveButton("Create", (d, w) -> {
+                            .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                            .setPositiveButton(Language.msg(R.string.l10n_common_create), (d, w) -> {
                                 String gname = nameField.getText().toString().trim();
                                 List<String> members = new ArrayList<>();
                                 for (int i = 0; i < picked.length; i++) {
@@ -308,14 +316,12 @@ public final class CloudChatsPage implements Page {
                                 }
                                 if (gname.isEmpty() || members.isEmpty()) {
                                     android.widget.Toast.makeText(mAct,
-                                            "Name the group and pick at least one member",
+                                            tr(R.string.l10n_native_chat_name_and_member),
                                             android.widget.Toast.LENGTH_LONG).show();
                                     return;
                                 }
                                 if (members.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
-                                    android.widget.Toast.makeText(mAct, "A group holds at most "
-                                            + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
-                                            + " people including you - pick fewer",
+                                    android.widget.Toast.makeText(mAct, Language.count(R.plurals.l10n_native_chat_group_capacity, com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS).toString(),
                                             android.widget.Toast.LENGTH_LONG).show();
                                     return;
                                 }
@@ -347,7 +353,7 @@ public final class CloudChatsPage implements Page {
                 final String err = error;
                 mAct.runOnUiThread(() -> {
                     android.widget.Toast.makeText(mAct, err == null
-                                    ? "Group created" : "Could not create group: " + err,
+                                    ? tr(R.string.l10n_chat_group_created) : tr(R.string.l10n_native_chat_create_failed, err),
                             android.widget.Toast.LENGTH_LONG).show();
                     mLastLoad = 0;
                     render();
@@ -374,16 +380,29 @@ public final class CloudChatsPage implements Page {
                 }
                 String last = str(s, "last");
                 boolean mine = bool(s, "lastMine");
-                row.preview = last.isEmpty() ? "no messages yet"
-                        : (mine ? "You: " : "") + oneLine(last);
+                row.last = last; row.mine = mine;
+                Object metadata = s.get("lastPreview");
+                if (metadata instanceof JSONObject) {
+                    Object kind = ((JSONObject) metadata).get("kind"), text = ((JSONObject) metadata).get("text");
+                    if (kind instanceof String && text instanceof String) {
+                        row.previewKind = (String) kind; row.previewText = (String) text;
+                    }
+                }
+                row.preview = preview(row);
                 long t = lng(s, "time");
-                row.time = t > 0 ? stamp(t) : "";
+                row.time = t;
                 row.unread = (int) lng(s, "unread");
                 row.group = bool(s, "group");
                 rows.add(row);
             }
         }
         return rows;
+    }
+
+    private String preview(Row row) {
+        if (row.last == null || row.last.isEmpty()) return tr(R.string.l10n_chat_no_messages);
+        String body = oneLine(com.eurobuddha.maxima.app.i18n.ChatPreview.summary(mAct, row.last, row.previewKind, row.previewText));
+        return row.mine ? tr(R.string.l10n_chat_you_prefix, body) : body;
     }
 
     private void applyFilter() {
@@ -402,20 +421,19 @@ public final class CloudChatsPage implements Page {
         mEmpty.setVisibility(mRows.isEmpty() ? View.VISIBLE : View.GONE);
         if (mRows.isEmpty()) {
             mEmpty.setText(mQuery.isEmpty()
-                    ? "No conversations yet.\n\nAdd a contact in the Contacts tab, then message them."
-                    : "No chats match “" + mSearch.getText() + "”.");
+                    ? tr(R.string.l10n_native_chat_empty_cloud)
+                    : tr(R.string.l10n_native_chat_no_matches, mSearch.getText().toString()));
         }
     }
 
-    private String stamp(long zTime) {
-        long age = System.currentTimeMillis() - zTime;
-        return age < 20L * 60 * 60 * 1000 ? mHm.format(new Date(zTime))
-                : mDay.format(new Date(zTime));
-    }
+
+    @Override public void languageChanged() { render(); }
+
+    private String tr(int resource, Object... arguments) { return Language.text(mAct, resource, arguments); }
 
     private static String oneLine(String zBody) {
         String s = zBody.replace('\n', ' ').trim();
-        return s.length() > 70 ? s.substring(0, 70) + "…" : s;
+        return s.codePointCount(0, s.length()) > 70 ? s.substring(0, s.offsetByCodePoints(0, 70)) + "…" : s;
     }
 
     // ---- JSON coercion (org.minima.utils.json) ----
@@ -448,7 +466,7 @@ public final class CloudChatsPage implements Page {
             Avatars.apply(v.findViewById(R.id.conv_avatar), r.key, r.name);
             ((TextView) v.findViewById(R.id.conv_name)).setText(r.name);
             ((TextView) v.findViewById(R.id.conv_preview)).setText(r.preview);
-            ((TextView) v.findViewById(R.id.conv_time)).setText(r.time);
+            ((TextView) v.findViewById(R.id.conv_time)).setText(r.time > 0 ? Language.shortStamp(r.time) : "");
             TextView badge = v.findViewById(R.id.conv_badge);
             if (r.unread > 0) {
                 badge.setVisibility(View.VISIBLE);

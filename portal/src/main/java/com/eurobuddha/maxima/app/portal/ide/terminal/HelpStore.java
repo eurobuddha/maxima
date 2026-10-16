@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal.ide.terminal;
 
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 
 import org.json.JSONObject;
 
@@ -40,6 +42,15 @@ public class HelpStore {
     public static String brief(Context ctx, String command) {
         JSONObject entry = load(ctx).optJSONObject(command);
         return entry != null ? entry.optString("help", null) : null;
+    }
+
+    /** Translate only the description; completion and parameter parsing use the raw asset. */
+    public static CharSequence displayBrief(String brief) {
+        if (brief == null) return "";
+        String description = ParamDocs.stripParams(brief);
+        if (description.isEmpty() || !brief.endsWith(description)) return brief;
+        return Language.join(brief.substring(0, brief.length() - description.length()),
+                SystemMessages.message(description));
     }
 
     /** The full help page, or null. */

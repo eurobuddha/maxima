@@ -52,6 +52,7 @@ public final class Theme {
     private static Font sSemibold;
     private static Font sBold;
     private static Font sExtrabold;
+    private static Font sChinese;
 
     private int textPercent;
     static final int MIN_TEXT_PERCENT = 80, MAX_TEXT_PERCENT = 150;
@@ -145,7 +146,8 @@ public final class Theme {
         java.awt.Dimension previousPreferred = c.getPreferredSize();
         java.awt.Dimension previousMax = c.isMaximumSizeSet() ? c.getMaximumSize() : null;
         if (c.isFontSet() && c.getFont() != null) {
-            c.setFont(c.getFont().deriveFont(c.getFont().getSize2D() * ratio));
+            if (c instanceof javax.swing.JComponent) Language.resizeFont((javax.swing.JComponent) c, ratio);
+            else c.setFont(c.getFont().deriveFont(c.getFont().getSize2D() * ratio));
         }
         if (c instanceof java.awt.Container) {
             for (java.awt.Component child : ((java.awt.Container) c).getComponents()) {
@@ -173,6 +175,15 @@ public final class Theme {
         sSemibold  = load("/fonts/manrope_semibold.ttf", Font.PLAIN);
         sBold      = load("/fonts/manrope_bold.ttf", Font.BOLD);
         sExtrabold = load("/fonts/manrope_extrabold.ttf", Font.BOLD);
+    }
+
+    /** Loaded only if the installed fonts cannot display the requested text. */
+    static synchronized Font chineseFont(int style, float size) {
+        if (sChinese == null) sChinese = load("/fonts/NotoSansSC-Regular.otf", Font.PLAIN);
+        // StyleContext composes the registered face with Swing's Dialog fallback on
+        // Windows/Linux. Use the public API so mixed-script text keeps OS glyphs.
+        return javax.swing.text.StyleContext.getDefaultStyleContext()
+                .getFont(sChinese.getFamily(java.util.Locale.ROOT), style, 1).deriveFont(size);
     }
 
     private static Font load(String zPath, int zFallbackStyle) {

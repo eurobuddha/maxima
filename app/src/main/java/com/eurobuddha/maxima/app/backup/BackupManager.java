@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.backup;
 
 import android.app.Activity;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.content.Context;
 import android.view.View;
 import android.widget.Toast;
@@ -77,6 +79,6 @@ public final class BackupManager {
                     PrefsKeyUses.importRaiseOnly(zAct, zBundle.keyUses);
                 },
                 forced -> Toast.makeText(zAct,
-                        "Backup restored — reconnecting", Toast.LENGTH_LONG).show());
+                        Language.text(zAct, R.string.l10n_backup_restored), Toast.LENGTH_LONG).show());
     }
 }

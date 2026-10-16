@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.R;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Color;
@@ -47,7 +51,7 @@ public final class Sheet {
     private final LinearLayout actionRow;
     private final TextView subtitleView;
 
-    private Sheet(Context ctx, String title) {
+    private Sheet(Context ctx, CharSequence title) {
         this.ctx = ctx;
         dialog = new Dialog(ctx);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -80,9 +84,9 @@ public final class Sheet {
         handle.setLayoutParams(hlp);
         panel.addView(handle);
 
-        if (title != null && !title.isEmpty()) {
+        if (title != null && title.length() > 0) {
             TextView t = new TextView(ctx);
-            t.setText(title);
+            Language.setText(t, title);
             t.setTextColor(Design.heading());
             t.setTextSize(17f);
             t.setTypeface(Design.typefaceBold());
@@ -110,7 +114,8 @@ public final class Sheet {
         panel.addView(sv);
 
         actionRow = new LinearLayout(ctx);
-        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setOrientation(ctx.getResources().getConfiguration().fontScale > 1.2f
+                ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         actionRow.setPadding(dp(16), dp(10), dp(16), 0);
         panel.addView(actionRow);
 
@@ -122,12 +127,12 @@ public final class Sheet {
         }
     }
 
-    public static Sheet create(Context ctx, String title) { return new Sheet(ctx, title); }
+    public static Sheet create(Context ctx, CharSequence title) { return new Sheet(ctx, title); }
 
     /** A line of explanatory text under the title, before the body. */
-    public Sheet subtitle(String s) {
-        if (s != null && !s.isEmpty()) {
-            subtitleView.setText(s);
+    public Sheet subtitle(CharSequence s) {
+        if (s != null && s.length() > 0) {
+            Language.setText(subtitleView, s);
             subtitleView.setVisibility(View.VISIBLE);
             subtitleView.setPadding(dp(20), dp(2), dp(20), dp(6));
         }
@@ -145,10 +150,25 @@ public final class Sheet {
         return this;
     }
 
-    /** Add an action. A null tap just dismisses — the common "Close"/"Back" case. */
-    public Sheet action(String label, Style style, final OnTap tap) {
+    /** Give longer action labels a full-width row using the existing large-text layout. */
+    public Sheet stackActions() {
+        actionRow.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < actionRow.getChildCount(); i++) {
+            View child = actionRow.getChildAt(i);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) child.getLayoutParams();
+            lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.weight = 0f;
+            lp.leftMargin = 0;
+            lp.topMargin = i == 0 ? 0 : dp(8);
+            child.setLayoutParams(lp);
+        }
+        return this;
+    }
+
+    /** Add an action. A null tap just dismisses — the common Close/Back case. */
+    public Sheet action(CharSequence label, Style style, final OnTap tap) {
         TextView b = new TextView(ctx);
-        b.setText(label);
+        Language.setText(b, label);
         b.setTextSize(13.5f);
         b.setTypeface(Design.typefaceBold());
         b.setGravity(Gravity.CENTER);
@@ -179,9 +199,14 @@ public final class Sheet {
         b.setBackground(new RippleDrawable(
                 ColorStateList.valueOf(withAlpha(rippleOn, 0x40)), shape, null));
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, style == Style.PRIMARY ? 1.5f : 1f);
-        if (actionRow.getChildCount() > 0) lp.leftMargin = dp(8);
+        boolean stacked = actionRow.getOrientation() == LinearLayout.VERTICAL;
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                stacked ? ViewGroup.LayoutParams.MATCH_PARENT : 0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, stacked ? 0f : style == Style.PRIMARY ? 1.5f : 1f);
+        if (actionRow.getChildCount() > 0) {
+            if (stacked) lp.topMargin = dp(8);
+            else lp.leftMargin = dp(8);
+        }
         b.setLayoutParams(lp);
 
         b.setOnClickListener(v -> {
@@ -193,7 +218,7 @@ public final class Sheet {
     }
 
     public Dialog show() {
-        if (actionRow.getChildCount() == 0) action("Close", Style.SECONDARY, null);
+        if (actionRow.getChildCount() == 0) action(msg(R.string.l10n_language_close), Style.SECONDARY, null);
         try { dialog.show(); } catch (Exception ignored) {}
         return dialog;
     }
@@ -220,21 +245,21 @@ public final class Sheet {
 
         private Progress(Sheet sheet, TextView text) { this.sheet = sheet; this.text = text; }
 
-        public void text(String msg) { if (msg != null) text.setText(msg); }
+        public void text(CharSequence msg) { if (msg != null) Language.setText(text, msg); }
 
         /** Let the user close it, and offer the button to do so. */
         public void finish() {
             sheet.cancelable(true);
-            if (sheet.actionRow.getChildCount() == 0) sheet.action("Close", Style.SECONDARY, null);
+            if (sheet.actionRow.getChildCount() == 0) sheet.action(msg(R.string.l10n_language_close), Style.SECONDARY, null);
         }
 
         public void dismiss() { sheet.dismiss(); }
     }
 
-    public static Progress progress(Context ctx, String title, String message) {
+    public static Progress progress(Context ctx, CharSequence title, CharSequence message) {
         Sheet s = create(ctx, title);
         TextView t = new TextView(ctx);
-        t.setText(message == null ? "" : message);
+        Language.setText(t, message == null ? "" : message);
         t.setTextColor(Design.text());
         t.setTextSize(13f);
         s.body().addView(t);

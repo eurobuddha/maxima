@@ -7,19 +7,20 @@ const vm = require('node:vm');
 // Run the shipped controls against an idempotent synthetic account; only browser/API
 // boundaries are stubbed, as in panel.test.cjs. No live identities or network access.
 function element() {
-  const children = new Map();
+  const children = new Map(), attributes = {};
   return { isConnected: true, hidden: false, disabled: false, textContent: '', items: [],
     querySelector(key) { if (!children.has(key)) children.set(key, element()); return children.get(key); },
-    setAttribute() {}, appendChild(child) { this.items.push(child); } };
+    setAttribute(k,v) {attributes[k]=v;},getAttribute(k){return attributes[k];},removeAttribute(k){delete attributes[k];},appendChild(child) { this.items.push(child); } };
 }
 function harness(intercept = () => {}) {
   const uploads = new Map(), calls = [], panels = [], toasts = [];
   let current;
-  const context = { window: {}, document: { createElement: element }, Uint8Array, TextDecoder,
+  const context = { window: {}, document: { createElement: element, documentElement: {}, querySelectorAll: () => [] }, Uint8Array, TextDecoder,
     crypto: require('node:crypto').webcrypto, btoa: s => Buffer.from(s, 'binary').toString('base64'),
     atob: s => Buffer.from(s, 'base64').toString('binary'),
     setTimeout(fn, delay) { if (delay <= 500) queueMicrotask(fn); } };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/panel/private-files.js'), 'utf8'), context);
+  vm.createContext(context);
+  for (const name of ['messages.js','i18n.js','private-files.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/panel',name), 'utf8'), context);
   const ui = context.window.ParlonsFiles.create({
     api: async (method, p) => {
       calls.push({ ...p });

@@ -1,5 +1,10 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import android.widget.Toast;
 
 import java.math.BigDecimal;
@@ -57,13 +62,11 @@ public class DistributeManager {
     }
 
     /** One-line progress string for the Tools tab, or null when idle. */
-    public String statusLine() {
+    public CharSequence statusLine() {
         if (job == null) return null;
-        String s = "Distribute running · " + job.batchesDone + " batch(es) done · "
-                + job.remaining.size() + " address(es) left"
-                + (job.waiting ? " · waiting for confirmation…" : " · posting…");
-        if (job.retryCount > 0) s += " · retry " + job.retryCount + "/" + MAX_RETRIES;
-        return s;
+        return Language.join(msg(R.string.l10n_node_tools_distribution_progress, job.batchesDone, job.remaining.size()),
+                " · ", job.waiting ? msg(R.string.l10n_node_tools_waiting) : msg(R.string.l10n_node_tools_posting_status),
+                job.retryCount > 0 ? Language.join(" · ", msg(R.string.l10n_node_tools_retry, job.retryCount, MAX_RETRIES)) : "");
     }
 
     // ===== start a new job =====
@@ -72,12 +75,12 @@ public class DistributeManager {
      *  user's selected coins. Later batches chain off each batch's change coin (see onCoinsUpdated). */
     public void start(List<Coin> inputs, List<String> addrs, String per, String tokenid, String tokenName) {
         starting = false;   // committing the reservation (if any) into a real job
-        if (job != null) { toast("A distribute job is already running."); return; }
-        if (inputs.isEmpty() || addrs.isEmpty()) { toast("Nothing to distribute."); return; }
+        if (job != null) { toast(msg(R.string.l10n_node_tools_distribute_busy)); return; }
+        if (inputs.isEmpty() || addrs.isEmpty()) { toast(msg(R.string.l10n_node_tools_nothing_distribute)); return; }
 
         BigDecimal total = sum(inputs);
         BigDecimal required = new BigDecimal(per).multiply(new BigDecimal(addrs.size()));
-        if (required.compareTo(total) > 0) { toast("Selected coins don't cover the distribution."); return; }
+        if (required.compareTo(total) > 0) { toast(msg(R.string.l10n_node_tools_insufficient)); return; }
 
         job = new DistributeJob();
         job.tokenid = tokenid;
@@ -127,7 +130,7 @@ public class DistributeManager {
         final String changeStr = hasChange ? change.stripTrailingZeros().toPlainString() : "";
 
         inFlight = true;
-        toast("Distribute: posting batch " + (job.batchesDone + 1) + " (" + n + " addresses)…");
+        toast(Language.count(R.plurals.l10n_node_tools_posting_batch, n, job.batchesDone + 1, n));
 
         if (hasChange) {
             act.node().cmd("getaddress", new NodeApi.Cb() {
@@ -229,12 +232,14 @@ public class DistributeManager {
         inFlight = false;
         DistributeJob.clear(act);
         job = null;
-        toast("Distribute complete.");
+        toast(msg(R.string.l10n_node_tools_complete));
         act.refreshTools();
     }
 
     /** Give up: mark the current row errored, clear the job, and report how many addresses went unfunded. */
-    private void abort(String why) {
+    private void abort(String why) { abort(why, SystemMessages.message(why)); }
+
+    private void abort(String why, CharSequence displayWhy) {
         int left = job != null ? job.remaining.size() : 0;
         if (job != null && !job.currentInternalId.isEmpty()) {
             act.history().update(job.currentInternalId, HistoryDb.STATUS_ERROR, null, "Distribute aborted: " + why);
@@ -242,7 +247,7 @@ public class DistributeManager {
         inFlight = false;
         DistributeJob.clear(act);
         job = null;
-        toast("Distribute aborted (" + left + " address(es) unfunded): " + why);
+        toast(msg(R.string.l10n_node_tools_aborted, left, displayWhy));
         act.refreshTools();
     }
 
@@ -261,7 +266,7 @@ public class DistributeManager {
         }
 
         if (job.batchesDone == 0) {
-            toast("Distribute couldn't start: " + message);
+            toast(msg(R.string.l10n_node_tools_could_not_start, SystemMessages.message(message)));
             DistributeJob.clear(act);
             job = null;
             act.refreshTools();
@@ -270,12 +275,13 @@ public class DistributeManager {
 
         job.retryCount++;
         if (job.retryCount > MAX_RETRIES) {
-            abort("batch " + (job.batchesDone + 1) + " failed after " + MAX_RETRIES + " retries: " + message);
+            abort("batch " + (job.batchesDone + 1) + " failed after " + MAX_RETRIES + " retries: " + message,
+                    msg(R.string.l10n_node_tools_batch_failed, job.batchesDone + 1, MAX_RETRIES, SystemMessages.message(message)));
             return;
         }
         job.waiting = true;
         job.save(act);
-        toast("Distribute batch failed; retrying next block (" + job.retryCount + "/" + MAX_RETRIES + ")");
+        toast(msg(R.string.l10n_node_tools_retry_next_block, job.retryCount, MAX_RETRIES));
         act.refreshTools();
     }
 
@@ -297,7 +303,7 @@ public class DistributeManager {
     }
 
     /** Short toast helper. */
-    private void toast(String msg) {
+    private void toast(CharSequence msg) {
         Toast.makeText(act, msg, Toast.LENGTH_SHORT).show();
     }
 }

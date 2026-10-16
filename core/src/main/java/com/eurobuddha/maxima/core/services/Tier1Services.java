@@ -117,6 +117,7 @@ public final class Tier1Services {
     public long blobsStored() { return mBlobsStored.get(); }
     public long receiptsSigned() { return mReceiptsSigned.get(); }
     public long declined() { return mRefused.get(); }
+    public long addressesShared() { return mGossipLearned.get(); }
 
     public void setBlobLimits(int zMaxBlobs, long zMaxBytes) {
         mMaxBlobs = zMaxBlobs;

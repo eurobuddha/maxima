@@ -9,31 +9,117 @@ const vm = require('node:vm');
 const source = fs.readFileSync(process.env.PARLONS_PANEL_SOURCE || path.join(__dirname, '../../main/resources/panel/app.js'), 'utf8');
 function element() {
   const classes = new Set(), attrs = {}, handlers = {}, children = new Map();
-  return { attrs, handlers, disabled: false, parentElement: {}, textContent: '', innerHTML: '',
+  return { nodeType: 1, attrs, handlers, disabled: false, value: '', appended: [], parentElement: {}, textContent: '', innerHTML: '',
     classList: { contains: k => classes.has(k), toggle(k, on) { on ? classes.add(k) : classes.delete(k); } },
-    addEventListener(k, f) { handlers[k] = f; }, setAttribute(k,v) { attrs[k] = v; }, removeAttribute(k) { delete attrs[k]; },
+    addEventListener(k, f) { handlers[k] = f; }, setAttribute(k,v) { attrs[k] = v; }, getAttribute(k) { return attrs[k] || null; }, removeAttribute(k) { delete attrs[k]; },
     querySelector(k) { if (!children.has(k)) children.set(k, element()); return children.get(k); },
-    appendChild() {}, remove() {}, focus() {}, isConnected: false, querySelectorAll() { return []; }, style: {}, scrollHeight: 100, scrollTop: 0, clientHeight: 100 };
+    appendChild(child) { this.appended.push(child); }, remove() {}, focus() {}, isConnected: false, querySelectorAll() { return []; }, style: {}, scrollHeight: 100, scrollTop: 0, clientHeight: 100 };
 }
 function harness(fetch) {
   const nodes = new Map();
   const node = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   const renders = { page: 0, list: 0, messages: 0 };
   const context = vm.createContext({ fetch, document: { body: element(), createElement: () => ({content: {firstElementChild: element()}}), getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
-    window: { icon: () => '', addEventListener() {} }, localStorage: { getItem: () => null },
+    window: { icon: () => '', addEventListener() {} }, confirm: () => true, localStorage: { getItem: () => null },
     setTimeout() {}, clearTimeout() {}, Event: class { constructor(type) { this.type = type; } }, URL, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
-  const expose = `globalThis.panel = { S, api, linkText, bubbleHtml, chatPhotos, copyableMessage, insertEmoji, findMessage, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
+  const expose = `globalThis.panel = { S, api, toast, retryCard, showSendErr, summaryPreview, i18n: I, draftKeydown, renderAdminPassword, renderHostedAccounts, linkText, bubbleHtml, chatPhotos, copyableMessage, insertEmoji, findMessage, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
     get seq() { return openSeq; }, get busy() { return olderBusy; }, get done() { return olderDone; } };
     renderChats = () => { renders.page++; }; renderChatsList = () => { renders.list++; }; renderMsgs = () => { renders.messages++; };`;
   assert.match(source, /  boot\(\);\s*\}\)\(\);\s*$/);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/panel/private-files.js'), 'utf8'), context);
+  for (const name of ['messages.js', 'i18n.js', 'private-files.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/panel', name), 'utf8'), context);
   vm.runInContext(source.replace(/  boot\(\);\s*\}\)\(\);\s*$/, expose + '\n})();'), context);
   return { p: context.panel, node, renders };
 }
 const reply = (body, status = 200) => ({ok: status < 400, status, json: async () => body});
 function deferred() { let resolve; const promise = new Promise(r => resolve = r); return {promise, resolve}; }
+
+test('server failures translate in retained displays while raw API errors and drafts stay intact', async () => {
+  const raw = 'no such contact', h = harness(async () => reply({ok:false,error:raw}, 400));
+  let failure;
+  try { await h.p.api('contacts.rename', {name:'literal'}); } catch (e) { failure = e; }
+  assert.equal(failure.message, raw);
+  h.node('draft').value = 'no such contact 中文 {error}';
+  h.p.toast(failure.message, 'err'); h.p.showSendErr(failure.message);
+  const host = element(); h.p.retryCard(host, 'chat.refreshFailed', failure.message, () => {});
+  const displays = [h.node('toast'), h.node('sendErr'), host.appended[0].querySelector('.sub')];
+  for (const code of ['ru', 'zh-Hans', 'en']) {
+    h.p.i18n.setLanguage(code);
+    for (const display of displays) {
+      h.p.i18n.apply(display);
+      assert.equal(display.textContent, h.p.i18n.t('serverError.noContact'));
+    }
+    assert.equal(failure.message, raw);
+    assert.equal(h.node('draft').value, 'no such contact 中文 {error}');
+  }
+  const literal = '<img onerror=x> {error} $1 中文';
+  h.p.toast(literal, 'err'); h.p.i18n.setLanguage('ru'); h.p.i18n.apply(h.node('toast'));
+  assert.equal(h.node('toast').textContent, literal);
+  h.p.toast('success literal', 'ok'); h.p.i18n.setLanguage('zh-Hans'); h.p.i18n.apply(h.node('toast'));
+  assert.equal(h.node('toast').textContent, 'success literal');
+});
+
+test('Enter commits an input-method composition without sending the draft', () => {
+  const h = harness(() => { throw Error('Composition must not send'); });
+  h.node('draft').value = '中文';
+  for (const composition of [{isComposing:true}, {keyCode:229}]) {
+    h.p.draftKeydown({key:'Enter', preventDefault() { throw Error('Composition must keep its Enter event'); }, ...composition});
+    assert.equal(h.node('draft').value, '中文');
+  }
+});
+
+test('admin setup validates confirmation, clears secrets and unlocks invitations only after saving', async () => {
+  const calls = [], h = harness(async (url, options) => {
+    calls.push({url, options});
+    return reply(options.method === 'POST' ? {ok:true,configured:true} : {available:true,configured:false});
+  });
+  const body = element(), input = element(), button = element();
+  await h.p.renderAdminPassword(body, input, button);
+  assert.equal(button.disabled, true); assert.equal(input.hidden, true);
+  const form = body.appended[0], password = form.querySelector('#newPassword'), confirmation = form.querySelector('#confirmPassword');
+  password.value = 'synthetic password'; confirmation.value = 'different password';
+  await form.handlers.submit({preventDefault(){}});
+  assert.equal(calls.length, 1); assert.match(form.querySelector('#passwordResult').textContent, /do not match/);
+  confirmation.value = password.value;
+  await form.handlers.submit({preventDefault(){}});
+  assert.equal(calls[1].url, '/api/admin-password');
+  assert.equal(JSON.parse(calls[1].options.body).newPassword, 'synthetic password');
+  assert.equal(password.value, ''); assert.equal(confirmation.value, '');
+  assert.equal(button.disabled, false); assert.equal(input.hidden, false);
+  assert.equal(form.querySelector('#currentPassword').required, true);
+});
+
+test('failed password setup stays unset and permits a retry without retaining passwords', async () => {
+  const h = harness(async (url, options) => options.method === 'POST' ? reply({error:'Disk is full'}, 400) : reply({available:true,configured:false}));
+  const body=element(), input=element(), button=element(); await h.p.renderAdminPassword(body,input,button);
+  const form=body.appended[0]; form.querySelector('#newPassword').value=form.querySelector('#confirmPassword').value='synthetic password';
+  await form.handlers.submit({preventDefault(){}});
+  assert.equal(button.disabled,true); assert.equal(form.querySelector('#savePassword').disabled,false);
+  assert.equal(form.querySelector('#newPassword').value,''); assert.match(form.querySelector('#passwordResult').textContent,/Disk is full/);
+});
+
+test('tenant UI enables hosting and uses the separate account invite endpoint', async () => {
+  let enabled=false; const calls=[];
+  const h=harness(async (url, options) => {
+    const request=JSON.parse(options.body); calls.push({url,...request});
+    if(request.action==='enable') enabled=true;
+    if(request.action==='invite') return reply({ok:true,invite:'MAX#guest#MxTEST@h:1?code=AABB-CCDD-EEFF'});
+    return reply({ok:true,managed:true,enabled,online:enabled,access:'chat-only',accounts:enabled?[{name:'alice',state:'running',paused:false}]:[]});
+  });
+  const body=element(); await h.p.renderHostedAccounts(body); const card=body.appended[0];
+  assert.equal(card.querySelector('#hostingCreate').hidden,true);
+  await card.querySelector('#hostingToggle').onclick();
+  // The click handler starts the async request; drain the promise microtasks.
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(card.querySelector('#hostingCreate').hidden,false);
+  const row=card.querySelector('#hostingRows').appended[0];
+  await row.querySelector('#tenantInvite').onclick();
+  assert.equal(card.querySelector('#tenantInvitation').hidden,false);
+  assert.match(card.querySelector('#tenantInviteText').textContent,/MAX#guest/);
+  assert.ok(calls.every(c=>c.url==='/api/hosted.accounts'));
+  assert.equal(calls.at(-1).name,'alice');
+});
 
 test('a failed status check cannot report a healthy connection', async () => {
   const h = harness(async () => { throw new Error('offline'); }); await h.p.refreshPill();
@@ -84,10 +170,10 @@ test('file upload retains its original recipient and group flag after navigation
 });
 test('switch saves once, reflects success after the event ends and preserves value on failure', async () => {
   const h = harness(), button = element(), d = deferred(); let calls = 0;
-  h.p.wireSwitch(button, 'Read receipts', () => { calls++; return d.promise; }, () => 'Saved');
+  h.p.wireSwitch(button, 'settings.readReceipts', () => { calls++; return d.promise; }, () => 'Saved');
   const save = button.handlers.click(); await button.handlers.click(); assert.equal(calls, 1); assert.equal(button.disabled, true);
   d.resolve(); await save; assert.equal(button.attrs['aria-checked'], 'true'); assert.equal(button.disabled, false);
-  h.p.wireSwitch(button, 'Read receipts', async () => { throw new Error('No connection'); }, () => 'Saved');
+  h.p.wireSwitch(button, 'settings.readReceipts', async () => { throw new Error('No connection'); }, () => 'Saved');
   await button.handlers.click(); assert.equal(button.attrs['aria-checked'], 'true'); assert.equal(h.node('toast').textContent, 'No connection');
 });
 
@@ -158,4 +244,44 @@ test('search navigation stops after changing conversations or a failed history r
 test('excessive domain labels remain literal text', () => {
   const h = harness();
   assert.ok(!h.p.linkText('a.'.repeat(10000) + 'com').includes('<a '));
+});
+
+
+test('structured summaries translate only known labels in every language and keep cached fallback literal', () => {
+  const h = harness(() => { throw Error('No network for preview'); });
+  const literal = 'Photo 中文 $1 {caption} <img>';
+  for (const [code, photo, voice, contact] of [['en','📷 Photo','🎤 Voice note','👤 Contact: '],['ru','📷 Фото','🎤 Голосовое сообщение','👤 Контакт: '],['zh-Hans','📷 照片','🎤 语音消息','👤 联系人：']]) {
+    h.p.i18n.setLanguage(code);
+    for (const [kind,text,expected] of [['photo',literal,photo+'  '+literal],['voice','0:42',voice+'  0:42'],['contact',literal,contact+literal],['file',literal,'📎 '+literal],['payment','💸 1.23456789 TOKEN','💸 1.23456789 TOKEN']]) {
+      const summary = {last:'Legacy English',lastPreview:{kind,text}};
+      const original = JSON.stringify(summary);
+      assert.equal(h.p.summaryPreview(summary),expected);
+      assert.equal(JSON.stringify(summary),original);
+    }
+    for (const lastPreview of [undefined,null,{kind:'future',text:'x'},{kind:'photo',text:2},{kind:{toString:2},text:'x'}])
+      assert.equal(h.p.summaryPreview({last:'📷 Photo',lastPreview}),'📷 Photo');
+  }
+});
+
+
+test('summary paging retains every typed row and keeps the existing list on a later-page failure', async () => {
+  const calls = [], first = {peer:'a',last:'old',time:1,lastPreview:{kind:'photo',text:'中文'}};
+  const h = harness(async (url, options) => {
+    const offset = JSON.parse(options.body).offset; calls.push(offset);
+    return reply(offset === 0 ? {summaries:[first],more:true,next:1} : {summaries:[{peer:'b',time:2}],more:false,next:2});
+  });
+  h.p.S.search = 'unsent 中文';
+  await h.p.loadSummaries();
+  assert.deepEqual(calls,[0,1]);
+  assert.equal(h.p.S.summaries.length,2); assert.equal(h.p.S.summaries[1].lastPreview.text,'中文');
+  assert.equal(h.p.S.search,'unsent 中文');
+  const broken = harness(async (url, options) => {
+    if (JSON.parse(options.body).offset) throw Error('offline');
+    return reply({summaries:[first],more:true,next:1});
+  });
+  const existing = [{peer:'keep'}]; broken.p.S.summaries = existing;
+  await assert.rejects(broken.p.loadSummaries(),/offline/);
+  assert.equal(broken.p.S.summaries,existing);
+  const stuck = harness(async () => reply({summaries:[],more:true,next:0}));
+  await assert.rejects(stuck.p.loadSummaries());
 });

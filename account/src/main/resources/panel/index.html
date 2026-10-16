@@ -12,30 +12,32 @@
     <header class="bar">
       <div class="titles">
         <div class="titlerow"><span class="title">Parlons!</span><span class="ver" id="ver"></span></div>
-        <div class="credit">Powered by Maxima</div>
+        <div class="credit" data-i18n="common.powered">Powered by Maxima</div>
       </div>
-      <div class="hpill" role="status"><span class="dot" id="dot"></span><span class="ptext" id="state">starting…</span></div>
-      <button class="ibtn" id="btnTheme" title="Theme"></button>
-      <button class="ibtn" id="btnSearch" title="Search"></button>
-      <button class="ibtn narrow" id="btnMore" title="More"></button>
+      <div class="hpill" role="status"><span class="dot" id="dot"></span><span class="ptext" id="state" data-i18n="connection.starting">starting…</span></div>
+      <button class="ibtn" id="btnTheme" title="Theme" data-i18n-title="common.theme"></button>
+      <button class="ibtn" id="btnSearch" title="Search" data-i18n-title="common.search"></button>
+      <button class="ibtn narrow" id="btnMore" title="More" data-i18n-title="common.more"></button>
     </header>
-    <nav class="tabs" id="tabs" aria-label="Parlons pages">
-      <button data-route="chats" class="on">Chats</button>
-      <button data-route="contacts">Contacts</button>
-      <button data-route="devices">Devices</button>
-      <button data-route="node">Node</button>
-      <button data-route="settings">Settings</button>
+    <nav class="tabs" id="tabs" aria-label="Parlons pages" data-i18n-aria-label="nav.pages">
+      <button data-route="chats" class="on" data-i18n="nav.chats">Chats</button>
+      <button data-route="contacts" data-i18n="nav.contacts">Contacts</button>
+      <button data-route="devices" data-i18n="nav.devices">Devices</button>
+      <button data-route="node" data-i18n="nav.node">Node</button>
+      <button data-route="settings" data-i18n="nav.settings">Settings</button>
     </nav>
     <div class="page" id="page"></div>
   </section>
   <section class="chatpane" id="chatpane">
-    <div class="ground" id="ground"><div class="groundText">Pick a conversation.</div></div>
+    <div class="ground" id="ground"><div class="groundText" data-i18n="chat.pick">Pick a conversation.</div></div>
   </section>
   <div class="banner" id="banner" role="status" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
 </div>
 <script src="qr.js"></script>
 <script src="icons.js"></script>
+<script src="messages.js"></script>
+<script src="i18n.js"></script>
 <script src="calls.js"></script>
 <script src="calls-ui.js"></script>
 <script src="private-files.js"></script>

@@ -6,6 +6,7 @@
   const Q = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"';
   const F = 'fill="currentColor"';
   const P = {
+    language: '<circle ' + S + ' cx="12" cy="12" r="9"/><ellipse ' + S + ' cx="12" cy="12" rx="4" ry="9"/><path ' + S + ' d="M3,12 H21"/>',
     back: '<path ' + S + ' d="M15,5 L8,12 L15,19"/>',
     search: '<path ' + S + ' d="M4.5,11 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0 z M20,20 l-4.2,-4.2"/>',
     more: '<path ' + F + ' d="M10.3,5 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 z M10.3,12 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 z M10.3,19 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 z"/>',

@@ -1,6 +1,11 @@
 package com.eurobuddha.maxima.app.backup;
 
-import android.app.AlertDialog;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
+import androidx.appcompat.app.AlertDialog;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
@@ -69,9 +74,8 @@ public final class BackupActivity extends AppCompatActivity {
     // ---- export -----------------------------------------------------------
 
     private void startExport() {
-        askPassword("Back up identity",
-                "Choose a password to protect this backup. You'll need it to restore — "
-                        + "it is NOT recoverable if you lose it.",
+        askPassword(Language.msg(R.string.l10n_backup_title),
+                Language.msg(R.string.l10n_backup_warning),
                 true,
                 pw -> {
                     mPassword = pw;
@@ -83,9 +87,9 @@ public final class BackupActivity extends AppCompatActivity {
         try (OutputStream os = getContentResolver().openOutputStream(zUri)) {
             os.write(BackupManager.export(this, mPassword));
             os.flush();
-            toast("Backup saved");
+            toast(tr(R.string.l10n_native_dialog_backup_saved));
         } catch (Exception e) {
-            toast("Backup failed: " + e.getMessage());
+            toast(tr(R.string.l10n_native_dialog_backup_failed, SystemMessages.text(this, e.getMessage())));
         } finally {
             clearPw();
             finish();
@@ -95,23 +99,22 @@ public final class BackupActivity extends AppCompatActivity {
     // ---- import -----------------------------------------------------------
 
     private void promptImportPassword(Uri zUri) {
-        askPassword("Restore from backup", "Enter the backup password.", false, pw -> {
+        askPassword(Language.msg(R.string.l10n_backup_restore_title), Language.msg(R.string.l10n_backup_enter_password), false, pw -> {
             try (InputStream is = getContentResolver().openInputStream(zUri)) {
                 byte[] blob = readAll(is);
                 final BackupBundle bundle = BackupManager.read(blob, pw);
-                new AlertDialog.Builder(this)
-                        .setTitle("Restore this backup?")
-                        .setMessage("This REPLACES the identity, contacts and chats on THIS phone "
-                                + "with the ones in the backup. It can't be undone.")
-                        .setNegativeButton("Cancel", (d, w) -> finish())
+                new LanguageDialog(this)
+                        .setTitle(Language.msg(R.string.l10n_backup_confirm_title))
+                        .setMessage(Language.msg(R.string.l10n_backup_replace_warning))
+                        .setNegativeButton(Language.msg(R.string.l10n_common_cancel), (d, w) -> finish())
                         .setOnCancelListener(d -> finish())
-                        .setPositiveButton("Restore", (d, w) -> {
+                        .setPositiveButton(Language.msg(R.string.l10n_native_dialog_restore), (d, w) -> {
                             BackupManager.apply(this, bundle);
                             finish();
                         })
                         .show();
             } catch (Exception e) {
-                toast("Could not read backup: " + e.getMessage());
+                toast(tr(R.string.l10n_backup_read_failed, SystemMessages.text(this, e.getMessage())));
                 finish();
             } finally {
                 java.util.Arrays.fill(pw, '\0');
@@ -121,46 +124,46 @@ public final class BackupActivity extends AppCompatActivity {
 
     // ---- helpers ----------------------------------------------------------
 
-    private void askPassword(String zTitle, String zMsg, boolean zConfirm, PwCallback zCb) {
+    private void askPassword(CharSequence zTitle, CharSequence zMsg, boolean zConfirm, PwCallback zCb) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(20);
         box.setPadding(pad, pad, pad, 0);
-        final EditText pw = passwordField("Password");
+        final EditText pw = passwordField(Language.msg(R.string.l10n_backup_password));
         box.addView(pw);
-        final EditText confirm = zConfirm ? passwordField("Repeat password") : null;
+        final EditText confirm = zConfirm ? passwordField(Language.msg(R.string.l10n_backup_repeat_password)) : null;
         if (confirm != null) {
             confirm.setGravity(Gravity.TOP);
             box.addView(confirm);
         }
 
-        AlertDialog d = new AlertDialog.Builder(this)
+        AlertDialog d = new LanguageDialog(this)
                 .setTitle(zTitle)
                 .setMessage(zMsg)
                 .setView(box)
-                .setNegativeButton("Cancel", (di, w) -> finish())
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), (di, w) -> finish())
                 .setOnCancelListener(di -> finish())
-                .setPositiveButton("OK", null)   // overridden below so validation can keep it open
+                .setPositiveButton(Language.msg(R.string.l10n_common_ok), null)   // overridden below so validation can keep it open
                 .create();
-        d.setOnShowListener(x -> d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        d.show();
+        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String p1 = pw.getText().toString();
             if (p1.length() < 6) {
-                toast("Use at least 6 characters");
+                toast(tr(R.string.l10n_backup_password_length));
                 return;
             }
             if (confirm != null && !p1.equals(confirm.getText().toString())) {
-                toast("Passwords don't match");
+                toast(tr(R.string.l10n_backup_password_mismatch));
                 return;
             }
             d.dismiss();
             zCb.run(p1.toCharArray());
-        }));
-        d.show();
+        });
     }
 
-    private EditText passwordField(String zHint) {
+    private EditText passwordField(CharSequence zHint) {
         EditText e = new EditText(this);
-        e.setHint(zHint);
+        Language.hint(e, zHint);
         e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         return e;
     }
@@ -186,7 +189,15 @@ public final class BackupActivity extends AppCompatActivity {
         return Math.round(zDp * getResources().getDisplayMetrics().density);
     }
 
+    private String tr(int resource, Object... args) { return Language.text(this, resource, args); }
+
     private void toast(String zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_LONG).show();
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
 }

@@ -1,5 +1,7 @@
 package com.eurobuddha.maxima.app;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,6 +46,7 @@ import java.util.List;
  * conversational screens stay free of transport internals.
  */
 public final class MainActivity extends AppCompatActivity implements ChatEngine.Listener {
+    private com.eurobuddha.maxima.app.ui.TabScroll mTabScroll;
 
     private TextView mPill;
     private View mDot;
@@ -77,6 +80,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         }
 
         setContentView(R.layout.activity_main);
+        com.eurobuddha.maxima.app.ui.MainHeader.configure(this);
 
         // DEV-ONLY intent hooks below. MainActivity is the exported launcher,
         // so ANY installed app could otherwise start it with these extras and
@@ -156,25 +160,24 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         // A three-dot icon promises a MENU - give it one instead of a tab jump.
         findViewById(R.id.btn_main_more).setOnClickListener(v -> {
             android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);
-            m.getMenu().add("New group");
-            m.getMenu().add("Scan QR");
-            m.getMenu().add("Search");
-            m.getMenu().add("Settings");
+            m.getMenu().add(0, 1, 1, Language.text(this, R.string.l10n_chat_new_group));
+            m.getMenu().add(0, 2, 2, Language.text(this, R.string.l10n_common_scan_qr));
+            m.getMenu().add(0, 3, 3, Language.text(this, R.string.l10n_common_search));
+            m.getMenu().add(0, 4, 4, Language.text(this, R.string.l10n_nav_settings));
             m.setOnMenuItemClickListener(item -> {
-                CharSequence t = item.getTitle();
-                if ("New group".contentEquals(t)) {
+                if (item.getItemId() == 1) {
                     showTab(0);
                     for (Page pg : mPages) {
                         if (pg instanceof com.eurobuddha.maxima.app.ui.ChatsPage) {
                             ((com.eurobuddha.maxima.app.ui.ChatsPage) pg).newGroup();
                         }
                     }
-                } else if ("Scan QR".contentEquals(t)) {
+                } else if (item.getItemId() == 2) {
                     scanQr();
-                } else if ("Search".contentEquals(t)) {
+                } else if (item.getItemId() == 3) {
                     startActivity(new android.content.Intent(this,
                             com.eurobuddha.maxima.app.ui.SearchActivity.class));
-                } else {
+                } else if (item.getItemId() == 4) {
                     showTab(4);
                 }
                 return true;
@@ -185,7 +188,9 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         themeBtn.setImageResource(ChatPrefs.appearanceIcon(this));
         themeBtn.setOnClickListener(v -> {
             ChatPrefs.cycleAppearance(this);
-            toast("Theme: " + ChatPrefs.appearanceLabel(this));
+            toast(Language.text(this, R.string.l10n_native_shell_theme, Language.text(this,
+                    ChatPrefs.nightMode(this) == androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO ? R.string.l10n_theme_light_label
+                    : ChatPrefs.nightMode(this) == androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES ? R.string.l10n_theme_dark_label : R.string.l10n_theme_system_label)));
             androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(ChatPrefs.nightMode(this));
         });
 
@@ -201,6 +206,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         mPages.add(new NetworkPage(this, inf.inflate(R.layout.page_network, null)));
         mPages.add(new SettingsPage(this, inf.inflate(R.layout.page_settings, null)));
 
+        for (Page page : mPages) Language.apply(page.view());
         mPager = findViewById(R.id.pager);
         mPager.setAdapter(new PagerAdapter() {
             @Override
@@ -234,7 +240,10 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         // would drop scroll position and re-run every lookup.
         mPager.setOffscreenPageLimit(4);
         TabLayout tabs = findViewById(R.id.tabs);
+        com.eurobuddha.maxima.app.ui.TabScroll.configureShell(tabs);
         tabs.setupWithViewPager(mPager);
+        mTabScroll = com.eurobuddha.maxima.app.ui.TabScroll.attach(tabs, mPager,
+                findViewById(R.id.tabScrollLeft), findViewById(R.id.tabScrollRight));
         // Settings lives in the overflow menu now - four tabs read better than
         // five. The page stays in the pager (menu + edge-swipe reach it), only
         // its tab is hidden. TabLayout REBUILDS its tab views whenever it
@@ -328,7 +337,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         if (node == null && jar == null) {
             setDotColour(R.color.ux_subtext);
             stopPulse();
-            mPill.setText("starting…");
+            Language.setText(mPill, Language.msg(R.string.l10n_connection_starting));
             mPill.setTextColor(getResources().getColor(R.color.ux_subtext, getTheme()));
             return;
         }
@@ -338,12 +347,12 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         // The dot carries the online/offline state now (and breathes when live),
         // so the label no longer needs a glyph.
         String text = hosts > 0
-                ? hosts + " host" + (hosts == 1 ? "" : "s")
-                : "offline";
+                ? Language.quantity(this, R.plurals.l10n_native_shell_hosts, hosts, hosts)
+                : Language.text(this, R.string.l10n_connection_offline);
         if (unread > 0) {
-            text += "   " + unread + " new";
+            text += "   " + Language.quantity(this, R.plurals.l10n_native_shell_unread, unread, unread);
         }
-        mPill.setText(text);
+        Language.setText(mPill, text);
         mPill.setTextColor(getResources().getColor(
                 hosts > 0 ? R.color.ux_success : R.color.ux_error, getTheme()));
         if (hosts > 0) {
@@ -420,7 +429,7 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
         com.journeyapps.barcodescanner.ScanOptions o =
                 new com.journeyapps.barcodescanner.ScanOptions();
         o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
-        o.setPrompt("Scan a Parlons QR");
+        o.setPrompt(Language.text(this, R.string.l10n_native_shell_scan_parlons));
         o.setBeepEnabled(false);
         o.setOrientationLocked(true);
         mScanLauncher.launch(o);
@@ -498,4 +507,20 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
             }
         });
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+        if (mPill != null) renderPill();
+        TabLayout tabs = findViewById(R.id.tabs);
+        if (tabs != null) for (int i = 0; i < mPages.size(); i++) {
+            TabLayout.Tab tab = tabs.getTabAt(i);
+            if (tab != null) tab.setText(mPages.get(i).title());
+            mPages.get(i).languageChanged();
+        }
+
+        if (mTabScroll != null) mTabScroll.keepSelectedVisible();
+
+    }
+
 }

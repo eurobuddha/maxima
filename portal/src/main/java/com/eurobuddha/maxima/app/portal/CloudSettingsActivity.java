@@ -1,5 +1,10 @@
 package com.eurobuddha.maxima.app.portal;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+
+import com.eurobuddha.maxima.app.i18n.Language;
+
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -57,30 +62,30 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         body.setOrientation(LinearLayout.VERTICAL);
         int pad = PortalUi.dp(c, 16);
         body.setPadding(pad, pad, pad, pad);
-        final android.app.AlertDialog[] dlg = new android.app.AlertDialog[1];
+        final androidx.appcompat.app.AlertDialog[] dlg = new androidx.appcompat.app.AlertDialog[1];
 
         for (final String h : PortalRelayStore.get(c)) {
             LinearLayout row = new LinearLayout(c);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             TextView t = new TextView(c);
-            t.setText(h + (com.eurobuddha.maxima.core.session.SeedRelays.isBuiltIn(h)
-                    ? "  · built-in" : "  · yours"));
+            Language.setText(t, Language.join(h, "  · ", Language.msg(com.eurobuddha.maxima.core.session.SeedRelays.isBuiltIn(h)
+                    ? R.string.l10n_node_builtin : R.string.l10n_desktop_network_yours)));
             t.setTextColor(getColor(R.color.ux_text));
             t.setTextSize(12);
             t.setTypeface(android.graphics.Typeface.MONOSPACE);
             row.addView(t, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            TextView rm = PortalUi.ghost(c, "Drop");
+            TextView rm = PortalUi.ghost(c, Language.msg(R.string.l10n_native_settings_drop));
             rm.setTextColor(getColor(R.color.ux_error));
             rm.setOnClickListener(v -> {
                 com.eurobuddha.maxima.core.session.SeedRelays.Drop d = PortalRelayStore.remove(c, h);
                 if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.REFUSED_LAST_SEED) {
-                    android.widget.Toast.makeText(c, "Keep at least one relay - add your own before dropping this one",
+                    android.widget.Toast.makeText(c, tr(R.string.l10n_native_dialog_keep_relay),
                             android.widget.Toast.LENGTH_LONG).show();
                     return;
                 }
                 if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.DROPPED_BUILTIN_BACK_ON) {
-                    android.widget.Toast.makeText(c, "That was your last relay - the built-in list is back on",
+                    android.widget.Toast.makeText(c, tr(R.string.l10n_native_dialog_last_relay),
                             android.widget.Toast.LENGTH_LONG).show();
                 }
                 if (dlg[0] != null) dlg[0].dismiss();
@@ -90,22 +95,22 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             body.addView(row);
         }
         if (PortalRelayStore.get(c).isEmpty()) {
-            body.addView(PortalUi.label(c, "No relays configured."));
+            body.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_no_relays)));
         }
 
         body.addView(PortalUi.gap(c, 10));
         final android.widget.EditText add = new android.widget.EditText(c);
-        add.setHint("host:port, or paste a relay QR text");
+        Language.hint(add, Language.msg(R.string.l10n_native_dialog_relay_input));
         add.setSingleLine(true);
         add.setTextSize(13);
         add.setTextColor(getColor(R.color.ux_text));
         add.setHintTextColor(getColor(R.color.ux_subtext));
         body.addView(add);
-        TextView addBtn = PortalUi.button(c, "Add");
+        TextView addBtn = PortalUi.button(c, Language.msg(R.string.l10n_common_add));
         addBtn.setOnClickListener(v -> {
             java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(add.getText().toString());
             if (hs.isEmpty()) {
-                android.widget.Toast.makeText(c, "Enter host:port, or paste a relay QR text",
+                android.widget.Toast.makeText(c, tr(R.string.l10n_native_dialog_relay_input_required),
                         android.widget.Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -114,16 +119,16 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             showRelays();
         });
         body.addView(addBtn);
-        TextView scan = PortalUi.ghost(c, "Scan a relay QR");
+        TextView scan = PortalUi.ghost(c, Language.msg(R.string.l10n_native_settings_scan_relay));
         scan.setOnClickListener(v -> {
             if (dlg[0] != null) dlg[0].dismiss();
             scanRelayQr(text -> {
                 java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(text);
                 if (hs.isEmpty()) {
-                    android.widget.Toast.makeText(c, "That QR is not a relay", android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(c, tr(R.string.l10n_native_dialog_not_relay_qr), android.widget.Toast.LENGTH_SHORT).show();
                 } else {
                     for (String h : hs) PortalRelayStore.add(c, h);
-                    android.widget.Toast.makeText(c, "Added " + hs.size() + " relay(s)", android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(c, Language.count(R.plurals.l10n_ios_relays_added, hs.size()), android.widget.Toast.LENGTH_SHORT).show();
                 }
                 showRelays();
             });
@@ -134,31 +139,30 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         LinearLayout sw = new LinearLayout(c);
         sw.setOrientation(LinearLayout.HORIZONTAL);
         sw.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView swLabel = PortalUi.label(c, "Use built-in relays (the list shipped with the app)");
+        TextView swLabel = PortalUi.label(c, Language.msg(R.string.l10n_native_settings_use_builtins));
         sw.addView(swLabel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         androidx.appcompat.widget.SwitchCompat toggle = new androidx.appcompat.widget.SwitchCompat(c);
         toggle.setChecked(PortalRelayStore.builtInEnabled(c));
         toggle.setOnCheckedChangeListener((b, on) -> {
             if (!PortalRelayStore.setBuiltInEnabled(c, on)) {
-                android.widget.Toast.makeText(c, "Add a relay of your own first - the phone needs somewhere to start",
+                android.widget.Toast.makeText(c, tr(R.string.l10n_native_dialog_add_relay_first),
                         android.widget.Toast.LENGTH_LONG).show();
                 b.setChecked(true);
             }
         });
         sw.addView(toggle);
         body.addView(sw);
-        body.addView(PortalUi.label(c, "Changes apply on the next reconnect. Relays this phone has "
-                + "already learned from the network are kept either way."));
+        body.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_relay_apply)));
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(c);
         scroll.addView(body);
-        dlg[0] = new android.app.AlertDialog.Builder(this)
-                .setTitle("Relays this phone starts from")
+        dlg[0] = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_native_settings_relay_sources))
                 .setView(scroll)
-                .setPositiveButton("Done", null)
-                .setNeutralButton("Reset", (d, w) -> {
+                .setPositiveButton(Language.msg(R.string.l10n_common_done), null)
+                .setNeutralButton(Language.msg(R.string.l10n_native_dialog_reset), (d, w) -> {
                     PortalRelayStore.reset(c);
-                    android.widget.Toast.makeText(c, "Back to the built-in list", android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(c, tr(R.string.l10n_native_dialog_builtin_reset), android.widget.Toast.LENGTH_SHORT).show();
                 })
                 .show();
     }
@@ -186,14 +190,14 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         int pad = PortalUi.dp(c, 16);
         bar.setPadding(pad, pad, pad, pad);
         TextView back = new TextView(c);
-        back.setText("‹");
+        Language.setText(back, "‹");
         back.setTextSize(26);
         back.setTextColor(getColor(R.color.ux_on_header));
         back.setPadding(0, 0, PortalUi.dp(c, 18), 0);
         back.setOnClickListener(v -> finish());
         bar.addView(back);
         TextView title = new TextView(c);
-        title.setText("Settings");
+        Language.setText(title, Language.msg(R.string.l10n_nav_settings));
         title.setTextSize(20);
         title.setTextColor(getColor(R.color.ux_on_header));
         bar.addView(title);
@@ -204,19 +208,30 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         int bp = PortalUi.dp(c, 14);
         body.setPadding(bp, bp, bp, bp);
 
+        LinearLayout languageCard = PortalUi.card(c);
+        TextView languageHelp = PortalUi.label(c, "");
+        com.eurobuddha.maxima.app.i18n.Language.setText(languageHelp,
+                com.eurobuddha.maxima.app.i18n.Language.msg(R.string.l10n_language_description));
+        languageCard.addView(languageHelp);
+        TextView languageButton = PortalUi.ghost(c, "English · 简体中文 · Русский");
+        com.eurobuddha.maxima.app.i18n.Language.description(languageButton,
+                com.eurobuddha.maxima.app.i18n.Language.msg(R.string.l10n_language_change));
+        languageButton.setOnClickListener(v -> com.eurobuddha.maxima.app.i18n.Language.choose(this, false));
+        languageCard.addView(languageButton);
+        body.addView(languageCard);
+
         // --- account settings (stored on the node — follow you to every device) ---
-        body.addView(PortalUi.section(c, "Your account"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_contacts_owner)));
         LinearLayout acc = PortalUi.card(c);
         LinearLayout rrRow = new LinearLayout(c);
         rrRow.setOrientation(LinearLayout.HORIZONTAL);
         rrRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout rrCol = new LinearLayout(c);
         rrCol.setOrientation(LinearLayout.VERTICAL);
-        TextView rrT = PortalUi.title(c, "Send read receipts");
+        TextView rrT = PortalUi.title(c, Language.msg(R.string.l10n_native_settings_send_receipts));
         rrCol.addView(rrT);
         rrCol.addView(PortalUi.label(c,
-                "Let people see when you've read their messages. Set on your node — applies "
-                        + "from every device."));
+                Language.msg(R.string.l10n_native_settings_cloud_receipts)));
         rrRow.addView(rrCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         mReceipts = new Switch(c);
@@ -231,7 +246,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         body.addView(acc);
 
         // --- privacy & security: app lock + screen-share (device-local, mirrors the phone app) ---
-        body.addView(PortalUi.section(c, "Privacy & security"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_settings_privacy_security)));
         LinearLayout sec = PortalUi.card(c);
         boolean lockAvail = com.eurobuddha.maxima.app.AppLock.isAvailable(c);
 
@@ -240,9 +255,8 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         lockRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout lockCol = new LinearLayout(c);
         lockCol.setOrientation(LinearLayout.VERTICAL);
-        lockCol.addView(PortalUi.title(c, "App lock"));
-        lockCol.addView(PortalUi.label(c, "Require your fingerprint or device PIN to open "
-                + "Parlons Cloud."));
+        lockCol.addView(PortalUi.title(c, Language.msg(R.string.l10n_native_settings_lock)));
+        lockCol.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_lock)));
         lockRow.addView(lockCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         mAppLock = new Switch(c);
@@ -251,8 +265,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         lockRow.addView(mAppLock);
         sec.addView(lockRow);
         if (!lockAvail) {
-            sec.addView(PortalUi.label(c, "Set up a fingerprint or screen lock in your phone's "
-                    + "settings first."));
+            sec.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_lock_unavailable)));
         }
 
         sec.addView(PortalUi.gap(c, 12));
@@ -262,9 +275,8 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         ssRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout ssCol = new LinearLayout(c);
         ssCol.setOrientation(LinearLayout.VERTICAL);
-        ssCol.addView(PortalUi.title(c, "Allow screen sharing"));
-        ssCol.addView(PortalUi.label(c, "On by default. Turn off to hide the app from "
-                + "screenshots and screen recording while it's locked."));
+        ssCol.addView(PortalUi.title(c, Language.msg(R.string.l10n_native_settings_screen_share)));
+        ssCol.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_screen_share)));
         ssRow.addView(ssCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         mScreenShare = new Switch(c);
@@ -282,16 +294,15 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         body.addView(sec);
 
         // --- notifications: the Parlons "pssst" sound (device-local) ---
-        body.addView(PortalUi.section(c, "Notifications"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_settings_notifications)));
         LinearLayout notifCard = PortalUi.card(c);
         LinearLayout sndRow = new LinearLayout(c);
         sndRow.setOrientation(LinearLayout.HORIZONTAL);
         sndRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout sndCol = new LinearLayout(c);
         sndCol.setOrientation(LinearLayout.VERTICAL);
-        sndCol.addView(PortalUi.title(c, "Message sound"));
-        sndCol.addView(PortalUi.label(c, "Play the Parlons chime for new messages. Off keeps the "
-                + "notification but stays silent (it still vibrates)."));
+        sndCol.addView(PortalUi.title(c, Language.msg(R.string.l10n_native_settings_sound)));
+        sndCol.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_sound)));
         sndRow.addView(sndCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         mMsgSound = new Switch(c);
@@ -300,51 +311,46 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         sndRow.addView(mMsgSound);
         notifCard.addView(sndRow);
         notifCard.addView(PortalUi.gap(c, 12));
-        TextView calls = PortalUi.ghost(c, "Incoming call settings");
+        TextView calls = PortalUi.ghost(c, Language.msg(R.string.l10n_native_settings_incoming_settings));
         calls.setOnClickListener(v -> PortalIncomingCall.openCallSettings(this));
         notifCard.addView(calls);
         notifCard.addView(PortalUi.label(c,
-                "Ringtone, vibration and full-screen alerts on the lock screen."));
+                Language.msg(R.string.l10n_native_settings_incoming_help)));
         body.addView(notifCard);
 
         // --- keys & backup: the identity lifecycle, app-parity discipline ---
-        body.addView(PortalUi.section(c, "Keys & backup"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_settings_keys_backup)));
         LinearLayout keys = PortalUi.card(c);
-        keys.addView(PortalUi.label(c, "Back up your Parlons identity and keep your wallet recovery phrase safe. "
-                + "They can be different after importing an identity or resyncing the wallet."));
+        keys.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_backup_help)));
         keys.addView(PortalUi.gap(c, 10));
-        TextView showSeed = PortalUi.ghost(c, "Show seed phrase");
+        TextView showSeed = PortalUi.ghost(c, Language.msg(R.string.l10n_native_settings_show_seed));
         showSeed.setTextColor(c.getColor(R.color.ux_error));
         showSeed.setOnClickListener(v -> confirmShowSeed());
         keys.addView(showSeed);
         keys.addView(PortalUi.gap(c, 8));
-        TextView backup = PortalUi.button(c, "Back up account…");
+        TextView backup = PortalUi.button(c, Language.msg(R.string.l10n_native_settings_backup_account));
         backup.setOnClickListener(v -> promptBackupPassphrase());
         keys.addView(backup);
         keys.addView(PortalUi.gap(c, 8));
-        keys.addView(PortalUi.label(c, "Encrypted with your passphrase before it leaves the "
-                + "node. The portable account bundle: identity, paired devices, settings, "
-                + "contacts and chat history (same .pbk format the phone app reads)."));
+        keys.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_bundle)));
         keys.addView(PortalUi.gap(c, 10));
-        TextView restore = PortalUi.ghost(c, "Import identity or backup…");
+        TextView restore = PortalUi.ghost(c, Language.msg(R.string.l10n_native_settings_import_identity));
         restore.setOnClickListener(v -> startActivity(new Intent(this, CloudIdentityImportActivity.class)));
         keys.addView(restore);
-        keys.addView(PortalUi.label(c, "Restore a Parlons phrase or .pbk backup onto this server. "
-                + "You will review the identity before replacing this server’s account."));
+        keys.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_cloud_restore)));
         body.addView(keys);
 
         // --- Minima Core on this phone — the same "link to core" path phone users know.
         //     A full node on the phone is your own chain view + an independent wallet home
         //     (resync your wallet to a new seed there; the cloud seed stays your identity). ---
-        body.addView(PortalUi.section(c, "Minima Core on this phone"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_settings_core_phone)));
         LinearLayout core = PortalUi.card(c);
         boolean coreInstalled = com.eurobuddha.maxima.app.wallet.WalletPublisher.coreInstalled(this);
         if (coreInstalled) {
-            core.addView(PortalUi.title(c, "Minima Core is installed ✓"));
+            core.addView(PortalUi.title(c, Language.msg(R.string.l10n_native_settings_core_installed)));
             core.addView(PortalUi.label(c,
-                    "Your phone runs a full Minima node — your own chain view, and the home "
-                            + "for a wallet independent of your cloud identity."));
-            TextView openCore = PortalUi.ghost(c, "Open Minima Core");
+                    Language.msg(R.string.l10n_native_settings_core_installed_help)));
+            TextView openCore = PortalUi.ghost(c, Language.msg(R.string.l10n_native_settings_open_core));
             openCore.setOnClickListener(v -> {
                 Intent i = getPackageManager()
                         .getLaunchIntentForPackage("com.eurobuddha.minimacore");
@@ -359,12 +365,10 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             openCore.setLayoutParams(oclp);
             core.addView(openCore);
         } else {
-            core.addView(PortalUi.title(c, "Run a full node on this phone"));
+            core.addView(PortalUi.title(c, Language.msg(R.string.l10n_native_settings_run_core)));
             core.addView(PortalUi.label(c,
-                    "Install Minima Core to run a full Minima node right here — your own view "
-                            + "of the chain, and a wallet you can resync to a fresh seed, fully "
-                            + "independent of your cloud identity. Strengthens the network too."));
-            TextView getCore = PortalUi.button(c, "Get Minima Core");
+                    Language.msg(R.string.l10n_native_settings_run_core_help)));
+            TextView getCore = PortalUi.button(c, Language.msg(R.string.l10n_native_settings_get_core));
             getCore.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW,
                     android.net.Uri.parse(
                             "https://github.com/eurobuddha/minima-core-apks/releases/tag/mirrors"))));
@@ -376,22 +380,21 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         body.addView(core);
 
         // --- this device ---
-        body.addView(PortalUi.section(c, "This device"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_settings_this_device)));
         LinearLayout dev = PortalUi.card(c);
-        TextView relays = PortalUi.title(c, "Relays this phone starts from");
+        TextView relays = PortalUi.title(c, Language.msg(R.string.l10n_native_settings_relay_sources));
         relays.setOnClickListener(v -> showRelays());
         dev.addView(relays);
-        dev.addView(PortalUi.label(c, "Where this phone first looks for your account. Add your "
-                + "own (type, paste, or scan a relay QR); the built-in list can be switched off."));
+        dev.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_relay_sources_help)));
         dev.addView(PortalUi.gap(c, 12));
-        TextView notif = PortalUi.title(c, "Notification settings");
+        TextView notif = PortalUi.title(c, Language.msg(R.string.l10n_native_settings_notification_settings));
         notif.setOnClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                     .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
             startActivity(i);
         });
         dev.addView(notif);
-        dev.addView(PortalUi.label(c, "Sounds, vibration and channels — handled by Android."));
+        dev.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_notification_help)));
 
         // Battery exemption — the portal must stay live on the push channel; battery optimisation
         // can kill the foreground service. Only offer it when NOT already exempt.
@@ -399,7 +402,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         boolean exempt = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
         if (!exempt) {
             dev.addView(PortalUi.gap(c, 12));
-            TextView batt = PortalUi.title(c, "Keep running in the background");
+            TextView batt = PortalUi.title(c, Language.msg(R.string.l10n_native_settings_background));
             batt.setOnClickListener(v -> {
                 try {
                     Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
@@ -415,22 +418,21 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                 }
             });
             dev.addView(batt);
-            dev.addView(PortalUi.label(c, "Let Parlons Cloud stay connected so messages and calls "
-                    + "arrive instantly, even when the screen is off."));
+            dev.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_background_help)));
         }
         body.addView(dev);
 
         // --- about ---
-        body.addView(PortalUi.section(c, "About"));
+        body.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_settings_about)));
         LinearLayout about = PortalUi.card(c);
         String ver = "";
         try {
             ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        about.addView(PortalUi.kv(c, "Portal version", "v" + ver));
+        about.addView(PortalUi.kv(c, Language.msg(R.string.l10n_native_settings_portal_version), "v" + ver));
         about.addView(PortalUi.gap(c, 8));
-        about.addView(PortalUi.label(c, "Your account address (share it — it never changes):"));
+        about.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_settings_address_help)));
         TextView addr = PortalUi.value(c, CloudSession.account(this));   // full, never truncated
         addr.setTextSize(12);
         about.addView(addr);
@@ -461,12 +463,11 @@ public final class CloudSettingsActivity extends AppCompatActivity {
     // ==================================================================
 
     private void confirmShowSeed() {
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Show seed phrase?")
-                .setMessage("This phrase controls your Parlons identity. It may differ from the server’s wallet phrase. "
-                        + "Make sure nobody is looking. It travels to this phone over the encrypted channel.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Show", (d, w) -> fetchAndShowSeed())
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_native_dialog_show_seed_question))
+                .setMessage(Language.msg(R.string.l10n_native_dialog_cloud_seed_warning))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_native_dialog_show), (d, w) -> fetchAndShowSeed())
                 .show();
     }
 
@@ -492,7 +493,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                     }
                     if (fp == null || fp.isEmpty()) {
                         Toast.makeText(CloudSettingsActivity.this,
-                                "Couldn't fetch the seed: " + fe, Toast.LENGTH_LONG).show();
+                                tr(R.string.l10n_native_dialog_fetch_seed_failed, fe), Toast.LENGTH_LONG).show();
                         return;
                     }
                     showSeedDialog(fp);
@@ -500,7 +501,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             }
             public void err(String m) {
                 runOnUiThread(() -> Toast.makeText(CloudSettingsActivity.this,
-                        "Couldn't reach your node: " + m, Toast.LENGTH_LONG).show());
+                        tr(R.string.l10n_native_dialog_node_failed, m), Toast.LENGTH_LONG).show());
             }
         });
     }
@@ -519,7 +520,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         row.setPadding(pad, PortalUi.dp(this, 10), pad, 0);
         for (String col : new String[]{left.toString(), right.toString()}) {
             TextView t = new TextView(this);
-            t.setText(col.trim());
+            Language.setText(t, col.trim());
             t.setTypeface(android.graphics.Typeface.MONOSPACE);
             t.setTextSize(14);
             t.setTextIsSelectable(true);
@@ -527,19 +528,19 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             row.addView(t, new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         }
-        androidx.appcompat.app.AlertDialog d = new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Your 24 words")
+        androidx.appcompat.app.AlertDialog d = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_native_dialog_your_words))
                 .setView(row)
-                .setPositiveButton("Close", null)
-                .setNeutralButton("Copy", null)
+                .setPositiveButton(Language.msg(R.string.l10n_language_close), null)
+                .setNeutralButton(Language.msg(R.string.l10n_common_copy), null)
                 .create();
         // FLAG_SECURE BEFORE show() — no capturable first frame (the app's discipline).
         if (d.getWindow() != null) {
             d.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         }
-        d.setOnShowListener(x -> d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
-                .setOnClickListener(v -> copySeed(zPhrase)));   // does NOT dismiss
         d.show();
+        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
+                .setOnClickListener(v -> copySeed(zPhrase));   // does NOT dismiss
     }
 
     private void copySeed(String zPhrase) {
@@ -553,7 +554,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             clip.getDescription().setExtras(extras);
         }
         cm.setPrimaryClip(clip);
-        Toast.makeText(this, "Copied — clipboard clears in 60s", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, tr(R.string.l10n_native_dialog_clipboard_clear), Toast.LENGTH_SHORT).show();
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 android.content.ClipData cur = cm.getPrimaryClip();
@@ -579,16 +580,16 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                             return;   // user cancelled the picker
                         }
                         if (blob == null) {
-                            Toast.makeText(this, "Backup expired — export again",
+                            Toast.makeText(this, tr(R.string.l10n_native_dialog_backup_expired),
                                     Toast.LENGTH_LONG).show();
                             return;
                         }
                         try (java.io.OutputStream os =
                                      getContentResolver().openOutputStream(uri)) {
                             os.write(blob);
-                            Toast.makeText(this, "Backup saved", Toast.LENGTH_LONG).show();
+                            Toast.makeText(this, tr(R.string.l10n_native_dialog_backup_saved), Toast.LENGTH_LONG).show();
                         } catch (Exception e) {
-                            Toast.makeText(this, "Backup failed: " + e.getMessage(),
+                            Toast.makeText(this, tr(R.string.l10n_native_dialog_backup_failed, e.getMessage()),
                                     Toast.LENGTH_LONG).show();
                         }
                     });
@@ -599,31 +600,30 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         int pad = PortalUi.dp(this, 20);
         box.setPadding(pad, PortalUi.dp(this, 8), pad, 0);
         final android.widget.EditText p1 = new android.widget.EditText(this);
-        p1.setHint("Passphrase (min 6 characters)");
+        Language.hint(p1, Language.msg(R.string.l10n_native_dialog_backup_passphrase));
         p1.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         box.addView(p1);
         final android.widget.EditText p2 = new android.widget.EditText(this);
-        p2.setHint("Repeat passphrase");
+        Language.hint(p2, Language.msg(R.string.l10n_native_dialog_repeat_passphrase));
         p2.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         box.addView(p2);
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Back up account")
-                .setMessage("Choose a passphrase for the backup file. It is NOT recoverable "
-                        + "if you lose it.")
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_native_dialog_backup_account))
+                .setMessage(Language.msg(R.string.l10n_native_dialog_backup_warning))
                 .setView(box)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Create backup", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_native_dialog_create_backup), (d, w) -> {
                     String a = p1.getText().toString();
                     String b = p2.getText().toString();
                     if (a.length() < 6) {
-                        Toast.makeText(this, "Use at least 6 characters",
+                        Toast.makeText(this, tr(R.string.l10n_native_dialog_six_characters),
                                 Toast.LENGTH_LONG).show();
                         return;
                     }
                     if (!a.equals(b)) {
-                        Toast.makeText(this, "Passphrases don't match",
+                        Toast.makeText(this, tr(R.string.l10n_native_dialog_passphrase_mismatch),
                                 Toast.LENGTH_LONG).show();
                         return;
                     }
@@ -633,7 +633,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
     }
 
     private void exportBackup(final String zPassphrase) {
-        Toast.makeText(this, "Building encrypted backup…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, tr(R.string.l10n_native_dialog_building_backup), Toast.LENGTH_SHORT).show();
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
                 byte[] blob = null;
@@ -658,7 +658,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                     }
                     if (fb == null) {
                         Toast.makeText(CloudSettingsActivity.this,
-                                "Backup failed: " + fe, Toast.LENGTH_LONG).show();
+                                tr(R.string.l10n_native_dialog_backup_failed, fe), Toast.LENGTH_LONG).show();
                         return;
                     }
                     mPendingBackup = fb;
@@ -667,7 +667,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
             }
             public void err(String m) {
                 runOnUiThread(() -> Toast.makeText(CloudSettingsActivity.this,
-                        "Couldn't reach your node: " + m, Toast.LENGTH_LONG).show());
+                        tr(R.string.l10n_native_dialog_node_failed, m), Toast.LENGTH_LONG).show());
             }
         });
     }
@@ -725,7 +725,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                         mReceipts.setChecked(!zOn);   // roll the switch back — be honest
                         mApplying = false;
                         Toast.makeText(CloudSettingsActivity.this,
-                                "Couldn't change it: " + err, Toast.LENGTH_LONG).show();
+                                tr(R.string.l10n_native_chat_operation_failed, SystemMessages.text(CloudSettingsActivity.this, err)), Toast.LENGTH_LONG).show();
                     }
                 });
             }
@@ -738,9 +738,19 @@ public final class CloudSettingsActivity extends AppCompatActivity {
                     mReceipts.setChecked(!zOn);
                     mApplying = false;
                     Toast.makeText(CloudSettingsActivity.this,
-                            "Couldn't reach your node: " + m, Toast.LENGTH_LONG).show();
+                            tr(R.string.l10n_native_dialog_node_failed, m), Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
+    private String tr(int resource, Object... arguments) {
+        return Language.text(this, resource, arguments);
+    }
+
 }

@@ -40,35 +40,46 @@ final class ImageViewer {
 
     static void open(Window owner, com.eurobuddha.maxima.core.chat.ChatImages photos, Loader loader) {
         if (photos.current() == null) return;
-        JDialog d = new JDialog(owner, "Image", JDialog.ModalityType.APPLICATION_MODAL);
+        JDialog d = new JDialog(owner, JDialog.ModalityType.APPLICATION_MODAL);
+        Language.title(d, Language.msg("desktopChat.image"));
         d.setLayout(new BorderLayout());
         Canvas canvas = new Canvas(null);
         d.add(canvas, BorderLayout.CENTER);
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
+        JPanel bar = new JPanel(new BorderLayout(0, 6));
+        bar.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        JPanel navigation = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        navigation.setOpaque(false);
+        JPanel actions = new JPanel(); actions.setOpaque(false);
+        bar.add(navigation, BorderLayout.NORTH); bar.add(actions, BorderLayout.CENTER);
         bar.setBackground(new Color(0, 0, 0, 179));
         javax.swing.JLabel counter = new javax.swing.JLabel(); counter.setForeground(Color.WHITE);
-        bar.add(counter);
-        JButton save = chromeButton("Save", () -> {
+        navigation.add(counter);
+        JButton save = chromeButton(Language.msg("common.save"), () -> {
             if (canvas.img != null) save(d, canvas.img,
                     com.eurobuddha.maxima.core.chat.ChatMedia.mime(photos.current().body).contains("png") ? "image.png" : "image.jpg");
         });
-        JButton copy = chromeButton("Copy", () -> { if (canvas.img != null) copy(canvas.img); });
+        JButton copy = chromeButton(Language.msg("common.copy"), () -> { if (canvas.img != null) copy(canvas.img); });
         java.util.concurrent.ThreadPoolExecutor worker = (java.util.concurrent.ThreadPoolExecutor)
                 java.util.concurrent.Executors.newFixedThreadPool(1);
         java.util.concurrent.Future<?>[] pending = {null};
         int[] generation = {0};
         Runnable[] bind = new Runnable[1];
         java.util.function.IntConsumer page = delta -> { if (photos.move(delta)) bind[0].run(); };
-        JButton prev = chromeButton("‹", () -> page.accept(-1)); prev.setToolTipText("Previous photo");
-        JButton next = chromeButton("›", () -> page.accept(1)); next.setToolTipText("Next photo");
-        JButton retry = chromeButton("Retry", () -> bind[0].run());
-        bar.add(prev); bar.add(next); bar.add(retry); bar.add(save); bar.add(copy);
-        bar.add(chromeButton("Close", d::dispose)); d.add(bar, BorderLayout.SOUTH);
+        JButton prev = chromeButton("‹", () -> page.accept(-1)); Language.tooltip(prev, Language.msg("photos.previous"));
+        JButton next = chromeButton("›", () -> page.accept(1)); Language.tooltip(next, Language.msg("photos.next"));
+        JButton retry = chromeButton(Language.msg("desktopPhotos.retry"), () -> bind[0].run());
+        navigation.add(prev); navigation.add(next); navigation.add(retry);
+        actions.add(save); actions.add(copy); actions.add(chromeButton(Language.msg("language.close"), d::dispose));
+        d.add(bar, BorderLayout.SOUTH);
+        Runnable reflow = () -> DKit.layoutActions(actions, Math.max(1, bar.getWidth() - 16));
+        bar.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) { reflow.run(); }
+        });
         bind[0] = () -> {
             int ticket = ++generation[0];
             if (pending[0] != null) pending[0].cancel(true);
             worker.purge();
-            canvas.setImage(null); canvas.status = "Loading photo…";
+            canvas.setImage(null); canvas.status = Language.msg("photos.loading");
             save.setEnabled(false); copy.setEnabled(false); retry.setVisible(false);
             counter.setText((photos.index() + 1) + " / " + photos.size());
             prev.setEnabled(photos.index() > 0); next.setEnabled(photos.index() + 1 < photos.size());
@@ -79,15 +90,18 @@ final class ImageViewer {
                 final BufferedImage image = result;
                 javax.swing.SwingUtilities.invokeLater(() -> {
                     if (ticket != generation[0] || !d.isDisplayable()) return;
-                    canvas.status = "Photo unavailable"; canvas.setImage(image);
+                    canvas.status = Language.msg("desktopPhotos.unavailable"); canvas.setImage(image);
                     save.setEnabled(image != null); copy.setEnabled(image != null); retry.setVisible(image == null);
                 });
             });
         };
         canvas.page = page;
+        Runnable languageChanged = () -> { Language.refresh(d); reflow.run(); };
+        Language.addListener(languageChanged);
         d.addWindowListener(new java.awt.event.WindowAdapter() {
             public void windowClosed(java.awt.event.WindowEvent e) {
                 generation[0]++; worker.shutdownNow(); canvas.setImage(null);
+                Language.removeListener(languageChanged);
             }
         });
         d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
@@ -100,11 +114,12 @@ final class ImageViewer {
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
         d.setSize(Math.min(screen.width - 80, 1100), Math.min(screen.height - 80, 820));
         d.setLocationRelativeTo(owner);
+        d.validate(); reflow.run();
         bind[0].run(); d.setVisible(true);
     }
 
-    private static JButton chromeButton(String label, Runnable action) {
-        JButton b = new JButton(label);
+    private static JButton chromeButton(CharSequence label, Runnable action) {
+        JButton b = Language.bind(new JButton(), label);
         b.setForeground(Color.WHITE);
         b.setBackground(new Color(255, 255, 255, 28));
         b.setFocusPainted(false);
@@ -116,8 +131,8 @@ final class ImageViewer {
     }
 
     private static void save(Window owner, BufferedImage img, String suggestedName) {
-        JFileChooser fc = new JFileChooser();
-        fc.setDialogTitle("Save image");
+        JFileChooser fc = Language.fileChooser();
+        fc.setDialogTitle(Language.text("desktopPhotos.save"));
         fc.setSelectedFile(new File(suggestedName == null || suggestedName.isEmpty()
                 ? "image.png" : suggestedName));
         if (fc.showSaveDialog(owner) != JFileChooser.APPROVE_OPTION) {
@@ -132,7 +147,7 @@ final class ImageViewer {
         try {
             ImageIO.write(img, fmt, out);
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(owner, "Couldn't save: " + ex.getMessage());
+            JOptionPane.showMessageDialog(owner, Language.text("desktopPhotos.saveFailed", "error", Language.system(ex.getMessage())));
         }
     }
 
@@ -162,7 +177,7 @@ final class ImageViewer {
     /** Zoom/pan canvas. */
     private static final class Canvas extends JComponent {
         private BufferedImage img;
-        private String status = "Loading photo…";
+        private CharSequence status = Language.msg("photos.loading");
         private java.util.function.IntConsumer page;
         private Point down;
         private boolean canPage;
@@ -221,7 +236,9 @@ final class ImageViewer {
             g2.setColor(Color.BLACK);
             g2.fillRect(0, 0, w, h);
             if (img == null) {
-                g2.setColor(Color.WHITE); g2.drawString(status, Math.max(12, w / 2 - 70), h / 2);
+                String message = status.toString();
+                g2.setFont(Language.fontFor(g2.getFont(), message));
+                g2.setColor(Color.WHITE); g2.drawString(message, Math.max(12, (w - g2.getFontMetrics().stringWidth(message)) / 2), h / 2);
                 g2.dispose(); return;
             }
             int iw = img.getWidth(), ih = img.getHeight();

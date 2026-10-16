@@ -1,10 +1,13 @@
 package com.eurobuddha.maxima.app;
 
-import android.app.AlertDialog;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
+import androidx.appcompat.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -65,24 +68,23 @@ public final class OnboardingActivity extends AppCompatActivity {
         root.setPadding(pad, pad, pad, pad);
 
         TextView title = new TextView(this);
-        title.setText("Parlons!");
+        Language.setText(title, "Parlons!");
         title.setTextColor(text);
         title.setTextSize(34);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
 
         TextView blurb = new TextView(this);
-        blurb.setText("Private, secure, community-run chat. Set up your identity — it lives "
-                + "only on this device and is backed by a secret 24-word phrase.");
+        Language.setText(blurb, Language.msg(R.string.l10n_onboarding_identity_intro));
         blurb.setTextColor(sub);
         blurb.setTextSize(15);
         blurb.setGravity(Gravity.CENTER);
         blurb.setPadding(0, dp(14), 0, dp(36));
 
-        Button create = primary("Create new identity");
+        Button create = primary(Language.msg(R.string.l10n_onboarding_create_identity));
         create.setOnClickListener(v -> createNew());
 
-        Button restore = ghost("Restore from seed phrase");
+        Button restore = ghost(Language.msg(R.string.l10n_onboarding_restore_identity));
         restore.setOnClickListener(v -> promptRestore());
 
         root.addView(title);
@@ -92,7 +94,22 @@ public final class OnboardingActivity extends AppCompatActivity {
         root.addView(gap, new LinearLayout.LayoutParams(1, dp(12)));
         root.addView(restore, lp());
 
-        setContentView(root);
+        Button language = ghost(Language.msg(R.string.l10n_language_change));
+        language.setOnClickListener(v -> Language.choose(this, false));
+        root.addView(new View(this), new LinearLayout.LayoutParams(1, dp(12)));
+        root.addView(language, lp());
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(root);
+        setContentView(scroll);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                    | androidx.core.view.WindowInsetsCompat.Type.ime());
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return androidx.core.view.WindowInsetsCompat.CONSUMED;
+        });
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(), scroll).setAppearanceLightStatusBars(
+                androidx.core.graphics.ColorUtils.calculateLuminance(bg) > 0.5);
     }
 
     // ---- create new -------------------------------------------------------
@@ -111,7 +128,7 @@ public final class OnboardingActivity extends AppCompatActivity {
             sb.append(i + 1).append(". ").append(words[i]).append(i % 2 == 0 ? "\t\t" : "\n");
         }
         TextView tv = new TextView(this);
-        tv.setText(sb.toString().trim());
+        Language.setText(tv, sb.toString().trim());
         tv.setTypeface(Typeface.MONOSPACE);
         tv.setTextColor(getColor(R.color.ux_text));
         tv.setTextSize(15);
@@ -121,31 +138,28 @@ public final class OnboardingActivity extends AppCompatActivity {
         ScrollView sv = new ScrollView(this);
         sv.addView(tv);
 
-        AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle("Write these 24 words down")
-                .setMessage("This is the ONLY way to recover your identity and any funds. "
-                        + "Keep it offline and private — anyone with these words is you.")
+        AlertDialog d = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_onboarding_write_words))
+                .setMessage(Language.msg(R.string.l10n_onboarding_words_warning))
                 .setView(sv)
                 .setCancelable(false)
-                .setNeutralButton("Copy", (di, w) -> copyWithAutoClear(zPhrase))
-                .setPositiveButton("I've saved them", (di, w) -> proceed())
+                .setNeutralButton(Language.msg(R.string.l10n_common_copy), (di, w) -> copyWithAutoClear(zPhrase))
+                .setPositiveButton(Language.msg(R.string.l10n_onboarding_saved_words), (di, w) -> proceed())
                 .create();
-        d.setOnShowListener(x -> {
-            // Copy must NOT dismiss the dialog — keep the words visible.
-            d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> copyWithAutoClear(zPhrase));
-        });
         if (d.getWindow() != null) {
             d.getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,
                     WindowManager.LayoutParams.FLAG_SECURE);
         }
         d.show();
+        // Copy must keep the words visible.
+        d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> copyWithAutoClear(zPhrase));
     }
 
     // ---- restore ----------------------------------------------------------
 
     private void promptRestore() {
         EditText input = new EditText(this);
-        input.setHint("Enter your seed phrase");
+        Language.hint(input, Language.msg(R.string.l10n_native_dialog_enter_seed));
         input.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -153,38 +167,36 @@ public final class OnboardingActivity extends AppCompatActivity {
         int pad = dp(16);
         input.setPadding(pad, pad, pad, pad);
         android.widget.CheckBox anyPhrase = new android.widget.CheckBox(this);
-        anyPhrase.setText("Custom phrase (Minima anyphrase)");
+        Language.setText(anyPhrase, Language.msg(R.string.l10n_native_dialog_custom_seed));
         android.widget.LinearLayout fields = new android.widget.LinearLayout(this);
         fields.setOrientation(android.widget.LinearLayout.VERTICAL);
         fields.addView(input);
         fields.addView(anyPhrase);
 
-        AlertDialog restoreDialog = new AlertDialog.Builder(this)
-                .setTitle("Restore from seed phrase")
-                .setMessage("Enter your seed phrase. For a nonstandard Minima phrase, select Custom phrase "
-                        + "and preserve every capital letter and space exactly." + IdentityRestore.KEYUSE_WARNING)
+        AlertDialog restoreDialog = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_onboarding_restore_identity))
+                .setMessage(Language.join(Language.msg(R.string.l10n_onboarding_restore_help), Language.msg(R.string.l10n_security_key_use_warning)))
                 .setView(fields)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Restore", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_native_dialog_restore), (d, w) -> {
                     String phrase = input.getText().toString();
                     if (phrase.trim().isEmpty()) {
-                        toast("Enter your phrase");
+                        toast(tr(R.string.l10n_native_dialog_enter_phrase));
                         return;
                     }
                     try {
                         SeedStore.ImportResult r = SeedStore.importPhrase(this, phrase, anyPhrase.isChecked());
-                        String warn = anyPhrase.isChecked() ? "\n\nCustom phrase restored exactly as entered."
+                        CharSequence warn = anyPhrase.isChecked() ? Language.msg(R.string.l10n_native_dialog_custom_restored)
                                 : r.checksumValid ? ""
-                                : "\n\nNote: no BIP39 checksum — normal for a phrase from a Minima "
-                                + "node. Restored anyway.";
-                        new AlertDialog.Builder(this)
-                                .setTitle("Restored")
+                                : Language.msg(R.string.l10n_onboarding_no_checksum);
+                        new LanguageDialog(this)
+                                .setTitle(Language.msg(R.string.l10n_native_dialog_restored))
                                 .setCancelable(false)
-                                .setMessage("Your identity is restored on this phone." + warn)
-                                .setPositiveButton("Start", (d2, w2) -> proceed())
+                                .setMessage(Language.join(Language.msg(R.string.l10n_onboarding_restored_phone), warn))
+                                .setPositiveButton(Language.msg(R.string.l10n_onboarding_start), (d2, w2) -> proceed())
                                 .show();
                     } catch (Exception e) {
-                        toast("Could not restore: " + e.getMessage());
+                        toast(tr(R.string.l10n_native_dialog_restore_failed, e.getMessage()));
                     }
                 })
                 .create();
@@ -214,7 +226,7 @@ public final class OnboardingActivity extends AppCompatActivity {
             return;
         }
         cm.setPrimaryClip(ClipData.newPlainText("seed", zPhrase));
-        toast("Copied — clipboard clears in 60s");
+        toast(tr(R.string.l10n_native_dialog_clipboard_clear));
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {
                 cm.setPrimaryClip(ClipData.newPlainText("", ""));
@@ -225,14 +237,14 @@ public final class OnboardingActivity extends AppCompatActivity {
 
     // ---- tiny view helpers ------------------------------------------------
 
-    private Button primary(String zLabel) {
+    private Button primary(CharSequence zLabel) {
         Button b = baseButton(zLabel);
         b.setTextColor(getColor(R.color.ux_on_accent));
         b.setBackground(pill(getColor(R.color.ux_accent)));
         return b;
     }
 
-    private Button ghost(String zLabel) {
+    private Button ghost(CharSequence zLabel) {
         Button b = baseButton(zLabel);
         b.setTextColor(getColor(R.color.ux_text));
         GradientDrawable g = pill(0x00000000);
@@ -241,11 +253,13 @@ public final class OnboardingActivity extends AppCompatActivity {
         return b;
     }
 
-    private Button baseButton(String zLabel) {
+    private Button baseButton(CharSequence zLabel) {
         Button b = new Button(this);
         b.setAllCaps(false);
-        b.setText(zLabel);
+        Language.setText(b, zLabel);
         b.setTextSize(16);
+        b.setMinHeight(dp(52));
+        b.setPadding(dp(12), dp(12), dp(12), dp(12));
         b.setStateListAnimator(null);
         return b;
     }
@@ -259,7 +273,7 @@ public final class OnboardingActivity extends AppCompatActivity {
 
     private LinearLayout.LayoutParams lp() {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         return p;
     }
 
@@ -270,4 +284,12 @@ public final class OnboardingActivity extends AppCompatActivity {
     private void toast(String zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_LONG).show();
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
+    private String tr(int resource, Object... arguments) { return Language.text(this, resource, arguments); }
+
 }

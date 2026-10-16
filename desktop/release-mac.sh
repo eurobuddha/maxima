@@ -20,17 +20,21 @@ JDK="${JPACKAGE_JDK:-}"
 [ -n "$JDK" ] || JDK=$(/usr/libexec/java_home 2>/dev/null)
 [ -x "$JDK/bin/jpackage" ] || { echo "no jpackage in $JDK — set JPACKAGE_JDK"; exit 1; }
 VERSION=$(grep -E "^version = '" desktop/build.gradle | sed -E "s/version = '([^']+)'/\1/")
+NOTARY_ARGS=(--keychain-profile "$PROFILE" --wait)
+if [ -n "${NOTARY_KEYCHAIN:-}" ]; then NOTARY_ARGS+=(--keychain "$NOTARY_KEYCHAIN"); fi
 OUT=desktop/build/jpackage
 echo "identity: $IDENTITY"; echo "jdk: $JDK"; echo "version: $VERSION"
 
 # ---- stage 1: signed app image → notarize → staple the .app ----
-./gradlew :desktop:jpackageImage -PmacSignIdentity="$IDENTITY" -PjpackageJdk="$JDK" -PskipAndroid=true --no-daemon
+GRADLE_ARGS=(--no-daemon)
+if [ -n "${GRADLE_JAVA_HOME:-}" ]; then GRADLE_ARGS+=("-Dorg.gradle.java.home=$GRADLE_JAVA_HOME"); fi
+./gradlew "${GRADLE_ARGS[@]}" :desktop:jpackageImage -PmacSignIdentity="$IDENTITY" -PjpackageJdk="$JDK" -PskipAndroid=true
 APP="$OUT/MaximaNode.app"
 [ -d "$APP" ] || { echo "no app image at $APP"; exit 1; }
 ZIP="$OUT/MaximaNode-$VERSION-app.zip"
 rm -f "$ZIP"; ditto -c -k --keepParent "$APP" "$ZIP"
 echo "notarizing the app (profile $PROFILE)…"
-xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait
+xcrun notarytool submit "$ZIP" "${NOTARY_ARGS[@]}"
 xcrun stapler staple "$APP"
 rm -f "$ZIP"
 
@@ -45,6 +49,6 @@ rm -f "$DMG"
 codesign --force --sign "$IDENTITY" --timestamp "$DMG"
 codesign --verify --strict "$DMG"
 echo "notarizing $DMG (profile $PROFILE)…"
-xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
+xcrun notarytool submit "$DMG" "${NOTARY_ARGS[@]}"
 xcrun stapler staple "$DMG"
 desktop/verify-mac.sh "$DMG"

@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.app.Person;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
@@ -30,9 +31,9 @@ public final class PortalIncomingCall {
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);
         if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) return;
         NotificationChannel old = nm.getNotificationChannel(LEGACY_CHANNEL_ID);
-        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Incoming calls",
+        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, Language.text(ctx,R.string.l10n_notification_calls),
                 old == null ? NotificationManager.IMPORTANCE_HIGH : old.getImportance());
-        ch.setDescription("Incoming Parlons calls");
+        ch.setDescription(Language.text(ctx,R.string.l10n_notification_incoming_calls));
         Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
         // Preserve an explicitly chosen sound (including user-selected silence).
         if (old != null && (old.getSound() != null
@@ -71,7 +72,7 @@ public final class PortalIncomingCall {
         if (nm == null) return;
         ensureChannel(zCtx);
         String who = zName;
-        if (who == null || who.isEmpty()) who = "Contact";
+        if (who == null || who.isEmpty()) who = Language.text(zCtx,R.string.l10n_notification_contact);
         boolean video = zVideo;
         String callId = PortalCallManager.get(zCtx).callId();
         Intent open = new Intent(zCtx, PortalCallActivity.class)
@@ -93,7 +94,7 @@ public final class PortalIncomingCall {
         Notification.Builder builder = new Notification.Builder(zCtx, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_send)
                 .setContentTitle(who)
-                .setContentText(video ? "Incoming Parlons video call" : "Incoming Parlons call")
+                .setContentText(video ? Language.text(zCtx,R.string.l10n_native_call_incoming_video) : Language.text(zCtx,R.string.l10n_native_call_incoming))
                 .setCategory(Notification.CATEGORY_CALL)
                 .setOngoing(true)
                 .setContentIntent(view)
@@ -104,9 +105,9 @@ public final class PortalIncomingCall {
                     .setIsVideo(video));
         } else {
             builder.setStyle(new Notification.BigTextStyle().bigText(
-                    video ? "Incoming Parlons video call" : "Incoming Parlons call"))
-                    .addAction(new Notification.Action.Builder(null, "Decline", decline).build())
-                    .addAction(new Notification.Action.Builder(null, "Answer", answer).build());
+                    video ? Language.text(zCtx,R.string.l10n_native_call_incoming_video) : Language.text(zCtx,R.string.l10n_native_call_incoming)))
+                    .addAction(new Notification.Action.Builder(null, Language.text(zCtx,R.string.l10n_call_decline), decline).build())
+                    .addAction(new Notification.Action.Builder(null, Language.text(zCtx,R.string.l10n_call_answer), answer).build());
         }
         Notification notification = builder.build();
         notification.flags |= Notification.FLAG_INSISTENT;

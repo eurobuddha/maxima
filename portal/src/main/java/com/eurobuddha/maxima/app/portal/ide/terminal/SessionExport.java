@@ -1,6 +1,10 @@
 package com.eurobuddha.maxima.app.portal.ide.terminal;
 
 import android.app.Activity;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -60,28 +64,28 @@ public final class SessionExport {
     public static boolean copy(Context ctx, CharSequence text, String label) {
         String plain = text == null ? "" : text.toString();
         if (plain.trim().isEmpty()) {
-            Toast.makeText(ctx, "Nothing to copy", Toast.LENGTH_SHORT).show();
+            Toast.makeText(ctx, msg(R.string.l10n_node_ide_copy_empty), Toast.LENGTH_SHORT).show();
             return false;
         }
         if (utf8Len(plain) > MAX_INLINE_BYTES) {
-            Toast.makeText(ctx, "Too big for the clipboard — use Export session → Save to file",
+            Toast.makeText(ctx, msg(R.string.l10n_node_ide_copy_large),
                     Toast.LENGTH_LONG).show();
             return false;
         }
         ClipboardManager cb = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
         if (cb == null) {
-            Toast.makeText(ctx, "No clipboard available", Toast.LENGTH_SHORT).show();
+            Toast.makeText(ctx, msg(R.string.l10n_node_ide_no_clipboard), Toast.LENGTH_SHORT).show();
             return false;
         }
         try {
             cb.setPrimaryClip(ClipData.newPlainText(label, plain));
         } catch (RuntimeException e) {
-            Toast.makeText(ctx, "Copy failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(ctx, msg(R.string.l10n_node_ide_copy_failed, SystemMessages.message(e.getMessage())), Toast.LENGTH_LONG).show();
             return false;
         }
         // Android 13+ shows its own clipboard confirmation; don't double up.
         if (android.os.Build.VERSION.SDK_INT < 33) {
-            Toast.makeText(ctx, "Copied " + plain.length() + " chars", Toast.LENGTH_SHORT).show();
+            Toast.makeText(ctx, Language.count(R.plurals.l10n_node_ide_copied_chars, plain.length()), Toast.LENGTH_SHORT).show();
         }
         return true;
     }
@@ -116,9 +120,9 @@ public final class SessionExport {
      * to the cache and shared as a FileProvider attachment, because an oversized
      * EXTRA_TEXT kills the app with TransactionTooLargeException.
      */
-    public static void share(Activity act, String text, String filename, String chooserTitle) {
+    public static void share(Activity act, String text, String filename, CharSequence chooserTitle) {
         if (text == null || text.trim().isEmpty()) {
-            Toast.makeText(act, "Nothing to share", Toast.LENGTH_SHORT).show();
+            Toast.makeText(act, msg(R.string.l10n_node_ide_share_empty), Toast.LENGTH_SHORT).show();
             return;
         }
         Intent send;
@@ -131,14 +135,14 @@ public final class SessionExport {
             try {
                 send = fileShareIntent(act, text, filename);
             } catch (IOException e) {
-                Toast.makeText(act, "Share failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(act, msg(R.string.l10n_node_ide_share_failed, SystemMessages.message(e.getMessage())), Toast.LENGTH_LONG).show();
                 return;
             }
         }
         try {
             act.startActivity(Intent.createChooser(send, chooserTitle));
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(act, "No app available to share with", Toast.LENGTH_LONG).show();
+            Toast.makeText(act, msg(R.string.l10n_node_ide_no_share_app), Toast.LENGTH_LONG).show();
         }
     }
 

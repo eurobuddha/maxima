@@ -1,6 +1,11 @@
 package com.eurobuddha.maxima.app.portal;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
 import android.content.Intent;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
@@ -32,12 +37,12 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
     private androidx.appcompat.app.AlertDialog previewDialog;
     private final ActivityResultLauncher<String[]> pick = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(), uri -> {
-                if (uri != null) { backup = uri; status.setText("Backup selected. Enter its password, then review."); controls(); }
+                if (uri != null) { backup = uri; Language.setText(status, Language.msg(R.string.l10n_identity_import_selected)); controls(); }
             });
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        setTitle("Import Parlons identity");
+        setTitle(Language.text(this, R.string.l10n_identity_import_title));
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(getColor(com.eurobuddha.maxima.app.R.color.ux_bg));
         LinearLayout bar = new LinearLayout(this); bar.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -45,9 +50,9 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
         int barPad = PortalUi.dp(this, 16); bar.setPadding(barPad, barPad, barPad, barPad);
         TextView back = new TextView(this); back.setText("‹"); back.setTextSize(26);
         back.setTextColor(getColor(com.eurobuddha.maxima.app.R.color.ux_on_header));
-        back.setPadding(0, 0, PortalUi.dp(this, 18), 0); back.setContentDescription("Back");
+        back.setPadding(0, 0, PortalUi.dp(this, 18), 0); Language.description(back, Language.msg(R.string.l10n_common_back));
         back.setOnClickListener(v -> finish()); bar.addView(back);
-        TextView heading = new TextView(this); heading.setText("Import identity"); heading.setTextSize(20);
+        TextView heading = new TextView(this); Language.setText(heading, Language.msg(R.string.l10n_identity_import_heading)); heading.setTextSize(20);
         heading.setTextColor(getColor(com.eurobuddha.maxima.app.R.color.ux_on_header)); bar.addView(heading);
         root.addView(bar);
         ScrollView scroll = new ScrollView(this);
@@ -59,33 +64,31 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
                     | androidx.core.view.WindowInsetsCompat.Type.ime());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom); return insets;
         });
-        body.addView(PortalUi.title(this, "Restore onto this server"));
-        body.addView(PortalUi.label(this, "Use the same phrase or encrypted .pbk backup as the Parlons app. "
-                + "This replaces the server’s Parlons identity, contacts and chats. Its Minima wallet stays unchanged. "
-                + "The previous account is retained on the server for recovery."));
-        phrase = input("Recovery phrase", false);
+        body.addView(PortalUi.title(this, Language.msg(R.string.l10n_identity_import_server_title)));
+        body.addView(PortalUi.label(this, Language.msg(R.string.l10n_identity_import_intro)));
+        phrase = input(Language.msg(R.string.l10n_identity_import_phrase), false);
         phrase.setMinLines(3); body.addView(phrase);
-        custom = new CheckBox(this); custom.setText("Custom phrase (Minima anyphrase)"); body.addView(custom);
-        body.addView(PortalUi.label(this, "Custom phrases preserve every character, including spaces and capitals."));
-        TextView choose = PortalUi.ghost(this, "Choose .pbk backup instead…");
+        custom = new CheckBox(this); Language.setText(custom, Language.msg(R.string.l10n_identity_import_custom)); body.addView(custom);
+        body.addView(PortalUi.label(this, Language.msg(R.string.l10n_identity_import_custom_help)));
+        TextView choose = PortalUi.ghost(this, Language.msg(R.string.l10n_identity_import_choose));
         choose.setOnClickListener(v -> { if (!busy && id.isEmpty()) pick.launch(new String[]{"*/*"}); });
         body.addView(choose);
-        password = input("Backup password", true); body.addView(password);
-        TextView usePhrase = PortalUi.ghost(this, "Use phrase instead of file");
-        usePhrase.setOnClickListener(v -> { if (!busy && id.isEmpty()) { backup = null; status.setText("Phrase selected"); controls(); } });
+        password = input(Language.msg(R.string.l10n_identity_import_password), true); body.addView(password);
+        TextView usePhrase = PortalUi.ghost(this, Language.msg(R.string.l10n_identity_import_use_phrase));
+        usePhrase.setOnClickListener(v -> { if (!busy && id.isEmpty()) { backup = null; Language.setText(status, Language.msg(R.string.l10n_identity_import_phrase_selected)); controls(); } });
         body.addView(usePhrase);
         status = PortalUi.value(this, ""); body.addView(status);
-        submit = PortalUi.button(this, "Review import"); submit.setOnClickListener(v -> begin()); body.addView(submit);
-        resume = PortalUi.ghost(this, "Resume / check import"); resume.setOnClickListener(v -> resume()); body.addView(resume);
-        cancel = PortalUi.ghost(this, "Cancel prepared import"); cancel.setOnClickListener(v -> cancel()); body.addView(cancel);
+        submit = PortalUi.button(this, Language.msg(R.string.l10n_identity_import_review)); submit.setOnClickListener(v -> begin()); body.addView(submit);
+        resume = PortalUi.ghost(this, Language.msg(R.string.l10n_identity_import_resume)); resume.setOnClickListener(v -> resume()); body.addView(resume);
+        cancel = PortalUi.ghost(this, Language.msg(R.string.l10n_identity_import_cancel)); cancel.setOnClickListener(v -> cancel()); body.addView(cancel);
         id = pref("import_id"); oldAccount = pref("import_old"); target = pref("import_target");
         controls();
-        if (!id.isEmpty()) status.setText("An import is pending. Tap Resume to check the server. Your phrase is not stored on this phone.");
+        if (!id.isEmpty()) Language.setText(status, Language.msg(R.string.l10n_identity_import_pending));
         lock.onCreate(); secure();
     }
 
-    private EditText input(String hint, boolean secret) {
-        EditText e = new EditText(this); e.setHint(hint);
+    private EditText input(CharSequence hint, boolean secret) {
+        EditText e = new EditText(this); Language.hint(e, hint);
         e.setInputType(InputType.TYPE_CLASS_TEXT | (secret ? InputType.TYPE_TEXT_VARIATION_PASSWORD
                 : InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
         e.setSaveEnabled(false); e.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
@@ -110,19 +113,19 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
         resume.setVisibility(id.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
         cancel.setVisibility(id.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
     }
-    private void show(String text) { runOnUiThread(() -> { if (!isDestroyed()) status.setText(text); }); }
+    private void show(CharSequence text) { runOnUiThread(() -> { if (!isDestroyed()) Language.setText(status, text); }); }
     private void run(Work work) {
         if (busy || com.eurobuddha.maxima.app.AppLock.mustUnlock(this)) return;
         busy = true; controls();
         io.execute(() -> {
             try { work.run(); }
-            catch (Exception e) { show("Could not finish. " + safeMessage(e) + "\nUse Resume to check a pending import before starting another."); }
+            catch (Exception e) { show(Language.msg(R.string.l10n_identity_import_failed, safeMessage(e))); }
             finally { runOnUiThread(() -> { busy = false; if (!isDestroyed()) controls(); }); }
         });
     }
     // Never echo crypto/parser errors that might embed a phrase, password or backup content.
-    private static String safeMessage(Exception e) {
-        return e instanceof UserMessage ? e.getMessage() : "Check the server connection and try again.";
+    private String safeMessage(Exception e) {
+        return e instanceof UserMessage ? SystemMessages.text(this, e.getMessage()) : Language.text(this, R.string.l10n_identity_import_connection);
     }
     private interface Work { void run() throws Exception; }
     private static final class UserMessage extends Exception { UserMessage(String s) { super(s); } }
@@ -148,11 +151,11 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
         final String text = phrase.getText().toString(); // custom: preserve raw UTF-8, as SeedStore does
         final boolean any = custom.isChecked();
         final String pass = password.getText().toString(); final Uri uri = backup;
-        if (uri == null && text.trim().isEmpty()) { show("Enter a recovery phrase or choose a backup."); return; }
-        if (uri != null && pass.isEmpty()) { show("Enter the backup password."); return; }
+        if (uri == null && text.trim().isEmpty()) { show(Language.msg(R.string.l10n_identity_import_enter)); return; }
+        if (uri != null && pass.isEmpty()) { show(Language.msg(R.string.l10n_backup_enter_password)); return; }
         oldAccount = CloudSession.account(this);
         run(() -> {
-            show("Checking server support…");
+            show(Language.msg(R.string.l10n_identity_import_support));
             ParlonsRemote remote = original();
             if (!Boolean.TRUE.equals(remote.nodeStatus().get("identityImport")))
                 throw new UserMessage("Update Parlons Node to 0.2.117 or later to import from this app.");
@@ -166,12 +169,12 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
                 for (int offset = 0; offset < bytes.length; offset += 60_000) {
                     JSONObject chunk = request("upload"); chunk.put("offset", offset);
                     chunk.put("chunk", Base64.getEncoder().encodeToString(Arrays.copyOfRange(bytes, offset, Math.min(offset + 60_000, bytes.length))));
-                    send(remote, chunk); show("Uploading backup: " + Math.min(100, (offset + 60_000L) * 100 / bytes.length) + "%");
+                    send(remote, chunk); show(Language.msg(R.string.l10n_identity_import_uploading, Math.min(100, (offset + 60_000L) * 100 / bytes.length)));
                 }
                 JSONObject prepare = request("prepare");
                 if (uri == null) { prepare.put("phrase", text); prepare.put("anyPhrase", any); }
                 else prepare.put("password", pass);
-                show("Checking the identity…");
+                show(Language.msg(R.string.l10n_identity_import_checking));
                 JSONObject result = send(remote, prepare);
                 runOnUiThread(() -> { phrase.setText(""); password.setText(""); });
                 follow(remote, result);
@@ -216,47 +219,44 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
         } else if ("committed".equals(state)) {
             reconnectImported();
         } else if ("failed".equals(state)) {
-            show(String.valueOf(result.getOrDefault("error", "Could not prepare the identity.")) + "\nCancel this import before trying again.");
+            show(Language.msg(R.string.l10n_identity_import_failed_cancel, SystemMessages.text(this, String.valueOf(result.getOrDefault("error", "Could not prepare the identity.")))));
         } else {
-            show("The upload has not been prepared. Cancel it, then select the phrase or backup again.");
+            show(Language.msg(R.string.l10n_identity_import_not_prepared));
         }
     }
     private void preview(String name) {
         if (isDestroyed() || isFinishing() || !foreground || com.eurobuddha.maxima.app.AppLock.mustUnlock(this)) {
-            show("Identity prepared. Unlock the app and tap Resume to review it."); return;
+            show(Language.msg(R.string.l10n_identity_import_prepared)); return;
         }
         LinearLayout box = PortalUi.card(this);
-        box.addView(PortalUi.value(this, (name.isEmpty() ? "Imported identity" : name) + "\n\n" + target));
-        box.addView(PortalUi.label(this, "This replaces this server’s Parlons account and restarts the node. "
-                + "This phone remains paired. A phrase restores identity only; a backup also restores its saved data. "
-                + "The server’s Minima wallet and its recovery phrase stay unchanged."));
-        CheckBox stopped = new CheckBox(this); stopped.setText("I have stopped this identity on its original device or server"); box.addView(stopped);
+        box.addView(PortalUi.value(this, Language.join(name.isEmpty() ? Language.msg(R.string.l10n_identity_import_imported) : name, "\n\n", target)));
+        box.addView(PortalUi.label(this, Language.msg(R.string.l10n_identity_import_confirm_help)));
+        CheckBox stopped = new CheckBox(this); Language.setText(stopped, Language.msg(R.string.l10n_identity_import_stopped)); box.addView(stopped);
         ScrollView review = new ScrollView(this); review.addView(box);
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Import this identity?").setView(review).setNegativeButton("Later", null)
-                .setPositiveButton("Import & restart", null).create();
+        androidx.appcompat.app.AlertDialog dialog = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_identity_import_confirm)).setView(review).setNegativeButton(Language.msg(R.string.l10n_identity_import_later), null)
+                .setPositiveButton(Language.msg(R.string.l10n_identity_import_restart), null).create();
         previewDialog = dialog;
-        dialog.setOnShowListener(v -> {
-            dialog.getButton(-1).setEnabled(false);
-            stopped.setOnCheckedChangeListener((b, checked) -> dialog.getButton(-1).setEnabled(checked));
-            dialog.getButton(-1).setOnClickListener(b -> {
-                dialog.dismiss();
-                run(() -> {
-                    ParlonsRemote r = original();
-                    if (!CloudSession.prefs(this).edit().putBoolean("import_committing", true).commit()) throw new IOException("Save failed");
-                    JSONObject commit = request("commit"); commit.put("confirm", true); commit.put("oldHostStopped", true);
-                    try { send(r, commit); } catch (Exception lostReply) { /* resolve the committed identity below */ }
-                    show("Server restarting. Reconnecting to the imported identity…");
-                    Thread.sleep(6000);
-                    reconnectImported();
-                });
+        dialog.show(); dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        dialog.getButton(-1).setEnabled(false);
+        stopped.setOnCheckedChangeListener((b, checked) -> dialog.getButton(-1).setEnabled(checked));
+        dialog.getButton(-1).setOnClickListener(b -> {
+            dialog.dismiss();
+            run(() -> {
+                ParlonsRemote r = original();
+                if (!CloudSession.prefs(this).edit().putBoolean("import_committing", true).commit()) throw new IOException("Save failed");
+                JSONObject commit = request("commit"); commit.put("confirm", true); commit.put("oldHostStopped", true);
+                try { send(r, commit); } catch (Exception lostReply) { /* resolve the committed identity below */ }
+                show(Language.msg(R.string.l10n_identity_import_restarting));
+                Thread.sleep(6000);
+                reconnectImported();
             });
         });
-        dialog.show(); dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+
     }
     private void reconnectImported() throws Exception {
         if (target.isEmpty()) throw new IOException("Missing imported address");
-        show("Connecting to the imported identity…");
+        show(Language.msg(R.string.l10n_identity_import_connecting));
         int generation = CloudSession.beginImportConnection(this, oldAccount);
         ParlonsRemote next = null; boolean adopted = false;
         try {
@@ -266,7 +266,7 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
             if (!Boolean.TRUE.equals(next.nodeStatus().get("ok"))) throw new IOException("Owner verification failed");
             CloudSession.adoptImported(this, oldAccount, target, next, generation); adopted = true;
             runOnUiThread(() -> {
-                Toast.makeText(this, "Identity imported and connected", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, Language.msg(R.string.l10n_identity_import_connected), Toast.LENGTH_LONG).show();
                 startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)); finish();
             });
         } finally {
@@ -279,7 +279,14 @@ public final class CloudIdentityImportActivity extends AppCompatActivity {
             send(original(), request("cancel"));
             if (!CloudSession.prefs(this).edit().remove("import_id").remove("import_old").remove("import_target")
                     .remove("import_committing").commit()) throw new IOException("Save failed");
-            id = ""; target = ""; show("Import cancelled. The server account is unchanged.");
+            id = ""; target = ""; show(Language.msg(R.string.l10n_identity_import_cancelled));
         });
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        setTitle(Language.text(this, R.string.l10n_identity_import_title));
+    }
+
 }

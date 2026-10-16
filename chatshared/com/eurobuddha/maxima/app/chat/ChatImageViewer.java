@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.chat;
 
 import android.app.Activity;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.app.Dialog;
 import android.graphics.Bitmap;
 import android.view.Gravity;
@@ -54,12 +56,12 @@ public final class ChatImageViewer extends Dialog {
 
         bar = new LinearLayout(activity); bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(6), dp(10), dp(6), dp(8)); bar.setBackgroundColor(0xB3000000);
-        TextView close = text("×"); close.setTextSize(28); close.setContentDescription("Close photo viewer");
+        TextView close = text("×"); close.setTextSize(28); Language.description(close, Language.msg(R.string.l10n_photos_close));
         close.setOnClickListener(v -> dismiss()); bar.addView(close);
         counter = text(""); counter.setTextSize(13);
         counter.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         bar.addView(counter, new LinearLayout.LayoutParams(0, -2, 1));
-        save = text("Save"); share = text("Share");
+        save = text(Language.msg(R.string.l10n_common_save)); share = text(Language.msg(R.string.l10n_common_share));
         save.setOnClickListener(v -> { if (displayed != null) savePhoto.accept(displayed); });
         share.setOnClickListener(v -> { if (displayed != null) sharePhoto.accept(displayed); });
         bar.addView(save); bar.addView(share);
@@ -67,8 +69,8 @@ public final class ChatImageViewer extends Dialog {
 
         navigation = new LinearLayout(activity); navigation.setGravity(Gravity.CENTER);
         navigation.setPadding(0, 0, 0, dp(16));
-        previous = text("‹"); previous.setTextSize(32); previous.setContentDescription("Previous photo");
-        next = text("›"); next.setTextSize(32); next.setContentDescription("Next photo");
+        previous = text("‹"); previous.setTextSize(32); Language.description(previous, Language.msg(R.string.l10n_photos_previous));
+        next = text("›"); next.setTextSize(32); Language.description(next, Language.msg(R.string.l10n_photos_next));
         previous.setOnClickListener(v -> page(-1)); next.setOnClickListener(v -> page(1));
         navigation.addView(previous); navigation.addView(next);
         root.addView(navigation, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
@@ -102,7 +104,7 @@ public final class ChatImageViewer extends Dialog {
         int ticket = ++generation;
         if (pending != null) pending.cancel(true);
         worker.purge();
-        status.setText("Loading earlier photos…"); status.setEnabled(false); status.setVisibility(View.VISIBLE);
+        Language.setText(status, Language.msg(R.string.l10n_photos_earlier)); status.setEnabled(false); status.setVisibility(View.VISIBLE);
         previous.setEnabled(false); next.setEnabled(false);
         final ChatImages initial = photos;
         final History source = history;
@@ -133,7 +135,7 @@ public final class ChatImageViewer extends Dialog {
                 if (!error) photos.move(-1);
                 bind();
                 if (error) android.widget.Toast.makeText(activity,
-                        "Couldn't load earlier photos. Swipe right to retry.", android.widget.Toast.LENGTH_SHORT).show();
+                        Language.text(activity,R.string.l10n_photos_earlier_retry), android.widget.Toast.LENGTH_SHORT).show();
             });
         });
     }
@@ -143,12 +145,12 @@ public final class ChatImageViewer extends Dialog {
         if (pending != null) pending.cancel(true);
         worker.purge(); // Rapid swipes cannot accumulate a queue of obsolete downloads.
         ChatImages.Photo photo = photos.current();
-        counter.setText((photos.index() + 1) + " / " + photos.size());
+        Language.setText(counter, (photos.index() + 1) + " / " + photos.size());
         previous.setVisibility(photos.index() > 0 || history != null ? View.VISIBLE : View.INVISIBLE);
         next.setVisibility(photos.index() + 1 < photos.size() ? View.VISIBLE : View.INVISIBLE);
         showBitmap(cache.get(photo.id));
         if (displayed != null) return;
-        status.setText("Loading photo…"); status.setEnabled(false);
+        Language.setText(status, Language.msg(R.string.l10n_photos_loading)); status.setEnabled(false);
         pending = worker.submit(() -> {
             Bitmap result = null;
             try { result = loader.load(photo); } catch (Exception ignored) { }
@@ -158,7 +160,7 @@ public final class ChatImageViewer extends Dialog {
                 if (ticket != generation || !isShowing() || activity.isDestroyed()) return;
                 showBitmap(bitmap);
                 if (bitmap == null) {
-                    status.setText("Photo unavailable · tap to retry"); status.setEnabled(true);
+                    Language.setText(status, Language.msg(R.string.l10n_photos_tap_retry)); status.setEnabled(true);
                 }
             });
         });
@@ -169,8 +171,8 @@ public final class ChatImageViewer extends Dialog {
         save.setEnabled(bitmap != null); share.setEnabled(bitmap != null);
         save.setAlpha(bitmap == null ? .4f : 1f); share.setAlpha(bitmap == null ? .4f : 1f);
     }
-    private TextView text(String label) {
-        TextView v = new TextView(activity); v.setText(label); v.setTextColor(0xFFFFFFFF);
+    private TextView text(CharSequence label) {
+        TextView v = new TextView(activity); Language.setText(v, label); v.setTextColor(0xFFFFFFFF);
         v.setTextSize(15); v.setGravity(Gravity.CENTER); v.setMinWidth(dp(48)); v.setMinHeight(dp(48));
         v.setPadding(dp(10), dp(4), dp(10), dp(4)); return v;
     }

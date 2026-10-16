@@ -26,7 +26,7 @@
         android:id="@+id/terminal_selbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:gravity="center_vertical"
         android:background="@color/ide_bg_light"
         android:paddingStart="12dp"
@@ -36,50 +36,64 @@
         android:visibility="gone">
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Select mode — long-press output"
+            android:text="@string/l10n_terminal_selection"
+            android:tag="l10n:text=l10n_terminal_selection"
             android:textSize="11sp"
             android:typeface="monospace"
             android:textColor="@color/ide_dim" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
         <TextView
             android:id="@+id/terminal_sel_copyall"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
             android:layout_height="wrap_content"
             android:padding="8dp"
             android:clickable="true"
             android:focusable="true"
-            android:text="COPY ALL"
+            android:text="@string/l10n_terminal_copy_all"
+            android:tag="l10n:text=l10n_terminal_copy_all"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="@color/ide_accent" />
 
         <TextView
             android:id="@+id/terminal_sel_export"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
             android:layout_height="wrap_content"
             android:padding="8dp"
             android:clickable="true"
             android:focusable="true"
-            android:text="EXPORT"
+            android:text="@string/l10n_terminal_export"
+            android:tag="l10n:text=l10n_terminal_export"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="@color/ide_accent" />
 
         <TextView
             android:id="@+id/terminal_sel_done"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
             android:layout_height="wrap_content"
             android:padding="8dp"
             android:clickable="true"
             android:focusable="true"
-            android:text="DONE"
+            android:text="@string/l10n_common_done"
+            android:tag="l10n:text=l10n_common_done"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="@color/ide_warn" />
 
+        </LinearLayout>
     </LinearLayout>
 
     <TextView
@@ -112,6 +126,20 @@
 
     </ScrollView>
 
+        <com.eurobuddha.maxima.app.portal.ide.terminal.CaretEditText
+            android:id="@+id/terminal_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:imeOptions="actionDone"
+            android:typeface="monospace"
+            android:textSize="14sp"
+            android:textColor="@color/ide_text"
+            android:textColorHint="@color/ide_dim"
+            android:hint="@string/l10n_terminal_command"
+            android:tag="l10n:hint=l10n_terminal_command"
+            android:inputType="text|textNoSuggestions" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -123,6 +151,8 @@
 
         <TextView
             android:id="@+id/terminal_hist_up"
+            android:contentDescription="@string/l10n_terminal_previous"
+            android:tag="l10n:description=l10n_terminal_previous"
             android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
@@ -134,6 +164,8 @@
 
         <TextView
             android:id="@+id/terminal_hist_down"
+            android:contentDescription="@string/l10n_terminal_next"
+            android:tag="l10n:description=l10n_terminal_next"
             android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
@@ -145,6 +177,8 @@
 
         <TextView
             android:id="@+id/terminal_tab"
+            android:contentDescription="@string/l10n_terminal_complete"
+            android:tag="l10n:description=l10n_terminal_complete"
             android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
@@ -156,22 +190,12 @@
             android:textColor="@color/ide_accent"
             android:visibility="gone" />
 
-        <com.eurobuddha.maxima.app.portal.ide.terminal.CaretEditText
-            android:id="@+id/terminal_input"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:singleLine="true"
-            android:imeOptions="actionDone"
-            android:typeface="monospace"
-            android:textSize="14sp"
-            android:textColor="@color/ide_text"
-            android:textColorHint="@color/ide_dim"
-            android:hint="command…"
-            android:inputType="text|textNoSuggestions" />
+
 
         <TextView
             android:id="@+id/terminal_fav"
+            android:contentDescription="@string/l10n_terminal_favorites_button"
+            android:tag="l10n:description=l10n_terminal_favorites_button"
             android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
@@ -181,11 +205,17 @@
             android:textSize="18sp"
             android:textColor="@color/ide_warn" />
 
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
         <Button
             android:id="@+id/terminal_send"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Run" />
+            android:text="@string/l10n_terminal_run"
+            android:tag="l10n:text=l10n_terminal_run" />
 
     </LinearLayout>
 

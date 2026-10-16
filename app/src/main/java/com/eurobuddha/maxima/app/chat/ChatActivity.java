@@ -2,6 +2,8 @@ package com.eurobuddha.maxima.app.chat;
 
 import android.graphics.Color;
 import android.os.Bundle;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -28,9 +30,7 @@ import com.eurobuddha.maxima.core.chat.Group;
 import com.eurobuddha.maxima.core.chat.Receipt;
 import com.eurobuddha.maxima.core.contacts.Contact;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -64,7 +64,6 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private final List<Row> mRows = new ArrayList<>();
     /** Message count last render, to detect real growth vs a state-only redraw. */
     private int mMsgCount;
-    private final SimpleDateFormat mTime = new SimpleDateFormat("HH:mm", Locale.UK);
 
     /** Cluster consecutive messages from one sender within this window. */
     private static final long CLUSTER_GAP_MS = 5 * 60 * 1000;
@@ -208,7 +207,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         themeBtn.setImageResource(com.eurobuddha.maxima.app.ChatPrefs.appearanceIcon(this));
         themeBtn.setOnClickListener(v -> {
             com.eurobuddha.maxima.app.ChatPrefs.cycleAppearance(this);
-            toast("Theme: " + com.eurobuddha.maxima.app.ChatPrefs.appearanceLabel(this));
+            String mode = com.eurobuddha.maxima.app.ChatPrefs.appearance(this);
+            toast(tr(R.string.l10n_native_shell_theme, tr("dark".equals(mode) ? R.string.l10n_theme_dark : "light".equals(mode) ? R.string.l10n_theme_light : R.string.l10n_theme_system)));
             androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(
                     com.eurobuddha.maxima.app.ChatPrefs.nightMode(this));
         });
@@ -252,6 +252,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private void wireSendReveal(final android.widget.ImageButton zSend) {
         boolean startText = mInput.getText().toString().trim().length() > 0;
         zSend.setImageResource(startText ? R.drawable.ic_send : R.drawable.ic_mic);
+        Language.description(zSend, Language.msg(startText ? R.string.l10n_chat_send : R.string.l10n_desktop_chat_voice_note));
         mInput.addTextChangedListener(new android.text.TextWatcher() {
             boolean hasText = startText;
 
@@ -263,6 +264,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 }
                 hasText = has;
                 zSend.setImageResource(has ? R.drawable.ic_send : R.drawable.ic_mic);
+                Language.description(zSend, Language.msg(has ? R.string.l10n_chat_send : R.string.l10n_desktop_chat_voice_note));
                 zSend.animate().scaleX(1.18f).scaleY(1.18f).setDuration(90)
                         .withEndAction(() -> zSend.animate().scaleX(1f).scaleY(1f)
                                 .setDuration(130).setInterpolator(
@@ -406,10 +408,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     i.setType("image/jpeg");
                     i.putExtra(android.content.Intent.EXTRA_STREAM, uri);
                     i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(android.content.Intent.createChooser(i, "Share photo"));
+                    startActivity(android.content.Intent.createChooser(i, tr(R.string.l10n_android_chat_share_photo)));
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Could not share image"));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_share_failed)));
             }
         }, "chat-share-image").start();
     }
@@ -433,9 +435,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
                     b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
                 }
-                runOnUiThread(() -> toast("Saved to Photos"));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_saved)));
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Save failed"));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_save_failed)));
             }
         }, "chat-save-image").start();
     }
@@ -465,21 +467,21 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final ChatEngine chat = MaximaService.chat();
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
-            toast("Transport not running");
+            toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         if (chat.group(mConversation) != null) {
-            toast("Payments are one-to-one for now");
+            toast(tr(R.string.l10n_android_chat_payment_direct));
             return;
         }
         final Contact contact = node.contact(mConversation);
         if (contact == null) {
-            toast("Not in your contacts");
+            toast(tr(R.string.l10n_desktop_chat_not_contact));
             return;
         }
         final String to = chat.walletAddress(mConversation);
         if (to == null || to.isEmpty()) {
-            toast("No wallet address yet — ask them to open this chat");
+            toast(tr(R.string.l10n_android_chat_wallet_address));
             return;
         }
         if (mSender == null) {
@@ -490,36 +492,36 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), 0);
         final EditText amt = new EditText(this);
-        amt.setHint("Amount (MINIMA)");
+        Language.hint(amt, Language.msg(R.string.l10n_android_chat_amount));
         amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                 | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amt.setTextColor(getColor(R.color.ux_text));
         amt.setHintTextColor(getColor(R.color.ux_subtext));
         box.addView(amt);
         final EditText memo = new EditText(this);
-        memo.setHint("Note (optional)");
+        Language.hint(memo, Language.msg(R.string.l10n_android_chat_note));
         memo.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         memo.setTextColor(getColor(R.color.ux_text));
         memo.setHintTextColor(getColor(R.color.ux_subtext));
         box.addView(memo);
 
-        new AlertDialog.Builder(this)
-                .setTitle("Pay " + Names.of(node, chat, mConversation))
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_pay_name, Names.of(node, chat, mConversation)))
                 .setView(box)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Send", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_chat_send), (d, w) -> {
                     String amtStr = amt.getText().toString().trim();
                     final String note = memo.getText().toString().trim();
                     final org.minima.objects.base.MiniNumber amount;
                     try {
                         amount = new org.minima.objects.base.MiniNumber(amtStr);
                     } catch (Exception e) {
-                        toast("Bad amount");
+                        toast(tr(R.string.l10n_desktop_chat_bad_amount));
                         return;
                     }
                     if (!amount.isMore(org.minima.objects.base.MiniNumber.ZERO)) {
-                        toast("Amount must be more than zero");
+                        toast(tr(R.string.l10n_desktop_chat_positive_amount));
                         return;
                     }
                     confirmPay(chat, contact, to, amount, note);
@@ -529,13 +531,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     private void confirmPay(final ChatEngine chat, final Contact contact, final String to,
                             final org.minima.objects.base.MiniNumber amount, final String note) {
-        new AlertDialog.Builder(this)
-                .setTitle("Send " + amount.toString() + " MINIMA?")
-                .setMessage("To " + contact.name + "\n\nThis signs and broadcasts a real "
-                        + "transaction and cannot be undone.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Confirm", (d, w) -> {
-                    toast("Signing payment…");
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_send_amount, amount.toString()))
+                .setMessage(Language.msg(R.string.l10n_android_chat_confirm_payment, contact.name))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_android_chat_confirm), (d, w) -> {
+                    toast(tr(R.string.l10n_android_chat_signing));
                     final ChatEngine.Entry[] pending = new ChatEngine.Entry[1];
                     mSender.send(to, amount, new com.eurobuddha.maxima.app.wallet.PaymentSender.Cb() {
                         @Override
@@ -574,7 +575,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                                     contact.name, zTxid);
                             runOnUiThread(() -> {
                                 render();
-                                toast("Payment sent");
+                                toast(tr(R.string.l10n_android_chat_payment_sent));
                             });
                         }
 
@@ -612,24 +613,24 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         boolean canPay = chat != null && node != null
                 && chat.group(mConversation) == null
                 && node.contact(mConversation) != null;
-        final List<String> items = new ArrayList<>();
-        items.add("Photo library");
-        items.add("Private file");
-        items.add("File transfers");
-        items.add("Voice note");
+        final List<Integer> items = new ArrayList<>();
+        items.add(R.string.l10n_android_chat_photo_library);
+        items.add(R.string.l10n_files_private);
+        items.add(R.string.l10n_files_title);
+        items.add(R.string.l10n_desktop_chat_voice_note);
         if (canPay) {
-            items.add("Send payment");
+            items.add(R.string.l10n_desktop_chat_send_payment);
         }
-        new AlertDialog.Builder(this)
-                .setItems(items.toArray(new String[0]), (d, which) -> {
-                    String c = items.get(which);
-                    if ("Private file".equals(c)) {
+        new LanguageDialog(this)
+                .actions(items, (d, which) -> {
+                    int c = items.get(which);
+                    if (R.string.l10n_files_private == c) {
                         fileUi().pick();
-                    } else if ("File transfers".equals(c)) {
+                    } else if (R.string.l10n_files_title == c) {
                         fileUi().transfers();
-                    } else if ("Send payment".equals(c)) {
+                    } else if (R.string.l10n_desktop_chat_send_payment == c) {
                         payContact();
-                    } else if ("Voice note".equals(c)) {
+                    } else if (R.string.l10n_desktop_chat_voice_note == c) {
                         startVoiceNote();
                     } else {
                         pickPhoto();
@@ -642,7 +643,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         android.content.Intent i = new android.content.Intent(
                 android.content.Intent.ACTION_GET_CONTENT);
         i.setType("image/*");
-        startActivityForResult(android.content.Intent.createChooser(i, "Send photo"), PICK_PHOTO);
+        startActivityForResult(android.content.Intent.createChooser(i, tr(R.string.l10n_android_chat_send_photo)), PICK_PHOTO);
     }
 
     /** Capture straight from the camera into our own cache, via the existing
@@ -670,7 +671,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
             startActivityForResult(i, TAKE_PHOTO);
         } catch (Exception e) {
-            toast("No camera available");
+            toast(tr(R.string.l10n_android_chat_no_camera));
         }
     }
 
@@ -724,7 +725,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             box.addView(iv);
         }
         final EditText cap = new EditText(this);
-        cap.setHint("Add a caption…");
+        Language.hint(cap, Language.msg(R.string.l10n_android_chat_caption));
         cap.setHintTextColor(getResources().getColor(R.color.ux_subtext));
         cap.setTextColor(getResources().getColor(R.color.ux_text));
         cap.setInputType(android.text.InputType.TYPE_CLASS_TEXT
@@ -732,12 +733,12 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         cap.setMaxLines(4);
         box.addView(cap);
-        new AlertDialog.Builder(this)
-                .setTitle("Send photo")
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_send_photo))
                 .setView(box)
-                .setPositiveButton("Send",
+                .setPositiveButton(Language.msg(R.string.l10n_chat_send),
                         (d, w) -> sendPhoto(uri, cap.getText().toString().trim()))
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
@@ -745,7 +746,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final ChatEngine chat = MaximaService.chat();
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
-            toast("Transport not running");
+            toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         final Group g = chat.group(mConversation);
@@ -753,7 +754,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (g == null && c == null) {
             return;
         }
-        toast("Sending photo…");
+        toast(tr(R.string.l10n_android_chat_sending_photo));
         mLastSendWasMine = true;
         new Thread(() -> {
             try {
@@ -774,7 +775,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     chat.sendMedia(c, jpeg, "image/jpeg", caption);
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Photo failed: " + e.getMessage()));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_photo_failed, e.getMessage())));
             }
             runOnUiThread(this::render);
         }, "chat-media").start();
@@ -796,11 +797,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         ChatEngine chat = MaximaService.chat();
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
-            toast("Transport not running");
+            toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         if (chat.group(mConversation) != null) {
-            toast("Group calls are not supported yet");
+            toast(tr(R.string.l10n_android_chat_group_calls));
             return;
         }
         Contact c = node.contact(mConversation);
@@ -808,7 +809,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             return;
         }
         if (c.isClassic()) {
-            toast("Calls need Parlons on both ends");
+            toast(tr(R.string.l10n_android_chat_calls_parlons));
             return;
         }
         java.util.List<String> need = new java.util.ArrayList<>();
@@ -848,6 +849,18 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     };
 
     /** Bottom-sheet emoji grid: tap inserts at the cursor, panel stays open. */
+    private static int emojiLabel(String category) {
+        switch (category) {
+            case "Smileys": return R.string.l10n_emoji_smileys;
+            case "Gestures": return R.string.l10n_emoji_gestures;
+            case "Hearts": return R.string.l10n_emoji_hearts;
+            case "Animals & nature": return R.string.l10n_emoji_nature;
+            case "Food & drink": return R.string.l10n_emoji_food;
+            case "Objects & symbols": return R.string.l10n_emoji_objects;
+            default: throw new IllegalArgumentException("Unknown emoji category");
+        }
+    }
+
     private void showEmojiPanel() {
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
@@ -858,7 +871,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final android.app.Dialog dlg = new android.app.Dialog(this);
         for (String[] cat : EMOJI) {
             TextView label = new TextView(this);
-            label.setText(cat[0].toUpperCase(java.util.Locale.UK));
+            Language.setText(label, Language.upper(Language.msg(emojiLabel(cat[0]))));
             label.setTextSize(11);
             label.setTypeface(null, android.graphics.Typeface.BOLD);
             label.setTextColor(getResources().getColor(R.color.ux_subtext));
@@ -899,13 +912,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         ChatEngine chat = MaximaService.chat();
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
-            toast("Transport not running");
+            toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         if (chat.group(mConversation) == null) {
             Contact c = node.contact(mConversation);
             if (c != null && c.isClassic()) {
-                toast("Voice notes need Parlons on both ends");
+                toast(tr(R.string.l10n_android_chat_voice_parlons));
                 return;
             }
         }
@@ -939,7 +952,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         try {
             rec.start();
         } catch (Exception e) {
-            toast("Microphone unavailable");
+            toast(tr(R.string.l10n_android_chat_no_microphone));
             return;
         }
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
@@ -970,11 +983,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         rowBox.addView(dot);
         rowBox.addView(timer);
 
-        final AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle("Voice note")
+        final AlertDialog dlg = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_desktop_chat_voice_note))
                 .setView(box)
-                .setPositiveButton("Send", null)
-                .setNegativeButton("Cancel", null)
+                .setPositiveButton(Language.msg(R.string.l10n_chat_send), null)
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
                 .create();
         dlg.setCanceledOnTouchOutside(false);
         dlg.show();
@@ -999,7 +1012,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 int sSec = rec.elapsedSeconds();
                 dot.setAlpha(dot.getAlpha() > 0.5f ? 0.25f : 1f);
                 if (sSec >= VoiceNote.MAX_SECONDS) {
-                    timer.setText(fmtSecs(VoiceNote.MAX_SECONDS) + "  max");
+                    Language.setText(timer, Language.msg(R.string.l10n_android_chat_max_duration, fmtSecs(VoiceNote.MAX_SECONDS)));
                     rec.stopQuiet();   // recorder hard-caps too (setMaxDuration)
                 } else {
                     timer.setText(fmtSecs(sSec));
@@ -1017,13 +1030,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             try {
                 bytes = rec.bytes();
             } catch (Exception e) {
-                toast("Recording failed");
+                toast(tr(R.string.l10n_android_chat_record_failed));
                 dlg.dismiss();
                 return;
             }
             dlg.dismiss();
             if (bytes == null || bytes.length == 0 || secs < 1) {
-                toast("Too short - hold on a moment longer");
+                toast(tr(R.string.l10n_android_chat_record_short));
                 return;
             }
             sendVoice(bytes, rec.mime(), secs,
@@ -1048,7 +1061,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final ChatEngine chat = MaximaService.chat();
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (chat == null || node == null) {
-            toast("Transport not running");
+            toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         final Group g = chat.group(mConversation);
@@ -1056,7 +1069,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         if (g == null && c == null) {
             return;
         }
-        toast("Sending voice note\u2026");
+        toast(tr(R.string.l10n_android_chat_sending_voice));
         mLastSendWasMine = true;
         new Thread(() -> {
             try {
@@ -1071,7 +1084,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     chat.sendMedia(c, zBytes, zMime, cap);
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Voice note failed: " + e.getMessage()));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_voice_failed, e.getMessage())));
             }
             runOnUiThread(this::render);
         }, "chat-voice").start();
@@ -1081,6 +1094,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         boolean playing = e.id.equals(mAudioPlayingId) && mAudioPlayer != null;
         int ink = getColor(e.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
         h.audioBtn.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        Language.description(h.audioBtn, Language.msg(playing ? R.string.l10n_desktop_chat_stop : R.string.l10n_media_play));
         h.audioBtn.setColorFilter(ink);
         h.audioTime.setTextColor(ink);
         String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
@@ -1103,7 +1117,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             h.audioTime.setText(fmtSecs(pos / 1000) + " / " + fmtSecs(dur / 1000));
             h.audioBar.setProgress(pos / (float) dur);
         } else {
-            h.audioTime.setText(total.isEmpty() ? "voice note" : total);
+            h.audioTime.setText(total.isEmpty() ? tr(R.string.l10n_desktop_chat_voice_note) : total);
             h.audioBar.setProgress(0f);
         }
         h.audio.setOnClickListener(v -> toggleAudio(e));
@@ -1127,7 +1141,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     return;
                 }
                 if (f == null) {
-                    toast("Could not decode voice note");
+                    toast(tr(R.string.l10n_android_chat_decode_voice));
                     return;
                 }
                 try {
@@ -1149,7 +1163,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         mAdapter.notifyItemChanged(i);
                     }
                 } catch (Exception ex) {
-                    toast("Playback failed");
+                    toast(tr(R.string.l10n_android_chat_playback_failed));
                     stopAudio();
                 }
             });
@@ -1544,14 +1558,15 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
         Group g = chat.group(mConversation);
         if (g != null) {
-            mSubtitle.setText(g.size() + " member(s)"
-                    + (g.isAdmin(node.publicKeyHex()) ? "  ·  you are an admin" : ""));
+            String members = Language.quantity(this, R.plurals.l10n_chat_members, g.size(), g.size());
+            mSubtitle.setText(g.isAdmin(node.publicKeyHex()) ? tr(R.string.l10n_android_chat_members_admin, members) : members);
             mSubtitle.setTextColor(getColor(R.color.ux_subtext));
         } else {
             Contact c = node.contact(mConversation);
-            String presence = c == null ? "" : com.eurobuddha.maxima.app.ui.Presence.of(c.lastSeen);
+            String presence = c == null || c.lastSeen <= 0 ? "" : com.eurobuddha.maxima.app.ui.Presence.online(c.lastSeen)
+                    ? tr(R.string.l10n_presence_online) : tr(R.string.l10n_presence_last_seen, Language.ago(System.currentTimeMillis() - c.lastSeen));
             if (c == null) {
-                mSubtitle.setText("not in your contacts");
+                mSubtitle.setText(tr(R.string.l10n_contacts_not_added));
                 mSubtitle.setTextColor(getColor(R.color.ux_subtext));
             } else if (!presence.isEmpty()) {
                 mSubtitle.setText(presence);
@@ -1560,7 +1575,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                                 ? R.color.ux_success : R.color.ux_subtext));
             } else {
                 mSubtitle.setText(c.primaryAddress() == null
-                        ? "no address yet" : "not reached yet");
+                        ? tr(R.string.l10n_contacts_no_address) : tr(R.string.l10n_contacts_unreached));
                 mSubtitle.setTextColor(getColor(R.color.ux_subtext));
             }
         }
@@ -1599,10 +1614,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mMsgCount = conv.size();
         if (conv.isEmpty()) {
             mEmpty.setText(g != null
-                    ? "This is the start of the “" + name + "” group.\n\nSay something."
-                    : "This is the start of your conversation with " + name
-                    + ".\n\nMessages are end-to-end encrypted - only the two of you "
-                    + "can read them.");
+                    ? tr(R.string.l10n_android_chat_empty_group, name)
+                    : tr(R.string.l10n_android_chat_empty_chat, name));
             mEmpty.setVisibility(View.VISIBLE);
         } else {
             mEmpty.setVisibility(View.GONE);
@@ -1648,21 +1661,9 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         return c.getTimeInMillis();
     }
 
-    /** "Today" / "Yesterday" / weekday (within a week) / a date. */
+    /** Selected-language relative day, weekday within a week, or full date. */
     private String dayLabel(long zMillis) {
-        long today = dayStart(System.currentTimeMillis());
-        long day = dayStart(zMillis);
-        long days = (today - day) / (24L * 60 * 60 * 1000);
-        if (days == 0) {
-            return "Today";
-        }
-        if (days == 1) {
-            return "Yesterday";
-        }
-        if (days > 1 && days < 7) {
-            return new SimpleDateFormat("EEEE", Locale.UK).format(new Date(zMillis));
-        }
-        return new SimpleDateFormat("d MMM yyyy", Locale.UK).format(new Date(zMillis));
+        return Language.dayLabel(this, zMillis, true);
     }
 
     private int dp(int zDp) {
@@ -1677,13 +1678,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
-            toast("Transport not running");
+            toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         final Group g = chat.group(mConversation);
         final Contact c = g == null ? node.contact(mConversation) : null;
         if (g == null && c == null) {
-            toast("They are not in your contacts");
+            toast(tr(R.string.l10n_desktop_chat_not_contact));
             return;
         }
         mInput.setText("");
@@ -1697,7 +1698,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                     chat.send(c, text);
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Send failed: " + e.getMessage()));
+                runOnUiThread(() -> toast(tr(R.string.l10n_wallet_send_failed, e.getMessage())));
             }
             runOnUiThread(this::render);
         }, "chat-send").start();
@@ -1712,38 +1713,36 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             return;
         }
         Group g = chat.group(mConversation);
-        StringBuilder sb = new StringBuilder();
+        Language.TextBuilder sb = new Language.TextBuilder();
         if (g != null) {
-            sb.append("Members\n");
+            sb.append(Language.msg(R.string.l10n_desktop_chat_members)).append("\n");
             for (String m : g.members()) {
                 sb.append("  ").append(Names.contact(node, m));
                 if (g.isAdmin(m)) {
-                    sb.append("   (admin)");
+                    sb.append("   (").append(Language.msg(R.string.l10n_chat_admin)).append(")");
                 }
                 sb.append('\n');
             }
-            sb.append("\nEvery message is sealed separately to each member. ")
-                    .append("There is no shared group key, so removing someone ")
-                    .append("removes them immediately.");
+            sb.append("\n").append(Language.msg(R.string.l10n_desktop_chat_group_help));
         } else {
             Contact c = node.contact(mConversation);
             if (c == null) {
-                sb.append("Not in your contacts.");
+                sb.append(Language.msg(R.string.l10n_desktop_chat_not_contact));
             } else {
-                sb.append(c.name).append('\n').append(c.publicKey).append("\n\nAddresses\n");
+                sb.append(c.name).append('\n').append(c.publicKey).append("\n\n").append(Language.msg(R.string.l10n_native_contacts_addresses)).append("\n");
                 for (String a : c.addresses) {
                     sb.append("  ").append(a).append('\n');
                 }
             }
         }
-        AlertDialog.Builder b = new AlertDialog.Builder(this)
+        AlertDialog.Builder b = new LanguageDialog(this)
                 .setTitle(Names.of(node, chat, mConversation))
-                .setMessage(sb.toString())
-                .setPositiveButton("Close", null)
-                .setNegativeButton("What do the ticks mean?", (d, w) ->
+                .setMessage(sb.build())
+                .setPositiveButton(Language.msg(R.string.l10n_language_close), null)
+                .setNegativeButton(Language.msg(R.string.l10n_android_chat_ticks_help), (d, w) ->
                         com.eurobuddha.maxima.app.ui.Explain.show(this, "ticks"));
         if (g != null && g.isAdmin(node.publicKeyHex())) {
-            b.setNeutralButton("Edit members", (d, w) -> editMembers(g));
+            b.setNeutralButton(Language.msg(R.string.l10n_desktop_chat_edit_members), (d, w) -> editMembers(g));
         }
         b.show();
     }
@@ -1758,17 +1757,16 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             labels[i] = contacts.get(i).name + "  " + Names.shorten(contacts.get(i).publicKey);
             checked[i] = zGroup.isMember(contacts.get(i).publicKey);
         }
-        new AlertDialog.Builder(this)
-                .setTitle("Members")
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_desktop_chat_members))
                 .setMultiChoiceItems(labels, checked, (d, which, isChecked) ->
                         checked[which] = isChecked)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Save", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_save), (d, w) -> {
                     int picked = 0;
                     for (boolean b : checked) if (b) picked++;
                     if (picked + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
-                        toast("A group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
-                                + " people including you - nothing changed");
+                        toast(Language.count(R.plurals.l10n_android_chat_group_limit, com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS).toString());
                         return;
                     }
                     for (int i = 0; i < contacts.size(); i++) {
@@ -1784,7 +1782,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         try {
                             MaximaService.chat().updateGroup(zGroup);
                         } catch (Exception e) {
-                            runOnUiThread(() -> toast("Failed: " + e.getMessage()));
+                            runOnUiThread(() -> toast(tr(R.string.l10n_native_chat_operation_failed, e.getMessage())));
                         }
                         runOnUiThread(this::render);
                     }, "update-group").start();
@@ -1802,42 +1800,42 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         ? com.eurobuddha.maxima.core.chat.ChatContact.address(e.body)
                 : com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
                         ? com.eurobuddha.maxima.core.chat.ChatPay.preview(e.body) : e.body;
-        final String copyLabel = media ? "Copy caption" : com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
-                ? "Copy contact address" : "Copy message";
+        final int copyLabel = media ? R.string.l10n_chat_copy_caption : com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
+                ? R.string.l10n_chat_copy_contact : R.string.l10n_chat_copy_message;
         final boolean haveImage = media && mImageCache.get(e.id) != null;
         final String txid = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
                 ? com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body) : "";
-        final List<String> items = new ArrayList<>();
+        final List<Integer> items = new ArrayList<>();
         if (copyText != null && !copyText.isEmpty()) {
             items.add(copyLabel);
         }
         if (!txid.isEmpty()) {
-            items.add("Copy transaction id");
+            items.add(R.string.l10n_desktop_chat_copy_tx);
         }
         if (haveImage) {
-            items.add("Save photo");
-            items.add("Share photo");
+            items.add(R.string.l10n_android_chat_save_photo);
+            items.add(R.string.l10n_android_chat_share_photo);
         }
-        items.add("Info");
-        new AlertDialog.Builder(this)
-                .setItems(items.toArray(new String[0]), (d, which) -> {
-                    String choice = items.get(which);
-                    if (copyLabel.equals(choice)) {
+        items.add(R.string.l10n_desktop_chat_info);
+        new LanguageDialog(this)
+                .actions(items, (d, which) -> {
+                    int choice = items.get(which);
+                    if (copyLabel == choice) {
                         android.content.ClipboardManager cm =
                                 getSystemService(android.content.ClipboardManager.class);
                         cm.setPrimaryClip(
                                 android.content.ClipData.newPlainText("message", copyText));
-                        toast("Copied");
-                    } else if ("Copy transaction id".equals(choice)) {
+                        toast(tr(R.string.l10n_common_copied));
+                    } else if (R.string.l10n_desktop_chat_copy_tx == choice) {
                         // The FULL txid - it exists to be pasted into an explorer.
                         android.content.ClipboardManager cm =
                                 getSystemService(android.content.ClipboardManager.class);
                         cm.setPrimaryClip(
                                 android.content.ClipData.newPlainText("txid", txid));
-                        toast("Transaction id copied");
-                    } else if ("Save photo".equals(choice)) {
+                        toast(tr(R.string.l10n_android_chat_tx_copied));
+                    } else if (R.string.l10n_android_chat_save_photo == choice) {
                         saveImage(e.id);
-                    } else if ("Share photo".equals(choice)) {
+                    } else if (R.string.l10n_android_chat_share_photo == choice) {
                         shareImage(e.id);
                     } else {
                         showMessageInfo(e);
@@ -1847,49 +1845,48 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private void showMessageInfo(ChatEngine.Entry e) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(e.mine ? "You" : Names.contact(MaximaService.port(), e.sender)).append('\n');
-        sb.append(new SimpleDateFormat("d MMM yyyy, HH:mm", Locale.UK)
-                .format(new Date(e.time)));
+        Language.TextBuilder sb = new Language.TextBuilder();
+        sb.append(e.mine ? Language.msg(R.string.l10n_notification_you) : Names.contact(MaximaService.port(), e.sender)).append('\n');
+        sb.append(Language.stamp(e.time, "yMMMdHm"));
         if (e.mine) {
-            sb.append("\n\nStatus: ").append(stateWord(e.state));
+            sb.append("\n\n").append(Language.msg(R.string.l10n_desktop_chat_status, stateWord(e.state)));
         }
         // A payment carries a transaction id - show it IN FULL (it is the only
         // way to look the payment up on-chain), never shortened.
         final String txid = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(e.body)
                 ? com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body) : "";
         if (!txid.isEmpty()) {
-            sb.append("\n\nTransaction:\n").append(txid);
+            sb.append("\n\n").append(Language.msg(R.string.l10n_desktop_chat_transaction, txid));
         }
-        AlertDialog.Builder b = new AlertDialog.Builder(this)
-                .setTitle("Message")
-                .setMessage(sb.toString())
-                .setPositiveButton("Close", null);
+        AlertDialog.Builder b = new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_chat_message))
+                .setMessage(sb.build())
+                .setPositiveButton(Language.msg(R.string.l10n_language_close), null);
         if (!txid.isEmpty()) {
-            b.setNeutralButton("Copy tx id", (d, w) -> {
+            b.setNeutralButton(Language.msg(R.string.l10n_android_chat_copy_tx), (d, w) -> {
                 android.content.ClipboardManager cm =
                         getSystemService(android.content.ClipboardManager.class);
                 cm.setPrimaryClip(android.content.ClipData.newPlainText("txid", txid));
-                toast("Transaction id copied");
+                toast(tr(R.string.l10n_android_chat_tx_copied));
             });
         }
         b.show();
     }
 
-    private static String stateWord(String zState) {
+    private CharSequence stateWord(String zState) {
         if (Receipt.FAILED.equals(zState)) {
-            return "Failed to send";
+            return Language.msg(R.string.l10n_android_chat_failed_send);
         }
         if (Receipt.READ.equals(zState)) {
-            return "Read";
+            return Language.msg(R.string.l10n_android_chat_read);
         }
         if (Receipt.DELIVERED.equals(zState)) {
-            return "Delivered";
+            return Language.msg(R.string.l10n_android_chat_delivered);
         }
         if (Receipt.SENT.equals(zState)) {
-            return "Sent (relay took it)";
+            return Language.msg(R.string.l10n_android_chat_sent_relay);
         }
-        return "Sending…";
+        return Language.msg(R.string.l10n_android_chat_sending);
     }
 
     /** A shared contact card: who, their full address (RULE 1: never shortened), and the hint. */
@@ -1897,7 +1894,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         String name = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
         String addr = com.eurobuddha.maxima.core.chat.ChatContact.address(e.body);
         android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
-        String head = "👤 " + (name.isEmpty() ? "(no name)" : name) + "\nShared contact";
+        String head = "👤 " + (name.isEmpty() ? tr(R.string.l10n_contacts_unnamed) : name) + "\n" + tr(R.string.l10n_contacts_shared);
         sb.append(head);
         sb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 2, head.indexOf('\n'),
                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -1905,7 +1902,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         int a0 = sb.length() - addr.length();
         sb.setSpan(new android.text.style.RelativeSizeSpan(0.8f), a0, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         sb.setSpan(new android.text.style.TypefaceSpan("monospace"), a0, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        sb.append("\n\nTap to add this contact");
+        sb.append("\n\n").append(tr(R.string.l10n_android_chat_add_hint));
         return sb;
     }
 
@@ -1913,28 +1910,30 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         final String name = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
         final String addr = com.eurobuddha.maxima.core.chat.ChatContact.address(e.body);
         if (addr.isEmpty()) {
-            toast("This card carries no address");
+            toast(tr(R.string.l10n_android_chat_card_address));
             return;
         }
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Add " + (name.isEmpty() ? "this contact" : name) + "?")
+        new LanguageDialog(this)
+                .setTitle(name.isEmpty() ? Language.msg(R.string.l10n_android_chat_add_unnamed) : Language.msg(R.string.l10n_android_chat_add_name, name))
                 .setMessage(addr)
-                .setPositiveButton("Add contact", (dlg, w) -> new Thread(() -> {
+                .setPositiveButton(Language.msg(R.string.l10n_contacts_add), (dlg, w) -> new Thread(() -> {
                     com.eurobuddha.maxima.core.MaximaNode node = MaximaService.node();
                     boolean ok = false;
                     try { if (node != null) { node.introduce(addr, true); ok = true; } } catch (Exception ignored) { }
                     final boolean fok = ok;
-                    runOnUiThread(() -> toast(fok ? "Introduction sent - they appear in Contacts once they answer" : "Could not add"));
+                    runOnUiThread(() -> toast(fok ? tr(R.string.l10n_android_chat_intro_sent) : tr(R.string.l10n_android_chat_could_not_add)));
                 }).start())
-                .setNeutralButton("Copy address", (dlg, w) -> {
+                .setNeutralButton(Language.msg(R.string.l10n_contacts_copy_address), (dlg, w) -> {
                     android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    if (cm != null) { cm.setPrimaryClip(android.content.ClipData.newPlainText("Parlons address", addr)); toast("Address copied"); }
+                    if (cm != null) { cm.setPrimaryClip(android.content.ClipData.newPlainText("Parlons address", addr)); toast(tr(R.string.l10n_native_contacts_address_copied)); }
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
-    private void toast(String zMsg) {
+    private String tr(int resource, Object... arguments) { return Language.text(this, resource, arguments); }
+
+    private void toast(CharSequence zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
     }
 
@@ -2026,7 +2025,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         String memo = com.eurobuddha.maxima.core.chat.ChatPay.memo(e.body);
         android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
         int hs = sb.length();
-        sb.append(e.mine ? "↑  You sent" : "↓  You received");
+        sb.append(e.mine ? tr(R.string.l10n_desktop_chat_sent_payment) : tr(R.string.l10n_desktop_chat_received_payment));
         sb.setSpan(new android.text.style.RelativeSizeSpan(0.82f), hs, sb.length(),
                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         sb.append('\n');
@@ -2045,7 +2044,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             String tx = com.eurobuddha.maxima.core.chat.ChatPay.txid(e.body);
             boolean confirmed = !tx.isEmpty() && isPayConfirmed(tx);
             int st = sb.length();
-            sb.append('\n').append(confirmed ? "✓ Confirmed" : "⏳ Pending…");
+            sb.append('\n').append(confirmed ? tr(R.string.l10n_android_chat_confirmed) : tr(R.string.l10n_android_chat_pending));
             sb.setSpan(new android.text.style.RelativeSizeSpan(0.82f), st, sb.length(),
                     android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
@@ -2125,7 +2124,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             h.image.setImageDrawable(null);
             h.audio.setVisibility(View.GONE);
             h.body.setVisibility(View.VISIBLE);
-            h.body.setText(paymentText(e));
+            com.eurobuddha.maxima.app.i18n.Language.setText(h.body, paymentText(e));
             h.body.setTextColor(getColor(R.color.ux_on_accent));
             h.body.setTextIsSelectable(false);
         } else {
@@ -2148,7 +2147,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
             if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body)) {
                 h.audio.setVisibility(View.GONE); h.image.setVisibility(View.GONE); h.image.setImageDrawable(null);
-                h.body.setVisibility(View.VISIBLE); h.body.setText(PrivateFileUi.label(e.body));
+                h.body.setVisibility(View.VISIBLE); com.eurobuddha.maxima.app.i18n.Language.setText(h.body, PrivateFileUi.label(e.body));
                 h.body.setOnClickListener(v -> fileUi().showBody(e.body));
                 h.bubble.setOnClickListener(v -> fileUi().showBody(e.body));
             } else if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)) {
@@ -2156,7 +2155,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.image.setVisibility(View.GONE);
                 h.image.setImageDrawable(null);
                 h.body.setVisibility(View.VISIBLE);
-                h.body.setText(contactCardText(e));
+                com.eurobuddha.maxima.app.i18n.Language.setText(h.body, contactCardText(e));
             } else if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(e.body)) {
                 String mime = com.eurobuddha.maxima.core.chat.ChatMedia.mime(e.body);
                 if (mime.startsWith("audio")) {
@@ -2168,7 +2167,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 } else {
                     h.audio.setVisibility(View.GONE);
                     String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(e.body);
-                    h.body.setText(cap);
+                    com.eurobuddha.maxima.app.i18n.Language.setText(h.body, cap);
                     h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
                     h.image.setVisibility(View.VISIBLE);
                     bindImage(h.image, e.body, e.id);
@@ -2178,7 +2177,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 h.image.setVisibility(View.GONE);
                 h.image.setImageDrawable(null);
                 h.body.setVisibility(View.VISIBLE);
-                h.body.setText(e.body);
+                com.eurobuddha.maxima.app.i18n.Language.setText(h.body, e.body);
             }
         }
 
@@ -2191,7 +2190,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         // Timestamp + ticks only on the last of a run (iMessage-style).
         if (r.lastInCluster) {
             h.meta.setVisibility(View.VISIBLE);
-            String stamp = mTime.format(new Date(e.time));
+            String stamp = Language.date(e.time, "Hm");
             if (e.mine) {
                 h.meta.setText(stamp + "  " + ticks(e.state));
                 h.meta.setTextColor(pay ? payMetaColour() : sentMetaColour(e.state));
@@ -2202,8 +2201,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                 // stamp; the second clock appears only when it tells you
                 // something ("sent 13:56 · arrived 14:02").
                 if (e.arrived > 0 && e.arrived - e.time >= 60_000) {
-                    h.meta.setText("sent " + stamp
-                            + " · arrived " + mTime.format(new Date(e.arrived)));
+                    h.meta.setText(tr(R.string.l10n_desktop_chat_late_delivery, stamp, Language.date(e.arrived, "Hm")));
                 } else {
                     h.meta.setText(stamp);
                 }
@@ -2258,4 +2256,11 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             }
         }
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        if (mAdapter != null) render();
+    }
+
 }

@@ -14,7 +14,7 @@ import android.view.ScaleGestureDetector;
  * chrome). Pure Matrix math on a stock ImageView - no libraries, matching the
  * app's no-deps drawn-UI language.
  */
-public final class ZoomImageView extends android.widget.ImageView {
+public final class ZoomImageView extends androidx.appcompat.widget.AppCompatImageView {
 
     private final Matrix mM = new Matrix();
     private final float[] mV = new float[9];

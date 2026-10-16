@@ -27,7 +27,8 @@
         android:textStyle="bold"
         android:textColor="@color/ide_text"
         android:textColorHint="@color/ide_dim"
-        android:hint="script name"
+        android:tag="l10n:hint=l10n_scripts_name"
+        android:hint="@string/l10n_scripts_name"
         android:background="@color/ide_bg_light" />
 
     <ScrollView
@@ -52,7 +53,8 @@
                 android:textSize="13sp"
                 android:textColor="@color/ide_text"
                 android:textColorHint="@color/ide_dim"
-                android:hint="/* KISS VM script */\nRETURN TRUE"
+                android:tag="l10n:hint=l10n_script_editor_source_hint"
+                android:hint="@string/l10n_script_editor_source_hint"
                 android:background="@color/ide_bg"
                 android:inputType="textMultiLine|textNoSuggestions" />
 
@@ -68,7 +70,7 @@
                 android:textSize="12sp"
                 android:textColor="@color/ide_dim"
                 android:background="@color/ide_bg_light"
-                android:text="0/1200 chars" />
+                android:text="" />
 
             <Button
                 android:id="@+id/editor_toggle_config"
@@ -76,7 +78,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/ide_accent"
-                android:text="▶ Test inputs" />
+                android:tag="l10n:text=l10n_script_editor_test_closed"
+                android:text="@string/l10n_script_editor_test_closed" />
 
             <LinearLayout
                 android:id="@+id/editor_runconfig"
@@ -95,7 +98,8 @@
                     android:textSize="12sp"
                     android:textColor="@color/ide_text"
                     android:textColorHint="@color/ide_dim"
-                    android:hint='state e.g. {"0":"0xFF..","6":"1"}'
+                    android:tag="l10n:hint=l10n_script_editor_state_hint"
+                    android:hint="@string/l10n_script_editor_state_hint"
                     android:inputType="text|textNoSuggestions" />
 
                 <EditText
@@ -106,7 +110,8 @@
                     android:textSize="12sp"
                     android:textColor="@color/ide_text"
                     android:textColorHint="@color/ide_dim"
-                    android:hint='prevstate e.g. {"0":"0xFF..","6":"0"}'
+                    android:tag="l10n:hint=l10n_script_editor_prev_hint"
+                    android:hint="@string/l10n_script_editor_prev_hint"
                     android:inputType="text|textNoSuggestions" />
 
                 <EditText
@@ -117,7 +122,8 @@
                     android:textSize="12sp"
                     android:textColor="@color/ide_text"
                     android:textColorHint="@color/ide_dim"
-                    android:hint='globals e.g. {"@COINAGE":"64","@AMOUNT":"10"}'
+                    android:tag="l10n:hint=l10n_script_editor_globals_hint"
+                    android:hint="@string/l10n_script_editor_globals_hint"
                     android:inputType="text|textNoSuggestions" />
 
                 <EditText
@@ -128,7 +134,8 @@
                     android:textSize="12sp"
                     android:textColor="@color/ide_text"
                     android:textColorHint="@color/ide_dim"
-                    android:hint='signatures e.g. ["0xFF.."]'
+                    android:tag="l10n:hint=l10n_script_editor_signatures_hint"
+                    android:hint="@string/l10n_script_editor_signatures_hint"
                     android:inputType="text|textNoSuggestions" />
 
             </LinearLayout>
@@ -142,7 +149,8 @@
                 android:textSize="12sp"
                 android:textIsSelectable="true"
                 android:textColor="@color/ide_dim"
-                android:text="Check = parse + address · Run = execute in the node VM with your test inputs" />
+                android:tag="l10n:text=l10n_script_editor_results_hint"
+                android:text="@string/l10n_script_editor_results_hint" />
 
         </LinearLayout>
 
@@ -178,24 +186,27 @@
             android:id="@+id/editor_check"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_marginEnd="4dp"
-            android:text="Check" />
+            android:tag="l10n:text=l10n_script_editor_check"
+            android:text="@string/l10n_script_editor_check" />
 
         <Button
             android:id="@+id/editor_run"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_marginEnd="4dp"
-            android:text="Run" />
+            android:tag="l10n:text=l10n_script_editor_run"
+            android:text="@string/l10n_script_editor_run" />
 
         <Button
             android:id="@+id/editor_deploy"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Deploy" />
+            android:layout_height="match_parent"
+            android:tag="l10n:text=l10n_script_editor_deploy"
+            android:text="@string/l10n_script_editor_deploy" />
 
     </LinearLayout>
 

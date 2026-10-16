@@ -124,7 +124,7 @@ final class VoiceNotes {
 
         String caption() {
             long ms = elapsedMs();
-            String dur = (ms / 60000) + ":" + String.format("%02d", (ms / 1000) % 60);
+            String dur = (ms / 60000) + ":" + String.format(java.util.Locale.ROOT, "%02d", (ms / 1000) % 60);
             return dur + "|" + Waveform.encode(Waveform.summarise(samples));
         }
     }
@@ -169,17 +169,21 @@ final class VoiceNotes {
         Recorder rec = new Recorder();
         if (!rec.start()) {
             javax.swing.JOptionPane.showMessageDialog(owner,
-                    "No microphone available.");
+                    Language.text("voice.noMicrophone"));
             return;
         }
+        showRecorder(owner, t, sink, rec);
+    }
+
+    private static JDialog showRecorder(Window owner, Theme t, Sink sink, Recorder rec) {
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new javax.swing.border.EmptyBorder(16, 16, 16, 16));
 
-        JLabel dot = new JLabel("●  Recording");
+        JLabel dot = Language.bind(new JLabel(), Language.msg("voice.recording"));
         dot.setForeground(new Color(0xE0, 0x52, 0x4D));
-        dot.setFont(t.semibold(13f));
+        Language.font(dot, t.semibold(13f));
         dot.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel timer = new JLabel("0:00");
         timer.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.BOLD, 26));
@@ -202,17 +206,29 @@ final class VoiceNotes {
         row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         DKit k = new DKit(t);
-        DKit.HoverButton send = k.primaryButton("Send");
-        DKit.HoverButton cancel = k.ghostButton("Cancel");
+        DKit.HoverButton send = k.primaryButton(Language.msg("chat.send"));
+        DKit.HoverButton cancel = k.ghostButton(Language.msg("common.cancel"));
         row.add(send);
         row.add(Box.createRigidArea(new Dimension(8, 0)));
         row.add(cancel);
         row.add(Box.createHorizontalGlue());
         body.add(row);
 
-        JDialog d = new JDialog(owner, "Voice note", JDialog.ModalityType.MODELESS);
+        JDialog d = new JDialog(owner, Language.text("desktopChat.voiceNote"), JDialog.ModalityType.MODELESS);
+        Language.title(d, Language.msg("desktopChat.voiceNote"));
         d.setContentPane(body);
-        d.setSize(320, 200);
+        d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        d.setSize(400, 260 * t.textPercent() / 100);
+        Runnable refresh = () -> {
+            Language.refresh(d);
+            DKit.layoutActions(row, Math.max(1, body.getWidth() - 32));
+        };
+        Language.addListener(refresh);
+        body.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent event) {
+                DKit.layoutActions(row, Math.max(1, body.getWidth() - 32));
+            }
+        });
         d.setLocationRelativeTo(owner);
 
         final boolean[] on = {true};
@@ -238,7 +254,7 @@ final class VoiceNotes {
         };
         Timer tick = new Timer(100, e -> {
             long ms = rec.elapsedMs();
-            timer.setText((ms / 60000) + ":" + String.format("%02d", (ms / 1000) % 60));
+            timer.setText((ms / 60000) + ":" + String.format(Language.locale(), "%02d", (ms / 1000) % 60));
             wave.update(rec.liveBars(LiveWave.BARS));
             on[0] = !on[0];
             dot.setForeground(on[0] ? new Color(0xE0, 0x52, 0x4D)
@@ -254,8 +270,13 @@ final class VoiceNotes {
         cancel.onClick(cancelOnce::run);
         d.addWindowListener(new java.awt.event.WindowAdapter() {
             public void windowClosing(java.awt.event.WindowEvent e) { cancelOnce.run(); }
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                Language.removeListener(refresh);
+                cancelOnce.run();
+            }
         });
         d.setVisible(true);
+        return d;
     }
 
     private static void finish(Recorder rec, JDialog d, Sink sink) {

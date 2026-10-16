@@ -1,6 +1,7 @@
 package com.eurobuddha.maxima.app;
 
 import android.view.View;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.view.WindowManager;
 import android.widget.Toast;
 
@@ -66,7 +67,7 @@ public final class LockGate {
             return;
         }
         mPrompting = true;
-        AppLock.authenticate(mAct, "Unlock Parlons", "Fingerprint or device PIN",
+        AppLock.authenticate(mAct, Language.text(mAct, R.string.l10n_native_lock_title), Language.text(mAct, R.string.l10n_native_lock_subtitle),
                 new AppLock.Callback() {
                     public void onSuccess() {
                         mPrompting = false;
@@ -118,14 +119,14 @@ public final class LockGate {
         icon.setColorFilter(mAct.getColor(R.color.ux_subtext));
         col.addView(icon, new android.widget.LinearLayout.LayoutParams((int) (46 * d), (int) (46 * d)));
         android.widget.TextView t = new android.widget.TextView(mAct);
-        t.setText("Parlons is locked");
+        Language.setText(t, Language.msg(R.string.l10n_native_lock_locked));
         t.setTextSize(16);
         t.setTextColor(mAct.getColor(R.color.ux_text));
         t.setGravity(android.view.Gravity.CENTER);
         t.setPadding(0, (int) (14 * d), 0, 0);
         col.addView(t);
         android.widget.TextView btn = new android.widget.TextView(mAct);
-        btn.setText("Unlock");
+        Language.setText(btn, Language.msg(R.string.l10n_native_lock_unlock));
         btn.setTextSize(14);
         btn.setGravity(android.view.Gravity.CENTER);
         btn.setTextColor(mAct.getColor(R.color.ux_on_accent));

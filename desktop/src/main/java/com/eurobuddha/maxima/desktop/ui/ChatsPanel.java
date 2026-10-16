@@ -92,6 +92,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private int mPaneWidth = 700;
     private String mLastSig = "";
     private String mThreadSig = "";
+    private boolean mComposing;
 
     // Bounded LRU: scaled ImageIcons accumulate over a long session viewing many
     // images. Cap so heap can't grow without bound (full-res bytes aren't held).
@@ -142,7 +143,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     g2.setColor(DKit.alpha(t.onHeader, 150));
                     g2.setFont(getFont());
                     java.awt.FontMetrics fm = g2.getFontMetrics();
-                    g2.drawString("Search chats", 1,
+                    g2.drawString(Language.text("chat.search"), 1,
                             (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
                     g2.dispose();
                 }
@@ -150,7 +151,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         };
         mSearch.setOpaque(false);
         mSearch.setBorder(new EmptyBorder(4, 0, 4, 0));
-        mSearch.setFont(t.font(13f));
+        Language.font(mSearch, t.font(13f));
         mSearch.setForeground(t.onHeader);
         mSearch.setCaretColor(t.onHeader);
         mSearch.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
@@ -175,6 +176,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         // 0x0 and invisible. Override doLayout() so children are sized on EVERY layout
         // pass (reliable), full-bleed list + bottom-right FAB.
         final SendFabLike fab = new SendFabLike(t);
+        Language.tooltip(fab, Language.msg("chat.newChat"));
         fab.onClick(this::showNewChat);
         javax.swing.JLayeredPane layered = new javax.swing.JLayeredPane() {
             public void doLayout() {
@@ -196,18 +198,19 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         head.setPreferredSize(new Dimension(10, HEADER_H));   // == list search band
         head.setMaximumSize(new Dimension(Integer.MAX_VALUE, HEADER_H));
         mBack = new Icons.Btn(Icons.CHEVRON_LEFT, t.onHeader, DKit.alpha(t.onHeader, 24), 32, 20, 2.2f);
+        Language.tooltip(mBack, Language.msg("chat.back"));
         mBack.onClick(() -> { mShowList = true; applyLayout(); });
         head.add(mBack);
         head.add(Box.createRigidArea(new Dimension(6, 0)));
         JPanel titleCol = new JPanel();
         titleCol.setOpaque(false);
         titleCol.setLayout(new BoxLayout(titleCol, BoxLayout.Y_AXIS));
-        mThreadTitle = new JLabel("Select a conversation");
-        mThreadTitle.setFont(t.semibold(15f));
+        mThreadTitle = Language.bind(new JLabel(), Language.msg("desktopChat.pickConversation"));
+        Language.font(mThreadTitle, t.semibold(15f), mThreadTitle.getText());
         mThreadTitle.setForeground(t.onHeader);
         mThreadTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
         mThreadSub = new JLabel(" ");
-        mThreadSub.setFont(t.font(11.5f));
+        Language.font(mThreadSub, t.font(11.5f), mThreadSub.getText());
         mThreadSub.setForeground(DKit.alpha(t.onHeader, 175));
         mThreadSub.setAlignmentX(Component.LEFT_ALIGNMENT);
         titleCol.add(mThreadTitle);
@@ -222,8 +225,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         // explain that calls run on the phone; incoming calls are declined
         // gracefully by DesktopCalls.
         Icons.Btn videoCall = new Icons.Btn(Icons.VIDEO, t.onHeader, DKit.alpha(t.onHeader, 24), 34, 20, 1.8f);
+        Language.tooltip(videoCall, Language.msg("call.video"));
         videoCall.onClick(() -> DesktopCalls.explainPlacingCalls(this));
         Icons.Btn voiceCall = new Icons.Btn(Icons.CALL, t.onHeader, DKit.alpha(t.onHeader, 24), 34, 18, 1.8f);
+        Language.tooltip(voiceCall, Language.msg("call.voice"));
         voiceCall.onClick(() -> DesktopCalls.explainPlacingCalls(this));
         head.add(videoCall);
         head.add(Box.createRigidArea(new Dimension(2, 0)));
@@ -237,6 +242,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mThreadScroll.setBorder(null);
         // Jump-to-latest FAB, shown only when scrolled up (phone parity).
         final DownFab downFab = new DownFab(t);
+        Language.tooltip(downFab, Language.msg("chat.latest"));
         downFab.onClick(this::jumpToLatest);
         downFab.setVisible(false);
         mScrollFab = downFab;
@@ -255,13 +261,29 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mInput = new JTextArea(1, 10);
         mInput.setLineWrap(true);
         mInput.setWrapStyleWord(true);
+        // Swing's input method handles candidate selection before key bindings.
+        // Do not send uncommitted text if a binding/button is invoked during composition.
+        mInput.addInputMethodListener(new java.awt.event.InputMethodListener() {
+            public void inputMethodTextChanged(java.awt.event.InputMethodEvent event) {
+                java.text.AttributedCharacterIterator text = event.getText();
+                mComposing = text != null && text.getEndIndex() - text.getBeginIndex() > event.getCommittedCharacterCount();
+            }
+            public void caretPositionChanged(java.awt.event.InputMethodEvent event) { }
+        });
         mConvPane.add(buildInputBar(), BorderLayout.SOUTH);
 
         applyLayout();   // default two-pane; onWidth() adjusts on first resize
     }
 
-    public String label() { return "Chats"; }
+    public String label() { return Language.text("nav.chats"); }
     public JComponent view() { return this; }
+
+    @Override public void languageChanged() {
+        // One pane is detached at phone widths. Refresh both, without rebuilding media widgets.
+        Language.refresh(mListPane);
+        Language.refresh(mConvPane);
+        updateBubbleWidths();
+    }
 
     public void onWidth(int contentWidth) {
         boolean narrow = contentWidth < NARROW;
@@ -301,11 +323,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private boolean matches(ChatEngine.Summary s) {
-        String q = mQuery.trim().toLowerCase();
+        String q = mQuery.trim();
         if (q.isEmpty()) return true;
         String title = titleFor(s.conversation, node.chat().group(s.conversation) != null);
-        return title.toLowerCase().contains(q)
-                || (s.lastBody != null && s.lastBody.toLowerCase().contains(q));
+        return com.eurobuddha.maxima.app.i18n.SearchText.indexOf(title, q) >= 0
+                || (s.lastBody != null && com.eurobuddha.maxima.app.i18n.SearchText.indexOf(s.lastBody, q) >= 0);
     }
 
     private static final int MAX_HITS = 50;
@@ -315,7 +337,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
      *  chat list already shows conversations). Mirrors the phone's SearchActivity. */
     private List<Hit> searchMessages(String zQuery) {
         List<Hit> hits = new java.util.ArrayList<>();
-        String q = zQuery.toLowerCase();
+        String q = zQuery;
         if (q.isEmpty()) return hits;
         ChatEngine ce = node.chat();
         outer:
@@ -325,7 +347,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             String title = titleFor(conv, group);
             for (ChatEngine.Entry e : ce.conversation(conv)) {
                 String text = searchable(e.body);
-                int at = text.toLowerCase().indexOf(q);
+                int at = com.eurobuddha.maxima.app.i18n.SearchText.indexOf(text, q);
                 if (at < 0) continue;
                 hits.add(new Hit(conv, title, snippet(text, at, q.length()), e.time, e.id));
                 if (hits.size() >= MAX_HITS) break outer;
@@ -351,6 +373,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private static String snippet(String zText, int zAt, int zLen) {
         int from = Math.max(0, zAt - 28);
         int to = Math.min(zText.length(), zAt + zLen + 60);
+        if (from > 0 && Character.isLowSurrogate(zText.charAt(from))) from--;
+        if (to < zText.length() && Character.isLowSurrogate(zText.charAt(to))) to++;
         return (from > 0 ? "…" : "") + zText.substring(from, to)
                 + (to < zText.length() ? "…" : "");
     }
@@ -419,16 +443,16 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             empty.setOpaque(false);
             empty.setBorder(new EmptyBorder(40, 20, 20, 20));
             empty.setLayout(new BoxLayout(empty, BoxLayout.Y_AXIS));
-            empty.add(k.sub(searching ? "No matches."
-                    : "No conversations yet. Add a contact to start."));
+            empty.add(k.sub(searching ? Language.msg("desktopChat.noMatches")
+                    : Language.msg("desktopChat.emptyChats")));
             mList.add(empty);
         }
         if (!sums.isEmpty()) {
-            if (searching) mList.add(sectionLabel("Chats"));
+            if (searching) mList.add(sectionLabel(Language.msg("nav.chats")));
             for (ChatEngine.Summary s : sums) mList.add(row(s));
         }
         if (!mHits.isEmpty()) {
-            mList.add(sectionLabel("Messages"));
+            mList.add(sectionLabel(Language.msg("notification.messages")));
             for (Hit h : mHits) mList.add(hitRow(h));
         }
         mList.add(Box.createVerticalGlue());
@@ -436,9 +460,9 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mList.repaint();
     }
 
-    private JComponent sectionLabel(String zText) {
-        JLabel l = new JLabel(zText.toUpperCase(java.util.Locale.UK));
-        l.setFont(t.semibold(10.5f));
+    private JComponent sectionLabel(CharSequence zText) {
+        JLabel l = Language.bind(new JLabel(), zText, text -> text.toUpperCase(Language.locale()));
+        Language.font(l, t.semibold(10.5f));
         l.setForeground(t.subtext);
         l.setBorder(new EmptyBorder(14, 16, 5, 16));
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -468,18 +492,18 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         head.setOpaque(false);
         head.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel title = new JLabel(h.title);
-        title.setFont(t.semibold(13.5f));
+        Language.font(title, t.semibold(13.5f), title.getText());
         title.setForeground(t.text);
         head.add(title, BorderLayout.CENTER);
         if (h.time > 0) {
-            JLabel when = new JLabel(shortDate(h.time));
-            when.setFont(t.font(11f));
+            JLabel when = Language.render(new JLabel(), () -> shortDate(h.time));
+            Language.font(when, t.font(11f));
             when.setForeground(t.subtext);
             head.add(when, BorderLayout.EAST);
         }
         col.add(head);
         JLabel sn = new JLabel(h.snippet);
-        sn.setFont(t.font(12f));
+        Language.font(sn, t.font(12f), sn.getText());
         sn.setForeground(t.subtext);
         sn.setAlignmentX(Component.LEFT_ALIGNMENT);
         col.add(sn);
@@ -492,8 +516,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private String shortDate(long zMs) {
-        return new java.text.SimpleDateFormat("d MMM", java.util.Locale.UK)
-                .format(new java.util.Date(zMs));
+        return Language.date(zMs, "zh-Hans".equals(Language.code()) ? "M月d日" : "d MMM");
     }
 
     /** Open a conversation and scroll to a specific message, which then pulses. */
@@ -570,12 +593,12 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mid.setOpaque(false);
         mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
         JLabel name = new JLabel(title);
-        name.setFont(t.semibold(13.5f));
+        Language.font(name, t.semibold(13.5f), name.getText());
         name.setForeground(t.text);
         name.setAlignmentX(Component.LEFT_ALIGNMENT);
-        String preview = (s.lastMine ? "You: " : "") + previewBody(s.lastBody);
-        JLabel last = new JLabel(clip(preview, 42));
-        last.setFont(t.font(12f));
+        JLabel last = Language.render(new JLabel(), () -> clip(s.lastMine
+                ? Language.text("chat.youPrefix", "message", previewBody(s.lastBody)) : previewBody(s.lastBody), 42));
+        Language.font(last, t.font(12f), last.getText());
         last.setForeground(t.subtext);
         last.setAlignmentX(Component.LEFT_ALIGNMENT);
         mid.add(name);
@@ -585,8 +608,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         JPanel right = new JPanel();
         right.setOpaque(false);
         right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
-        JLabel time = new JLabel(shortTime(s.lastTime));
-        time.setFont(t.font(10.5f));
+        JLabel time = Language.render(new JLabel(), () -> shortTime(s.lastTime));
+        Language.font(time, t.font(10.5f));
         time.setForeground(t.subtext);
         time.setAlignmentX(Component.RIGHT_ALIGNMENT);
         right.add(time);
@@ -612,11 +635,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private void rowMenu(ChatEngine.Summary s, String zTitle, MouseEvent ev) {
         javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
         if (s.unread > 0) {
-            javax.swing.JMenuItem read = new javax.swing.JMenuItem("Mark as read");
+            javax.swing.JMenuItem read = Language.bind(new javax.swing.JMenuItem(), Language.msg("nativeChat.markRead"));
             read.addActionListener(a -> { node.chat().markRead(s.conversation); mLastSig = ""; refresh(); });
             m.add(read);
         }
-        javax.swing.JMenuItem clear = new javax.swing.JMenuItem("Clear messages");
+        javax.swing.JMenuItem clear = Language.bind(new javax.swing.JMenuItem(), Language.msg("nativeChat.clearMessages"));
         clear.addActionListener(a -> confirmClear(s.conversation, zTitle));
         m.add(clear);
         m.show(ev.getComponent(), ev.getX(), ev.getY());
@@ -624,10 +647,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private void confirmClear(String zConv, String zTitle) {
         int r = javax.swing.JOptionPane.showConfirmDialog(this,
-                "Delete every message with " + zTitle + " on THIS machine.\n"
-                        + "It won't unsend anything or leave a group — the thread just\n"
-                        + "starts empty again. This can't be undone.",
-                "Clear this chat?", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                Language.text("desktopChat.clearQuestion", "name", zTitle),
+                Language.text("nativeChat.clearTitle"), javax.swing.JOptionPane.OK_CANCEL_OPTION,
                 javax.swing.JOptionPane.WARNING_MESSAGE);
         if (r == javax.swing.JOptionPane.OK_OPTION) {
             node.chat().clearConversation(zConv);
@@ -639,7 +660,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private JComponent unreadBadge(int n) {
         JLabel badge = new JLabel(String.valueOf(n), javax.swing.SwingConstants.CENTER);
-        badge.setFont(t.bold(10.5f));
+        Language.font(badge, t.bold(10.5f));
         badge.setForeground(Color.WHITE);
         DKit.RoundPanel b = new DKit.RoundPanel(t.error, 999);
         b.setLayout(new BorderLayout());
@@ -673,8 +694,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mOpenGroup = group;
         mShowList = false;
         node.chat().markRead(conversation);
-        mThreadTitle.setText(titleFor(conversation, group));
-        mThreadSub.setText(group ? groupSub(conversation) : peerSub(conversation));
+        Language.render(mThreadTitle, () -> titleFor(conversation, group));
+        Language.render(mThreadSub, () -> group ? groupSub(conversation) : peerSub(conversation));
         mLastSig = "";
         mThreadSig = "";
         if (mNarrow) applyLayout();
@@ -786,7 +807,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private static String dayKey(long ms) {
-        return new java.text.SimpleDateFormat("yyyyMMdd").format(new java.util.Date(ms));
+        return new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(new java.util.Date(ms));
     }
 
     /** "Today" / "Yesterday" / weekday-in-the-last-week / "d MMM yyyy". */
@@ -795,16 +816,14 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         day.setTimeInMillis(ms);
         java.util.Calendar now = java.util.Calendar.getInstance();
         String key = dayKey(ms);
-        if (key.equals(dayKey(now.getTimeInMillis()))) return "Today";
+        if (key.equals(dayKey(now.getTimeInMillis()))) return Language.text("date.today");
         now.add(java.util.Calendar.DAY_OF_YEAR, -1);
-        if (key.equals(dayKey(now.getTimeInMillis()))) return "Yesterday";
+        if (key.equals(dayKey(now.getTimeInMillis()))) return Language.text("date.yesterday");
         long ageDays = (System.currentTimeMillis() - ms) / (24L * 3600 * 1000);
         if (ageDays < 7) {
-            return new java.text.SimpleDateFormat("EEEE", java.util.Locale.UK)
-                    .format(new java.util.Date(ms));
+            return Language.date(ms, "EEEE");
         }
-        return new java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
-                .format(new java.util.Date(ms));
+        return Language.date(ms, "zh-Hans".equals(Language.code()) ? "yyyy年M月d日" : "d MMM yyyy");
     }
 
     /** Centered date pill, phone-style. */
@@ -816,8 +835,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         DKit.RoundPanel pill = k.round(t.input, 12);
         pill.setLayout(new BoxLayout(pill, BoxLayout.X_AXIS));
         pill.setBorder(new EmptyBorder(3, 12, 3, 12));
-        JLabel lbl = new JLabel(dateLabel(ms));
-        lbl.setFont(t.font(10.5f));
+        JLabel lbl = Language.render(new JLabel(), () -> dateLabel(ms));
+        Language.font(lbl, t.font(10.5f));
         lbl.setForeground(t.subtext);
         pill.add(lbl);
         pill.setMaximumSize(pill.getPreferredSize());
@@ -898,7 +917,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
         if (mOpenGroup && !mine && first) {
             JLabel who = new JLabel(nameFor(e.sender));
-            who.setFont(t.semibold(11f));
+            Language.font(who, t.semibold(11f), who.getText());
             who.setForeground(DKit.alpha(fg, 200));
             who.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(who);
@@ -907,20 +926,20 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (media) {
             addMediaTo(b, e.body, e.id, fg);
         } else if (pay) {
-            JLabel dir = new JLabel(mine ? "↑ You sent" : "↓ You received");
-            dir.setFont(t.font(11f));
+            JLabel dir = Language.bind(new JLabel(), mine ? Language.msg("desktopChat.sentPayment") : Language.msg("desktopChat.receivedPayment"));
+            Language.font(dir, t.font(11f), dir.getText());
             dir.setForeground(DKit.alpha(fg, 200));
             dir.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(dir);
             JLabel body = new JLabel(ChatPay.amount(e.body) + " " + ChatPay.tokenName(e.body));
-            body.setFont(t.semibold(16f));
+            Language.font(body, t.semibold(16f), body.getText());
             body.setForeground(fg);
             body.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(body);
             String memo = ChatPay.memo(e.body);
             if (memo != null && !memo.isEmpty()) {
                 JLabel mm = new JLabel(memo);
-                mm.setFont(t.font(12.5f));
+                Language.font(mm, t.font(12.5f), mm.getText());
                 mm.setForeground(DKit.alpha(fg, 210));
                 mm.setAlignmentX(Component.LEFT_ALIGNMENT);
                 b.add(mm);
@@ -934,13 +953,17 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     public void mouseClicked(MouseEvent ev) {
                         java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
                                 .setContents(new java.awt.datatransfer.StringSelection(txid), null);
-                        info("Transaction id copied:\n" + txid);
+                        info(Language.text("desktopChat.txCopied", "txid", txid));
                     }
                 });
             }
         } else if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(e.body)) {
             String filename = ChatMedia.caption(e.body);
-            javax.swing.JButton file = new javax.swing.JButton("📎 " + filename + " · Transfer controls");
+            DKit.WrapText fileName = new DKit.WrapText(filename);
+            Language.font(fileName, t.semibold(13f), filename);
+            fileName.setForeground(fg);
+            b.add(fileName);
+            javax.swing.JButton file = Language.bind(new javax.swing.JButton(), Language.msg("desktopChat.transferAction"));
             file.setForeground(fg); file.setContentAreaFilled(false); file.setAlignmentX(Component.LEFT_ALIGNMENT);
             final String conversation = mOpen; final boolean isGroup = mOpenGroup;
             file.addActionListener(event -> PrivateFileDialog.showBody(this, node, e.body, conversation, isGroup));
@@ -949,13 +972,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             // A shared contact: who, their full address, one action.
             final String cname = com.eurobuddha.maxima.core.chat.ChatContact.name(e.body);
             final String caddr = com.eurobuddha.maxima.core.chat.ChatContact.address(e.body);
-            JLabel head = new JLabel("👤 " + (cname.isEmpty() ? "(no name)" : cname));
-            head.setFont(t.semibold(14f));
+            JLabel head = Language.render(new JLabel(), () -> "👤 " + (cname.isEmpty() ? Language.text("contacts.unnamed") : cname));
+            Language.font(head, t.semibold(14f), head.getText());
             head.setForeground(fg);
             head.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(head);
-            JLabel kind = new JLabel("Shared contact");
-            kind.setFont(t.font(11f));
+            JLabel kind = Language.bind(new JLabel(), Language.msg("contacts.shared"));
+            Language.font(kind, t.font(11f), kind.getText());
             kind.setForeground(DKit.alpha(fg, 200));
             kind.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(kind);
@@ -967,7 +990,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             addrA.setLineWrap(true);
             addrA.setAlignmentX(Component.LEFT_ALIGNMENT);
             b.add(addrA);
-            DKit.HoverButton add = k.ghostButton("Add contact");
+            DKit.HoverButton add = k.ghostButton(Language.msg("contacts.add"));
             add.setAlignmentX(Component.LEFT_ALIGNMENT);
             add.onClick(() -> new Thread(() -> {
                 com.eurobuddha.maxima.core.MaximaNode n = node.node();
@@ -979,16 +1002,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
 
         if (last) {   // phone: timestamp + ticks only on the last bubble of a cluster
-            String metaTxt;
-            if (mine) {
-                metaTxt = time(e.time) + "  " + stateGlyph(e);
-            } else if (e.arrived > 0 && e.arrived - e.time >= 60_000) {
-                // A late relay delivery: show both clocks, like the phone.
-                metaTxt = "sent " + time(e.time) + " · arrived " + time(e.arrived);
-            } else {
-                metaTxt = time(e.time);
-            }
-            JLabel meta = new JLabel(metaTxt);
+            JLabel meta = Language.render(new JLabel(), () -> messageMeta(e));
             meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10)
                     .deriveFont(10f * t.textPercent() / 100f));
             meta.setForeground(DKit.alpha(fg, 160));
@@ -1011,6 +1025,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
         line.putClientProperty("entryId", e.id);   // for search scroll-to-bubble
         return line;
+    }
+
+    private String messageMeta(ChatEngine.Entry e) {
+        if (e.mine) return time(e.time) + "  " + stateGlyph(e);
+        if (e.arrived > 0 && e.arrived - e.time >= 60_000)
+            return Language.text("desktopChat.lateDelivery", "sent", time(e.time), "arrived", time(e.arrived));
+        return time(e.time);
     }
 
     private void installMessageMenu(Component component, ChatEngine.Entry entry) {
@@ -1047,13 +1068,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private void addLinkActions(javax.swing.JComponent menu, String url) {
-        javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open link");
+        javax.swing.JMenuItem open = Language.bind(new javax.swing.JMenuItem(), Language.msg("link.open"));
         open.addActionListener(a -> openLink(url)); menu.add(open);
-        javax.swing.JMenuItem copy = new javax.swing.JMenuItem("Copy link");
+        javax.swing.JMenuItem copy = Language.bind(new javax.swing.JMenuItem(), Language.msg("link.copy"));
         copy.addActionListener(a -> clip(url)); menu.add(copy);
         // Swing has no portable OS share sheet. Copying supplies the URL to any app.
-        javax.swing.JMenuItem share = new javax.swing.JMenuItem("Copy link to share");
-        share.addActionListener(a -> { clip(url); info("Link copied. Paste it into the conversation or app you want to share with."); });
+        javax.swing.JMenuItem share = Language.bind(new javax.swing.JMenuItem(), Language.msg("link.copyToShare"));
+        share.addActionListener(a -> { clip(url); info(Language.text("desktopChat.linkCopied")); });
         menu.add(share);
     }
 
@@ -1061,7 +1082,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (!url.regionMatches(true, 0, "http://", 0, 7) && !url.regionMatches(true, 0, "https://", 0, 8)) return;
         new Thread(() -> {
             try { java.awt.Desktop.getDesktop().browse(java.net.URI.create(url)); }
-            catch (Exception ex) { javax.swing.SwingUtilities.invokeLater(() -> info("Could not open the browser.")); }
+            catch (Exception ex) { javax.swing.SwingUtilities.invokeLater(() -> info(Language.text("desktopChat.browserFailed"))); }
         }, "chat-open-link").start();
     }
 
@@ -1071,14 +1092,14 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         boolean pay = ChatPay.isPayment(e.body);
         boolean card = com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body);
         if (card) {
-            javax.swing.JMenuItem ca = new javax.swing.JMenuItem("Copy contact address");
+            javax.swing.JMenuItem ca = Language.bind(new javax.swing.JMenuItem(), Language.msg("chat.copyContact"));
             ca.addActionListener(a -> clip(com.eurobuddha.maxima.core.chat.ChatContact.address(e.body)));
             m.add(ca);
         }
         String text = media ? (ChatMedia.mime(e.body).startsWith("audio/") ? "" : ChatMedia.caption(e.body))
                 : pay ? ChatPay.preview(e.body) : card ? "" : e.body;
         if (text != null && !text.isEmpty()) {
-            javax.swing.JMenuItem copy = new javax.swing.JMenuItem(media ? "Copy caption" : "Copy message");
+            javax.swing.JMenuItem copy = new javax.swing.JMenuItem(media ? Language.text("chat.copyCaption") : Language.text("chat.copyMessage"));
             copy.addActionListener(a -> clip(text)); m.add(copy);
             for (com.eurobuddha.maxima.core.chat.ChatLinks.Link link : com.eurobuddha.maxima.core.chat.ChatLinks.find(text)) {
                 javax.swing.JMenu linkMenu = new javax.swing.JMenu(link.url);
@@ -1088,20 +1109,20 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (pay) {
             String txid = ChatPay.txid(e.body);
             if (txid != null && !txid.isEmpty()) {
-                javax.swing.JMenuItem ct = new javax.swing.JMenuItem("Copy transaction id");
-                ct.addActionListener(a -> { clip(txid); info("Transaction id copied:\n" + txid); });
+                javax.swing.JMenuItem ct = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.copyTx"));
+                ct.addActionListener(a -> { clip(txid); info(Language.text("desktopChat.txCopied", "txid", txid)); });
                 m.add(ct);
             }
         }
         if (media) {
             String mime = ChatMedia.mime(e.body), ref = ChatMedia.ref(e.body);
             if (mime != null && mime.startsWith("image/") && ref != null) {
-                javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open image");
+                javax.swing.JMenuItem open = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.openImage"));
                 open.addActionListener(a -> openImage(e.id));
                 m.add(open);
             }
         }
-        javax.swing.JMenuItem info = new javax.swing.JMenuItem("Info");
+        javax.swing.JMenuItem info = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.info"));
         info.addActionListener(a -> showMessageInfo(e));
         m.add(info);
         m.show(anchor, x, y);
@@ -1114,14 +1135,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private void showMessageInfo(ChatEngine.Entry e) {
         StringBuilder sb = new StringBuilder();
-        sb.append("From: ").append(e.mine ? "you" : nameFor(e.sender)).append('\n');
-        sb.append("Sent: ").append(new java.util.Date(e.time)).append('\n');
-        if (e.arrived > 0) sb.append("Arrived: ").append(new java.util.Date(e.arrived)).append('\n');
-        sb.append("Status: ").append(e.state == null ? "—" : e.state);
+        sb.append(Language.text("desktopChat.from", "name", e.mine ? Language.text("desktopChat.you") : nameFor(e.sender))).append('\n');
+        sb.append(Language.text("desktopChat.sentAt", "time", fullDate(e.time))).append('\n');
+        if (e.arrived > 0) sb.append(Language.text("desktopChat.arrivedAt", "time", fullDate(e.arrived))).append('\n');
+        sb.append(Language.text("desktopChat.status", "state", stateText(e.state)));
         if (ChatPay.isPayment(e.body)) {
-            sb.append("\nAmount: ").append(ChatPay.amount(e.body)).append(' ')
-                    .append(ChatPay.tokenName(e.body));
-            sb.append("\nTransaction id: ").append(ChatPay.txid(e.body));
+            sb.append('\n').append(Language.text("desktopChat.amount", "amount", ChatPay.amount(e.body), "token", ChatPay.tokenName(e.body)));
+            sb.append('\n').append(Language.text("desktopChat.transaction", "txid", ChatPay.txid(e.body)));
         }
         info(sb.toString());
     }
@@ -1138,15 +1158,17 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         pill.setBorder(new EmptyBorder(4, 10, 4, 8));
 
         Icons.Btn attach = new Icons.Btn(Icons.PLUS, t.subtext, null, 30, 19, 2f);
+        Language.tooltip(attach, Language.msg("chat.attach"));
         attach.onClick(() -> showAttachMenu(attach));
         pill.add(attach);
         pill.add(Box.createRigidArea(new Dimension(2, 0)));
         Icons.Btn emoji = new Icons.Btn(Icons.SMILE, t.subtext, null, 30, 19, 1.6f);
+        Language.tooltip(emoji, Language.msg("chat.emoji"));
         emoji.onClick(() -> showEmojiPicker(emoji));
         pill.add(emoji);
         pill.add(Box.createRigidArea(new Dimension(8, 0)));
 
-        mInput.setFont(t.font(13.5f));
+        Language.font(mInput, t.font(13.5f));
         mInput.setForeground(t.text);
         mInput.setCaretColor(t.text);
         mInput.setOpaque(false);
@@ -1163,6 +1185,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         bar.add(pill, BorderLayout.CENTER);
 
         SendFab fab = new SendFab(t);
+        Language.tooltip(fab, Language.msg("chat.send"));
         fab.onClick(this::sendCurrent);
         JPanel fabWrap = new JPanel(new BorderLayout());
         fabWrap.setOpaque(false);
@@ -1178,11 +1201,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         mInput.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK), "newline");
         mInput.getActionMap().put("newline", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) { mInput.append("\n"); }
+            public void actionPerformed(ActionEvent e) { if (!mComposing) mInput.replaceSelection("\n"); }
         });
         ImagePasteSupport.install(mInput, () -> mOpen != null && !mShowList,
                 this::pasteImage);
-        mInput.setToolTipText("Paste an image with Ctrl+V (Command+V on Mac)");
+        Language.tooltip(mInput, Language.msg("desktopChat.pasteHint"));
         for (String shortcut : new String[]{"control V", "meta V"}) {
             mConvPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
                     .put(KeyStroke.getKeyStroke(shortcut), "paste-image-or-text");
@@ -1205,12 +1228,12 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     // Same six labelled categories as the phone's emoji panel.
     private static final String[][] EMOJI = {
-        {"Smileys", "😀 😂 🤣 😊 😇 😉 😍 🥰 😘 😜 🤪 🤔 🤐 😐 🙄 😬 😴 🥵 🥶 🤯 😳 🥺 😢 😭 😡 🤬 🤢 🥳 😎 🤓 🙈 🙉 🙊 💀 🤡 💩"},
-        {"Gestures", "👍 👎 👌 ✌️ 🤞 🤟 🤘 👊 ✊ 👏 🙌 👐 🤲 🤝 🙏 💪 ☝️ 👆 👇 👈 👉 🖐️ 🤙 👋"},
-        {"Hearts", "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💋 💌"},
-        {"Animals & nature", "🐶 🐱 🐭 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐵 🐔 🐧 🦆 🦅 🦉 🦋 🐝 🐢 🐙 🐳 🐬 🌵 🌲 🌻 🌹 🍂 ☀️ 🌙 ⭐ 🌈 ⚡ 🔥 ❄️ 🌊"},
-        {"Food & drink", "🍎 🍌 🍇 🍓 🍋 🥑 🍕 🍔 🍟 🌭 🌮 🍜 🍣 🍦 🍰 🍫 🍿 ☕ 🍺 🍷 🥂 🍵"},
-        {"Objects & symbols", "🎉 🎁 🎈 ⚽ 🏀 🎸 🎮 🎲 🚗 ✈️ 🚀 ⛵ 🏠 💡 🔑 💰 💎 ⏰ 📱 💻 🎧 📷 ✅ ❌ ❗ ❓ 💯 🎖️ 🏆 🚩"},
+        {"emoji.smileys", "😀 😂 🤣 😊 😇 😉 😍 🥰 😘 😜 🤪 🤔 🤐 😐 🙄 😬 😴 🥵 🥶 🤯 😳 🥺 😢 😭 😡 🤬 🤢 🥳 😎 🤓 🙈 🙉 🙊 💀 🤡 💩"},
+        {"emoji.gestures", "👍 👎 👌 ✌️ 🤞 🤟 🤘 👊 ✊ 👏 🙌 👐 🤲 🤝 🙏 💪 ☝️ 👆 👇 👈 👉 🖐️ 🤙 👋"},
+        {"emoji.hearts", "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💋 💌"},
+        {"emoji.nature", "🐶 🐱 🐭 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐵 🐔 🐧 🦆 🦅 🦉 🦋 🐝 🐢 🐙 🐳 🐬 🌵 🌲 🌻 🌹 🍂 ☀️ 🌙 ⭐ 🌈 ⚡ 🔥 ❄️ 🌊"},
+        {"emoji.food", "🍎 🍌 🍇 🍓 🍋 🥑 🍕 🍔 🍟 🌭 🌮 🍜 🍣 🍦 🍰 🍫 🍿 ☕ 🍺 🍷 🥂 🍵"},
+        {"emoji.objects", "🎉 🎁 🎈 ⚽ 🏀 🎸 🎮 🎲 🚗 ✈️ 🚀 ⛵ 🏠 💡 🔑 💰 💎 ⏰ 📱 💻 🎧 📷 ✅ ❌ ❗ ❓ 💯 🎖️ 🏆 🚩"},
     };
 
     private void showEmojiPicker(JComponent anchor) {
@@ -1222,8 +1245,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
         box.setBackground(t.card);
         for (String[] cat : EMOJI) {
-            JLabel label = new JLabel(cat[0].toUpperCase(java.util.Locale.UK));
-            label.setFont(t.semibold(10f));
+            JLabel label = Language.bind(new JLabel(), Language.msg(cat[0]), text -> text.toUpperCase(Language.locale()));
+            Language.font(label, t.semibold(10f));
             label.setForeground(t.subtext);
             label.setAlignmentX(Component.LEFT_ALIGNMENT);
             label.setBorder(new EmptyBorder(8, 4, 3, 0));
@@ -1263,15 +1286,18 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private void sendCurrent() {
+        if (mComposing) return;
         String txt = mInput.getText().trim();
         if (txt.isEmpty() || mOpen == null) return;
+        final String conversation = mOpen;
+        final boolean group = mOpenGroup;
         mInput.setText("");
         new Thread(() -> {
             try {
-                if (mOpenGroup) {
-                    node.chat().sendGroup(mOpen, txt);
+                if (group) {
+                    node.chat().sendGroup(conversation, txt);
                 } else {
-                    Contact c = node.port().contact(mOpen);
+                    Contact c = node.port().contact(conversation);
                     if (c != null) node.chat().send(c, txt);
                 }
             } catch (Exception ignored) { }
@@ -1287,7 +1313,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         body.setBackground(t.card);
         JDialogRef ref = new JDialogRef();
         if (cs.isEmpty()) {
-            body.add(k.sub("No contacts yet. Add someone in the Contacts tab first."));
+            body.add(k.sub(Language.msg("desktopChat.addContacts")));
         } else {
             // A group starts here too, exactly like the phone's overflow "New group".
             JPanel grp = new JPanel(new BorderLayout(12, 0));
@@ -1297,8 +1323,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             grp.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
             grp.add(new Icons.Btn(Icons.CONTACTS, t.accent, DKit.alpha(t.accent, 30), 38, 22, 1.8f),
                     BorderLayout.WEST);
-            JLabel gl = new JLabel("New group");
-            gl.setFont(t.semibold(13.5f));
+            JLabel gl = Language.bind(new JLabel(), Language.msg("chat.newGroup"));
+            Language.font(gl, t.semibold(13.5f), gl.getText());
             gl.setForeground(t.text);
             grp.add(gl, BorderLayout.CENTER);
             grp.addMouseListener(new MouseAdapter() {
@@ -1321,7 +1347,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
                 row.add(k.avatar(c.publicKey, name, 38), BorderLayout.WEST);
                 JLabel nm = new JLabel(name);
-                nm.setFont(t.semibold(13.5f));
+                Language.font(nm, t.semibold(13.5f), nm.getText());
                 nm.setForeground(t.text);
                 row.add(nm, BorderLayout.CENTER);
                 row.addMouseListener(new MouseAdapter() {
@@ -1339,7 +1365,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         sp.setBorder(null);
         sp.getViewport().setBackground(t.card);
         JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
-                "New chat", java.awt.Dialog.ModalityType.MODELESS);
+                Language.text("chat.newChat"), java.awt.Dialog.ModalityType.MODELESS);
+        Language.title(d, Language.msg("chat.newChat"));
         ref.d = d;
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setBackground(t.card);
@@ -1358,18 +1385,18 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
      *  the sole admin. */
     private void newGroup() {
         List<Contact> cs = node.port().contacts();
-        if (cs.isEmpty()) { info("Add some contacts first."); return; }
+        if (cs.isEmpty()) { info(Language.text("desktopChat.contactsFirst")); return; }
 
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(2, 2, 2, 2));
 
-        final JTextField nameField = k.field("Group name");
+        final JTextField nameField = k.field(Language.msg("chat.groupName"));
         nameField.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(nameField);
         body.add(k.vgap(10));
-        JLabel prompt = k.sub("Who is in the group?");
+        JLabel prompt = k.sub(Language.msg("nativeChat.pickMembers"));
         prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(prompt);
         body.add(k.vgap(4));
@@ -1379,7 +1406,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             javax.swing.JCheckBox cb = new javax.swing.JCheckBox(nameFor(c.publicKey));
             cb.setOpaque(false);
             cb.setForeground(t.text);
-            cb.setFont(t.font(13f));
+            Language.font(cb, t.font(13f), cb.getText());
             cb.setAlignmentX(Component.LEFT_ALIGNMENT);
             cb.putClientProperty("pk", c.publicKey);
             boxes.add(cb);
@@ -1393,7 +1420,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         sp.getViewport().setBackground(t.card);
 
         final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
-                "New group", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+                Language.text("chat.newGroup"), java.awt.Dialog.ModalityType.APPLICATION_MODAL);
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setBackground(t.card);
         wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
@@ -1403,19 +1430,19 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         buttons.setOpaque(false);
         buttons.setLayout(new BoxLayout(buttons, BoxLayout.X_AXIS));
         buttons.setBorder(new EmptyBorder(12, 0, 0, 0));
-        DKit.HoverButton how = k.ghostButton("How groups work");
-        how.onClick(() -> DesktopExplain.show(this, "groups"));
-        DKit.HoverButton cancel = k.ghostButton("Cancel");
+        DKit.HoverButton how = k.ghostButton(Language.msg("nativeChat.groupHelp"));
+        how.onClick(() -> DesktopExplain.show(this, "groups", t));
+        DKit.HoverButton cancel = k.ghostButton(Language.msg("common.cancel"));
         cancel.onClick(() -> d.dispose());
-        DKit.HoverButton create = k.primaryButton("Create");
+        DKit.HoverButton create = k.primaryButton(Language.msg("common.create"));
         create.onClick(() -> {
             java.util.List<String> members = new java.util.ArrayList<>();
             for (javax.swing.JCheckBox cb : boxes) {
                 if (cb.isSelected()) members.add((String) cb.getClientProperty("pk"));
             }
-            if (members.isEmpty()) { info("Pick at least one person."); return; }
+            if (members.isEmpty()) { info(Language.text("desktopChat.pickPerson")); return; }
             String n = nameField.getText().trim();
-            final String name = n.isEmpty() ? "Group" : n;
+            final String name = n.isEmpty() ? Language.text("chat.group") : n;
             d.dispose();
             new Thread(() -> {
                 try {
@@ -1428,7 +1455,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     });
                 } catch (Exception ex) {
                     javax.swing.SwingUtilities.invokeLater(() ->
-                            info("Could not create: " + ex.getMessage()));
+                            info(Language.text("desktopChat.createFailed", "error", Language.system(ex.getMessage()))));
                 }
             }, "create-group").start();
         });
@@ -1457,40 +1484,38 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (g != null) {
             String me = node.port().publicKeyHex();
             iAmAdmin = g.isAdmin(me);
-            JLabel h = k.sub("Members");
+            JLabel h = k.sub(Language.msg("desktopChat.members"));
             h.setAlignmentX(Component.LEFT_ALIGNMENT);
             body.add(h);
             body.add(k.vgap(4));
             for (String m : g.members()) {
-                String label = nameFor(m) + (g.isAdmin(m) ? "   (admin)" : "");
+                CharSequence label = g.isAdmin(m) ? Language.msg("desktopChat.adminName", "name", nameFor(m)) : nameFor(m);
                 // RULE 1: the member's full public key is one click away (copyField).
                 body.add(k.copyField(label, m, false));
                 body.add(k.vgap(6));
             }
             body.add(k.vgap(4));
-            JLabel note = k.sub("Every message is sealed separately to each member. "
-                    + "There is no shared group key, so removing someone removes them "
-                    + "immediately.");
+            JLabel note = k.sub(Language.msg("desktopChat.groupHelp"));
             note.setAlignmentX(Component.LEFT_ALIGNMENT);
             body.add(note);
         } else {
             Contact c = node.port().contact(mOpen);
             if (c == null) {
-                body.add(k.sub("Not in your contacts."));
+                body.add(k.sub(Language.msg("desktopChat.notContact")));
             } else {
-                JLabel nm = new JLabel(c.name == null ? "Contact" : c.name);
-                nm.setFont(t.semibold(15f));
+                JLabel nm = new JLabel(c.name == null ? Language.text("notification.contact") : c.name);
+                Language.font(nm, t.semibold(15f), nm.getText());
                 nm.setForeground(t.text);
                 nm.setAlignmentX(Component.LEFT_ALIGNMENT);
                 body.add(nm);
                 body.add(k.vgap(8));
-                body.add(k.copyField("maxima publickey", c.publicKey, false));
+                body.add(k.copyField(Language.msg("desktop.publicKey"), c.publicKey, false));
                 if (c.addresses != null) {
                     int i = 0;
                     for (String a : c.addresses) {
                         if (a == null || a.isEmpty()) continue;
                         body.add(k.vgap(6));
-                        body.add(k.copyField("host " + (++i), a, false));
+                        body.add(k.copyField(Language.msg("nativeContacts.hostNumber", "number", ++i), a, false));
                     }
                 }
             }
@@ -1514,7 +1539,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             bar.setOpaque(false);
             bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
             bar.setBorder(new EmptyBorder(12, 0, 0, 0));
-            DKit.HoverButton edit = k.primaryButton("Edit members");
+            DKit.HoverButton edit = k.primaryButton(Language.msg("desktopChat.editMembers"));
             edit.onClick(() -> { d.dispose(); editMembers(fg); });
             bar.add(Box.createHorizontalGlue());
             bar.add(edit);
@@ -1537,7 +1562,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             javax.swing.JCheckBox cb = new javax.swing.JCheckBox(nameFor(c.publicKey));
             cb.setOpaque(false);
             cb.setForeground(t.text);
-            cb.setFont(t.font(13f));
+            Language.font(cb, t.font(13f), cb.getText());
             cb.setSelected(zGroup.isMember(c.publicKey));
             cb.setAlignmentX(Component.LEFT_ALIGNMENT);
             cb.putClientProperty("pk", c.publicKey);
@@ -1551,7 +1576,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         sp.getViewport().setBackground(t.card);
 
         final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
-                "Members", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+                Language.text("desktopChat.members"), java.awt.Dialog.ModalityType.APPLICATION_MODAL);
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setBackground(t.card);
         wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
@@ -1560,9 +1585,9 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         bar.setOpaque(false);
         bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
         bar.setBorder(new EmptyBorder(12, 0, 0, 0));
-        DKit.HoverButton cancel = k.ghostButton("Cancel");
+        DKit.HoverButton cancel = k.ghostButton(Language.msg("common.cancel"));
         cancel.onClick(() -> d.dispose());
-        DKit.HoverButton save = k.primaryButton("Save");
+        DKit.HoverButton save = k.primaryButton(Language.msg("common.save"));
         save.onClick(() -> {
             for (javax.swing.JCheckBox cb : boxes) {
                 String pk = (String) cb.getClientProperty("pk");
@@ -1575,7 +1600,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     node.chat().updateGroup(zGroup);
                     javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
                 } catch (Exception ex) {
-                    javax.swing.SwingUtilities.invokeLater(() -> info("Failed: " + ex.getMessage()));
+                    javax.swing.SwingUtilities.invokeLater(() -> info(Language.text("desktopChat.failed", "error", Language.system(ex.getMessage()))));
                 }
             }, "update-group").start();
         });
@@ -1593,7 +1618,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private javax.swing.JComponent linkedText(String text, Color fg) {
         if (com.eurobuddha.maxima.core.chat.ChatLinks.find(text).isEmpty()) {
             DKit.WrapText body = new DKit.WrapText(text);
-            body.setFont(t.font(13.5f)); body.setForeground(fg); body.setOpaque(false);
+            Language.font(body, t.font(13.5f), text); body.setForeground(fg); body.setOpaque(false);
             body.setEditable(false); body.setFocusable(false);
             body.setLineWrap(true); body.setWrapStyleWord(true);
             body.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1621,7 +1646,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         };
         view.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
         view.setContentType("text/html");
-        view.setFont(t.font(13.5f)); view.setForeground(fg);
+        Language.font(view, t.font(13.5f), text); view.setForeground(fg);
         view.setOpaque(false); view.setEditable(false); view.setBorder(null);
         view.setText("<html><body style='color:" + colour + ";margin:0'>"
                 + html.toString().replace("\n", "<br>") + "</body></html>");
@@ -1657,13 +1682,13 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (cached != null) {
             img.setIcon(cached);
         } else if (isImage) {
-            img.setText("Loading image…");
-            img.setFont(t.font(12f));
+            Language.bind(img, Language.msg("desktopChat.loadingImage"));
+            Language.font(img, t.font(12f));
             img.setForeground(DKit.alpha(fg, 170));
             fetchThumb(ref, img);
         } else {
-            img.setText("📎 " + (mime == null ? "attachment" : mime));
-            img.setFont(t.font(12.5f));
+            Language.render(img, () -> "📎 " + (mime == null ? Language.text("desktopChat.attachment") : mime));
+            Language.font(img, t.font(12.5f));
             img.setForeground(fg);
         }
         b.add(img);
@@ -1698,7 +1723,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     target.revalidate();
                 });
             } catch (Exception e) {
-                javax.swing.SwingUtilities.invokeLater(() -> target.setText("Image unavailable"));
+                javax.swing.SwingUtilities.invokeLater(() -> Language.bind(target, Language.msg("desktopChat.imageUnavailable")));
             }
         }, "media-fetch").start();
     }
@@ -1734,19 +1759,19 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private void showAttachMenu(Component anchor) {
         if (mOpen == null) return;
         javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
-        javax.swing.JMenuItem photo = new javax.swing.JMenuItem("Photo…");
+        javax.swing.JMenuItem photo = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.photoPick"));
         photo.addActionListener(e -> attachFile());
         m.add(photo);
-        javax.swing.JMenuItem privateFile = new javax.swing.JMenuItem("Private file…");
+        javax.swing.JMenuItem privateFile = Language.bind(new javax.swing.JMenuItem(), Language.msg("files.privatePick"));
         privateFile.addActionListener(e -> PrivateFileDialog.choose(this, node, mOpen, mOpenGroup)); m.add(privateFile);
-        javax.swing.JMenuItem transfers = new javax.swing.JMenuItem("File transfers");
+        javax.swing.JMenuItem transfers = Language.bind(new javax.swing.JMenuItem(), Language.msg("files.title"));
         transfers.addActionListener(e -> PrivateFileDialog.list(this, node)); m.add(transfers);
-        javax.swing.JMenuItem voice = new javax.swing.JMenuItem("Voice note");
+        javax.swing.JMenuItem voice = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.voiceNote"));
         voice.addActionListener(e -> VoiceNotes.record(
                 javax.swing.SwingUtilities.getWindowAncestor(this), t, this::sendVoice));
         m.add(voice);
         if (!mOpenGroup) {
-            javax.swing.JMenuItem pay = new javax.swing.JMenuItem("Send payment");
+            javax.swing.JMenuItem pay = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.sendPayment"));
             pay.addActionListener(e -> showPaymentDialog());
             m.add(pay);
         }
@@ -1760,53 +1785,57 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (mOpen == null || mOpenGroup) return;
         final Contact contact = node.port().contact(mOpen);
         final String addr = node.chat().walletAddress(mOpen);
-        if (contact == null) { info("Payments need a known contact."); return; }
+        if (contact == null) { info(Language.text("desktopChat.knownContact")); return; }
         if (addr == null || addr.isEmpty() || addr.startsWith("Mx00")) {
-            info("No wallet address for this contact yet — they need to share one.");
+            info(Language.text("desktopChat.noWalletAddress"));
             return;
         }
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(14, 14, 14, 14));
-        JLabel to = new JLabel("To " + nameFor(mOpen));
-        to.setFont(t.semibold(13.5f)); to.setForeground(t.text); to.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel to = Language.bind(new JLabel(), Language.msg("desktopChat.to", "name", nameFor(mOpen)));
+        Language.font(to, t.semibold(13.5f), to.getText()); to.setForeground(t.text); to.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(to);
         body.add(Box.createVerticalStrut(10));
-        JTextField amt = k.field("amount (MINIMA)");
+        JTextField amt = k.field(Language.msg("desktopChat.amountHint"));
         amt.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); amt.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(amt); body.add(Box.createVerticalStrut(8));
-        JTextField memo = k.field("note (optional)");
+        JTextField memo = k.field(Language.msg("desktopChat.noteHint"));
         memo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); memo.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(memo); body.add(Box.createVerticalStrut(12));
-        JLabel status = new JLabel(" ");
-        status.setFont(t.font(12f)); status.setForeground(t.subtext); status.setAlignmentX(Component.LEFT_ALIGNMENT);
-        DKit.HoverButton send = k.primaryButton("Sign & send");
+        JLabel status = k.sub(" ");
+        Language.font(status, t.font(12f)); status.setForeground(t.subtext); status.setAlignmentX(Component.LEFT_ALIGNMENT);
+        DKit.HoverButton send = k.primaryButton(Language.msg("desktopChat.signSend"));
         send.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(send); body.add(Box.createVerticalStrut(6)); body.add(status);
 
         JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
-                "Send payment", java.awt.Dialog.ModalityType.MODELESS);
-        d.setContentPane(body);
-        d.setSize(380, 250);
+                Language.text("desktopChat.sendPayment"), java.awt.Dialog.ModalityType.MODELESS);
+        Language.title(d, Language.msg("desktopChat.sendPayment"));
+        JScrollPane scroll = new JScrollPane(new DKit.ScrollableColumn(body),
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null); scroll.getViewport().setBackground(t.card);
+        d.setContentPane(scroll);
+        d.setSize(490, Math.min(java.awt.Toolkit.getDefaultToolkit().getScreenSize().height - 80, 300 * t.textPercent() / 100));
         d.setLocationRelativeTo(this);
 
         send.onClick(() -> {
             String a = amt.getText().trim();
             final org.minima.objects.base.MiniNumber amount;
             try { amount = new org.minima.objects.base.MiniNumber(a); }
-            catch (Exception ex) { status.setText("Bad amount."); return; }
+            catch (Exception ex) { Language.bind(status, Language.msg("desktopChat.badAmount")); return; }
             if (!amount.isMore(org.minima.objects.base.MiniNumber.ZERO)) {
-                status.setText("Amount must be greater than 0."); return;
+                Language.bind(status, Language.msg("desktopChat.positiveAmount")); return;
             }
             WalletPanel wallet = mHost == null ? null : mHost.wallet();
-            if (wallet == null) { status.setText("Wallet unavailable."); return; }
+            if (wallet == null) { Language.bind(status, Language.msg("desktopChat.walletUnavailable")); return; }
             final String memoText = memo.getText().trim();
             send.setButtonEnabled(false);
-            status.setText("Preparing…");
+            Language.bind(status, Language.msg("nativeFiles.preparing"));
             new Thread(() -> wallet.requestPayment(addr, amount, new WalletPanel.PayResult() {
                 public void onStatus(String s) {
-                    javax.swing.SwingUtilities.invokeLater(() -> status.setText(s));
+                    javax.swing.SwingUtilities.invokeLater(() -> k.renderSub(status, () -> WalletPanel.systemText(s)));
                 }
                 public void onTxid(String txid) {
                     // This callback arrives on the EDT (publish delivers via invokeLater),
@@ -1822,7 +1851,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 }
                 public void onError(String e) {
                     javax.swing.SwingUtilities.invokeLater(() -> {
-                        status.setText(e == null ? "Send failed." : e);
+                        k.renderSub(status, () -> e == null ? Language.text("desktopChat.sendFailed") : WalletPanel.systemText(e));
                         send.setButtonEnabled(true);
                     });
                 }
@@ -1851,7 +1880,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; refresh(); });
             } catch (Exception ex) {
                 javax.swing.SwingUtilities.invokeLater(() ->
-                        javax.swing.JOptionPane.showMessageDialog(this, "Couldn't send: " + ex.getMessage()));
+                        javax.swing.JOptionPane.showMessageDialog(this, Language.text("desktopChat.sendError", "error", Language.system(ex.getMessage()))));
             }
         }, "chat-voice").start();
     }
@@ -1885,6 +1914,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         bars.setMaximumSize(new Dimension(150, 26));
 
         final PlayButton play = new PlayButton(fg);
+        Language.tooltip(play, Language.msg("media.play"));
         play.onToggle(playing -> {
             if (!playing) { VoiceNotes.stop(); return; }
             new Thread(() -> {
@@ -1933,7 +1963,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
         void onToggle(java.util.function.Consumer<Boolean> c) { cb = c; }
 
-        void setPlaying(boolean p) { playing = p; repaint(); }
+        void setPlaying(boolean p) { playing = p; Language.tooltip(this, Language.msg(p ? "desktopChat.stop" : "media.play")); repaint(); }
 
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
@@ -1963,8 +1993,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (mOpen == null) return;
         final String conversation = mOpen;
         final boolean group = mOpenGroup;
-        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        fc.setDialogTitle("Send a photo");
+        javax.swing.JFileChooser fc = Language.fileChooser();
+        fc.setDialogTitle(Language.text("desktopChat.photoTitle"));
         if (fc.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
         java.io.File f = fc.getSelectedFile();
         new Thread(() -> {
@@ -1996,17 +2026,17 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     if (!isDisplayable()) return;
                     JTextArea caption = new JTextArea(3, 28);
                     caption.setLineWrap(true); caption.setWrapStyleWord(true);
-                    caption.setFont(t.font(13.5f));
+                    Language.font(caption, t.font(13.5f));
                     JPanel preview = new JPanel(new BorderLayout(0, 12));
                     preview.add(new JLabel(icon), BorderLayout.CENTER);
                     JPanel bottom = new JPanel(new BorderLayout(0, 4));
-                    bottom.add(new JLabel("Caption (optional)"), BorderLayout.NORTH);
+                    bottom.add(Language.bind(new JLabel(), Language.msg("desktopChat.caption")), BorderLayout.NORTH);
                     bottom.add(new JScrollPane(caption), BorderLayout.CENTER);
                     preview.add(bottom, BorderLayout.SOUTH);
                     int choice = javax.swing.JOptionPane.showOptionDialog(this, preview,
-                            "Send image to " + recipient, javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                            Language.text("desktopChat.imageTo", "name", recipient), javax.swing.JOptionPane.OK_CANCEL_OPTION,
                             javax.swing.JOptionPane.PLAIN_MESSAGE, null,
-                            new String[]{"Send", "Cancel"}, "Send");
+                            new String[]{Language.text("chat.send"), Language.text("common.cancel")}, Language.text("chat.send"));
                     if (choice != 0) return;
                     final String text = caption.getText();
                     new Thread(() -> {
@@ -2037,7 +2067,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private void attachmentError(Exception ex) {
         javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(
-                this, "Couldn't send image: " + ex.getMessage(), "Image", javax.swing.JOptionPane.ERROR_MESSAGE));
+                this, Language.text("desktopChat.imageError", "error", Language.system(ex.getMessage())), Language.text("desktopChat.image"), javax.swing.JOptionPane.ERROR_MESSAGE));
     }
 
     // ---- helpers ----
@@ -2045,7 +2075,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private String titleFor(String conversation, boolean group) {
         if (group) {
             com.eurobuddha.maxima.core.chat.Group g = node.chat().group(conversation);
-            return g != null ? g.name : "Group";
+            return g != null ? g.name : Language.text("chat.group");
         }
         return nameFor(conversation);
     }
@@ -2058,20 +2088,31 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private String peerSub(String pubkey) {
         Contact c = node.port().contact(pubkey);
-        if (c == null) return "unknown contact";
+        if (c == null) return Language.text("desktopChat.unknownContact");
         long ls = c.lastSeen;
-        if (ls <= 0) return "offline";
+        if (ls <= 0) return Language.text("nativeContacts.offline");
         long d = System.currentTimeMillis() - ls;
-        return d < 30 * 60 * 1000L ? "online" : "last seen " + ago(d);
+        return d < 30 * 60 * 1000L ? Language.text("presence.online") : Language.text("presence.lastSeen", "time", Language.relative(d));
     }
 
     private String groupSub(String id) {
         com.eurobuddha.maxima.core.chat.Group g = node.chat().group(id);
-        return g == null ? "" : g.size() + " members";
+        return g == null ? "" : Language.text("chat.members", "count", g.size());
     }
 
     private static String previewBody(String body) {
-        if (ChatMedia.isMedia(body)) return "📷 Photo";
+        if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(body))
+            return Language.text("desktopChat.filePreview", "name", ChatMedia.caption(body));
+        if (ChatMedia.isMedia(body)) {
+            String mime = ChatMedia.mime(body);
+            if (mime != null && mime.startsWith("audio/")) return Language.text("media.voice");
+            if (mime != null && mime.startsWith("video/")) return Language.text("media.video");
+            return Language.text("media.photo");
+        }
+        if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(body)) {
+            String name = com.eurobuddha.maxima.core.chat.ChatContact.name(body);
+            return name.isEmpty() ? Language.text("media.unnamedContact") : Language.text("media.contact", "name", name);
+        }
         if (ChatPay.isPayment(body)) return "💸 " + ChatPay.amount(body) + " " + ChatPay.tokenName(body);
         return body == null ? "" : body;
     }
@@ -2091,27 +2132,37 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private static String time(long ms) {
-        return new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date(ms));
+        return Language.date(ms, "HH:mm");
     }
 
     private static String shortTime(long ms) {
         if (ms <= 0) return "";
         long d = System.currentTimeMillis() - ms;
         if (d < 24 * 3600_000L) return time(ms);
-        return new java.text.SimpleDateFormat("dd MMM").format(new java.util.Date(ms));
+        return Language.date(ms, "zh-Hans".equals(Language.code()) ? "M月d日" : "d MMM");
     }
 
-    private static String ago(long ms) {
-        long m = ms / 60000;
-        if (m < 60) return m + "m";
-        long h = m / 60;
-        if (h < 24) return h + "h";
-        return (h / 24) + "d";
+    private static String fullDate(long ms) {
+        return java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
+                java.text.DateFormat.MEDIUM, Language.locale()).format(new java.util.Date(ms));
+    }
+
+    private static String stateText(String state) {
+        if (state == null) return "—";
+        switch (state) {
+            case "sent": return Language.text("desktopChat.stateSent");
+            case "delivered": return Language.text("desktopChat.stateDelivered");
+            case "read": return Language.text("desktopChat.stateRead");
+            case "sending": return Language.text("desktopChat.stateSending");
+            case "queued": return Language.text("desktopChat.stateQueued");
+            case "failed": return Language.text("desktopChat.stateFailed");
+            default: return state;
+        }
     }
 
     private static String clip(String s, int n) {
         if (s == null) return "";
-        return s.length() > n ? s.substring(0, n - 1) + "…" : s;
+        return s.codePointCount(0, s.length()) > n ? s.substring(0, s.offsetByCodePoints(0, n - 1)) + "…" : s;
     }
 
     private static String escHtml(String s) {

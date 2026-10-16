@@ -1,5 +1,6 @@
 /* Full-window incoming screen, using the panel's existing theme, avatar and button styles. */
 window.initParlonsCalls = function ({api, avatar, toast}) {
+  const I = window.ParlonsI18n;
   const $ = id => document.getElementById(id);
   const screen = document.createElement('section');
   screen.id = 'callScreen'; screen.className = 'call-screen'; screen.hidden = true;
@@ -7,9 +8,10 @@ window.initParlonsCalls = function ({api, avatar, toast}) {
   screen.setAttribute('aria-labelledby', 'callName');
   screen.innerHTML = '<div class="call-heading"><div class="call-brand">Parlons</div><div id="callAvatar"></div><h1 id="callName"></h1><p id="callStatus" role="status"></p></div>'
     + '<div class="call-video" id="callVideo" hidden><video id="callRemote" autoplay playsinline></video><video id="callLocal" autoplay playsinline muted></video></div>'
-    + '<p class="call-audio-note" id="callAudioNote" hidden>Sound is paused by your browser. <button class="btn" id="callEnableSound">Enable sound</button></p>'
-    + '<div class="call-controls"><button class="btn" id="callMute" hidden>Mute</button><button class="btn" id="callCamera" hidden>Camera off</button>'
-    + '<button class="btn call-decline" id="callEnd">Decline</button><button class="btn call-answer" id="callAnswer">Answer</button></div>';
+    + '<p class="call-audio-note" id="callAudioNote" hidden><span data-i18n="call.soundPaused">Sound is paused by your browser.</span> <button class="btn" id="callEnableSound" data-i18n="call.enableSound">Enable sound</button></p>'
+    + '<div class="call-controls"><button class="btn" id="callMute" data-i18n="call.mute" hidden>Mute</button><button class="btn" id="callCamera" data-i18n="call.cameraOff" hidden>Camera off</button>'
+    + '<button class="btn call-decline" id="callEnd" data-i18n="call.decline">Decline</button><button class="btn call-answer" id="callAnswer" data-i18n="call.answer">Answer</button></div>';
+  I.apply(screen);
   document.body.appendChild(screen);
   let ringing = null, audio = null, previousFocus = null, shownId = '', ticker = null;
   function stopRing() {
@@ -50,7 +52,7 @@ window.initParlonsCalls = function ({api, avatar, toast}) {
       if (c.state === 'ENDED') {
         stopRing(); screen.hidden = true; $('app').inert = false; shownId = '';
         if (previousFocus && previousFocus.isConnected) previousFocus.focus();
-        toast(c.reason); return;
+        toast(I.system(c.reason)); return;
       }
       const incoming = c.state === 'INCOMING_RINGING';
       if (shownId !== c.id) {
@@ -62,18 +64,19 @@ window.initParlonsCalls = function ({api, avatar, toast}) {
       }
       if (!incoming) stopRing();
       $('callAnswer').hidden = !incoming;
-      $('callEnd').textContent = incoming ? 'Decline' : 'End call';
-      $('callMute').hidden = !c.media; $('callMute').textContent = c.muted ? 'Unmute' : 'Mute';
+      I.bind($('callEnd'), incoming ? 'call.decline' : 'call.end');
+      $('callMute').hidden = !c.media; I.bind($('callMute'), c.muted ? 'call.unmute' : 'call.mute');
       $('callMute').setAttribute('aria-pressed', String(c.muted));
-      $('callCamera').hidden = !c.video || !c.media; $('callCamera').textContent = c.cameraOff ? 'Camera on' : 'Camera off';
+      $('callCamera').hidden = !c.video || !c.media; I.bind($('callCamera'), c.cameraOff ? 'call.cameraOn' : 'call.cameraOff');
       $('callCamera').setAttribute('aria-pressed', String(c.cameraOff));
       // Keep the remote element playing for voice calls too (only its visual container is hidden).
       $('callVideo').hidden = !c.video || incoming;
       const status = () => {
         const elapsed = c.liveSince ? Math.floor((Date.now() - c.liveSince) / 1000) : 0;
-        $('callStatus').textContent = incoming ? 'Incoming ' + (c.video ? 'video' : 'voice') + ' call'
-          : c.state === 'OUTGOING_RINGING' ? 'Calling…' : c.state === 'CONNECTING' ? 'Connecting…'
-          : (c.video ? 'Video call' : 'Voice call') + ' · ' + Math.floor(elapsed / 60) + ':' + String(elapsed % 60).padStart(2, '0');
+        const key = incoming ? (c.video ? 'call.incomingVideo' : 'call.incomingVoice')
+          : c.state === 'OUTGOING_RINGING' ? 'call.calling' : c.state === 'CONNECTING' ? 'call.connecting'
+          : (c.video ? 'call.videoDuration' : 'call.voiceDuration');
+        I.bind($('callStatus'), key, { time: Math.floor(elapsed / 60) + ':' + String(elapsed % 60).padStart(2, '0') });
       };
       status(); if (c.state === 'LIVE') ticker = setInterval(status, 1000);
       $('callAnswer').onclick = () => calls.accept(c.id);

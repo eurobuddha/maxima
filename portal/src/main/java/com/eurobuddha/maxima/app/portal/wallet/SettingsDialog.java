@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.R;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import android.view.Gravity;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -15,14 +19,13 @@ public final class SettingsDialog {
 
     public static void show(final WalletActivity act) {
         final android.app.Dialog[] dlgRef = new android.app.Dialog[1];
-        final Sheet sheet = Sheet.create(act, "Settings");
+        final Sheet sheet = Sheet.create(act, msg(R.string.l10n_nav_settings));
         LinearLayout box = sheet.body();
 
         // ---- amount display ----
-        box.addView(section(act, "DECIMAL PLACES"));
+        box.addView(section(act, msg(R.string.l10n_node_wallet_decimals)));
         TextView dnote = new TextView(act);
-        dnote.setText("Minima carries up to 44 decimal places. Lists are trimmed to this many; "
-                + "detail sheets and transaction confirmations always show the exact figure.");
+        Language.setText(dnote, msg(R.string.l10n_node_wallet_precision_help));
         dnote.setTextColor(Design.dim());
         dnote.setTextSize(11f);
         box.addView(dnote);
@@ -31,7 +34,7 @@ public final class SettingsDialog {
         final int[] places = {2, 4, 8, Format.FULL};
         for (final int d : places) {
             RadioButton rb = new RadioButton(act);
-            rb.setText(Format.label(d));
+            Language.setText(rb, d == Format.FULL ? msg(R.string.l10n_node_wallet_full_precision) : Language.count(R.plurals.l10n_node_wallet_decimal_places, d));
             rb.setTextColor(Design.text());
             rb.setTextSize(13f);
             rb.setChecked(Format.decimals() == d);
@@ -44,11 +47,11 @@ public final class SettingsDialog {
         box.addView(dgroup);
 
         // ---- hidden tokens ----
-        box.addView(section(act, "HIDDEN TOKENS"));
+        box.addView(section(act, msg(R.string.l10n_node_wallet_hidden_tokens)));
         Set<String> hidden = HiddenTokens.all(act);
         if (hidden.isEmpty()) {
             TextView none = new TextView(act);
-            none.setText("None. Hide a token from its detail sheet on the Balances tab.");
+            Language.setText(none, msg(R.string.l10n_node_wallet_none_hidden));
             none.setTextColor(Design.dim());
             none.setTextSize(12f);
             box.addView(none);
@@ -64,13 +67,13 @@ public final class SettingsDialog {
                     if (b.tokenid.equals(tid)) { name = b.name + "  ·  " + Util.shorten(tid); break; }
                 }
                 if (name.equals(tid)) name = Util.shorten(tid);
-                t.setText(name);
+                Language.setText(t, name);
                 t.setTextColor(Design.text());
                 t.setTextSize(12f);
                 t.setTypeface(android.graphics.Typeface.MONOSPACE);
                 r.addView(t, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
                 TextView un = new TextView(act);
-                un.setText("UNHIDE");
+                Language.setText(un, msg(R.string.l10n_node_wallet_unhide));
                 un.setTextColor(Design.accent());
                 un.setTextSize(10f);
                 un.setLetterSpacing(0.08f);
@@ -78,7 +81,7 @@ public final class SettingsDialog {
                 un.setOnClickListener(v -> {
                     HiddenTokens.unhide(act, tid);
                     r.setAlpha(0.3f);
-                    un.setText("UNHIDDEN");
+                    Language.setText(un, msg(R.string.l10n_node_wallet_unhidden));
                     act.refreshAll();
                 });
                 r.addView(un);
@@ -87,39 +90,36 @@ public final class SettingsDialog {
         }
 
         // ---- node ----
-        box.addView(section(act, "NODE"));
+        box.addView(section(act, msg(R.string.l10n_nav_node)));
         NodeApi node = act.node();
         TextView n = new TextView(act);
         boolean paired = node != null && node.isEnabled();
         long ok = node == null ? 0 : node.lastOkMs();
-        String last = ok <= 0 ? "never" : ((System.currentTimeMillis() - ok) / 1000) + "s ago";
-        n.setText((paired ? "✓ This device is paired to the account (its Parlons Node signs)" : "◦ Not paired — pair this device on the Node tab")
-                + "\nLast node reply: " + last
-                + "\nIPC: broadcast Intent · bounded paging · large replies via file hand-off");
+        CharSequence last = ok <= 0 ? msg(R.string.l10n_ios_never_seen) : Language.since(ok);
+        Language.setText(n, Language.join(paired ? msg(R.string.l10n_node_wallet_paired) : msg(R.string.l10n_node_wallet_unpaired),
+                "\n", msg(R.string.l10n_node_wallet_last_reply, last)));
         n.setTextColor(paired ? Design.success() : Design.amber());
         n.setTextSize(12f);
         box.addView(n);
 
         // ---- about ----
-        box.addView(section(act, "ABOUT"));
+        box.addView(section(act, msg(R.string.l10n_native_settings_about)));
         TextView a = new TextView(act);
         String ver;
         try { ver = act.getPackageManager().getPackageInfo(act.getPackageName(), 0).versionName; }
         catch (Exception e) { ver = "?"; }
-        a.setText("Parlons Cloud wallet v" + ver + " — your node's wallet, on your phone.\n"
-                + "Tokens · NFTs · State NFT locked editions.\n"
-                + "Java + classic Views · node access only via minimaapi broadcast IPC.");
+        Language.setText(a, msg(R.string.l10n_node_wallet_about, ver));
         a.setTextColor(Design.dim());
         a.setTextSize(12f);
         box.addView(a);
 
-        sheet.action("Close", Sheet.Style.SECONDARY, null);
+        sheet.action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null);
         dlgRef[0] = sheet.show();
     }
 
-    private static TextView section(WalletActivity act, String label) {
+    private static TextView section(WalletActivity act, CharSequence label) {
         TextView t = new TextView(act);
-        t.setText(label);
+        Language.setText(t, label);
         t.setTextColor(Design.dim());
         t.setTextSize(11f);
         t.setLetterSpacing(0.1f);

@@ -64,20 +64,19 @@ final class DesktopCalls implements ChatEngine.CallSignals {
     }
 
     private void showIncoming(Contact c, String callId, boolean video) {
-        String name = c.name != null && !c.name.isEmpty() && !"noname".equals(c.name)
-                ? c.name : "Someone";
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(16, 18, 16, 18));
 
-        JLabel title = new JLabel(name + (video ? " — incoming video call" : " — incoming call"));
-        title.setFont(t.semibold(15f));
+        JLabel title = new DKit(t).sub("");
+        new DKit(t).renderSub(title, () -> Language.text(video ? "desktopChat.incomingVideo" : "desktopChat.incomingVoice",
+                "name", c.name != null && !c.name.isEmpty() && !"noname".equals(c.name) ? c.name : Language.text("desktopChat.someone")));
+        Language.font(title, t.semibold(15f), title.getText());
         title.setForeground(t.text);
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel hint = new JLabel("<html><div style='width:300px'>Answer on your phone — "
-                + "the desktop app doesn't carry call audio/video yet.</div></html>");
-        hint.setFont(t.font(12.5f));
+        JLabel hint = new DKit(t).sub(Language.msg("desktopChat.phoneAnswer"));
+        Language.font(hint, t.font(12.5f));
         hint.setForeground(t.subtext);
         hint.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(title);
@@ -86,13 +85,14 @@ final class DesktopCalls implements ChatEngine.CallSignals {
         body.add(Box.createVerticalStrut(14));
 
         DKit k = new DKit(t);
-        DKit.HoverButton decline = k.primaryButton("Decline");
+        DKit.HoverButton decline = k.primaryButton(Language.msg("call.decline"));
         decline.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(decline);
 
-        JDialog d = new JDialog(owner, "Incoming call", JDialog.ModalityType.MODELESS);
+        JDialog d = new JDialog(owner, Language.text("desktopChat.incoming"), JDialog.ModalityType.MODELESS);
+        Language.title(d, Language.msg("desktopChat.incoming"));
         d.setContentPane(body);
-        d.setSize(360, 190);
+        d.setSize(420, 280);
         d.setLocationRelativeTo(owner);
 
         // Auto-decline if ignored, so the caller isn't left ringing.
@@ -131,9 +131,7 @@ final class DesktopCalls implements ChatEngine.CallSignals {
     /** The explanation shown when a desktop user taps a header call button. */
     static void explainPlacingCalls(Component parent) {
         javax.swing.JOptionPane.showMessageDialog(parent,
-                "Audio and video calls run on the Parlons phone app.\n\n"
-                        + "This desktop app receives calls and declines them politely, "
-                        + "so a caller is never left ringing.",
-                "Calls", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                Language.text("desktopChat.callsHelp"),
+                Language.text("desktopChat.calls"), javax.swing.JOptionPane.INFORMATION_MESSAGE);
     }
 }

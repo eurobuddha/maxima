@@ -17,6 +17,7 @@ public final class PortalApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        com.eurobuddha.maxima.app.i18n.Language.initialize(this);
         Sha3Provider.install();
         try {
             int night = CloudSession.prefs(this)
@@ -25,4 +26,10 @@ public final class PortalApp extends Application {
         } catch (Exception ignored) {
         }
     }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
 }

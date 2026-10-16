@@ -34,6 +34,8 @@ public final class StateNft {
     public static class Meta {
         public String tokenid = "";
         public String name = "Collection";
+        /** Chain metadata supplied a name; only the UI fallback may be translated. */
+        public boolean nameProvided = false;
         public String description = "";
         public String mode = "url";
         public int size = 0;
@@ -81,7 +83,10 @@ public final class StateNft {
         }
         JSONObject src = meta != null ? meta : root;
         if (src != null) {
-            m.name = first(src.optString("name", ""), root.optString("name", ""), "Collection");
+            String suppliedName = first(src.optString("name", ""), root.optString("name", ""));
+            m.nameProvided = (!(src.opt("name") instanceof JSONObject) && !src.optString("name", "").isEmpty())
+                    || (!(root.opt("name") instanceof JSONObject) && !root.optString("name", "").isEmpty());
+            m.name = first(suppliedName, "Collection");
             m.description = first(src.optString("description", ""), root.optString("description", ""));
             m.mode = first(src.optString("mode", ""), root.optString("mode", ""), src.optString("base", "").isEmpty() ? "embed" : "url");
             m.size = firstInt(src.opt("size"), root.opt("size"), root.opt("total"),
@@ -95,6 +100,7 @@ public final class StateNft {
             m.webvalidate = first(src.optString("webvalidate", ""), root.optString("webvalidate", ""));
         } else if (tokenNode instanceof String) {
             m.name = (String) tokenNode;
+            m.nameProvided = !m.name.isEmpty();
         }
         return m;
     }

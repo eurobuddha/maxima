@@ -1,5 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.R;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import org.json.JSONObject;
 
 import java.math.BigDecimal;
@@ -9,6 +12,11 @@ public final class Util {
     public static final String MINIMA_TOKENID = "0x00";
 
     private Util() {}
+
+    /** Keep a literal token named "Token" distinct from a missing-name placeholder. */
+    public static CharSequence displayName(TokenBalance balance) {
+        return balance.meta != null && balance.meta.nameProvided ? balance.name : msg(R.string.l10n_wallet_token);
+    }
 
     /** A Minima address: 0x + exactly 64 hex (32-byte script hash), or Mx + 40–118 alnum.
      *  Matches the dapp's validateAddress; a pre-filter before the node's checkaddress. */
@@ -54,19 +62,19 @@ public final class Util {
     public static void openWebUrl(final android.content.Context ctx, final String url) {
         if (!isWebUrl(url)) {
             android.widget.Toast.makeText(ctx,
-                    "This link isn't a plain web address — not opening it.",
+                    msg(R.string.l10n_node_wallet_bad_link),
                     android.widget.Toast.LENGTH_LONG).show();
             return;
         }
-        Sheet.create(ctx, "Open this link?")
-                .subtitle(url + "\n\nThis address comes from the token's metadata, not from Minima.")
-                .action("Cancel", Sheet.Style.SECONDARY, null)
-                .action("Open", Sheet.Style.PRIMARY, () -> {
+        Sheet.create(ctx, msg(R.string.l10n_node_wallet_open_link))
+                .subtitle(msg(R.string.l10n_node_wallet_link_source, url))
+                .action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_wallet_open), Sheet.Style.PRIMARY, () -> {
                     try {
                         ctx.startActivity(new android.content.Intent(
                                 android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)));
                     } catch (Exception e) {
-                        android.widget.Toast.makeText(ctx, "No app can open that link.",
+                        android.widget.Toast.makeText(ctx, msg(R.string.l10n_node_wallet_no_link_app),
                                 android.widget.Toast.LENGTH_SHORT).show();
                     }
                 })

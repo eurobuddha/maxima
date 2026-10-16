@@ -10,7 +10,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import com.eurobuddha.maxima.app.portal.ide.BaseView;
 import com.eurobuddha.maxima.app.portal.ide.NodeApi;
@@ -49,7 +52,7 @@ public class TxnView extends BaseView {
         wire(R.id.txn_change, v -> addChange());
         wire(R.id.txn_setstate, v -> stateDialog());
         wire(R.id.txn_sign, v -> signDialog());
-        wire(R.id.txn_basics, v -> simple("txnbasics", "MMR proofs + scripts added"));
+        wire(R.id.txn_basics, v -> simple("txnbasics", msg(R.string.l10n_txn_workbench_basics_added)));
         wire(R.id.txn_check, v -> refresh());
         wire(R.id.txn_post, v -> postDialog());
         wire(R.id.txn_export, v -> exportTxn());
@@ -69,11 +72,11 @@ public class TxnView extends BaseView {
     private String txnId() {
         String id = mTxnId.getText().toString().trim();
         if (id.isEmpty()) {
-            Toast.makeText(mActivity, "Set a transaction id first", Toast.LENGTH_SHORT).show();
+            Toast.makeText(mActivity, msg(R.string.l10n_txn_workbench_id_required), Toast.LENGTH_SHORT).show();
             return null;
         }
         if (hasCommandChars(id)) {
-            Toast.makeText(mActivity, "Transaction id can't contain spaces or ':'", Toast.LENGTH_SHORT).show();
+            Toast.makeText(mActivity, msg(R.string.l10n_txn_workbench_id_invalid), Toast.LENGTH_SHORT).show();
             return null;
         }
         return id;
@@ -94,17 +97,23 @@ public class TxnView extends BaseView {
         return s.contains(" ") || s.contains("\t") || s.contains("\n") || s.contains(";");
     }
 
-    private boolean rejectBadField(String label, String value, boolean allowColon) {
+    private boolean rejectBadField(CharSequence label, String value, boolean allowColon) {
         boolean bad = allowColon ? hasWhitespaceOrSemicolon(value) : hasCommandChars(value);
         if (bad) {
-            Toast.makeText(mActivity, label + " can't contain spaces"
-                    + (allowColon ? " or ';'" : ", ':' or ';'"), Toast.LENGTH_LONG).show();
+            Toast.makeText(mActivity, msg(allowColon ? R.string.l10n_txn_workbench_field_invalid_colon
+                    : R.string.l10n_txn_workbench_field_invalid, label), Toast.LENGTH_LONG).show();
         }
         return bad;
     }
 
-    private void setStatus(String text, int color) {
-        mStatus.setText(OutputFormatter.colored(text, color));
+    private void setStatus(CharSequence text, int color) {
+        Language.setText(mStatus, text);
+        mStatus.setTextColor(color);
+    }
+
+    private void setSummary(CharSequence text, int color) {
+        Language.setText(mSummary, text);
+        mSummary.setTextColor(color);
     }
 
     // ---------------- actions ----------------
@@ -112,13 +121,13 @@ public class TxnView extends BaseView {
     private void create() {
         String id = txnId();
         if (id == null) return;
-        run("txncreate id:" + id, "created '" + id + "' — now add inputs", true);
+        run("txncreate id:" + id, msg(R.string.l10n_txn_workbench_created, id), true);
     }
 
     private void pickCoin() {
         String id = txnId();
         if (id == null) return;
-        setStatus("… loading your coins", OutputFormatter.COL_DIM);
+        setStatus(msg(R.string.l10n_txn_workbench_loading_coins), OutputFormatter.COL_DIM);
         // Shrink the reply at the SOURCE with simplestate:true (drops the large per-coin
         // state blobs) — an over-limit Binder reply crashes app+node uncatchably (see
         // minima-ipc-gotchas). We keep relevant+sendable (never hide coins by age) and
@@ -128,7 +137,7 @@ public class TxnView extends BaseView {
             public void onResult(JSONObject json) {
                 JSONArray coins = json.optJSONArray("response");
                 if (coins == null || coins.length() == 0) {
-                    setStatus("No sendable coins found", OutputFormatter.COL_ERROR);
+                    setStatus(msg(R.string.l10n_txn_workbench_no_coins), OutputFormatter.COL_ERROR);
                     return;
                 }
                 int n = Math.min(coins.length(), 100);
@@ -143,14 +152,14 @@ public class TxnView extends BaseView {
                     coinids[i] = c.optString("coinid", "");
                     labels[i] = amount + " " + token + "\n" + shorten(coinids[i]);
                 }
-                String title = capped ? "Add input coin (first " + n + " of " + coins.length() + ")"
-                        : "Add input coin (" + coins.length() + " sendable)";
-                new AlertDialog.Builder(mActivity)
+                CharSequence title = capped ? msg(R.string.l10n_txn_workbench_coin_capped, n, coins.length())
+                        : msg(R.string.l10n_txn_workbench_coin_title, coins.length());
+                new LanguageDialog(mActivity)
                         .setTitle(title)
                         .setItems(labels, (d, which) ->
                                 run("txninput id:" + id + " coinid:" + coinids[which],
-                                        "input added", true))
-                        .setNegativeButton("Cancel", null)
+                                        msg(R.string.l10n_txn_workbench_input_added), true))
+                        .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                         .show();
             }
 
@@ -163,33 +172,32 @@ public class TxnView extends BaseView {
         String id = txnId();
         if (id == null) return;
         View v = mActivity.getLayoutInflater().inflate(R.layout.dialog_output, null);
+        Language.apply(v);
         EditText amount = v.findViewById(R.id.out_amount);
         EditText address = v.findViewById(R.id.out_address);
         EditText tokenid = v.findViewById(R.id.out_tokenid);
         CheckBox storestate = v.findViewById(R.id.out_storestate);
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Add output")
-                .setMessage("Inputs must equal outputs — any difference is BURNED. Add a change "
-                        + "output back to yourself. storestate:true only for covenant/phase coins.")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_txn_workbench_output_title))
                 .setView(v)
-                .setPositiveButton("Add", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_common_add), (d, w) -> {
                     String amt = amount.getText().toString().trim();
                     String addr = address.getText().toString().trim();
                     if (amt.isEmpty() || addr.isEmpty()) {
-                        Toast.makeText(mActivity, "Amount and address required", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(mActivity, msg(R.string.l10n_txn_workbench_amount_address_required), Toast.LENGTH_SHORT).show();
                         return;
                     }
                     String tok = tokenid.getText().toString().trim();
-                    if (rejectBadField("Amount", amt, false) || rejectBadField("Address", addr, false)
-                            || rejectBadField("Token id", tok, false)) {
+                    if (rejectBadField(msg(R.string.l10n_wallet_amount), amt, false) || rejectBadField(msg(R.string.l10n_common_address), addr, false)
+                            || rejectBadField(msg(R.string.l10n_txn_workbench_token_id), tok, false)) {
                         return;
                     }
                     String cmd = "txnoutput id:" + id + " amount:" + amt + " address:" + addr
                             + (tok.isEmpty() ? "" : " tokenid:" + tok)
                             + " storestate:" + storestate.isChecked();
-                    run(cmd, "output added", true);
+                    run(cmd, msg(R.string.l10n_txn_workbench_output_added), true);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
@@ -207,11 +215,11 @@ public class TxnView extends BaseView {
         String id = txnId();
         if (id == null) return;
         if (mChangeInFlight) {
-            Toast.makeText(mActivity, "Change calculation already in progress", Toast.LENGTH_SHORT).show();
+            Toast.makeText(mActivity, msg(R.string.l10n_txn_workbench_change_in_progress), Toast.LENGTH_SHORT).show();
             return;
         }
         mChangeInFlight = true;
-        setStatus("… calculating change", OutputFormatter.COL_DIM);
+        setStatus(msg(R.string.l10n_txn_workbench_calculating_change), OutputFormatter.COL_DIM);
         mNode.cmd("txncheck id:" + id, new NodeApi.Cb() {
             @Override
             public void onResult(JSONObject json) {
@@ -219,7 +227,7 @@ public class TxnView extends BaseView {
                 JSONArray coins = resp != null ? resp.optJSONArray("coins") : null;
                 if (coins == null) {
                     mChangeInFlight = false;
-                    setStatus("✖ no txn '" + id + "' — Create it first", OutputFormatter.COL_ERROR);
+                    setStatus(Language.join("✖ ", msg(R.string.l10n_txn_workbench_missing, id)), OutputFormatter.COL_ERROR);
                     return;
                 }
                 final java.util.List<String[]> changes = new java.util.ArrayList<>();  // {tokenid, amount}
@@ -240,16 +248,15 @@ public class TxnView extends BaseView {
                 }
                 if (changes.isEmpty()) {
                     mChangeInFlight = false;
-                    setStatus("✓ inputs already equal outputs — no change needed",
+                    setStatus(msg(R.string.l10n_txn_workbench_balanced),
                             OutputFormatter.COL_STRING);
                     return;
                 }
-                new AlertDialog.Builder(mActivity)
-                        .setTitle("Add change to your wallet")
-                        .setMessage("These leftovers would BURN on post. Send them back to "
-                                + "your own address?\n\n" + planned)
-                        .setPositiveButton("Add change", (d, w) -> fetchAddressAndAdd(id, changes))
-                        .setNegativeButton("Cancel", (d, w) -> mChangeInFlight = false)
+                new LanguageDialog(mActivity)
+                        .setTitle(msg(R.string.l10n_txn_workbench_change_title))
+                        .setMessage(msg(R.string.l10n_txn_workbench_change_body, planned.toString()))
+                        .setPositiveButton(msg(R.string.l10n_txn_workbench_add_change), (d, w) -> fetchAddressAndAdd(id, changes))
+                        .setNegativeButton(msg(R.string.l10n_common_cancel), (d, w) -> mChangeInFlight = false)
                         .setOnCancelListener(d -> mChangeInFlight = false)
                         .show();
             }
@@ -271,7 +278,7 @@ public class TxnView extends BaseView {
                         resp.optString("address", "")) : "";
                 if (addr.isEmpty()) {
                     mChangeInFlight = false;
-                    setStatus("✖ couldn't fetch a wallet address", OutputFormatter.COL_ERROR);
+                    setStatus(msg(R.string.l10n_txn_workbench_address_failed), OutputFormatter.COL_ERROR);
                     return;
                 }
                 addChangeOutputs(id, addr, changes, 0);
@@ -288,8 +295,7 @@ public class TxnView extends BaseView {
     private void addChangeOutputs(String id, String addr, java.util.List<String[]> changes, int idx) {
         if (idx >= changes.size()) {
             mChangeInFlight = false;
-            setStatus("✓ change added for all " + changes.size()
-                    + " token(s) — inputs now match outputs", OutputFormatter.COL_STRING);
+            setStatus(msg(R.string.l10n_txn_workbench_change_added, changes.size()), OutputFormatter.COL_STRING);
             refresh();
             return;
         }
@@ -309,10 +315,8 @@ public class TxnView extends BaseView {
                                 .append(changes.get(j)[0].equals("0x00") ? "MINIMA"
                                         : shorten(changes.get(j)[0])).append("\n");
                     }
-                    setStatus("✖ change failed on token " + (idx + 1) + "/" + changes.size()
-                            + ": " + json.optString("error", "txnoutput failed")
-                            + "\n\n⚠ Still unbalanced (would BURN on post):\n" + left
-                            + "\nFix these or Delete the txn before posting.",
+                    setStatus(msg(R.string.l10n_txn_workbench_change_failed, idx + 1, changes.size(),
+                            SystemMessages.message(json.optString("error", "txnoutput failed")), left.toString()),
                             OutputFormatter.COL_ERROR);
                     return;
                 }
@@ -335,30 +339,28 @@ public class TxnView extends BaseView {
         int pad = (int) (mActivity.getResources().getDisplayMetrics().density * 20);
         box.setPadding(pad, 0, pad, 0);
         EditText port = new EditText(mActivity);
-        port.setHint("port (0-255)");
+        Language.hint(port, msg(R.string.l10n_txn_workbench_port_hint));
         port.setInputType(InputType.TYPE_CLASS_NUMBER);
         EditText value = new EditText(mActivity);
-        value.setHint("value");
+        Language.hint(value, msg(R.string.l10n_node_mint_value));
         box.addView(port);
         box.addView(value);
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Set state variable")
-                .setMessage("State variables ride on the transaction and are stored in outputs "
-                        + "with storestate:true. Unset ports read as empty — set every port your "
-                        + "script touches.")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_txn_workbench_state_title))
+                .setMessage(msg(R.string.l10n_txn_workbench_state_body))
                 .setView(box)
-                .setPositiveButton("Set", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_native_settings_set), (d, w) -> {
                     String p = port.getText().toString().trim();
                     String val = value.getText().toString().trim();
                     if (p.isEmpty() || val.isEmpty()) {
-                        Toast.makeText(mActivity, "Port and value required", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(mActivity, msg(R.string.l10n_txn_workbench_port_value_required), Toast.LENGTH_SHORT).show();
                         return;
                     }
                     // value may be hex (0x..) but must not carry spaces/';' onto the command line.
-                    if (rejectBadField("Port", p, false) || rejectBadField("Value", val, true)) return;
-                    run("txnstate id:" + id + " port:" + p + " value:" + val, "state set", true);
+                    if (rejectBadField(msg(R.string.l10n_txn_workbench_port), p, false) || rejectBadField(msg(R.string.l10n_txn_workbench_value), val, true)) return;
+                    run("txnstate id:" + id + " port:" + p + " value:" + val, msg(R.string.l10n_txn_workbench_state_set), true);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
@@ -366,23 +368,22 @@ public class TxnView extends BaseView {
         String id = txnId();
         if (id == null) return;
         EditText key = new EditText(mActivity);
-        key.setHint("publickey (leave empty for auto)");
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Sign transaction")
-                .setMessage("Order matters: sign FIRST, then Basics, then Post. For script-coin "
-                        + "inputs sign with the specific key the script checks.")
+        Language.hint(key, msg(R.string.l10n_txn_workbench_key_hint));
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_txn_workbench_sign_title))
+                .setMessage(msg(R.string.l10n_txn_workbench_sign_body))
                 .setView(key)
-                .setPositiveButton("Sign", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_txn_workbench_sign), (d, w) -> {
                     String k = key.getText().toString().trim();
-                    if (rejectBadField("Public key", k, false)) return;
+                    if (rejectBadField(msg(R.string.l10n_native_contacts_public_key), k, false)) return;
                     run("txnsign id:" + id + " publickey:" + (k.isEmpty() ? "auto" : k),
-                            "signed — now run Basics", true);
+                            msg(R.string.l10n_txn_workbench_signed), true);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
-    private void simple(String cmd, String okMsg) {
+    private void simple(String cmd, CharSequence okMsg) {
         String id = txnId();
         if (id == null) return;
         run(cmd + " id:" + id, okMsg, true);
@@ -392,43 +393,40 @@ public class TxnView extends BaseView {
         String id = txnId();
         if (id == null) return;
         EditText burn = new EditText(mActivity);
-        burn.setHint("burn (optional, e.g. 0.1)");
+        Language.hint(burn, msg(R.string.l10n_txn_workbench_burn_hint));
         burn.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Post transaction")
-                .setMessage("This broadcasts on-chain. Success = status:true; the PoW mines "
-                        + "asynchronously so istransaction:false at return is NORMAL — do not "
-                        + "re-post, watch the chain instead. Did you run Sign then Basics?")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_txn_workbench_post_title))
+                .setMessage(msg(R.string.l10n_txn_workbench_post_body))
                 .setView(burn)
-                .setPositiveButton("Post", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_txn_workbench_post), (d, w) -> {
                     String b = burn.getText().toString().trim();
-                    if (rejectBadField("Burn", b, false)) return;
+                    if (rejectBadField(msg(R.string.l10n_node_mint_burn), b, false)) return;
                     run("txnpost id:" + id + (b.isEmpty() ? "" : " burn:" + b),
-                            "posted — status:true means accepted; it mines over the next blocks", true);
+                            msg(R.string.l10n_txn_workbench_posted), true);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void exportTxn() {
         String id = txnId();
         if (id == null) return;
-        setStatus("… exporting", OutputFormatter.COL_DIM);
+        setStatus(msg(R.string.l10n_txn_workbench_exporting), OutputFormatter.COL_DIM);
         mNode.cmd("txnexport id:" + id, new NodeApi.Cb() {
             @Override
             public void onResult(JSONObject json) {
                 JSONObject resp = json.optJSONObject("response");
                 String data = resp != null ? resp.optString("data", "") : "";
                 if (data.isEmpty()) {
-                    setStatus("✖ export failed: " + json.optString("error", "no data"),
+                    setStatus(msg(R.string.l10n_txn_workbench_export_failed, SystemMessages.message(json.optString("error", "no data"))),
                             OutputFormatter.COL_ERROR);
                     return;
                 }
                 android.content.ClipboardManager cb = (android.content.ClipboardManager)
                         mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
                 cb.setPrimaryClip(android.content.ClipData.newPlainText("txn", data));
-                setStatus("✓ exported to clipboard (" + data.length() + " chars) — import it on "
-                        + "another node with Import", OutputFormatter.COL_STRING);
+                setStatus(msg(R.string.l10n_txn_workbench_exported, data.length()), OutputFormatter.COL_STRING);
             }
 
             @Override
@@ -440,33 +438,33 @@ public class TxnView extends BaseView {
         String id = txnId();
         if (id == null) return;
         EditText data = new EditText(mActivity);
-        data.setHint("0x... exported txn data");
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Import transaction")
+        Language.hint(data, msg(R.string.l10n_txn_workbench_import_hint));
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_txn_workbench_import_title))
                 .setView(data)
-                .setPositiveButton("Import", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_android_wallet_import), (d, w) -> {
                     String hex = data.getText().toString().trim();
                     if (hex.isEmpty()) return;
-                    if (rejectBadField("Import data", hex, false)) return;
-                    run("txnimport id:" + id + " data:" + hex, "imported", true);
+                    if (rejectBadField(msg(R.string.l10n_txn_workbench_import_data), hex, false)) return;
+                    run("txnimport id:" + id + " data:" + hex, msg(R.string.l10n_txn_workbench_imported), true);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void deleteDialog() {
         String id = txnId();
         if (id == null) return;
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Delete '" + id + "'?")
-                .setMessage("Always delete abandoned transactions — they lock their input coins.")
-                .setPositiveButton("Delete", (d, w) -> run("txndelete id:" + id, "deleted", false))
-                .setNegativeButton("Cancel", null)
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_txn_workbench_delete_title, id))
+                .setMessage(msg(R.string.l10n_txn_workbench_delete_body))
+                .setPositiveButton(msg(R.string.l10n_scripts_delete), (d, w) -> run("txndelete id:" + id, msg(R.string.l10n_txn_workbench_deleted), false))
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void listAll() {
-        setStatus("… listing transactions", OutputFormatter.COL_DIM);
+        setStatus(msg(R.string.l10n_txn_workbench_listing), OutputFormatter.COL_DIM);
         mNode.cmd("txnlist", new NodeApi.Cb() {
             @Override
             public void onResult(JSONObject json) {
@@ -475,10 +473,10 @@ public class TxnView extends BaseView {
                 // Show a compact id + in/out-count summary instead.
                 JSONArray arr = json.optJSONArray("response");
                 if (arr == null || arr.length() == 0) {
-                    setStatus("No pending transactions", OutputFormatter.COL_DIM);
+                    setStatus(msg(R.string.l10n_txn_workbench_no_pending), OutputFormatter.COL_DIM);
                     return;
                 }
-                StringBuilder sb = new StringBuilder(arr.length() + " pending transaction(s):\n\n");
+                Language.TextBuilder sb = new Language.TextBuilder().append(msg(R.string.l10n_txn_workbench_pending_title, arr.length()));
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject t = arr.optJSONObject(i);
                     if (t == null) continue;
@@ -489,10 +487,10 @@ public class TxnView extends BaseView {
                     int outs = txn != null && txn.optJSONArray("outputs") != null
                             ? txn.optJSONArray("outputs").length() : 0;
                     sb.append("• ").append(tid).append("  ")
-                            .append(ins).append(" in / ").append(outs).append(" out\n");
+                            .append(msg(R.string.l10n_txn_workbench_io_counts, ins, outs)).append("\n");
                 }
-                sb.append("\nType an id above + Check to inspect one.");
-                setStatus(sb.toString(), OutputFormatter.COL_PLAIN);
+                sb.append("\n").append(msg(R.string.l10n_txn_workbench_inspect_hint));
+                setStatus(sb.build(), OutputFormatter.COL_PLAIN);
             }
 
             @Override
@@ -502,18 +500,17 @@ public class TxnView extends BaseView {
 
     // ---------------- helpers ----------------
 
-    private void run(String cmd, String okMsg, boolean refreshAfter) {
+    private void run(String cmd, CharSequence okMsg, boolean refreshAfter) {
         setStatus("… " + cmd, OutputFormatter.COL_DIM);
         mNode.cmd(cmd, new NodeApi.Cb() {
             @Override
             public void onResult(JSONObject json) {
                 if (!json.optBoolean("status", false)) {
-                    setStatus("✖ " + cmd + "\n" + json.optString("error", "failed")
-                            + "\n\nTip: delete abandoned txns (they lock coins).",
+                    setStatus(msg(R.string.l10n_txn_workbench_command_error, cmd, SystemMessages.message(json.optString("error", "failed"))),
                             OutputFormatter.COL_ERROR);
                     return;
                 }
-                setStatus("✓ " + okMsg, OutputFormatter.COL_STRING);
+                setStatus(Language.join("✓ ", okMsg), OutputFormatter.COL_STRING);
                 if (refreshAfter) refresh();
             }
 
@@ -530,12 +527,11 @@ public class TxnView extends BaseView {
             @Override
             public void onResult(JSONObject json) {
                 if (!json.optBoolean("status", false)) {
-                    mSummary.setText(OutputFormatter.colored(
-                            "no txn '" + id + "' — Create it first", OutputFormatter.COL_DIM));
+                    setSummary(msg(R.string.l10n_txn_workbench_missing, id), OutputFormatter.COL_DIM);
                     return;
                 }
                 JSONObject resp = json.optJSONObject("response");
-                StringBuilder sb = new StringBuilder();
+                Language.TextBuilder sb = new Language.TextBuilder();
                 boolean burnWarning = false;
                 if (resp != null) {
                     JSONArray coins = resp.optJSONArray("coins");
@@ -546,32 +542,26 @@ public class TxnView extends BaseView {
                             String in = c.optString("input", "?");
                             String outp = c.optString("output", "?");
                             String diff = c.optString("difference", "?");
-                            sb.append(tokenid.equals("0x00") ? "MINIMA" : shorten(tokenid))
-                                    .append("  in:").append(in)
-                                    .append("  out:").append(outp)
-                                    .append("  diff:").append(diff).append("\n");
+                            sb.append(msg(R.string.l10n_txn_workbench_balance_line, tokenid.equals("0x00") ? "MINIMA" : shorten(tokenid), in, outp, diff));
                             try {
                                 if (new BigDecimal(diff).compareTo(BigDecimal.ZERO) > 0) burnWarning = true;
                             } catch (NumberFormatException ignored) {}
                         }
                     }
                     String burn = resp.optString("burn", "");
-                    if (!burn.isEmpty()) sb.append("burn: ").append(burn).append("\n");
+                    if (!burn.isEmpty()) sb.append(msg(R.string.l10n_txn_workbench_burn_line, burn));
                     JSONObject valid = resp.optJSONObject("valid");
                     if (valid != null) {
-                        sb.append("valid: basic=").append(valid.optBoolean("basic"))
-                                .append(" signatures=").append(valid.optBoolean("signatures"))
-                                .append(" mmrproofs=").append(valid.optBoolean("mmrproofs"))
-                                .append(" scripts=").append(valid.optBoolean("scripts"));
+                        sb.append(msg(R.string.l10n_txn_workbench_valid_line, valid.optBoolean("basic"), valid.optBoolean("signatures"),
+                                valid.optBoolean("mmrproofs"), valid.optBoolean("scripts")));
                     }
                 }
                 if (burnWarning) {
-                    sb.append("\n⚠ inputs > outputs — the difference will be PERMANENTLY BURNED. "
-                            + "Add a change output unless intentional.");
+                    sb.append("\n").append(msg(R.string.l10n_txn_workbench_burn_warning));
                 }
-                mSummary.setText(OutputFormatter.colored(sb.length() == 0
-                                ? "txn exists — add inputs/outputs" : sb.toString(),
-                        burnWarning ? OutputFormatter.COL_BOOL : OutputFormatter.COL_PLAIN));
+                CharSequence summary = sb.build();
+                setSummary(summary.length() == 0 ? msg(R.string.l10n_txn_workbench_exists) : summary,
+                        burnWarning ? OutputFormatter.COL_BOOL : OutputFormatter.COL_PLAIN);
             }
 
             @Override
@@ -581,10 +571,10 @@ public class TxnView extends BaseView {
 
     private void nodeError(String message) {
         if (NodeApi.ERR_NOT_ENABLED.equals(message)) {
-            setStatus("✖ This app is not enabled yet.\nOpen Minima Core → Apps and enable Terminal IDE.",
+            setStatus(msg(R.string.l10n_terminal_not_enabled),
                     OutputFormatter.COL_ERROR);
         } else {
-            setStatus("✖ " + message, OutputFormatter.COL_ERROR);
+            setStatus(Language.join("✖ ", SystemMessages.message(message)), OutputFormatter.COL_ERROR);
         }
     }
 

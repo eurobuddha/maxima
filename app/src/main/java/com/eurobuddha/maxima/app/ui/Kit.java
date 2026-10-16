@@ -1,5 +1,7 @@
 package com.eurobuddha.maxima.app.ui;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -63,9 +65,9 @@ public final class Kit {
         return c;
     }
 
-    public TextView sectionLabel(String t) {
+    public TextView sectionLabel(CharSequence t) {
         TextView v = new TextView(a);
-        v.setText(t.toUpperCase());
+        Language.setText(v, Language.upper(t));
         v.setTextSize(10);
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setLetterSpacing(0.15f);
@@ -78,14 +80,14 @@ public final class Kit {
 
     /** A metric row: label (+ optional hint) left, bold value right. Tapping the
      *  optional "?" is not built here — pass an onTap for a whole-row action. */
-    public LinearLayout kv(String key, String hint, String value, int valueColorOr0) {
+    public LinearLayout kv(CharSequence key, CharSequence hint, CharSequence value, int valueColorOr0) {
         LinearLayout row = new LinearLayout(a);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(10), 0, dp(10));
         row.addView(leftCol(key, hint), new LinearLayout.LayoutParams(0, -2, 1f));
         TextView v = new TextView(a);
-        v.setText(value);
+        Language.setText(v, value);
         v.setTextSize(15);
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setGravity(Gravity.END);
@@ -95,7 +97,7 @@ public final class Kit {
     }
 
     /** A metric row with a status pill on the right. */
-    public LinearLayout kvPill(String key, String hint, String pillText, int kind) {
+    public LinearLayout kvPill(CharSequence key, CharSequence hint, CharSequence pillText, int kind) {
         LinearLayout row = new LinearLayout(a);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -106,7 +108,7 @@ public final class Kit {
     }
 
     /** A real greyscale switch row. */
-    public LinearLayout switchRow(String key, String hint, boolean on, OnToggle cb) {
+    public LinearLayout switchRow(CharSequence key, CharSequence hint, boolean on, OnToggle cb) {
         LinearLayout row = new LinearLayout(a);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -130,17 +132,17 @@ public final class Kit {
         return row;
     }
 
-    private LinearLayout leftCol(String key, String hint) {
+    private LinearLayout leftCol(CharSequence key, CharSequence hint) {
         LinearLayout col = new LinearLayout(a);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView k = new TextView(a);
-        k.setText(key);
+        Language.setText(k, key);
         k.setTextSize(14);
         k.setTextColor(col(R.color.ux_text));
         col.addView(k);
-        if (hint != null && !hint.isEmpty()) {
+        if (hint != null && hint.length() > 0) {
             TextView h = new TextView(a);
-            h.setText(hint);
+            Language.setText(h, hint);
             h.setTextSize(11.5f);
             h.setTextColor(col(R.color.ux_subtext));
             h.setPadding(0, dp(1), 0, 0);
@@ -149,7 +151,7 @@ public final class Kit {
         return col;
     }
 
-    public TextView statusPill(String text, int kind) {
+    public TextView statusPill(CharSequence text, int kind) {
         int c;
         switch (kind) {
             case OK: c = col(R.color.ux_success); break;
@@ -158,7 +160,7 @@ public final class Kit {
             default: c = col(R.color.ux_subtext); break;
         }
         TextView p = new TextView(a);
-        p.setText(text.toUpperCase());
+        Language.setText(p, Language.upper(text));
         p.setTextSize(10);
         p.setTypeface(Typeface.DEFAULT_BOLD);
         p.setLetterSpacing(0.06f);
@@ -190,31 +192,38 @@ public final class Kit {
         dp0.rightMargin = dp(10);
         row.addView(dot, dp0);
         TextView h = new TextView(a);
-        h.setText(host);
+        Language.setText(h, host);
         h.setTypeface(Typeface.MONOSPACE);
         h.setTextSize(12);
         h.setTextColor(col(connected ? R.color.ux_text : R.color.ux_subtext));
-        row.addView(h, new LinearLayout.LayoutParams(0, -2, 1f));
+        boolean compact = MainHeader.compact(a);
+        LinearLayout labels = row;
+        if (compact) {
+            labels = new LinearLayout(a);
+            labels.setOrientation(LinearLayout.VERTICAL);
+            row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        labels.addView(h, new LinearLayout.LayoutParams(compact ? -1 : 0, -2, compact ? 0f : 1f));
         TextView st = new TextView(a);
-        st.setText(connected ? "CONNECTED" : "IDLE");
+        Language.setText(st, Language.upper(Language.msg(connected ? R.string.l10n_notification_connected : R.string.l10n_native_network_idle)));
         st.setTextSize(9);
         st.setTypeface(Typeface.DEFAULT_BOLD);
         st.setLetterSpacing(0.06f);
         st.setTextColor(col(connected ? R.color.ux_success : R.color.ux_subtext));
-        row.addView(st);
+        labels.addView(st);
         return row;
     }
 
     // ---- copy field ----
 
-    public LinearLayout copyField(String labelText, String value, String toastMsg) {
+    public LinearLayout copyField(CharSequence labelText, CharSequence value, CharSequence toastMsg) {
         return copyField(labelText, value, toastMsg, true);
     }
 
     /** As {@link #copyField}, but {@code upperLabel=false} keeps the label verbatim
      *  (e.g. "maxima publickey", a term of art from classic Minima that must not
      *  be upper-cased). */
-    public LinearLayout copyField(String labelText, String value, String toastMsg,
+    public LinearLayout copyField(CharSequence labelText, CharSequence value, CharSequence toastMsg,
                                   boolean upperLabel) {
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -228,7 +237,7 @@ public final class Kit {
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView l = new TextView(a);
-        l.setText(upperLabel ? labelText.toUpperCase() : labelText);
+        Language.setText(l, upperLabel ? Language.upper(labelText) : labelText);
         l.setTextSize(10);
         l.setLetterSpacing(upperLabel ? 0.12f : 0.04f);
         l.setTextColor(col(R.color.ux_subtext));
@@ -240,7 +249,7 @@ public final class Kit {
         box.addView(head);
 
         TextView v = new TextView(a);
-        v.setText(value);
+        Language.setText(v, value);
         v.setTypeface(Typeface.MONOSPACE);
         v.setTextSize(12);
         v.setPadding(0, dp(7), 0, 0);
@@ -251,29 +260,29 @@ public final class Kit {
         box.setOnClickListener(view -> {
             ((ClipboardManager) a.getSystemService(Context.CLIPBOARD_SERVICE))
                     .setPrimaryClip(ClipData.newPlainText("maxima", value));
-            a.toast(toastMsg);
+            a.toast(toastMsg == null ? "" : toastMsg.toString());
         });
         return box;
     }
 
     // ---- buttons ----
 
-    public TextView primaryButton(String text) {
+    public TextView primaryButton(CharSequence text) {
         return button(text, R.drawable.btn_primary, R.color.ux_on_accent);
     }
 
-    public TextView ghostButton(String text) {
+    public TextView ghostButton(CharSequence text) {
         return button(text, R.drawable.btn_ghost, R.color.ux_text);
     }
 
-    public TextView dangerButton(String text) {
+    public TextView dangerButton(CharSequence text) {
         TextView b = button(text, R.drawable.btn_ghost, R.color.ux_error);
         return b;
     }
 
-    private TextView button(String text, int bg, int textColor) {
+    private TextView button(CharSequence text, int bg, int textColor) {
         TextView b = new TextView(a);
-        b.setText(text);
+        Language.setText(b, text);
         b.setGravity(Gravity.CENTER);
         b.setTextSize(14);
         b.setTypeface(manrope(Typeface.BOLD));
@@ -285,9 +294,9 @@ public final class Kit {
         return b;
     }
 
-    public EditText field(String hint) {
+    public EditText field(CharSequence hint) {
         EditText e = new EditText(a);
-        e.setHint(hint);
+        Language.hint(e, hint);
         e.setBackgroundResource(R.drawable.field_pill);
         e.setPadding(dp(14), dp(12), dp(14), dp(12));
         e.setTextColor(col(R.color.ux_text));
@@ -300,7 +309,7 @@ public final class Kit {
 
     // ---- sheet ----
 
-    public BottomSheetDialog sheet(String titleText, View content) {
+    public BottomSheetDialog sheet(CharSequence titleText, View content) {
         LinearLayout root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundResource(R.drawable.sheet_bg);
@@ -314,7 +323,7 @@ public final class Kit {
         root.addView(grab, gp);
 
         TextView t = new TextView(a);
-        t.setText(titleText);
+        Language.setText(t, titleText);
         t.setTextSize(17);
         t.setTypeface(manrope(Typeface.BOLD));
         t.setTextColor(col(R.color.ux_text));
@@ -354,9 +363,9 @@ public final class Kit {
         return d;
     }
 
-    public TextView sub(String t) {
+    public TextView sub(CharSequence t) {
         TextView v = new TextView(a);
-        v.setText(t);
+        Language.setText(v, t);
         v.setTextSize(12);
         v.setTextColor(col(R.color.ux_subtext));
         return v;

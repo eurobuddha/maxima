@@ -29,7 +29,7 @@ import javax.swing.border.EmptyBorder;
  * for others), the host list (add / connect / remove / reset), the location service
  * (MLS) address, and the event log.
  */
-public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
+public final class NetworkPanel extends JPanel implements MaximaWindow.Tab, MaximaWindow.Responsive {
 
     private final DesktopNode node;
     private final Theme t;
@@ -50,7 +50,8 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
     // rebuilt on a STRUCTURAL change (host list, direct on/off, relay on/off,
     // MLS mode). Rebuilding every tick is what snapped the scroll back.
     private JLabel mStatHosts, mStatContacts, mStatMailbox, mStatOutbox, mStatServices;
-    private JLabel mDrDetail, mRelayRoutes, mRelayRelayed;
+    private JLabel mDrDetail, mDrState, mRelayRoutes, mRelayRelayed;
+    private final java.util.List<JPanel> mActionRows = new java.util.ArrayList<>();
 
     public NetworkPanel(DesktopNode zNode, Theme zTheme) {
         node = zNode;
@@ -70,7 +71,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         add(mScroll, BorderLayout.CENTER);
     }
 
-    public String label() { return "Network"; }
+    public String label() { return Language.text("nav.network"); }
     public JComponent view() { return this; }
 
     public void refresh() {
@@ -129,48 +130,50 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
     private void rebuildJar() {
         mBody.removeAll();
+        mActionRows.clear();
         // The jar view doesn't own the built-in live labels — null them so a later
         // flip-back to built-in never has updateLive() touch detached orphans.
         mStatHosts = mStatContacts = mStatMailbox = mStatOutbox = mStatServices = null;
-        mDrDetail = mRelayRoutes = mRelayRelayed = null;
+        mDrDetail = mDrState = mRelayRoutes = mRelayRelayed = null;
         mHeroPill = null; mHeroSub = null;
         int hosts = node.connectedCount();
         // hero
         DKit.RoundPanel hero = k.card();
         JPanel line = rowX();
         mHeroBig = new JLabel();
-        mHeroBig.setFont(t.extrabold(22f));
+        Language.font(mHeroBig, t.extrabold(22f));
         line.add(mHeroBig);
         line.add(Box.createHorizontalGlue());
         hero.add(line);
         hero.add(k.vgap(6));
-        hero.add(k.sub(hosts + " host" + (hosts == 1 ? "" : "s")
-                + " · classic Maxima engine (self-healing routing)"));
+        JLabel classic = k.sub("");
+        k.renderSub(classic, () -> Language.text("desktopNetwork.classic", "hosts", Language.text("nativeShell.hosts", "count", node.connectedCount())));
+        hero.add(classic);
         mBody.add(hero);
         mBody.add(k.vgap(14));
         updateHero(hosts);
 
         // hosts (add via the jar's connectHost)
-        mBody.add(k.sectionLabel("Hosts"));
+        mBody.add(sectionLabel(Language.msg("desktopNetwork.hosts")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel hostCard = k.card();
         try {
             for (String h : node.jarEngine().connectedHosts()) {
-                hostCard.add(k.kvLine(h, "connected"));
+                hostCard.add(k.kvLine(h, Language.msg("node.connected")));
             }
         } catch (Exception ignored) { }
         hostCard.add(k.vgap(8));
-        JTextField add = k.field("relay host:port");
+        JTextField add = k.field(Language.msg("desktopNetwork.relayHint"));
         add.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         add.setAlignmentX(Component.LEFT_ALIGNMENT);
         hostCard.add(add);
         hostCard.add(k.vgap(8));
-        DKit.HoverButton addBtn = k.primaryButton("Add & connect");
+        DKit.HoverButton addBtn = k.primaryButton(Language.msg("nativeNetwork.addConnect"));
         addBtn.onClick(() -> {
             java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(add.getText());
             if (hs.isEmpty()) {
                 javax.swing.JOptionPane.showMessageDialog(this,
-                        "Enter host:port, e.g. 31.125.188.214:9501 - or paste a relay QR text");
+                        Language.text("desktopNetwork.enterRelay"));
                 return;
             }
             connectHost(hs.get(0));
@@ -179,6 +182,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         ar.add(addBtn);
         ar.add(Box.createHorizontalGlue());
         hostCard.add(ar);
+        mActionRows.add(ar);
         mBody.add(hostCard);
         mBody.add(k.vgap(14));
 
@@ -187,7 +191,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(14));
 
         // event log
-        mBody.add(k.sectionLabel("Event log"));
+        mBody.add(sectionLabel(Language.msg("nativeNetwork.log")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel logCard = k.card();
         mLog.setForeground(t.subtext);
@@ -196,6 +200,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         logCard.add(mLog);
         mBody.add(logCard);
         mBody.add(Box.createVerticalGlue());
+        if (getWidth() > 0) onWidth(getWidth());
         mBody.revalidate();
         mBody.repaint();
     }
@@ -205,32 +210,30 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         col.setOpaque(false);
         col.setLayout(new BoxLayout(col, BoxLayout.Y_AXIS));
         col.setAlignmentX(Component.LEFT_ALIGNMENT);
-        col.add(k.sectionLabel("Location service · finds you when you move"));
+        col.add(sectionLabel(Language.msg("nativeNetwork.locationTitle")));
         col.add(k.vgap(8));
         DKit.RoundPanel mls = k.card();
-        mls.add(k.kvLine("Mode", node.isStaticMls() ? "static (pinned)" : "rotating (host-assigned)"));
+        mls.add(sectionLabel(Language.msg("desktopNetwork.mode")));
+        mls.add(k.sub(node.isStaticMls() ? Language.msg("desktopNetwork.static") : Language.msg("desktopNetwork.rotating")));
         String loc = node.mlsLocationAddress();
         if (loc != null && !loc.isEmpty()) {
             mls.add(k.vgap(8));
-            mls.add(k.copyField("location address", loc, false));
+            mls.add(k.copyField(Language.msg("desktopNetwork.locationAddress"), loc, false));
         }
         String perm = node.permanentAddress();
         if (perm != null && !perm.isEmpty()) {
             mls.add(k.vgap(8));
-            mls.add(k.copyField("permanent MAX# address", perm, false));
+            mls.add(k.copyField(Language.msg("desktopChat.permanent"), perm, false));
             mls.add(k.vgap(6));
             mls.add(k.sub(node.isStaticMls()
-                    ? "Fixed to your pinned directory — this address never changes, "
-                      + "even as you roam between hosts."
-                    : "Host-assigned and usable right now. Pin a static MLS below to keep "
-                      + "THIS exact address when your host changes."));
+                    ? Language.msg("desktopNetwork.pinnedHelp")
+                    : Language.msg("desktopNetwork.assignedHelp")));
         } else {
             mls.add(k.vgap(6));
-            mls.add(k.sub("Your MAX# appears as soon as a host offers you a directory. "
-                    + "Pin a static MLS to fix it permanently."));
+            mls.add(k.sub(Language.msg("desktopNetwork.waitingMls")));
         }
         mls.add(k.vgap(10));
-        DKit.HoverButton loc2 = k.ghostButton("Location settings");
+        DKit.HoverButton loc2 = k.ghostButton(Language.msg("nativeNetwork.locationSettings"));
         loc2.onClick(this::mlsSettings);
         JPanel lr = rowX();
         lr.add(loc2);
@@ -245,8 +248,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(16, 16, 16, 16));
-        body.add(k.sub("Pin a static Location Service so contacts always find you when you "
-                + "change networks. Leave it to the host otherwise."));
+        body.add(k.sub(Language.msg("desktopNetwork.pinHelp")));
         body.add(k.vgap(10));
         JTextField f = k.field("Mx…@host:port");
         f.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
@@ -259,14 +261,16 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         status.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
-                "Location service", java.awt.Dialog.ModalityType.MODELESS);
+                Language.text("nativeNetwork.location"), java.awt.Dialog.ModalityType.MODELESS);
 
-        DKit.HoverButton pin = k.primaryButton("Pin this MLS");
+        Language.title(d, Language.msg("nativeNetwork.location"));
+
+        DKit.HoverButton pin = k.primaryButton(Language.msg("nativeNetwork.pin"));
         pin.setAlignmentX(Component.LEFT_ALIGNMENT);
         pin.onClick(() -> {
             String m = f.getText().trim();
             if (!m.startsWith("Mx") || !m.contains("@") || !m.contains(":")) {
-                status.setText("Needs the form Mx…@host:port"); return;
+                k.setSub(status, Language.msg("nativeNetwork.mlsFormat")); return;
             }
             node.setStaticMls(m);
             DesktopEventLog.add("static MLS pinned");
@@ -276,18 +280,18 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         body.add(k.vgap(8));
 
         if (node.canRegisterPool()) {
-            DKit.HoverButton pool = k.primaryButton("Use the eurobuddha pool (register)");
+            DKit.HoverButton pool = k.primaryButton(Language.msg("nativeNetwork.poolRegister"));
             pool.setAlignmentX(Component.LEFT_ALIGNMENT);
             pool.onClick(() -> {
                 pool.setButtonEnabled(false);
-                status.setText("Registering with the pool…");
+                k.setSub(status, Language.msg("nativeNetwork.registering"));
                 new Thread(() -> registerPool(status, d), "mls-pool").start();
             });
             body.add(pool);
             body.add(k.vgap(8));
         }
 
-        DKit.HoverButton host = k.ghostButton("Use the host's directory");
+        DKit.HoverButton host = k.ghostButton(Language.msg("nativeNetwork.hostDirectory"));
         host.setAlignmentX(Component.LEFT_ALIGNMENT);
         host.onClick(() -> {
             node.setStaticMls("");
@@ -298,8 +302,8 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         body.add(k.vgap(6));
         body.add(status);
 
-        d.setContentPane(body);
-        d.setSize(430, node.canRegisterPool() ? 330 : 280);
+        d.setContentPane(scrollBody(body));
+        d.setSize(490, dialogHeight(node.canRegisterPool() ? 390 : 340));
         d.setLocationRelativeTo(this);
         d.setVisible(true);
     }
@@ -315,14 +319,14 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
             boolean ok = node.registerWithPool("https://eurobuddha.com/staticmls/api.php",
                     idm.group(1), pm.group(1));
             javax.swing.SwingUtilities.invokeLater(() -> {
-                status.setText(ok ? "Registered — permanent MAX# address active"
-                        : "Pool registration failed — see the log");
+                k.setSub(status, ok ? Language.msg("desktopNetwork.registered")
+                        : Language.msg("nativeNetwork.poolFailed"));
                 if (ok) { mSig = ""; refresh(); d.dispose(); }
             });
         } catch (Exception e) {
             DesktopEventLog.add("pool register: " + e);
             javax.swing.SwingUtilities.invokeLater(() ->
-                    status.setText("Pool unavailable: " + e.getMessage()));
+                    k.renderSub(status, () -> Language.text("nativeNetwork.poolUnavailable", "error", Language.system(e.getMessage()))));
         }
     }
 
@@ -331,22 +335,20 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(16, 16, 16, 16));
-        body.add(k.sub("If your router won't open a port automatically, add a rule that forwards "
-                + "a TCP port to this computer, then enter your public IP so Parlons can prove "
-                + "and advertise it. The port is pinned so the rule survives restarts."));
+        body.add(k.sub(Language.msg("desktopNetwork.manualHelp")));
         body.add(k.vgap(10));
         String lan = DesktopManualForward.localIp();
         int curPort = DesktopManualForward.port();
-        body.add(k.copyField("Forward to this computer",
+        body.add(k.copyField(Language.msg("desktopNetwork.forwardComputer"),
                 lan.isEmpty() ? "—" : lan + ":" + curPort, false));
         body.add(k.vgap(10));
-        JTextField portF = k.field("Port to forward");
+        JTextField portF = k.field(Language.msg("nativeNetwork.port"));
         portF.setText(String.valueOf(curPort));
         portF.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         portF.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(portF);
         body.add(k.vgap(8));
-        JTextField ipF = k.field("Your public IP (found automatically)");
+        JTextField ipF = k.field(Language.msg("nativeNetwork.publicAuto"));
         ipF.setText(DesktopManualForward.publicIp());
         ipF.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         ipF.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -363,9 +365,9 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
             }, "detect-ip").start();
         }
 
-        DKit.HoverButton enable = k.primaryButton("Enable & verify");
+        DKit.HoverButton enable = k.primaryButton(Language.msg("nativeNetwork.enableVerify"));
         enable.setAlignmentX(Component.LEFT_ALIGNMENT);
-        DKit.HoverButton off = k.ghostButton("Turn manual off");
+        DKit.HoverButton off = k.ghostButton(Language.msg("nativeNetwork.manualOffButton"));
         off.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(enable);
         body.add(k.vgap(8));
@@ -374,21 +376,22 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         body.add(status);
 
         JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
-                "Manual port-forward", java.awt.Dialog.ModalityType.MODELESS);
+                Language.text("nativeNetwork.manualTitle"), java.awt.Dialog.ModalityType.MODELESS);
+        Language.title(d, Language.msg("nativeNetwork.manualTitle"));
         enable.onClick(() -> {
             int p;
             try { p = Integer.parseInt(portF.getText().trim()); }
-            catch (Exception e) { status.setText("Enter a port"); return; }
-            if (p <= 0 || p >= 65536) { status.setText("Port must be 1–65535"); return; }
+            catch (Exception e) { k.setSub(status, Language.msg("nativeNetwork.enterPort")); return; }
+            if (p <= 0 || p >= 65536) { k.setSub(status, Language.msg("nativeNetwork.portRange")); return; }
             if (p == DesktopNode.RELAY_PORT) {
-                status.setText("Port " + p + " is reserved for relay mode — pick another"); return;
+                k.setSub(status, Language.msg("nativeNetwork.reservedPort", "port", p)); return;
             }
             String ip = ipF.getText().trim();
-            if (ip.isEmpty()) { status.setText("Enter your public IP (or wait for auto-detect)"); return; }
+            if (ip.isEmpty()) { k.setSub(status, Language.msg("desktopNetwork.enterPublic")); return; }
             DesktopManualForward.set(true, ip, p);
             node.applyManualForward();
             DesktopEventLog.add("manual port-forward enabled: " + ip + ":" + p);
-            status.setText("Enabled — verifying " + ip + ":" + p + " from outside…");
+            k.setSub(status, Language.msg("desktopNetwork.enabledVerify", "address", ip, "port", p));
             mSig = ""; refresh();
             javax.swing.Timer tm = new javax.swing.Timer(1600, e -> d.dispose());
             tm.setRepeats(false); tm.start();
@@ -399,8 +402,8 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
             DesktopEventLog.add("manual port-forward off");
             mSig = ""; refresh(); d.dispose();
         });
-        d.setContentPane(body);
-        d.setSize(450, 360);
+        d.setContentPane(scrollBody(body));
+        d.setSize(490, dialogHeight(440));
         d.setLocationRelativeTo(this);
         d.setVisible(true);
     }
@@ -446,12 +449,13 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
     private void rebuild(MaximaNode n, int hosts, boolean directNow, boolean relayOn) {
         mBody.removeAll();
+        mActionRows.clear();
 
         // ---- connection hero + Auto-connect ----
         DKit.RoundPanel hero = k.card();
         JPanel line = rowX();
         mHeroBig = new JLabel();
-        mHeroBig.setFont(t.extrabold(22f));
+        Language.font(mHeroBig, t.extrabold(22f));
         line.add(mHeroBig);
         line.add(Box.createHorizontalGlue());
         mHeroPill = new JPanel();
@@ -463,58 +467,58 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mHeroSub = k.sub("");
         hero.add(mHeroSub);
         hero.add(k.vgap(12));
-        mAutoBtn = k.primaryButton("Auto-connect");
+        mAutoBtn = k.primaryButton(Language.msg("nativeNetwork.auto"));
         mAutoBtn.onClick(this::autoConnect);
         JPanel ar = rowX();
         ar.add(mAutoBtn);
         ar.add(Box.createHorizontalGlue());
         hero.add(ar);
+        mActionRows.add(ar);
         mBody.add(hero);
         mBody.add(k.vgap(14));
         updateHero(hosts);
 
         // ---- transport stats ----
-        mBody.add(k.sectionLabel("Transport"));
+        mBody.add(sectionLabel(Language.msg("nativeNetwork.transport")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel stats = k.card();
         mStatHosts = new JLabel(); mStatContacts = new JLabel();
         mStatMailbox = new JLabel(); mStatOutbox = new JLabel(); mStatServices = new JLabel();
-        stats.add(statRow("Hosts connected", "Independent routes to you. More is safer.", mStatHosts));
+        stats.add(statRow(Language.msg("nativeNetwork.hostsConnected"), Language.msg("nativeNetwork.independent"), mStatHosts));
         stats.add(k.divider());
-        stats.add(statRow("Contacts", "People who can reach you and you them", mStatContacts));
+        stats.add(statRow(Language.msg("nav.contacts"), Language.msg("nativeNetwork.contactsHelp"), mStatContacts));
         stats.add(k.divider());
-        stats.add(statRow("Mailbox held for others", "Encrypted messages you store for offline peers", mStatMailbox));
+        stats.add(statRow(Language.msg("nativeNetwork.mailbox"), Language.msg("nativeNetwork.mailboxHelp"), mStatMailbox));
         stats.add(k.divider());
-        stats.add(statRow("Your outbox", "Your messages waiting to be accepted by a host", mStatOutbox));
+        stats.add(statRow(Language.msg("nativeNetwork.outbox"), Language.msg("nativeNetwork.outboxHelp"), mStatOutbox));
         stats.add(k.divider());
-        stats.add(statRow("Services you answer", "Requests this desktop can serve for others", mStatServices));
+        stats.add(statRow(Language.msg("nativeNetwork.services"), Language.msg("desktopNetwork.servicesHelp"), mStatServices));
         mBody.add(stats);
         mBody.add(k.vgap(14));
 
         // ---- direct reachability ----
-        mBody.add(k.sectionLabel("Direct reachability · a public address when possible"));
+        mBody.add(sectionLabel(Language.msg("nativeNetwork.directTitle")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel dr = k.card();
         JPanel drRow = rowX();
-        JLabel drState = new JLabel(directNow ? "Directly reachable"
-                : (node.reachState() == ReachabilityManager.State.OFF ? "Not advertised"
-                : cap(node.reachState().name().toLowerCase())));
-        drState.setFont(t.semibold(14f));
+        JLabel drState = mDrState = Language.render(new JLabel(), () -> reachState(node.reachState()));
+        Language.font(drState, t.semibold(14f));
         drState.setForeground(directNow ? t.success : t.text);
         drRow.add(drState);
         drRow.add(Box.createHorizontalGlue());
-        drRow.add(k.pill(directNow ? "on" : "off", directNow ? DKit.OK : DKit.NEUTRAL));
+        drRow.add(k.pill(directNow ? Language.msg("nativeNetwork.on") : Language.msg("nativeNetwork.off"), directNow ? DKit.OK : DKit.NEUTRAL));
         dr.add(drRow);
         dr.add(k.vgap(6));
-        mDrDetail = k.sub(node.reachDetail());
+        mDrDetail = k.sub("");
+        k.renderSub(mDrDetail, () -> reachDetail(node.reachDetail()));
         mDrDetail.setAlignmentX(Component.LEFT_ALIGNMENT);
         dr.add(mDrDetail);
         if (directNow && !node.reachAddress().isEmpty()) {
             dr.add(k.vgap(8));
-            dr.add(k.copyField("your public address", node.reachAddress(), false));
+            dr.add(k.copyField(Language.msg("nativeNetwork.public"), node.reachAddress(), false));
         }
         dr.add(k.vgap(10));
-        DKit.HoverButton check = k.ghostButton(directNow ? "Re-check" : "Check / make me reachable");
+        DKit.HoverButton check = k.ghostButton(directNow ? Language.msg("desktopNetwork.recheck") : Language.msg("desktopNetwork.check"));
         check.onClick(() -> {
             DesktopEventLog.add("checking direct reachability…");
             node.checkReachability();
@@ -523,32 +527,34 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         cr.add(check);
         cr.add(Box.createHorizontalGlue());
         dr.add(cr);
+        mActionRows.add(cr);
         // Manual port-forward — for routers with no UPnP (phone parity).
         dr.add(k.vgap(8));
         DKit.HoverButton mfBtn = k.ghostButton(DesktopManualForward.enabled()
-                ? "Manual port-forward · on" : "Set up manual port-forward");
+                ? Language.msg("desktopNetwork.manualOn") : Language.msg("nativeNetwork.setupManual"));
         mfBtn.onClick(this::manualForward);
         JPanel mfr = rowX();
         mfr.add(mfBtn);
         mfr.add(Box.createHorizontalGlue());
         dr.add(mfr);
+        mActionRows.add(mfr);
         mBody.add(dr);
         mBody.add(k.vgap(14));
 
         // ---- relay ----
-        mBody.add(k.sectionLabel("Help the network"));
+        mBody.add(sectionLabel(Language.msg("nativeNetwork.help")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel relay = k.card();
         JPanel switchRow = rowX();
         JPanel sc = new JPanel();
         sc.setOpaque(false);
         sc.setLayout(new BoxLayout(sc, BoxLayout.Y_AXIS));
-        JLabel st = new JLabel("Run as a relay");
-        st.setFont(t.semibold(13.5f));
+        JLabel st = Language.bind(new JLabel(), Language.msg("desktopNetwork.runRelay"));
+        Language.font(st, t.semibold(13.5f));
         st.setForeground(t.text);
         st.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel sh = k.sub(relayOn ? "You're carrying other people's traffic on port " + node.relayPort()
-                : "Forward other people's messages — grows the network");
+        JLabel sh = k.sub(relayOn ? Language.msg("desktopNetwork.carrying", "port", node.relayPort())
+                : Language.msg("desktopNetwork.forwardOthers"));
         sh.setAlignmentX(Component.LEFT_ALIGNMENT);
         sc.add(st);
         sc.add(sh);
@@ -569,19 +575,19 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
             relay.add(k.vgap(8));
             mRelayRoutes = new JLabel(String.valueOf(rs.routes));
             mRelayRelayed = new JLabel(String.valueOf(rs.relayed));
-            relay.add(kvRow("Clients attached", mRelayRoutes));
-            relay.add(kvRow("Messages relayed", mRelayRelayed));
+            relay.add(kvRow(Language.msg("desktopNetwork.clients"), mRelayRoutes));
+            relay.add(kvRow(Language.msg("desktopNetwork.relayed"), mRelayRelayed));
         }
         // tiers
         relay.add(k.vgap(8));
-        relay.add(tier("Contributing", "mailbox & lookups", hosts > 0));
-        relay.add(tier("Directly reachable", "peers reach you", directNow));
-        relay.add(tier("Relay ⚡", "carrying others' traffic", relayOn));
+        relay.add(tier(Language.msg("nativeNetwork.contributing"), Language.msg("nativeNetwork.mailboxLookups"), hosts > 0));
+        relay.add(tier(Language.msg("nativeNetwork.directlyReachable"), Language.msg("nativeNetwork.peersReach"), directNow));
+        relay.add(tier(Language.msg("nativeNetwork.relay"), Language.msg("nativeNetwork.relayTraffic"), relayOn));
         mBody.add(relay);
         mBody.add(k.vgap(14));
 
         // ---- hosts ----
-        mBody.add(k.sectionLabel("Hosts · they relay your traffic"));
+        mBody.add(sectionLabel(Language.msg("nativeNetwork.hostsTitle")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel hostCard = k.card();
         List<String> active = n.pool().activeHosts();
@@ -595,22 +601,22 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
             first = false;
         }
         if (union.isEmpty()) {
-            hostCard.add(k.sub("No hosts yet."));
+            hostCard.add(k.sub(Language.msg("desktopNetwork.noHosts")));
         }
         hostCard.add(k.vgap(10));
-        JTextField add = k.field("add relay  host:port");
+        JTextField add = k.field(Language.msg("nativeNetwork.relayHint"));
         add.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         add.setAlignmentX(Component.LEFT_ALIGNMENT);
         hostCard.add(add);
         hostCard.add(k.vgap(8));
         JPanel hr = rowX();
-        DKit.HoverButton addBtn = k.primaryButton("Add & connect");
+        DKit.HoverButton addBtn = k.primaryButton(Language.msg("nativeNetwork.addConnect"));
         addBtn.onClick(() -> {
             // Typed host:port, a comma list, or the text of a relay's QR (parlons-relay:...).
             java.util.List<String> hs = com.eurobuddha.maxima.core.session.SeedRelays.parse(add.getText());
             if (hs.isEmpty()) {
                 javax.swing.JOptionPane.showMessageDialog(this,
-                        "Enter host:port, e.g. 31.125.188.214:9501 - or paste a relay QR text");
+                        Language.text("desktopNetwork.enterRelay"));
                 return;
             }
             for (String hp : hs) {
@@ -621,19 +627,19 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
             mSig = "";
             refresh();
         });
-        DKit.HoverButton reset = k.ghostButton("Reset to defaults");
+        DKit.HoverButton reset = k.ghostButton(Language.msg("nativeNetwork.reset"));
         reset.onClick(() -> { node.relayStore().reset(); mSig = ""; refresh(); });
         // The compiled-in list is one seed source among several - never the only one.
         JPanel bi = rowX();
         JLabel biLabel = k.sub(node.relayStore().builtInEnabled()
-                ? "Built-in relays: on (the list shipped with the app, plus yours)"
-                : "Built-in relays: off (only relays you added or this machine remembers)");
+                ? Language.msg("desktopNetwork.builtinOn")
+                : Language.msg("desktopNetwork.builtinOff"));
         bi.add(biLabel);
         bi.add(Box.createRigidArea(new Dimension(10, 0)));
         bi.add(k.toggle(node.relayStore().builtInEnabled(), on -> {
             if (!node.relayStore().setBuiltInEnabled(on)) {
                 javax.swing.JOptionPane.showMessageDialog(this,
-                        "Add a relay of your own first - this machine needs somewhere to start.");
+                        Language.text("desktopNetwork.addFirst"));
             }
             mSig = "";
             refresh();
@@ -646,6 +652,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         hr.add(reset);
         hr.add(Box.createHorizontalGlue());
         hostCard.add(hr);
+        mActionRows.add(hr);
         mBody.add(hostCard);
         mBody.add(k.vgap(14));
 
@@ -656,9 +663,9 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
         // ---- event log ----
         JPanel logHead = rowX();
-        logHead.add(k.sectionLabel("Event log"));
+        logHead.add(sectionLabel(Language.msg("nativeNetwork.log")));
         logHead.add(Box.createHorizontalGlue());
-        DKit.HoverButton clear = k.ghostButton("Clear");
+        DKit.HoverButton clear = k.ghostButton(Language.msg("common.clear"));
         clear.onClick(() -> { DesktopEventLog.clear(); refresh(); });
         logHead.add(clear);
         mBody.add(logHead);
@@ -671,6 +678,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(logCard);
 
         mBody.add(Box.createVerticalGlue());
+        if (getWidth() > 0) onWidth(getWidth());
         mBody.revalidate();
         mBody.repaint();
     }
@@ -684,7 +692,8 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mStatMailbox.setText(String.valueOf(n.mailbox().totalItems()));
         mStatOutbox.setText(String.valueOf(n.outbox().size()));
         mStatServices.setText(String.valueOf(n.services().methods().size()));
-        if (mDrDetail != null) mDrDetail.setText(node.reachDetail());
+        if (mDrDetail != null) k.renderSub(mDrDetail, () -> reachDetail(node.reachDetail()));
+        if (mDrState != null) Language.render(mDrState, () -> reachState(node.reachState()));
         RelayRuntime.Stats rs = node.relayStats();
         if (rs != null && mRelayRoutes != null) mRelayRoutes.setText(String.valueOf(rs.routes));
         if (rs != null && mRelayRelayed != null) mRelayRelayed.setText(String.valueOf(rs.relayed));
@@ -692,16 +701,17 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
     /** A stat row whose value is a caller-owned label, so it can be updated in
      *  place by {@link #updateLive} without rebuilding the card. */
-    private JComponent statRow(String title, String hint, JLabel value) {
+    private JComponent statRow(CharSequence title, CharSequence hint, JLabel value) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(9, 2, 9, 2));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         JPanel left = new JPanel();
         left.setOpaque(false);
         left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
-        JLabel tl = new JLabel(title);
-        tl.setFont(t.semibold(13f));
+        JLabel tl = k.sub(title);
+        Language.font(tl, t.semibold(13f));
         tl.setForeground(t.text);
         tl.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel hl = k.sub(hint);
@@ -709,23 +719,24 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         left.add(tl);
         left.add(hl);
         row.add(left, BorderLayout.CENTER);
-        value.setFont(t.extrabold(18f));
+        Language.font(value, t.extrabold(18f));
         value.setForeground(t.text);
         row.add(value, BorderLayout.EAST);
         return row;
     }
 
     /** A label:value line whose value label the caller keeps for in-place updates. */
-    private JComponent kvRow(String label, JLabel value) {
+    private JComponent kvRow(CharSequence label, JLabel value) {
         JPanel row = new JPanel(new BorderLayout(10, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(4, 0, 4, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel l = new JLabel(label);
-        l.setFont(t.font(12.5f));
+        JLabel l = k.sub(label);
+        Language.font(l, t.font(12.5f));
         l.setForeground(t.subtext);
-        value.setFont(t.semibold(12.5f));
+        Language.font(value, t.semibold(12.5f));
         value.setForeground(t.text);
         row.add(l, BorderLayout.WEST);
         row.add(value, BorderLayout.EAST);
@@ -735,20 +746,20 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
     private void updateHero(int hosts) {
         if (mHeroBig == null) return;
         boolean ok = hosts > 0;
-        mHeroBig.setText(mConnecting ? "Connecting…" : (ok ? "Connected" : "Offline"));
+        Language.bind(mHeroBig, mConnecting ? Language.msg("connection.connecting") : (ok ? Language.msg("notification.connected") : Language.msg("nativeNetwork.offline")));
         mHeroBig.setForeground(mConnecting ? t.text : (ok ? t.success : t.error));
         // mHeroPill / mHeroSub only exist on the built-in rebuild() path; the
         // classic (jar) rebuildJar() builds only mHeroBig. Guard so a jar-mode
         // heartbeat can't NPE here and leave the whole tab half-built.
         if (mHeroPill != null) {
             mHeroPill.removeAll();
-            mHeroPill.add(k.pill(hosts + (hosts == 1 ? " host" : " hosts"), ok ? DKit.OK : DKit.BAD));
+            mHeroPill.add(k.pill(Language.msg("nativeShell.hosts", "count", hosts), ok ? DKit.OK : DKit.BAD));
             mHeroPill.revalidate();
             mHeroPill.repaint();
         }
         if (mHeroSub != null && !mConnecting) {
-            mHeroSub.setText(ok ? "Reachable through " + hosts + (hosts == 1 ? " route." : " independent routes.")
-                    : "Not connected — tap Auto-connect to fix.");
+            k.setSub(mHeroSub, ok ? Language.msg("desktopNetwork.routes", "count", hosts)
+                    : Language.msg("desktopNetwork.offlineHelp"));
         }
     }
 
@@ -756,13 +767,13 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         if (DesktopConnectionFinder.isRunning()) return;
         mConnecting = true;
         mAutoBtn.setButtonEnabled(false);
-        mAutoBtn.setText("Working…");
+        Language.bind(mAutoBtn, Language.msg("nativeNetwork.working"));
         DesktopConnectionFinder.run(node, node.relayStore(), new DesktopConnectionFinder.Listener() {
-            public void onStep(String plain) { mHeroSub.setText(plain); }
+            public void onStep(String plain) { k.renderSub(mHeroSub, () -> Language.system(plain)); }
             public void onDone(int connectedHosts, boolean anyReachable) {
                 mConnecting = false;
                 mAutoBtn.setButtonEnabled(true);
-                mAutoBtn.setText("Auto-connect");
+                Language.bind(mAutoBtn, Language.msg("nativeNetwork.auto"));
                 node.checkReachability();
                 mSig = "";
                 refresh();
@@ -787,7 +798,7 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         copy.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
         body.add(Box.createRigidArea(new Dimension(0, 8)));
         body.add(copy);
-        javax.swing.JOptionPane.showMessageDialog(this, body, "Share relay " + hostPort,
+        javax.swing.JOptionPane.showMessageDialog(this, body, Language.text("desktopNetwork.shareRelay", "host", hostPort),
                 javax.swing.JOptionPane.PLAIN_MESSAGE);
     }
 
@@ -807,16 +818,17 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
     // ---- rows ----
 
-    private JComponent stat(String title, String hint, String value) {
+    private JComponent stat(CharSequence title, CharSequence hint, String value) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(9, 2, 9, 2));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         JPanel left = new JPanel();
         left.setOpaque(false);
         left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
-        JLabel tl = new JLabel(title);
-        tl.setFont(t.semibold(13f));
+        JLabel tl = k.sub(title);
+        Language.font(tl, t.semibold(13f));
         tl.setForeground(t.text);
         tl.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel hl = k.sub(hint);
@@ -825,26 +837,27 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         left.add(hl);
         row.add(left, BorderLayout.CENTER);
         JLabel v = new JLabel(value);
-        v.setFont(t.extrabold(18f));
+        Language.font(v, t.extrabold(18f));
         v.setForeground(t.text);
         row.add(v, BorderLayout.EAST);
         return row;
     }
 
-    private JComponent tier(String title, String hint, boolean on) {
+    private JComponent tier(CharSequence title, CharSequence hint, boolean on) {
         JPanel row = new JPanel(new BorderLayout(10, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(6, 2, 6, 2));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
         JLabel dot = new JLabel("●");
-        dot.setFont(t.font(11f));
+        Language.font(dot, t.font(11f));
         dot.setForeground(on ? t.success : DKit.alpha(t.subtext, 120));
         row.add(dot, BorderLayout.WEST);
         JPanel mid = new JPanel();
         mid.setOpaque(false);
         mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
-        JLabel tl = new JLabel(title);
-        tl.setFont(t.semibold(12.5f));
+        JLabel tl = k.sub(title);
+        Language.font(tl, t.semibold(12.5f));
         tl.setForeground(on ? t.text : t.subtext);
         tl.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel hl = k.sub(hint);
@@ -853,8 +866,8 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         mid.add(hl);
         row.add(mid, BorderLayout.CENTER);
         if (on) {
-            JLabel now = new JLabel("NOW");
-            now.setFont(t.bold(9.5f));
+            JLabel now = Language.bind(new JLabel(), Language.msg("nativeNetwork.now"));
+            Language.font(now, t.bold(9.5f));
             now.setForeground(t.success);
             row.add(now, BorderLayout.EAST);
         }
@@ -863,15 +876,17 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
 
     private JComponent hostRow(String hostPort, boolean connected) {
         JPanel row = new JPanel(new BorderLayout(10, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(9, 2, 9, 2));
         JLabel dot = new JLabel("●");
-        dot.setFont(t.font(10f));
+        Language.font(dot, t.font(10f));
         dot.setForeground(connected ? t.success : DKit.alpha(t.subtext, 110));
         row.add(dot, BorderLayout.WEST);
-        String kind = DesktopRelayStore.isBuiltIn(hostPort) ? "built-in"
-                : node.relayStore().userSeeds().contains(hostPort) ? "yours" : "learned";
-        JLabel h = new JLabel(hostPort + "   " + kind);
+        String kind = DesktopRelayStore.isBuiltIn(hostPort) ? "desktopNetwork.builtIn"
+                : node.relayStore().userSeeds().contains(hostPort) ? "desktopNetwork.yours" : "desktopNetwork.learned";
+        JLabel h = k.sub("");
+        k.renderSub(h, () -> hostPort + "   " + Language.text(kind));
         h.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
         h.setForeground(t.text);
         row.add(h, BorderLayout.CENTER);
@@ -879,36 +894,85 @@ public final class NetworkPanel extends JPanel implements MaximaWindow.Tab {
         actions.setOpaque(false);
         actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
         DKit.HoverButton qr = k.ghostButton("QR");
-        qr.setFont(t.semibold(11f));
+        Language.font(qr, t.semibold(11f));
         qr.onClick(() -> shareRelayQr(hostPort));
         actions.add(qr);
         actions.add(Box.createRigidArea(new Dimension(6, 0)));
         if (!connected) {
-            DKit.HoverButton c = k.ghostButton("Connect");
-            c.setFont(t.semibold(11f));
+            DKit.HoverButton c = k.ghostButton(Language.msg("nativeNetwork.connect"));
+            Language.font(c, t.semibold(11f));
             c.onClick(() -> connectHost(hostPort));
             actions.add(c);
             actions.add(Box.createRigidArea(new Dimension(6, 0)));
         }
-        DKit.HoverButton rm = k.dangerButton("Remove");
-        rm.setFont(t.semibold(11f));
+        DKit.HoverButton rm = k.dangerButton(Language.msg("common.remove"));
+        Language.font(rm, t.semibold(11f));
         rm.onClick(() -> {
             com.eurobuddha.maxima.core.session.SeedRelays.Drop d = node.relayStore().remove(hostPort);
             if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.REFUSED_LAST_SEED) {
                 javax.swing.JOptionPane.showMessageDialog(this,
-                        "Keep at least one relay - add your own before dropping this one.");
+                        Language.text("desktopNetwork.keepRelay"));
                 return;
             }
             if (d == com.eurobuddha.maxima.core.session.SeedRelays.Drop.DROPPED_BUILTIN_BACK_ON) {
                 javax.swing.JOptionPane.showMessageDialog(this,
-                        "That was your last relay, so the built-in list is back on.");
+                        Language.text("desktopNetwork.lastRelay"));
             }
             mSig = "";
             refresh();
         });
         actions.add(rm);
-        row.add(actions, BorderLayout.EAST);
+        row.add(actions, BorderLayout.SOUTH);
+        mActionRows.add(actions);
         return row;
+    }
+
+    private JScrollPane scrollBody(JPanel body) {
+        JScrollPane scroll=new JScrollPane(new DKit.ScrollableColumn(body),
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null);scroll.getViewport().setBackground(t.card);return scroll;
+    }
+    private int dialogHeight(int normal) {
+        return Math.min(java.awt.Toolkit.getDefaultToolkit().getScreenSize().height-80,
+                normal*t.textPercent()/100);
+    }
+
+    private JLabel sectionLabel(CharSequence text) {
+        JLabel label=k.sub(text);Language.font(label, t.semibold(11f));return label;
+    }
+    @Override public void onWidth(int width) {
+        int available=Math.max(1,Math.min(720,width-44)-32);
+        for(JPanel row:mActionRows) DKit.layoutActions(row,available);
+    }
+    static String reachState(ReachabilityManager.State state) {
+        switch(state){
+            case OFF: return Language.text("desktopNetwork.notAdvertised");
+            case MAPPING: return Language.text("nativeNetwork.mapping");
+            case PROBING: return Language.text("nativeNetwork.probing");
+            case ADVERTISED: return Language.text("nativeNetwork.directlyReachable");
+            default: throw new IllegalArgumentException("Unknown reachability state");
+        }
+    }
+    /** Display-only adaptation of ReachabilityManager diagnostics; protocol values stay unchanged. */
+    public static String reachDetail(String value) {
+        if(value==null)return "";
+        String[][] patterns={
+            {"verifying (.+) \\(manual forward\\)…", "desktopNetwork.manualVerifying", "address"},
+            {"manual forward: port ([0-9]+) is not open from outside — check the router rule", "desktopNetwork.manualNotOpen", "port"},
+            {"reachable at (.+) \\(manual forward\\)", "desktopNetwork.manualReachable", "address"},
+            {"verifying (.+) from outside…", "desktopNetwork.verifyOutside", "address"},
+            {"reachable at (.+) via (.+)", "desktopNetwork.reachableVia", "address", "via"},
+            {"lease renewed for (.+)", "desktopNetwork.leaseRenewed", "address"}
+        };
+        for(String[] pattern:patterns){
+            java.util.regex.Matcher m=java.util.regex.Pattern.compile(pattern[0]).matcher(value);
+            if(m.matches()){
+                Object[] pairs=new Object[(pattern.length-2)*2];
+                for(int i=2;i<pattern.length;i++){pairs[(i-2)*2]=pattern[i];pairs[(i-2)*2+1]=m.group(i-1);}
+                return Language.text(pattern[1],pairs);
+            }
+        }
+        return Language.system(value);
     }
 
     private JPanel rowX() {

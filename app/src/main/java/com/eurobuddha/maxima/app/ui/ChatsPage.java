@@ -1,6 +1,9 @@
 package com.eurobuddha.maxima.app.ui;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
 import android.content.Intent;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,9 +24,7 @@ import com.eurobuddha.maxima.core.chat.ChatEngine;
 import com.eurobuddha.maxima.core.chat.Group;
 import com.eurobuddha.maxima.core.contacts.Contact;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -37,7 +38,7 @@ public final class ChatsPage implements Page {
         String key;
         String name;
         String preview;
-        String time;
+        long time;
         int unread;
     }
 
@@ -52,8 +53,6 @@ public final class ChatsPage implements Page {
     private final Adapter mAdapter = new Adapter();
     private String mQuery = "";
 
-    private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
-    private final SimpleDateFormat mDay = new SimpleDateFormat("d MMM", Locale.UK);
 
     public ChatsPage(MainActivity zAct, View zView) {
         mAct = zAct;
@@ -92,7 +91,7 @@ public final class ChatsPage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Chats";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_chats);
     }
 
     private void open(String zConversation) {
@@ -106,7 +105,7 @@ public final class ChatsPage implements Page {
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
-            mEmpty.setText("Starting the transport…");
+            Language.setText(mEmpty, Language.msg(R.string.l10n_native_chat_starting));
             mEmpty.setVisibility(View.VISIBLE);
             return;
         }
@@ -120,16 +119,10 @@ public final class ChatsPage implements Page {
             Row r = new Row();
             r.key = s.conversation;
             r.name = Names.of(node, chat, s.conversation);
-            String who = s.lastMine ? "You: "
-                    : (chat.group(s.conversation) != null
-                    ? Names.contact(node, s.lastSender) + ": " : "");
-            String body = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(s.lastBody)
-                    ? com.eurobuddha.maxima.core.chat.ChatPay.preview(s.lastBody)
-                    : com.eurobuddha.maxima.core.chat.ChatContact.isCard(s.lastBody)
-                    ? com.eurobuddha.maxima.core.chat.ChatContact.preview(s.lastBody)
-                    : com.eurobuddha.maxima.core.chat.ChatMedia.preview(s.lastBody);
-            r.preview = who + oneLine(body);
-            r.time = stamp(s.lastTime);
+            String body = oneLine(com.eurobuddha.maxima.app.i18n.ChatPreview.text(mAct, s.lastBody));
+            r.preview = s.lastMine ? tr(R.string.l10n_chat_you_prefix, body)
+                    : (chat.group(s.conversation) != null ? Names.contact(node, s.lastSender) + ": " : "") + body;
+            r.time = s.lastTime;
             r.unread = s.unread;
             rows.add(r);
             seen.add(s.conversation);
@@ -167,27 +160,25 @@ public final class ChatsPage implements Page {
 
         mEmpty.setVisibility(mRows.isEmpty() ? View.VISIBLE : View.GONE);
         if (!mQuery.isEmpty()) {
-            mEmpty.setText("No chats match “" + mSearch.getText() + "”.");
+            Language.setText(mEmpty, Language.msg(R.string.l10n_native_chat_no_matches, mSearch.getText().toString()));
         } else {
-            mEmpty.setText("No conversations yet.\n\nGo to Contacts, paste someone's "
-                    + "Mx…@host:port address and introduce yourself. Or send them yours.");
+            Language.setText(mEmpty, Language.msg(R.string.l10n_native_chat_empty_device));
         }
     }
 
-    private static Row blank(String zKey, String zName) {
+    private Row blank(String zKey, String zName) {
         Row r = new Row();
         r.key = zKey;
         r.name = zName;
-        r.preview = "no messages yet";
-        r.time = "";
+        r.preview = tr(R.string.l10n_chat_no_messages);
+        r.time = 0;
         return r;
     }
 
-    private String stamp(long zTime) {
-        long age = System.currentTimeMillis() - zTime;
-        return age < 20L * 60 * 60 * 1000 ? mHm.format(new Date(zTime))
-                : mDay.format(new Date(zTime));
-    }
+
+    @Override public void languageChanged() { render(); }
+
+    private String tr(int resource, Object... arguments) { return Language.text(mAct, resource, arguments); }
 
     private static String oneLine(String zBody) {
         String s = zBody.replace('\n', ' ').trim();
@@ -202,16 +193,15 @@ public final class ChatsPage implements Page {
         if (chat == null) {
             return;
         }
-        final List<String> items = new ArrayList<>();
+        final List<CharSequence> items = new ArrayList<>();
         if (row.unread > 0) {
-            items.add("Mark as read");
+            items.add(Language.msg(R.string.l10n_native_chat_mark_read));
         }
-        items.add("Clear messages");
-        new AlertDialog.Builder(mAct)
+        items.add(Language.msg(R.string.l10n_native_chat_clear_messages));
+        new LanguageDialog(mAct)
                 .setTitle(row.name)
-                .setItems(items.toArray(new String[0]), (d, which) -> {
-                    String choice = items.get(which);
-                    if ("Mark as read".equals(choice)) {
+                .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
+                    if (row.unread > 0 && which == 0) {
                         chat.markRead(row.key);
                         render();
                     } else {
@@ -222,13 +212,11 @@ public final class ChatsPage implements Page {
     }
 
     private void confirmClear(final Row row) {
-        new AlertDialog.Builder(mAct)
-                .setTitle("Clear this chat?")
-                .setMessage("Delete every message with " + row.name + " on THIS phone. "
-                        + "It won't unsend anything or leave a group - the thread just "
-                        + "starts empty again. This can't be undone.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Clear", (d, w) -> {
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_chat_clear_title))
+                .setMessage(Language.msg(R.string.l10n_native_chat_clear_device, row.name))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_clear), (d, w) -> {
                     ChatEngine chat = MaximaService.chat();
                     if (chat != null) {
                         chat.clearConversation(row.key);
@@ -244,12 +232,12 @@ public final class ChatsPage implements Page {
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         ChatEngine chat = MaximaService.chat();
         if (node == null || chat == null) {
-            mAct.toast("Transport not running");
+            mAct.toast(tr(R.string.l10n_native_chat_transport_stopped));
             return;
         }
         List<Contact> contacts = node.contacts();
         if (contacts.isEmpty()) {
-            mAct.toast("Add some contacts first");
+            mAct.toast(tr(R.string.l10n_native_chat_add_contacts_first));
             mAct.showTab(1);
             return;
         }
@@ -258,12 +246,12 @@ public final class ChatsPage implements Page {
         for (int i = 0; i < contacts.size(); i++) {
             labels[i] = contacts.get(i).name + "   " + Names.shorten(contacts.get(i).publicKey);
         }
-        new AlertDialog.Builder(mAct)
-                .setTitle("Who is in the group?")
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_chat_pick_members))
                 .setMultiChoiceItems(labels, checked, (d, which, on) -> checked[which] = on)
-                .setNeutralButton("How groups work", (d, w) -> Explain.show(mAct, "groups"))
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Next", (d, w) -> {
+                .setNeutralButton(Language.msg(R.string.l10n_native_chat_group_help), (d, w) -> Explain.show(mAct, "groups"))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_next), (d, w) -> {
                     List<String> members = new ArrayList<>();
                     for (int i = 0; i < contacts.size(); i++) {
                         if (checked[i]) {
@@ -271,12 +259,11 @@ public final class ChatsPage implements Page {
                         }
                     }
                     if (members.isEmpty()) {
-                        mAct.toast("Pick at least one person");
+                        mAct.toast(tr(R.string.l10n_native_chat_pick_one));
                         return;
                     }
                     if (members.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
-                        mAct.toast("A group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
-                                + " people including you - pick fewer");
+                        mAct.toast(Language.count(R.plurals.l10n_native_chat_group_capacity, com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS).toString());
                         return;
                     }
                     nameGroup(members);
@@ -286,14 +273,14 @@ public final class ChatsPage implements Page {
 
     private void nameGroup(List<String> zMembers) {
         final EditText input = new EditText(mAct);
-        input.setHint("Group name");
+        Language.hint(input, Language.msg(R.string.l10n_chat_group_name));
         int pad = Ui.dp(mAct, 20);
         input.setPadding(pad, pad / 2, pad, pad / 2);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Name the group")
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_chat_name_group))
                 .setView(input)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Create", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_create), (d, w) -> {
                     String n = input.getText().toString().trim();
                     final String name = n.isEmpty() ? "Group" : n;
                     // Creating fans the roster out to every member - a network
@@ -307,7 +294,7 @@ public final class ChatsPage implements Page {
                             });
                         } catch (Exception e) {
                             mAct.runOnUiThread(() ->
-                                    mAct.toast("Could not create: " + e.getMessage()));
+                                    mAct.toast(tr(R.string.l10n_native_chat_create_failed, e.getMessage())));
                         }
                     }, "create-group").start();
                 })
@@ -343,7 +330,7 @@ public final class ChatsPage implements Page {
             Avatars.apply(v.findViewById(R.id.conv_avatar), r.key, r.name);
             ((TextView) v.findViewById(R.id.conv_name)).setText(r.name);
             ((TextView) v.findViewById(R.id.conv_preview)).setText(r.preview);
-            ((TextView) v.findViewById(R.id.conv_time)).setText(r.time);
+            ((TextView) v.findViewById(R.id.conv_time)).setText(r.time > 0 ? Language.shortStamp(r.time) : "");
             TextView badge = v.findViewById(R.id.conv_badge);
             if (r.unread > 0) {
                 badge.setVisibility(View.VISIBLE);

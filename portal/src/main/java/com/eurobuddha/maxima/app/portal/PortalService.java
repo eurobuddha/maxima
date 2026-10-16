@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -78,20 +79,11 @@ public final class PortalService extends Service {
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm.getNotificationChannel(CHANNEL) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL,
-                    "Cloud connection", NotificationManager.IMPORTANCE_MIN);
-            ch.setDescription("Keeps you connected to your cloud account");
+                    Language.text(this,R.string.l10n_notification_cloud_connection), NotificationManager.IMPORTANCE_MIN);
+            ch.setDescription(Language.text(this,R.string.l10n_notification_cloud_connection_help));
             nm.createNotificationChannel(ch);
         }
-        Intent open = new Intent(this, MainActivity.class);
-        PendingIntent pi = PendingIntent.getActivity(this, 0, open,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Notification n = new NotificationCompat.Builder(this, CHANNEL)
-                .setSmallIcon(R.drawable.ic_send)
-                .setContentTitle("Parlons Cloud")
-                .setContentText("Connected to your cloud account")
-                .setOngoing(true)
-                .setContentIntent(pi)
-                .build();
+        Notification n = buildNotification();
         mNotification = n;
         mCallForeground.refresh(n);
 
@@ -156,6 +148,27 @@ public final class PortalService extends Service {
         } catch (Exception e) {
             mNetCb = null;
         }
+    }
+
+    private Notification buildNotification() {
+        Intent open = new Intent(this, MainActivity.class);
+        PendingIntent pi = PendingIntent.getActivity(this, 0, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        return new NotificationCompat.Builder(this, CHANNEL)
+                .setSmallIcon(R.drawable.ic_send)
+                .setContentTitle("Parlons Cloud")
+                .setContentText(Language.text(this,R.string.l10n_notification_cloud_connected))
+                .setOngoing(true)
+                .setContentIntent(pi)
+                .build();
+    }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        mNotification = buildNotification();
+        try { getSystemService(NotificationManager.class).notify(1, mNotification); }
+        catch (RuntimeException ignored) { }
     }
 
     @Override

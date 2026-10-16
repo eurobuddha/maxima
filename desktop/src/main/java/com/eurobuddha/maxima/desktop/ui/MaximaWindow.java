@@ -74,6 +74,7 @@ public final class MaximaWindow {
         String label();
         JComponent view();
         void refresh();
+        default void languageChanged() { }
     }
 
     /** Panels that reflow implement this to receive the live content width. */
@@ -95,6 +96,7 @@ public final class MaximaWindow {
     private final Timer mBeat;
     private final Runnable mChangeHook;
     private ChatEngine.Listener mChatHook;
+    private final Runnable mLanguageHook;
 
     private JLabel mStatusText;
     private StatusDot mStatusDot;
@@ -142,9 +144,8 @@ public final class MaximaWindow {
         // Phone parity: FOUR visible tabs (Chats/Contacts/Wallet/Network).
         // Settings is the last panel (index 4) and is reached via the ⋮ overflow,
         // never shown as a tab — so the strip carries every tab but the last.
-        int stripCount = mTabs.size() - 1;
-        String[] labels = new String[stripCount];
-        for (int i = 0; i < stripCount; i++) labels[i] = mTabs.get(i).label();
+        CharSequence[] labels = {Language.msg("nav.chats"), Language.msg("nav.contacts"),
+                Language.msg("nav.wallet"), Language.msg("nav.network")};
         mStrip = new TabStrip(labels, t, this::select);
         header.add(mStrip);
 
@@ -210,6 +211,20 @@ public final class MaximaWindow {
         };
         mNode.addChatListener(mChatHook);
 
+        mLanguageHook = () -> {
+            for (Tab tab : mTabs) tab.languageChanged();
+            Language.refresh(root);
+            for (java.awt.Window child : mFrame.getOwnedWindows()) Language.refresh(child);
+            refreshStatus();
+            pushWidth();
+        };
+        Language.addListener(mLanguageHook);
+        mFrame.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosed(java.awt.event.WindowEvent e) {
+                Language.removeListener(mLanguageHook);
+            }
+        });
+
         // Tier-0 telephony: receive call signals and decline gracefully so a
         // phone caller gets an instant "unavailable" instead of ringing out.
         new DesktopCalls(mNode, mFrame, t).attach();
@@ -223,7 +238,7 @@ public final class MaximaWindow {
                     ? java.awt.SystemTray.getSystemTray() : null;
             if (tray != null && tray.getTrayIcons().length > 0) {
                 tray.getTrayIcons()[0].displayMessage(
-                        "Parlons!", "New message", java.awt.TrayIcon.MessageType.NONE);
+                        "Parlons!", Language.text("desktop.newMessage"), java.awt.TrayIcon.MessageType.NONE);
             }
         } catch (Exception ignored) { }
     }
@@ -288,18 +303,18 @@ public final class MaximaWindow {
         line1.setLayout(new BoxLayout(line1, BoxLayout.X_AXIS));
         line1.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel brand = new JLabel("Parlons!");
-        brand.setFont(t.extrabold(21f));
+        Language.font(brand, t.extrabold(21f));
         brand.setForeground(t.onHeader);
         line1.add(brand);
         JLabel ver = new JLabel("v" + com.eurobuddha.maxima.desktop.DesktopMain.APP_VERSION);
-        ver.setFont(t.font(10.5f));
+        Language.font(ver, t.font(10.5f));
         ver.setForeground(DKit.alpha(t.onHeader, 150));
         ver.setBorder(new EmptyBorder(5, 8, 0, 0));
         line1.add(ver);
         brandCol.add(line1);
 
-        JLabel tagline = new JLabel("Powered by Maxima");
-        tagline.setFont(t.font(9f));
+        JLabel tagline = Language.bind(new JLabel(), Language.msg("common.powered"));
+        Language.font(tagline, t.font(9f));
         tagline.setForeground(DKit.alpha(t.onHeader, 110));
         tagline.setAlignmentX(Component.LEFT_ALIGNMENT);
         tagline.setBorder(new EmptyBorder(1, 1, 0, 0));
@@ -317,8 +332,8 @@ public final class MaximaWindow {
         mStatusDot = new StatusDot();
         statusPill.add(mStatusDot);
         statusPill.add(javax.swing.Box.createRigidArea(new Dimension(6, 0)));
-        mStatusText = new JLabel("starting…");
-        mStatusText.setFont(t.medium(11f));
+        mStatusText = Language.bind(new JLabel(), Language.msg("connection.starting"));
+        Language.font(mStatusText, t.medium(11f));
         mStatusText.setForeground(t.onHeader);
         statusPill.add(mStatusText);
         statusPill.setMaximumSize(statusPill.getPreferredSize());
@@ -330,6 +345,7 @@ public final class MaximaWindow {
         // Theme toggle (sun/moon) — light↔dark, persisted.
         Icons.Btn theme = new Icons.Btn(t.mode == Theme.Mode.DARK ? Icons.SUN : Icons.MOON,
                 t.onHeader, DKit.alpha(t.onHeader, 24), 38, 20, 1.6f);
+        Language.tooltip(theme, Language.msg("common.theme"));
         theme.onClick(() -> {
             Theme.Mode next = t.mode == Theme.Mode.DARK ? Theme.Mode.LIGHT : Theme.Mode.DARK;
             java.util.prefs.Preferences.userRoot().node("com/eurobuddha/maxima/desktop")
@@ -340,6 +356,7 @@ public final class MaximaWindow {
 
         // Search (magnifying glass) → jump to Chats and focus its search (phone: showTab(0)).
         Icons.Btn search = new Icons.Btn(Icons.SEARCH, t.onHeader, DKit.alpha(t.onHeader, 24), 38, 19, 1.9f);
+        Language.tooltip(search, Language.msg("common.search"));
         search.onClick(() -> {
             select(0);
             Tab chats = mTabs.get(0);
@@ -349,6 +366,7 @@ public final class MaximaWindow {
 
         // Overflow (three dots) → Settings (phone: showTab(4)).
         Icons.Btn more = new Icons.Btn(Icons.MORE, t.onHeader, DKit.alpha(t.onHeader, 24), 36, 18, 1.6f);
+        Language.tooltip(more, Language.msg("nav.settings"));
         more.onClick(() -> select(4));
         bar.add(more);
         return bar;
@@ -376,7 +394,9 @@ public final class MaximaWindow {
         int hosts = 0;
         try { hosts = mNode.connectedCount(); } catch (Exception ignored) { }
         boolean ok = hosts > 0;
-        mStatusText.setText(ok ? (hosts + (hosts == 1 ? " host" : " hosts")) : "offline");
+        Language.bind(mStatusText, ok ? Language.msg("nativeShell.hosts", "count", hosts) : Language.msg("connection.offline"));
+        Component pill = mStatusText.getParent();
+        pill.setMaximumSize(pill.getPreferredSize());
         mStatusDot.setColor(ok ? t.success : t.error);
     }
 
@@ -403,7 +423,7 @@ public final class MaximaWindow {
         IconButton(String glyph, Theme t) {
             super(glyph, javax.swing.SwingConstants.CENTER);
             theme = t;
-            setFont(t.medium(17f));
+            Language.font(this, t.medium(17f));
             setForeground(t.onHeader);
             setPreferredSize(new Dimension(38, 38));
             setMaximumSize(new Dimension(38, 38));
@@ -429,13 +449,13 @@ public final class MaximaWindow {
 
     /** The 5-tab strip: fixed tabs, underline indicator (not full width), on the header color. */
     static final class TabStrip extends JComponent {
-        private final String[] labels;
+        private final CharSequence[] labels;
         private int selected;
         private int hover = -1;
         private final Theme theme;
         private final java.util.function.IntConsumer onPick;
 
-        TabStrip(String[] zLabels, Theme t, java.util.function.IntConsumer zOnPick) {
+        TabStrip(CharSequence[] zLabels, Theme t, java.util.function.IntConsumer zOnPick) {
             labels = zLabels;
             theme = t;
             onPick = zOnPick;
@@ -474,15 +494,15 @@ public final class MaximaWindow {
             int segW = w / Math.max(1, n);
             for (int i = 0; i < n; i++) {
                 boolean sel = i == selected;
-                g2.setFont(sel ? theme.semibold(13f) : theme.medium(13f));
+                g2.setFont(Language.fontFor(sel ? theme.semibold(13f) : theme.medium(13f), labels[i].toString()));
                 g2.setColor(sel ? theme.onHeader
                         : (i == hover ? DKit.alpha(theme.onHeader, 210) : DKit.alpha(theme.onHeader, 150)));
                 java.awt.FontMetrics fm = g2.getFontMetrics();
-                int lx = i * segW + (segW - fm.stringWidth(labels[i])) / 2;
+                int lx = i * segW + (segW - fm.stringWidth(labels[i].toString())) / 2;
                 int ly = (h + fm.getAscent()) / 2 - 4;
-                g2.drawString(labels[i], lx, ly);
+                g2.drawString(labels[i].toString(), lx, ly);
                 if (sel) {
-                    int iw = Math.min(segW - 24, fm.stringWidth(labels[i]) + 14);
+                    int iw = Math.min(segW - 24, fm.stringWidth(labels[i].toString()) + 14);
                     int ix = i * segW + (segW - iw) / 2;
                     g2.setColor(theme.onHeader);
                     g2.fillRoundRect(ix, h - 3, iw, 3, 3, 3);

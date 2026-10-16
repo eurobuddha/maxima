@@ -2,6 +2,8 @@ package com.eurobuddha.maxima.app.ui;
 
 import android.app.Activity;
 import android.content.Intent;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SearchText;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -30,9 +32,7 @@ import com.eurobuddha.maxima.core.chat.ChatMedia;
 import com.eurobuddha.maxima.core.chat.ChatPay;
 import com.eurobuddha.maxima.core.contacts.Contact;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -49,7 +49,6 @@ public final class SearchActivity extends Activity {
     private EditText mQuery;
     private LinearLayout mResults;
     private final Handler mDebounce = new Handler(Looper.getMainLooper());
-    private final SimpleDateFormat mDate = new SimpleDateFormat("d MMM", Locale.UK);
     private volatile int mGeneration;
 
     @Override
@@ -71,11 +70,12 @@ public final class SearchActivity extends Activity {
         back.setImageResource(R.drawable.ic_back);
         back.setColorFilter(getColor(R.color.ux_on_header));
         back.setPadding(dp(12), dp(12), dp(12), dp(12));
+        Language.description(back, Language.msg(R.string.l10n_common_back));
         back.setOnClickListener(v -> finish());
         bar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         mQuery = new EditText(this);
-        mQuery.setHint("Search messages…");
+        Language.hint(mQuery, Language.msg(R.string.l10n_search_messages));
         mQuery.setTextColor(getColor(R.color.ux_on_header));
         mQuery.setHintTextColor(0x99FFFFFF);
         mQuery.setBackground(null);
@@ -88,6 +88,7 @@ public final class SearchActivity extends Activity {
         clear.setImageResource(R.drawable.ic_close);
         clear.setColorFilter(getColor(R.color.ux_on_header));
         clear.setPadding(dp(12), dp(12), dp(12), dp(12));
+        Language.description(clear, Language.msg(R.string.l10n_common_clear));
         clear.setOnClickListener(v -> mQuery.setText(""));
         bar.addView(clear, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
@@ -190,12 +191,12 @@ public final class SearchActivity extends Activity {
                         }
                         for (ChatEngine.Entry e : chat.conversation(conv)) {
                             String text = searchable(e.body);
-                            int at = text.toLowerCase(Locale.ROOT).indexOf(q);
+                            int at = SearchText.indexOf(text, zQuery);
                             if (at < 0) {
                                 continue;
                             }
                             messages.add(new Hit(conv, title,
-                                    snippet(text, at, q.length()), e.time, e.id));
+                                    snippet(text, at, zQuery.length()), e.time, e.id));
                             if (messages.size() >= MAX_HITS) {
                                 break outer;
                             }
@@ -214,12 +215,12 @@ public final class SearchActivity extends Activity {
     }
 
     /** What a human would consider the message's text - never wire artefacts. */
-    private static String searchable(String zBody) {
+    private String searchable(String zBody) {
         if (ChatPay.isPayment(zBody)) {
             return ChatPay.preview(zBody);
         }
         if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(zBody)) {
-            return com.eurobuddha.maxima.core.chat.ChatContact.preview(zBody);
+            return com.eurobuddha.maxima.app.i18n.ChatPreview.text(this, zBody);
         }
         if (ChatMedia.isMedia(zBody)) {
             String cap = ChatMedia.caption(zBody);
@@ -249,20 +250,20 @@ public final class SearchActivity extends Activity {
     private void render(String zQuery, List<Hit> zNames, List<Hit> zMessages) {
         mResults.removeAllViews();
         if (!zNames.isEmpty()) {
-            mResults.addView(sectionLabel(zQuery.isEmpty() ? "Chats" : "Contacts & groups"));
+            mResults.addView(sectionLabel(Language.msg(zQuery.isEmpty() ? R.string.l10n_nav_chats : R.string.l10n_search_contacts_groups)));
             for (Hit h : zNames) {
                 mResults.addView(row(h));
             }
         }
         if (!zMessages.isEmpty()) {
-            mResults.addView(sectionLabel("Messages"));
+            mResults.addView(sectionLabel(Language.msg(R.string.l10n_search_message_section)));
             for (Hit h : zMessages) {
                 mResults.addView(row(h));
             }
         }
         if (zNames.isEmpty() && zMessages.isEmpty() && !zQuery.isEmpty()) {
             TextView none = new TextView(this);
-            none.setText("No matches");
+            Language.setText(none, Language.msg(R.string.l10n_chat_no_matches));
             none.setTextColor(getColor(R.color.ux_subtext));
             none.setGravity(Gravity.CENTER);
             none.setPadding(0, dp(40), 0, 0);
@@ -270,9 +271,9 @@ public final class SearchActivity extends Activity {
         }
     }
 
-    private TextView sectionLabel(String zText) {
+    private TextView sectionLabel(CharSequence zText) {
         TextView t = new TextView(this);
-        t.setText(zText.toUpperCase(Locale.UK));
+        Language.setText(t, Language.upper(zText));
         t.setTextSize(11);
         t.setTypeface(null, Typeface.BOLD);
         t.setTextColor(getColor(R.color.ux_subtext));
@@ -306,7 +307,7 @@ public final class SearchActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         if (zHit.time > 0) {
             TextView when = new TextView(this);
-            when.setText(mDate.format(new Date(zHit.time)));
+            when.setText(Language.date(zHit.time, "MMMd"));
             when.setTextColor(getColor(R.color.ux_subtext));
             when.setTextSize(12);
             head.addView(when);
@@ -344,4 +345,11 @@ public final class SearchActivity extends Activity {
     private int dp(int zDp) {
         return Math.round(zDp * getResources().getDisplayMetrics().density);
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        if (mQuery != null) runSearch(mQuery.getText().toString().trim());
+    }
+
 }

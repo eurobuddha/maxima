@@ -5,6 +5,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -602,8 +604,7 @@ public final class MaximaService extends Service {
                             }
                             jarEngine.probeContacts(chat, sJarWalletMx);
                         }
-                        updateNotification("Classic engine · "
-                                + jarEngine.connectedHosts().size() + " host(s)");
+                        updateNotification(Language.count(R.plurals.l10n_notification_classic_hosts, jarEngine.connectedHosts().size()));
                     } catch (Exception e) {
                         Log.w(TAG, "jar pump: " + e);
                     }
@@ -656,7 +657,7 @@ public final class MaximaService extends Service {
                 // candidate is how a stale direct-forward (e.g. an old CGNAT forward)
                 // came back every boot and stranded messages. The swarm is genuinely
                 // learned RELAYS only — ConnectionFinder records those on real attach.
-                updateNotification(attached + " relay(s) connected");
+                updateNotification(Language.count(R.plurals.l10n_notification_relays, attached));
                 if (attached == 0) {
                     EventLog.add("NO RELAYS REACHED - check the relay list and connectivity");
                 } else {
@@ -861,7 +862,7 @@ public final class MaximaService extends Service {
                             gt.start();
                         }
                         lastMaintain = System.currentTimeMillis();
-                        updateNotification(node.pool().activeCount() + " relay(s) connected");
+                        updateNotification(Language.count(R.plurals.l10n_notification_relays, node.pool().activeCount()));
                         // Remember our current homes for the old-home drain.
                         for (String h : node.pool().activeHosts()) {
                             HomeStore.attached(MaximaService.this, h);
@@ -1021,18 +1022,26 @@ public final class MaximaService extends Service {
         }
     }
 
-    private Notification buildNotification(String zText) {
+    private volatile CharSequence mNotificationText = "Connecting...";
+    private Notification buildNotification(CharSequence zText) {
+        mNotificationText = zText;
         Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
         return b.setContentTitle("Parlons!")
-                .setContentText(zText)
+                .setContentText(zText instanceof Language.Message ? zText.toString() : SystemMessages.text(this,zText.toString()))
                 .setSmallIcon(R.drawable.ic_stat_maxima)
                 .setOngoing(true)
                 .build();
     }
 
-    private void updateNotification(String zText) {
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        updateNotification(mNotificationText);
+    }
+
+    private void updateNotification(CharSequence zText) {
         try {
             NotificationManager nm = getSystemService(NotificationManager.class);
             if (nm != null) {

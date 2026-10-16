@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
 import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import android.app.AlertDialog;
 import android.text.Editable;
@@ -109,6 +111,13 @@ public class SendView extends BaseView {
         tokenBal.setTextColor(Design.dim());
         previewBtn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Design.accent()));
         previewBtn.setTextColor(Design.onAccent());
+        if (act.getResources().getConfiguration().fontScale > 1.2f) {
+            LinearLayout modes = (LinearLayout) modeQuick.getParent();
+            modes.setOrientation(LinearLayout.VERTICAL);
+            for (TextView label : new TextView[]{modeQuick, modeCoins})
+                label.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+        }
         paintModeSegment();
     }
 
@@ -146,15 +155,15 @@ public class SendView extends BaseView {
                 quickTokenid = Util.MINIMA_TOKENID;
                 b = quickToken();
             }
-            String name = b == null ? "Minima" : displayName(b);
-            tokenLabel.setText(name);
-            tokenBal.setText(b == null ? "" : Format.amount(b.sendable));
+            CharSequence name = b == null ? "Minima" : displayName(b);
+            Language.setText(tokenLabel, name);
+            Language.setText(tokenBal, b == null ? "" : Format.amount(b.sendable));
             boolean minima = Util.isMinima(quickTokenid);
             burnInput.setEnabled(true);   // burn rides alongside any send in quick mode
             burnNote.setVisibility(View.GONE);
             previewBtn.setEnabled(!sending);
             if (!minima && b != null && b.isNft()) {
-                setNote(splitNote, "NFTs are indivisible — split does not apply.", R.color.ux_subtext);
+                setNote(splitNote, msg(R.string.l10n_node_send_nft_no_split), R.color.ux_subtext);
             } else {
                 splitNote.setVisibility(View.GONE);
             }
@@ -166,7 +175,7 @@ public class SendView extends BaseView {
 
         if (sel.isEmpty()) {
             TextView t = new TextView(act);
-            t.setText("Select coins in the Coins tab, then come here to send.");
+            Language.setText(t, msg(R.string.l10n_node_send_select_coins_help));
             t.setTextColor(Design.dim());
             t.setTextSize(13f);
             fromList.addView(t);
@@ -184,14 +193,14 @@ public class SendView extends BaseView {
             try { total = total.add(new BigDecimal(c.amount)); } catch (Exception ignored) {}
             fromList.addView(row("• " + Util.shorten(c.coinid), Util.tidyAmount(c.amount), false));
         }
-        View totalRow = row("Total in", Util.tidyAmount(total.toPlainString()) + " " + tokenName, true);
+        View totalRow = row(msg(R.string.l10n_node_send_total_in), Util.tidyAmount(total.toPlainString()) + " " + tokenName, true);
         fromList.addView(totalRow);
 
         // In expert mode burn is spent from the selected Minima coins, so it needs a Minima selection.
         burnInput.setEnabled(minima);
         if (!minima) {
             burnInput.setText("");
-            setNote(burnNote, "Burn is only for Minima sends.", R.color.ux_subtext);
+            setNote(burnNote, msg(R.string.l10n_node_send_burn_minima_only), R.color.ux_subtext);
         } else {
             burnNote.setVisibility(View.GONE);
         }
@@ -227,39 +236,42 @@ public class SendView extends BaseView {
         return null;
     }
 
-    private String displayName(TokenBalance b) {
-        String n = b.name == null || b.name.isEmpty() ? "Token" : b.name;
+    private CharSequence displayName(TokenBalance b) {
+        CharSequence name = Util.displayName(b);
         if (b.meta != null && b.meta.ticker != null && !b.meta.ticker.isEmpty()
-                && !b.meta.ticker.equalsIgnoreCase(n)) n = n + "  ·  " + b.meta.ticker.toUpperCase();
-        return n;
+                && !b.meta.ticker.equalsIgnoreCase(b.name))
+            return Language.join(name, "  ·  ", b.meta.ticker.toUpperCase(java.util.Locale.ROOT));
+        return name;
     }
 
     /** Theme-styled token chooser listing every balance with its sendable amount. */
     private void showTokenPicker() {
         final List<TokenBalance> all = new ArrayList<>(act.balances());
-        if (all.isEmpty()) { status("No balances loaded yet.", false); return; }
+        if (all.isEmpty()) { status(msg(R.string.l10n_node_send_no_balances), false); return; }
         LinearLayout box = new LinearLayout(act);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(Design.bg());
         box.setPadding(dp(8), dp(8), dp(8), dp(8));
-        final Sheet pick = Sheet.create(act, "Send which token?");
+        final Sheet pick = Sheet.create(act, msg(R.string.l10n_node_send_pick_token));
         pick.body(box);
-        pick.action("Cancel", Sheet.Style.SECONDARY, null);
+        pick.action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null);
         for (final TokenBalance b : all) {
             LinearLayout r = new LinearLayout(act);
-            r.setOrientation(LinearLayout.HORIZONTAL);
+            r.setOrientation(LinearLayout.VERTICAL);
             r.setGravity(Gravity.CENTER_VERTICAL);
             r.setPadding(dp(12), dp(12), dp(12), dp(12));
             TextView n = new TextView(act);
-            n.setText(displayName(b));
+            Language.setText(n, displayName(b));
             n.setTextColor(Design.text()); n.setTextSize(14f); n.setTypeface(Design.typefaceBold());
             TextView amt = new TextView(act);
-            amt.setText(Format.amount(b.sendable));
+            Language.setText(amt, Format.amount(b.sendable));
             amt.setTextColor(Design.dim()); amt.setTextSize(13f);
             amt.setTypeface(android.graphics.Typeface.MONOSPACE);
             amt.setGravity(Gravity.END);
-            r.addView(n, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            r.addView(amt);
+            r.addView(n, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
+            r.addView(amt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
             r.setOnClickListener(v -> {
                 quickTokenid = b.tokenid;
                 pick.dismiss();
@@ -332,11 +344,11 @@ public class SendView extends BaseView {
         if (quickMode) { onPreviewQuick(); return; }
 
         final List<Coin> sel = act.selectedCoins();
-        if (sel.isEmpty()) { status("Select coins in the Coins tab first.", false); return; }
+        if (sel.isEmpty()) { status(msg(R.string.l10n_node_send_select_coins), false); return; }
 
         final String recipient = addrInput.getText().toString().trim();
-        if (recipient.isEmpty()) { setNote(addrNote, "Enter a recipient address.", R.color.ux_error); return; }
-        if (!Util.isValidAddress(recipient)) { setNote(addrNote, "Invalid address format.", R.color.ux_error); return; }
+        if (recipient.isEmpty()) { setNote(addrNote, msg(R.string.l10n_node_send_enter_recipient), R.color.ux_error); return; }
+        if (!Util.isValidAddress(recipient)) { setNote(addrNote, msg(R.string.l10n_node_send_invalid_address), R.color.ux_error); return; }
         addrNote.setVisibility(View.GONE);
 
         final String tokenid = act.selectedTokenid();
@@ -344,19 +356,19 @@ public class SendView extends BaseView {
         final String tokenName = sel.get(0).tokenName;
         final BigDecimal total = sum(sel);
         final BigDecimal burn = minima ? parseBurn() : BigDecimal.ZERO;
-        if (burn.signum() < 0) { setNote(burnNote, "Invalid burn amount.", R.color.ux_error); return; }
+        if (burn.signum() < 0) { setNote(burnNote, msg(R.string.l10n_node_send_invalid_burn), R.color.ux_error); return; }
         burnNote.setVisibility(minima ? View.GONE : burnNote.getVisibility());
 
         BigDecimal maxSpendable = minima ? total.subtract(burn) : total;
-        if (maxSpendable.signum() <= 0) { setNote(amountNote, "Burn exceeds total — nothing left to send.", R.color.ux_error); return; }
+        if (maxSpendable.signum() <= 0) { setNote(amountNote, msg(R.string.l10n_node_send_burn_exceeds), R.color.ux_error); return; }
 
         final BigDecimal amount;
         try { amount = new BigDecimal(amountInput.getText().toString().trim()); }
-        catch (Exception e) { setNote(amountNote, "Enter a valid amount.", R.color.ux_error); return; }
-        if (amount.signum() <= 0) { setNote(amountNote, "Amount must be greater than zero.", R.color.ux_error); return; }
-        if (amount.compareTo(maxSpendable) > 0) { setNote(amountNote, "Max sendable is " + Util.tidyAmount(maxSpendable.toPlainString()) + ".", R.color.ux_error); return; }
+        catch (Exception e) { setNote(amountNote, msg(R.string.l10n_node_send_valid_amount), R.color.ux_error); return; }
+        if (amount.signum() <= 0) { setNote(amountNote, msg(R.string.l10n_node_send_positive_amount), R.color.ux_error); return; }
+        if (amount.compareTo(maxSpendable) > 0) { setNote(amountNote, msg(R.string.l10n_node_send_max_sendable, Util.tidyAmount(maxSpendable.toPlainString())), R.color.ux_error); return; }
         int dec = act.tokenDecimals(tokenid);
-        if (dec >= 0 && Util.decimalPlaces(amount) > dec) { setNote(amountNote, "This token supports at most " + dec + " decimals.", R.color.ux_error); return; }
+        if (dec >= 0 && Util.decimalPlaces(amount) > dec) { setNote(amountNote, Language.count(R.plurals.l10n_node_send_decimals, dec), R.color.ux_error); return; }
         amountNote.setVisibility(View.GONE);
 
         // Change = inputs − amount − burn; only require/validate a change address when there's any left.
@@ -365,8 +377,8 @@ public class SendView extends BaseView {
         final String changeStr = hasChange ? change.stripTrailingZeros().toPlainString() : null;
         final String changeAddr = changeInput.getText().toString().trim();
         if (hasChange) {
-            if (changeAddr.isEmpty()) { setNote(changeNote, "Change address required.", R.color.ux_error); return; }
-            if (!Util.isValidAddress(changeAddr)) { setNote(changeNote, "Invalid change address.", R.color.ux_error); return; }
+            if (changeAddr.isEmpty()) { setNote(changeNote, msg(R.string.l10n_node_send_change_required), R.color.ux_error); return; }
+            if (!Util.isValidAddress(changeAddr)) { setNote(changeNote, msg(R.string.l10n_node_send_invalid_change), R.color.ux_error); return; }
         }
         changeNote.setVisibility(View.GONE);
 
@@ -374,12 +386,12 @@ public class SendView extends BaseView {
 
         // Confirm the recipient with the node before showing the breakdown.
         previewBtn.setEnabled(false);
-        status("Checking address…", true);
+        status(msg(R.string.l10n_node_send_checking), true);
         act.node().cmd("checkaddress address:" + recipient, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 previewBtn.setEnabled(true);
                 if (!json.optBoolean("status", false)) {
-                    setNote(addrNote, "That isn't a valid Minima address.", R.color.ux_error);
+                    setNote(addrNote, msg(R.string.l10n_node_send_not_minima_address), R.color.ux_error);
                     statusView.setVisibility(View.GONE);
                     return;
                 }
@@ -390,7 +402,7 @@ public class SendView extends BaseView {
             @Override public void onError(String message) {
                 previewBtn.setEnabled(true);
                 setNote(addrNote, NodeApi.ERR_NOT_ENABLED.equals(message)
-                        ? "Enable this wallet in Minima Core → Apps first." : "Could not validate address.", R.color.ux_error);
+                        ? msg(R.string.l10n_node_send_pair_first) : msg(R.string.l10n_node_send_validate_failed), R.color.ux_error);
                 statusView.setVisibility(View.GONE);
             }
         });
@@ -400,50 +412,50 @@ public class SendView extends BaseView {
     private void onPreviewQuick() {
         final TokenBalance tok = quickToken();
         final boolean minima = Util.isMinima(quickTokenid);
-        if (tok == null && !minima) { status("Pick a token first.", false); return; }
+        if (tok == null && !minima) { status(msg(R.string.l10n_node_send_pick_first), false); return; }
 
         final String recipient = addrInput.getText().toString().trim();
-        if (recipient.isEmpty()) { setNote(addrNote, "Enter a recipient address.", R.color.ux_error); return; }
-        if (!Util.isValidAddress(recipient)) { setNote(addrNote, "Invalid address format.", R.color.ux_error); return; }
+        if (recipient.isEmpty()) { setNote(addrNote, msg(R.string.l10n_node_send_enter_recipient), R.color.ux_error); return; }
+        if (!Util.isValidAddress(recipient)) { setNote(addrNote, msg(R.string.l10n_node_send_invalid_address), R.color.ux_error); return; }
         addrNote.setVisibility(View.GONE);
 
         final BigDecimal burn = parseBurn();
-        if (burn.signum() < 0) { setNote(burnNote, "Invalid burn amount.", R.color.ux_error); return; }
+        if (burn.signum() < 0) { setNote(burnNote, msg(R.string.l10n_node_send_invalid_burn), R.color.ux_error); return; }
         burnNote.setVisibility(View.GONE);
 
         final BigDecimal amount;
         try { amount = new BigDecimal(amountInput.getText().toString().trim()); }
-        catch (Exception e) { setNote(amountNote, "Enter a valid amount.", R.color.ux_error); return; }
-        if (amount.signum() <= 0) { setNote(amountNote, "Amount must be greater than zero.", R.color.ux_error); return; }
+        catch (Exception e) { setNote(amountNote, msg(R.string.l10n_node_send_valid_amount), R.color.ux_error); return; }
+        if (amount.signum() <= 0) { setNote(amountNote, msg(R.string.l10n_node_send_positive_amount), R.color.ux_error); return; }
         BigDecimal sendable = BigDecimal.ZERO;
         try { if (tok != null) sendable = new BigDecimal(tok.sendable); } catch (Exception ignored) {}
         // For Minima the burn is spent from the same balance — amount + burn must fit.
         BigDecimal needed = minima ? amount.add(burn) : amount;
         if (tok != null && needed.compareTo(sendable) > 0) {
             setNote(amountNote, minima && burn.signum() > 0
-                    ? "Amount + burn exceeds sendable (" + Util.tidyAmount(tok.sendable) + ")."
-                    : "Max sendable is " + Util.tidyAmount(tok.sendable) + ".", R.color.ux_error); return;
+                    ? msg(R.string.l10n_node_send_amount_burn_exceeds, Util.tidyAmount(tok.sendable))
+                    : msg(R.string.l10n_node_send_max_sendable, Util.tidyAmount(tok.sendable)), R.color.ux_error); return;
         }
         int dec = act.tokenDecimals(quickTokenid);
-        if (dec >= 0 && Util.decimalPlaces(amount) > dec) { setNote(amountNote, "This token supports at most " + dec + " decimals.", R.color.ux_error); return; }
+        if (dec >= 0 && Util.decimalPlaces(amount) > dec) { setNote(amountNote, Language.count(R.plurals.l10n_node_send_decimals, dec), R.color.ux_error); return; }
         amountNote.setVisibility(View.GONE);
 
         final int split = parseSplit();
-        if (split < 1 || split > 20) { setNote(splitNote, "Split must be between 1 and 20.", R.color.ux_error); return; }
+        if (split < 1 || split > 20) { setNote(splitNote, msg(R.string.l10n_node_send_split_range), R.color.ux_error); return; }
         splitNote.setVisibility(View.GONE);
 
-        final String tokenName = tok == null ? "Minima" : tok.name;
+        final CharSequence tokenName = tok == null ? "Minima" : Util.displayName(tok);
         final String amountStr = amount.stripTrailingZeros().toPlainString();
         final String burnStr = burn.signum() > 0 ? burn.stripTrailingZeros().toPlainString() : null;
 
         previewBtn.setEnabled(false);
-        status("Checking address…", true);
+        status(msg(R.string.l10n_node_send_checking), true);
         act.node().cmd("checkaddress address:" + recipient, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 previewBtn.setEnabled(true);
                 statusView.setVisibility(View.GONE);
                 if (!json.optBoolean("status", false)) {
-                    setNote(addrNote, "That isn't a valid Minima address.", R.color.ux_error);
+                    setNote(addrNote, msg(R.string.l10n_node_send_not_minima_address), R.color.ux_error);
                     return;
                 }
                 showQuickConfirm(recipient, amountStr, burnStr, split, tokenName);
@@ -451,7 +463,7 @@ public class SendView extends BaseView {
             @Override public void onError(String message) {
                 previewBtn.setEnabled(true);
                 setNote(addrNote, NodeApi.ERR_NOT_ENABLED.equals(message)
-                        ? "Enable this wallet in Minima Core → Apps first." : "Could not validate address.", R.color.ux_error);
+                        ? msg(R.string.l10n_node_send_pair_first) : msg(R.string.l10n_node_send_validate_failed), R.color.ux_error);
                 statusView.setVisibility(View.GONE);
             }
         });
@@ -459,48 +471,48 @@ public class SendView extends BaseView {
 
     /** Quick-mode confirm: recipient / amount / burn / split breakdown before the node send. */
     private void showQuickConfirm(final String recipient, final String amountStr,
-                                  final String burnStr, final int split, final String tokenName) {
+                                  final String burnStr, final int split, final CharSequence tokenName) {
         LinearLayout body = new LinearLayout(act);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setBackgroundColor(Design.bg());
         int pad = dp(18);
         body.setPadding(pad, dp(8), pad, 0);
 
-        body.addView(sectionLabel("SEND"));
-        body.addView(row("Token", tokenName, true));
-        body.addView(row("→ " + Util.shorten(recipient) + (isMine(recipient) ? "  (yours)" : ""),
-                Util.tidyAmount(amountStr) + " " + tokenName, false));
-        if (burnStr != null) body.addView(row("🔥 burn", Util.tidyAmount(burnStr) + " MINIMA", false));
-        if (split > 1) body.addView(row("Split", split + " equal coins", false));
-        body.addView(row("Coins", "chosen by the node", false));
+        body.addView(sectionLabel(Language.upper(msg(R.string.l10n_chat_send))));
+        body.addView(row(msg(R.string.l10n_wallet_token), tokenName, true));
+        body.addView(row(Language.join("→ ", Util.shorten(recipient), isMine(recipient) ? Language.join("  ", msg(R.string.l10n_node_send_yours)) : ""),
+                Language.join(Util.tidyAmount(amountStr), " ", tokenName), false));
+        if (burnStr != null) body.addView(row(msg(R.string.l10n_node_send_burn), Util.tidyAmount(burnStr) + " MINIMA", false));
+        if (split > 1) body.addView(row(msg(R.string.l10n_node_send_split), Language.count(R.plurals.l10n_node_send_equal_coins, split), false));
+        body.addView(row(msg(R.string.l10n_wallet_coins), msg(R.string.l10n_node_send_node_chooses), false));
 
         TextView warn = new TextView(act);
-        warn.setText("Once posted, this cannot be undone. Verify the recipient address before continuing.");
+        Language.setText(warn, msg(R.string.l10n_node_send_quick_warning));
         warn.setTextColor(Design.red());
         warn.setTextSize(12f);
         warn.setPadding(0, dp(14), 0, 0);
         body.addView(warn);
 
-        Sheet.create(act, "Confirm transaction")
+        Sheet.create(act, msg(R.string.l10n_node_send_confirm))
                 .body(body)
-                .action("Back", Sheet.Style.SECONDARY, null)
-                .action("Send →", Sheet.Style.PRIMARY,
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_send_send), Sheet.Style.PRIMARY,
                         () -> runQuickSend(recipient, amountStr, burnStr, split, tokenName))
                 .show();
     }
 
     /** Posts the node-level `send` and reports the outcome. */
     private void runQuickSend(final String recipient, final String amountStr,
-                              final String burnStr, final int split, final String tokenName) {
+                              final String burnStr, final int split, final CharSequence tokenName) {
         sending = true;
         previewBtn.setEnabled(false);
-        status("Sending…", true);
+        status(msg(R.string.l10n_node_send_sending), true);
         // The tokenid rides straight into the command. Balance rows are vetted at ingestion, but
         // this is the one place a bad id would become a chained command — never take it on trust.
         if (!Util.isValidHexId(quickTokenid)) {
             sending = false;
             previewBtn.setEnabled(true);
-            status("That token's id is malformed — refusing to build the command.", false);
+            status(msg(R.string.l10n_node_send_bad_token_id), false);
             return;
         }
         StringBuilder cmd = new StringBuilder("send address:").append(recipient)
@@ -513,23 +525,21 @@ public class SendView extends BaseView {
                 sending = false;
                 previewBtn.setEnabled(true);
                 if (json.optBoolean("status", false)) {
-                    status("✓ Sent — " + Util.tidyAmount(amountStr) + " " + tokenName + " to "
-                            + Util.shorten(recipient) + ".", true);
+                    status(msg(R.string.l10n_node_send_sent, Util.tidyAmount(amountStr), tokenName, Util.shorten(recipient)), true);
                     addrInput.setText("");
                     amountInput.setText("");
                     burnInput.setText("");
                     splitInput.setText("");
                     act.reload();
                 } else {
-                    String err = json.optString("error", json.optString("message", "Send failed."));
-                    status("Failed: " + err, false);
+                    String err = json.optString("error", json.optString("message", ""));
+                    status(msg(R.string.l10n_node_send_failed, err.isEmpty() ? msg(R.string.l10n_cloud_wallet_send_failed) : err), false);
                 }
             }
             @Override public void onError(String message) {
                 sending = false;
                 previewBtn.setEnabled(true);
-                if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
-                status("Failed: " + message, false);
+                status(msg(R.string.l10n_node_send_failed, NodeApi.ERR_NOT_ENABLED.equals(message) ? msg(R.string.l10n_node_send_pair_first) : message), false);
             }
         });
     }
@@ -546,34 +556,34 @@ public class SendView extends BaseView {
         int pad = dp(18);
         body.setPadding(pad, dp(8), pad, 0);
 
-        body.addView(sectionLabel("INPUTS"));
+        body.addView(sectionLabel(Language.upper(msg(R.string.l10n_node_history_inputs))));
         for (Coin c : sel) body.addView(row("• " + Util.shorten(c.coinid), Util.tidyAmount(c.amount), false));
-        body.addView(row("Total in", Util.tidyAmount(total.toPlainString()) + " " + tokenName, true));
+        body.addView(row(msg(R.string.l10n_node_send_total_in), Util.tidyAmount(total.toPlainString()) + " " + tokenName, true));
 
-        body.addView(sectionLabel("OUTPUTS"));
-        body.addView(row("→ " + Util.shorten(recipient) + (isMine(recipient) ? "  (yours)" : ""),
-                Util.tidyAmount(amountStr) + " " + tokenName, false));
+        body.addView(sectionLabel(Language.upper(msg(R.string.l10n_node_history_outputs))));
+        body.addView(row(Language.join("→ ", Util.shorten(recipient), isMine(recipient) ? Language.join("  ", msg(R.string.l10n_node_send_yours)) : ""),
+                Language.join(Util.tidyAmount(amountStr), " ", tokenName), false));
         if (changeStr != null) {
             // Flag a change address we don't recognise as ours with "(verify)" — guards against typos
             // in a hand-edited change field sending the remainder to a stranger.
-            body.addView(row("↩ " + Util.shorten(changeAddr) + (isMine(changeAddr) ? "  (yours)" : "  (verify)"),
+            body.addView(row(Language.join("↩ ", Util.shorten(changeAddr), "  ", isMine(changeAddr) ? msg(R.string.l10n_node_send_yours) : msg(R.string.l10n_node_send_verify)),
                     Util.tidyAmount(changeStr) + " " + tokenName, false));
         }
         if (burnStr != null) {
-            body.addView(row("🔥 burn", Util.tidyAmount(burnStr) + " MINIMA", false));
+            body.addView(row(msg(R.string.l10n_node_send_burn), Util.tidyAmount(burnStr) + " MINIMA", false));
         }
 
         TextView warn = new TextView(act);
-        warn.setText("Once signed and posted, this cannot be undone. Verify the recipient address before continuing.");
+        Language.setText(warn, msg(R.string.l10n_node_send_sign_warning));
         warn.setTextColor(Design.red());
         warn.setTextSize(12f);
         warn.setPadding(0, dp(14), 0, 0);
         body.addView(warn);
 
-        Sheet.create(act, "Confirm transaction")
+        Sheet.create(act, msg(R.string.l10n_node_send_confirm))
                 .body(body)
-                .action("Back", Sheet.Style.SECONDARY, null)
-                .action("Sign & Post →", Sheet.Style.PRIMARY, () ->
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_send_sign_post), Sheet.Style.PRIMARY, () ->
                         buildSend(sel, recipient, amountStr, changeAddr, changeStr, burnStr, tokenid, tokenName))
                 .show();
     }
@@ -584,7 +594,7 @@ public class SendView extends BaseView {
                            final String tokenid, final String tokenName) {
         sending = true;
         previewBtn.setEnabled(false);
-        status("Recording audit row…", true);
+        status(msg(R.string.l10n_node_send_recording), true);
 
         // Outputs = recipient, plus the change output when there's any change to return.
         List<TxnBuilder.Out> outs = new ArrayList<>();
@@ -602,8 +612,7 @@ public class SendView extends BaseView {
                 // Do NOT store the txnsign-response txpowid — it is not the on-chain id. The resolver
                 // fills the real txpowid (and marks confirmed) once the transaction is mined.
                 act.history().update(internalid, HistoryDb.STATUS_POSTED, null, "");
-                status("✓ Posted — " + Util.tidyAmount(amountStr) + " " + tokenName
-                        + " sent. The Explorer link appears in History once it confirms on-chain.", true);
+                status(msg(R.string.l10n_node_send_posted, Util.tidyAmount(amountStr), tokenName), true);
                 addrInput.setText("");
                 amountInput.setText("");
                 burnInput.setText("");
@@ -615,9 +624,8 @@ public class SendView extends BaseView {
                 act.reload();
             }
             @Override public void onFailed(String message) {
-                if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
                 act.history().update(internalid, HistoryDb.STATUS_ERROR, null, message);
-                status("Failed: " + message, false);
+                status(msg(R.string.l10n_node_send_failed, NodeApi.ERR_NOT_ENABLED.equals(message) ? msg(R.string.l10n_node_send_pair_first) : message), false);
                 sending = false;
                 previewBtn.setEnabled(true);
             }
@@ -627,32 +635,37 @@ public class SendView extends BaseView {
     // ----- small helpers -----
 
     /** Builds a monospaced left-label / right-value row; bold marks a total/heading. */
-    private View row(String left, String right, boolean bold) {
+    private View row(CharSequence left, CharSequence right, boolean bold) {
         LinearLayout r = new LinearLayout(act);
-        r.setOrientation(LinearLayout.HORIZONTAL);
+        boolean stacked = act.getResources().getConfiguration().fontScale > 1.2f || right.length() > 14;
+        r.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         r.setPadding(0, dp(4), 0, dp(4));
 
         TextView l = new TextView(act);
-        l.setText(left);
+        Language.setText(l, left);
         l.setTextColor(bold ? Design.text() : Design.dim());
         l.setTextSize(12f);
         l.setTypeface(android.graphics.Typeface.MONOSPACE, bold ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-        l.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        l.setLayoutParams(new LinearLayout.LayoutParams(stacked ? LinearLayout.LayoutParams.MATCH_PARENT : 0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, stacked ? 0f : 1f));
         r.addView(l);
 
         TextView rt = new TextView(act);
-        rt.setText(right);
+        Language.setText(rt, right);
         rt.setTextColor(Design.text());
         rt.setTextSize(12f);
         rt.setTypeface(android.graphics.Typeface.MONOSPACE, bold ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-        r.addView(rt);
+        rt.setGravity(Gravity.END);
+        r.addView(rt, stacked ? new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT) : new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         return r;
     }
 
     /** Builds a small dim, letter-spaced section heading (INPUTS / OUTPUTS) for the Confirm dialog. */
-    private TextView sectionLabel(String text) {
+    private TextView sectionLabel(CharSequence text) {
         TextView t = new TextView(act);
-        t.setText(text);
+        Language.setText(t, text);
         t.setTextColor(Design.dim());
         t.setTextSize(11f);
         t.setLetterSpacing(0.12f);
@@ -688,16 +701,16 @@ public class SendView extends BaseView {
     }
 
     /** Shows an inline validation note under a field; colors track the active Design mode. */
-    private void setNote(TextView note, String msg, int colorRes) {
+    private void setNote(TextView note, CharSequence msg, int colorRes) {
         note.setVisibility(View.VISIBLE);
-        note.setText(msg);
+        Language.setText(note, msg);
         note.setTextColor(colorRes == R.color.ux_error ? Design.red() : Design.dim());
     }
 
     /** Shows the bottom status line; green on ok, red on failure. */
-    private void status(String msg, boolean ok) {
+    private void status(CharSequence msg, boolean ok) {
         statusView.setVisibility(View.VISIBLE);
-        statusView.setText(msg);
+        Language.setText(statusView, msg);
         statusView.setTextColor(ok ? Design.success() : Design.red());
     }
 

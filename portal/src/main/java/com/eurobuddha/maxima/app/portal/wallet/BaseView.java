@@ -1,5 +1,7 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+
 import android.view.LayoutInflater;
 import android.view.View;
 
@@ -12,6 +14,7 @@ public abstract class BaseView {
     public BaseView(WalletActivity a, int layoutRes) {
         act = a;
         root = LayoutInflater.from(a).inflate(layoutRes, null);
+        Language.apply(root);
     }
 
     public View getRoot() {

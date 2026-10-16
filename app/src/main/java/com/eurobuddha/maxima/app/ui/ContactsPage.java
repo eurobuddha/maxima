@@ -1,8 +1,11 @@
 package com.eurobuddha.maxima.app.ui;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -73,21 +76,20 @@ public final class ContactsPage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Contacts";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_contacts);
     }
 
     @Override
     public void render() {
         com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
-            mHostInfo.setText("starting…");
+            Language.setText(mHostInfo, Language.msg(R.string.l10n_native_contacts_starting));
             return;
         }
         List<String> addrs = node.myAddresses();
-        mHostInfo.setText(addrs.isEmpty()
-                ? "No address yet — waiting for a host"
-                : "Reachable through " + addrs.size()
-                        + (addrs.size() == 1 ? " host" : " hosts"));
+        Language.setText(mHostInfo, addrs.isEmpty()
+                ? Language.msg(R.string.l10n_native_contacts_no_host)
+                : Language.count(R.plurals.l10n_native_contacts_hosts, addrs.size()));
 
         List<Contact> cs = node.contacts();
         StringBuilder sig = new StringBuilder();
@@ -109,11 +111,11 @@ public final class ContactsPage implements Page {
     private void rebuildList(List<Contact> all) {
         mList.removeAllViews();
         List<Contact> cs = filtered(all);
-        mCountLabel.setText("CONTACTS · " + all.size());
+        Language.setText(mCountLabel, Language.msg(R.string.l10n_native_contacts_list_count, all.size()));
         if (cs.isEmpty()) {
             mList.addView(sub(all.isEmpty()
-                    ? "Nobody yet — share your address or scan a friend's to get started."
-                    : "No contact matches \"" + mSearchQuery.trim() + "\"."));
+                    ? tr(R.string.l10n_native_contacts_empty)
+                    : tr(R.string.l10n_native_contacts_no_matches, mSearchQuery.trim())));
             return;
         }
         boolean first = true;
@@ -162,7 +164,7 @@ public final class ContactsPage implements Page {
         LinearLayout mid = new LinearLayout(mAct);
         mid.setOrientation(LinearLayout.VERTICAL);
         TextView name = new TextView(mAct);
-        name.setText(c.name);
+        Language.setText(name, c.name);
         name.setTextSize(15);
         name.setTypeface(Typeface.DEFAULT_BOLD);
         name.setSingleLine(true);
@@ -170,7 +172,7 @@ public final class ContactsPage implements Page {
         name.setTextColor(col(R.color.ux_text));
         boolean online = c.lastSeen > 0 && System.currentTimeMillis() - c.lastSeen < ONLINE_MS;
         TextView pr = new TextView(mAct);
-        pr.setText("● " + presenceText(c));
+        Language.setText(pr, "● " + presenceText(c));
         pr.setTextSize(11.5f);
         pr.setSingleLine(true);
         pr.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -182,7 +184,7 @@ public final class ContactsPage implements Page {
         String pill = peerPill(c);
         if (pill != null) {
             TextView badge = new TextView(mAct);
-            badge.setText(pill.toUpperCase());
+            Language.setText(badge, pill.toUpperCase());
             badge.setTextSize(9);
             badge.setTypeface(Typeface.DEFAULT_BOLD);
             badge.setLetterSpacing(0.08f);
@@ -241,13 +243,13 @@ public final class ContactsPage implements Page {
         LinearLayout hn = new LinearLayout(mAct);
         hn.setOrientation(LinearLayout.VERTICAL);
         TextView nm = new TextView(mAct);
-        nm.setText(c.name);
+        Language.setText(nm, c.name);
         nm.setTextSize(18);
         nm.setTypeface(manrope(Typeface.BOLD));
         nm.setTextColor(col(R.color.ux_text));
         boolean online = c.lastSeen > 0 && System.currentTimeMillis() - c.lastSeen < ONLINE_MS;
         TextView pr = new TextView(mAct);
-        pr.setText("● " + presenceText(c));
+        Language.setText(pr, "● " + presenceText(c));
         pr.setTextSize(12);
         pr.setTextColor(col(online ? R.color.ux_success : R.color.ux_subtext));
         hn.addView(nm);
@@ -255,12 +257,12 @@ public final class ContactsPage implements Page {
         head.addView(hn);
         body.addView(head, marginBottom(dp(16)));
 
-        TextView msg = primaryButton("Message");
+        TextView msg = primaryButton(Language.msg(R.string.l10n_chat_message));
         body.addView(msg, marginBottom(dp(4)));
 
         String addr = c.primaryAddress();
         if (addr != null) {
-            body.addView(copyField("Parlons address", addr, "Address copied"));
+            body.addView(copyField(Language.msg(R.string.l10n_native_contacts_address), addr, Language.msg(R.string.l10n_native_contacts_address_copied)));
             // RULE 1: every host address must be copyable in full, not just
             // counted. Tap to reveal the rest as their own copy fields.
             if (c.addresses != null && c.addresses.size() > 1) {
@@ -268,15 +270,14 @@ public final class ContactsPage implements Page {
                 extras.setOrientation(LinearLayout.VERTICAL);
                 extras.setVisibility(View.GONE);
                 final int n = c.addresses.size() - 1;
-                final TextView more = ghostButton("Show " + n + " more host"
-                        + (n == 1 ? "" : "s"));
+                final TextView more = ghostButton(Language.count(R.plurals.l10n_native_contacts_more_hosts, n));
                 more.setPadding(dp(2), dp(8), 0, 0);
                 more.setOnClickListener(v -> {
                     if (extras.getChildCount() == 0) {
                         int idx = 0;
                         for (String a : c.addresses) {
                             if (a != null && !a.equals(addr)) {
-                                extras.addView(copyField("Host " + (++idx), a, "Address copied"));
+                                extras.addView(copyField(Language.msg(R.string.l10n_native_contacts_host_number, ++idx), a, Language.msg(R.string.l10n_native_contacts_address_copied)));
                             }
                         }
                     }
@@ -287,7 +288,7 @@ public final class ContactsPage implements Page {
                 body.addView(extras);
             }
         } else {
-            TextView none = sub("No address known yet — they have not replied to your introduction.");
+            TextView none = sub(Language.msg(R.string.l10n_native_contacts_await_reply));
             none.setPadding(0, dp(12), 0, 0);
             body.addView(none);
         }
@@ -298,13 +299,13 @@ public final class ContactsPage implements Page {
         final String share = c.shareAddress();
         if (!share.isEmpty()) {
             if (!share.equals(addr)) {
-                body.addView(copyField("Share address (permanent)", share, "Share address copied"));
+                body.addView(copyField(Language.msg(R.string.l10n_native_contacts_permanent_share), share, Language.msg(R.string.l10n_native_contacts_share_copied)));
             }
             LinearLayout shareRow = new LinearLayout(mAct);
             shareRow.setOrientation(LinearLayout.HORIZONTAL);
-            TextView shareBtn = ghostButton("Share…");
-            shareBtn.setOnClickListener(v -> shareText(share, "Share " + c.name));
-            TextView sendBtn = ghostButton("Send to a contact…");
+            TextView shareBtn = ghostButton(Language.msg(R.string.l10n_native_contacts_share));
+            shareBtn.setOnClickListener(v -> shareText(share, tr(R.string.l10n_native_contacts_share_name, c.name)));
+            TextView sendBtn = ghostButton(Language.msg(R.string.l10n_contacts_send_to));
             sendBtn.setOnClickListener(v -> showSendContactPicker(c, share));
             LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, -2, 1f);
             shareRow.addView(shareBtn, half);
@@ -313,18 +314,18 @@ public final class ContactsPage implements Page {
         }
 
         if (c.minimaAddress != null && !c.minimaAddress.isEmpty()) {
-            body.addView(copyField("Payment address (MINIMA)", c.minimaAddress, "Payment address copied"));
+            body.addView(copyField(Language.msg(R.string.l10n_native_contacts_payment_address), c.minimaAddress, Language.msg(R.string.l10n_native_contacts_payment_copied)));
         }
 
         LinearLayout meta = new LinearLayout(mAct);
         meta.setOrientation(LinearLayout.VERTICAL);
         meta.setPadding(0, dp(16), 0, 0);
-        meta.addView(kv("Software", softwareLabel(c)));
-        meta.addView(kv("Last seen", online ? "Online now" : lastSeenText(c)));
+        meta.addView(kv(Language.msg(R.string.l10n_native_contacts_software), softwareLabel(c)));
+        meta.addView(kv(Language.msg(R.string.l10n_native_contacts_last_seen), online ? tr(R.string.l10n_native_contacts_online_now) : lastSeenText(c)));
         body.addView(meta);
 
         body.addView(divider(), marginTB(dp(16)));
-        TextView remove = ghostButton("Remove contact");
+        TextView remove = ghostButton(Language.msg(R.string.l10n_contacts_remove));
         remove.setTextColor(col(R.color.ux_error));
         body.addView(remove);
 
@@ -337,12 +338,11 @@ public final class ContactsPage implements Page {
     }
 
     private void confirmRemove(Contact c, BottomSheetDialog sheet) {
-        new AlertDialog.Builder(mAct)
-                .setTitle("Remove " + c.name + "?")
-                .setMessage("They keep your address and can still write to you. "
-                        + "This only removes them from your list.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Remove", (d, w) -> {
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_contacts_remove_name, c.name))
+                .setMessage(Language.msg(R.string.l10n_native_contacts_remove_help))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_remove), (d, w) -> {
                     com.eurobuddha.maxima.core.ChatPort n = MaximaService.port();
                     if (n != null) {
                         n.removeContact(c.publicKey);
@@ -361,7 +361,7 @@ public final class ContactsPage implements Page {
     private void showMyAddressSheet() {
         String raw = pickShareAddrRaw();
         if (raw == null) {
-            mAct.toast("No address yet — wait for a host");
+            mAct.toast(tr(R.string.l10n_native_contacts_no_host_wait));
             return;
         }
         LinearLayout body = new LinearLayout(mAct);
@@ -386,11 +386,11 @@ public final class ContactsPage implements Page {
         com.eurobuddha.maxima.core.chat.ChatEngine keetsCe = MaximaService.chat();
         String keetsPk = keetsCe == null ? null : keetsCe.keetsPubkey();
         if (keetsPk != null) {
-            body.addView(copyField("Your KeetChat address (keets)", keetsPk,
-                    "KeetChat address copied"), new LinearLayout.LayoutParams(-1, -2));
+            body.addView(copyField(Language.msg(R.string.l10n_native_contacts_keets_address), keetsPk,
+                    Language.msg(R.string.l10n_native_contacts_keets_copied)), new LinearLayout.LayoutParams(-1, -2));
         }
 
-        final TextView shareBtn = primaryButton("Share…");
+        final TextView shareBtn = primaryButton(Language.msg(R.string.l10n_native_contacts_share));
         LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, -2);
         sbp.topMargin = dp(12);
         body.addView(shareBtn, sbp);
@@ -401,14 +401,12 @@ public final class ContactsPage implements Page {
             hosts = Math.max(1, node.myAddresses().size());
         }
         TextView note = sub(raw.startsWith("MAX#")
-                ? "Your PERMANENT address — it survives every host move. "
-                        + "Let a friend scan the QR, or share it."
-                : "Let a friend scan the QR, or share it. Reachable through "
-                        + hosts + (hosts == 1 ? " host." : " hosts — any of them works."));
+                ? Language.msg(R.string.l10n_native_contacts_permanent_help)
+                : Language.count(R.plurals.l10n_native_contacts_share_hosts, hosts));
         note.setPadding(dp(2), dp(10), dp(2), 0);
         body.addView(note);
 
-        sheet("Share my address", body);
+        sheet(Language.msg(R.string.l10n_native_contacts_share_my_address), body);
 
         // Resolve host → IP off-main, then fill QR + copy field + share.
         // A MAX# permanent address is location-independent - no resolving.
@@ -419,8 +417,7 @@ public final class ContactsPage implements Page {
                     // Couldn't turn a domain host into an IP — never share the
                     // domain form. Ask the user to retry once online.
                     copyHolder.removeAllViews();
-                    TextView warn = sub("Couldn't resolve a shareable IP address. "
-                            + "Check your connection and reopen this to try again.");
+                    TextView warn = sub(Language.msg(R.string.l10n_native_contacts_ip_failed));
                     warn.setPadding(dp(2), dp(6), dp(2), 0);
                     copyHolder.addView(warn);
                     shareBtn.setEnabled(false);
@@ -432,7 +429,7 @@ public final class ContactsPage implements Page {
                     qr.setImageBitmap(bmp);
                 }
                 copyHolder.removeAllViews();
-                copyHolder.addView(copyField("Your address", ipAddr, "Address copied"));
+                copyHolder.addView(copyField(Language.msg(R.string.l10n_native_contacts_your_address), ipAddr, Language.msg(R.string.l10n_native_contacts_address_copied)));
                 shareBtn.setOnClickListener(v -> shareText(ipAddr));
             });
         }, "resolve-share-addr").start();
@@ -442,17 +439,17 @@ public final class ContactsPage implements Page {
         LinearLayout body = new LinearLayout(mAct);
         body.setOrientation(LinearLayout.VERTICAL);
 
-        TextView scan = primaryButton("Scan their QR");
+        TextView scan = primaryButton(Language.msg(R.string.l10n_native_contacts_scan_their_qr));
         body.addView(scan, marginBottom(dp(2)));
 
-        TextView or = sub("OR PASTE");
+        TextView or = sub(Language.msg(R.string.l10n_native_contacts_or_paste));
         or.setGravity(Gravity.CENTER);
         or.setLetterSpacing(0.1f);
         or.setPadding(0, dp(14), 0, dp(10));
         body.addView(or);
 
         final EditText paste = new EditText(mAct);
-        paste.setHint("Mx…@host:port");
+        Language.hint(paste, "Mx…@host:port");
         paste.setBackgroundResource(R.drawable.field_pill);
         paste.setPadding(dp(14), dp(12), dp(14), dp(12));
         paste.setTextColor(col(R.color.ux_text));
@@ -462,14 +459,14 @@ public final class ContactsPage implements Page {
                 | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         body.addView(paste, marginBottom(dp(11)));
 
-        TextView intro = ghostButton("Introduce myself");
+        TextView intro = ghostButton(Language.msg(R.string.l10n_native_contacts_introduce));
         body.addView(intro);
 
-        TextView note = sub("They'll appear in your list once they reply to the introduction.");
+        TextView note = sub(Language.msg(R.string.l10n_native_contacts_intro_help));
         note.setPadding(dp(2), dp(12), dp(2), 0);
         body.addView(note);
 
-        BottomSheetDialog d = sheet("Add a contact", body);
+        BottomSheetDialog d = sheet(Language.msg(R.string.l10n_contacts_add_heading), body);
         scan.setOnClickListener(v -> {
             d.dismiss();
             mAct.scanQr(this::onScanned);
@@ -493,12 +490,12 @@ public final class ContactsPage implements Page {
         }
         final String addr = zText.trim();
         if (addr.isEmpty()) {
-            mAct.toast("Paste their Mx…@host:port address");
+            mAct.toast(tr(R.string.l10n_native_contacts_paste_mx));
             return false;
         }
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
-            mAct.toast("Transport not running");
+            mAct.toast(tr(R.string.l10n_native_chat_transport_stopped));
             return false;
         }
         // A bare keets pubkey (0x + 64 hex - the KeetChat QR / identity dialog):
@@ -507,21 +504,21 @@ public final class ContactsPage implements Page {
         if (addr.matches("(?i)0x[0-9a-f]{64}")) {
             com.eurobuddha.maxima.core.chat.ChatEngine ce = MaximaService.chat();
             if (ce == null || !ce.hasKeets()) {
-                mAct.toast("KeetChat contacts need the minimaCore node app (enable Parlons in its Apps tab)");
+                mAct.toast(tr(R.string.l10n_native_contacts_keets_required));
                 return false;
             }
             com.eurobuddha.maxima.core.contacts.Contact kc = node.storeKeetsContact(addr, "");
             if (kc == null) {
-                mAct.toast("This engine can't store KeetChat contacts");
+                mAct.toast(tr(R.string.l10n_native_contacts_keets_unsupported));
                 return false;
             }
-            mAct.toast("KeetChat contact added — say hello!");
+            mAct.toast(tr(R.string.l10n_native_contacts_keets_added));
             mLastSignature = "";
             render();
             return true;
         }
         if (!addr.startsWith("Mx") && !addr.startsWith("MAX#")) {
-            mAct.toast("Not a Parlons address");
+            mAct.toast(tr(R.string.l10n_native_contacts_invalid_address));
             return false;
         }
         EventLog.add("introducing ourselves to " + addr.substring(Math.max(0, addr.indexOf('@'))));
@@ -529,20 +526,20 @@ public final class ContactsPage implements Page {
             try {
                 node.introduce(addr, true);
                 mAct.runOnUiThread(() -> {
-                    mAct.toast("Introduction sent — waiting for them to reply");
+                    mAct.toast(tr(R.string.l10n_native_contacts_intro_sent));
                     mLastSignature = "";
                     render();
                 });
             } catch (Exception e) {
                 EventLog.add("introduce failed: " + e.getMessage());
-                mAct.runOnUiThread(() -> mAct.toast("Failed: " + e.getMessage()));
+                mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_native_chat_operation_failed, e.getMessage())));
             }
         }, "introduce").start();
         return true;
     }
 
     private void shareText(String text) {
-        shareText(text, "Share your Parlons address");
+        shareText(text, tr(R.string.l10n_native_contacts_share_your_parlons));
     }
 
     private void shareText(String text, String title) {
@@ -556,7 +553,7 @@ public final class ContactsPage implements Page {
     private void showSendContactPicker(final Contact zWho, final String zShare) {
         com.eurobuddha.maxima.core.MaximaNode node = MaximaService.node();
         if (node == null) {
-            mAct.toast("Not connected yet");
+            mAct.toast(tr(R.string.l10n_native_contacts_not_connected));
             return;
         }
         LinearLayout body = new LinearLayout(mAct);
@@ -572,9 +569,9 @@ public final class ContactsPage implements Page {
             body.addView(row);
         }
         if (n == 0) {
-            body.addView(sub("No one else to send it to yet."));
+            body.addView(sub(Language.msg(R.string.l10n_contacts_none_to_send)));
         }
-        final BottomSheetDialog d = sheet("Send " + zWho.name + " to…", body);
+        final BottomSheetDialog d = sheet(Language.msg(R.string.l10n_native_contacts_send_name_to, zWho.name), body);
         int idx = 0;
         for (final Contact t : node.contacts()) {
             if (t.publicKey == null || t.publicKey.equalsIgnoreCase(zWho.publicKey)) {
@@ -589,7 +586,7 @@ public final class ContactsPage implements Page {
                     boolean ok = false;
                     try { ok = chat != null && chat.send(t, card) != null; } catch (Exception ignored) { }
                     final boolean fok = ok;
-                    mAct.runOnUiThread(() -> mAct.toast(fok ? "Contact sent to " + t.name : "Could not send"));
+                    mAct.runOnUiThread(() -> mAct.toast(fok ? tr(R.string.l10n_native_contacts_sent_to, t.name) : tr(R.string.l10n_native_contacts_send_failed)));
                 }).start();
             });
         }
@@ -698,36 +695,23 @@ public final class ContactsPage implements Page {
     private String presenceText(Contact c) {
         long ls = c.lastSeen;
         if (ls <= 0) {
-            return "offline";
+            return tr(R.string.l10n_native_contacts_offline);
         }
         long d = System.currentTimeMillis() - ls;
         if (d < ONLINE_MS) {
-            return "online";
+            return tr(R.string.l10n_presence_online);
         }
-        return "last seen " + ago(d);
+        return tr(R.string.l10n_presence_last_seen, Language.ago(d));
     }
 
     private String lastSeenText(Contact c) {
         if (c.lastSeen <= 0) {
-            return "never";
+            return tr(R.string.l10n_native_contacts_never);
         }
-        return ago(System.currentTimeMillis() - c.lastSeen) + " ago";
+        return Language.ago(System.currentTimeMillis() - c.lastSeen);
     }
 
-    private String ago(long d) {
-        long mins = d / 60000L;
-        if (mins < 1) {
-            return "moments";
-        }
-        if (mins < 60) {
-            return mins + "m";
-        }
-        long hours = mins / 60;
-        if (hours < 24) {
-            return hours + "h";
-        }
-        return (hours / 24) + "d";
-    }
+    private String ago(long d) { return Language.ago(d); }
 
     private String statusLabel(Contact c) {
         if (c.isKeets()) {
@@ -736,10 +720,10 @@ public final class ContactsPage implements Page {
         }
         long ls = c.lastSeen;
         if (ls <= 0) {
-            return "offline";
+            return tr(R.string.l10n_native_contacts_offline);
         }
         long d = System.currentTimeMillis() - ls;
-        return d < ONLINE_MS ? "online" : ago(d);
+        return d < ONLINE_MS ? tr(R.string.l10n_presence_online) : ago(d);
     }
 
     private String peerPill(Contact c) {
@@ -799,7 +783,7 @@ public final class ContactsPage implements Page {
         LinearLayout idcol = new LinearLayout(mAct);
         idcol.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(mAct);
-        title.setText("Your Parlons address");
+        Language.setText(title, Language.msg(R.string.l10n_native_contacts_your_parlons));
         title.setTextSize(16);
         title.setTypeface(manrope(Typeface.BOLD));
         title.setTextColor(col(R.color.ux_text));
@@ -813,8 +797,8 @@ public final class ContactsPage implements Page {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams acp = new LinearLayout.LayoutParams(-1, -2);
         acp.topMargin = dp(14);
-        TextView share = primaryButton("Share my address");
-        TextView scan = ghostButton("Scan");
+        TextView share = primaryButton(Language.msg(R.string.l10n_native_contacts_share_my_address));
+        TextView scan = ghostButton(Language.msg(R.string.l10n_native_contacts_scan));
         LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, -2, 2f);
         l.rightMargin = dp(5);
         LinearLayout.LayoutParams r = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -839,7 +823,7 @@ public final class ContactsPage implements Page {
         silp.rightMargin = dp(9);
         searchRow.addView(si, silp);
         mSearch = new EditText(mAct);
-        mSearch.setHint("Search contacts…");
+        Language.hint(mSearch, Language.msg(R.string.l10n_contacts_search));
         mSearch.setBackground(null);
         mSearch.setTextColor(col(R.color.ux_text));
         mSearch.setHintTextColor(col(R.color.ux_subtext));
@@ -871,14 +855,14 @@ public final class ContactsPage implements Page {
         head.setGravity(Gravity.CENTER_VERTICAL);
         head.setPadding(dp(4), dp(18), dp(4), dp(9));
         mCountLabel = new TextView(mAct);
-        mCountLabel.setText("CONTACTS");
+        Language.setText(mCountLabel, Language.msg(R.string.l10n_nav_contacts));
         mCountLabel.setTextSize(10);
         mCountLabel.setTypeface(Typeface.DEFAULT_BOLD);
         mCountLabel.setLetterSpacing(0.15f);
         mCountLabel.setTextColor(col(R.color.ux_subtext));
         head.addView(mCountLabel, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView add = new TextView(mAct);
-        add.setText("+ Add");
+        Language.setText(add, Language.msg(R.string.l10n_native_contacts_add_plus));
         add.setTextSize(12.5f);
         add.setTypeface(Typeface.DEFAULT_BOLD);
         add.setTextColor(col(R.color.ux_text));
@@ -901,7 +885,7 @@ public final class ContactsPage implements Page {
     // Sheet + widget helpers
     // ---------------------------------------------------------------
 
-    private BottomSheetDialog sheet(String titleText, View content) {
+    private BottomSheetDialog sheet(CharSequence titleText, View content) {
         LinearLayout root = new LinearLayout(mAct);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundResource(R.drawable.sheet_bg);
@@ -915,7 +899,7 @@ public final class ContactsPage implements Page {
         root.addView(grab, gp);
 
         TextView t = new TextView(mAct);
-        t.setText(titleText);
+        Language.setText(t, titleText);
         t.setTextSize(17);
         t.setTypeface(manrope(Typeface.BOLD));
         t.setTextColor(col(R.color.ux_text));
@@ -946,18 +930,18 @@ public final class ContactsPage implements Page {
         return d;
     }
 
-    private LinearLayout kv(String key, String value) {
+    private LinearLayout kv(CharSequence key, CharSequence value) {
         LinearLayout row = new LinearLayout(mAct);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(9), 0, dp(9));
         TextView k = new TextView(mAct);
-        k.setText(key.toUpperCase());
+        Language.setText(k, Language.upper(key));
         k.setTextSize(10);
         k.setLetterSpacing(0.1f);
         k.setTextColor(col(R.color.ux_subtext));
         TextView v = new TextView(mAct);
-        v.setText(value);
+        Language.setText(v, value);
         v.setTextSize(14);
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setGravity(Gravity.END);
@@ -967,7 +951,7 @@ public final class ContactsPage implements Page {
         return row;
     }
 
-    private LinearLayout copyField(String labelText, String value, String toastMsg) {
+    private LinearLayout copyField(CharSequence labelText, String value, CharSequence toastMsg) {
         LinearLayout box = new LinearLayout(mAct);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundResource(R.drawable.field_pill);
@@ -980,7 +964,7 @@ public final class ContactsPage implements Page {
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView l = new TextView(mAct);
-        l.setText(labelText.toUpperCase());
+        Language.setText(l, Language.upper(labelText));
         l.setTextSize(10);
         l.setLetterSpacing(0.12f);
         l.setTextColor(col(R.color.ux_subtext));
@@ -992,7 +976,7 @@ public final class ContactsPage implements Page {
         box.addView(head);
 
         TextView v = new TextView(mAct);
-        v.setText(value);
+        Language.setText(v, value);
         v.setTypeface(Typeface.MONOSPACE);
         v.setTextSize(12);
         v.setPadding(0, dp(7), 0, 0);
@@ -1003,7 +987,7 @@ public final class ContactsPage implements Page {
         box.setOnClickListener(view -> {
             ((ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE))
                     .setPrimaryClip(ClipData.newPlainText("maxima", value));
-            mAct.toast(toastMsg);
+            mAct.toast(toastMsg.toString());
         });
         return box;
     }
@@ -1021,9 +1005,9 @@ public final class ContactsPage implements Page {
         return androidx.core.content.ContextCompat.getDrawable(mAct, tv.resourceId);
     }
 
-    private TextView primaryButton(String text) {
+    private TextView primaryButton(CharSequence text) {
         TextView b = new TextView(mAct);
-        b.setText(text);
+        Language.setText(b, text);
         b.setGravity(Gravity.CENTER);
         b.setTextSize(14);
         b.setTypeface(manrope(Typeface.BOLD));
@@ -1035,9 +1019,9 @@ public final class ContactsPage implements Page {
         return b;
     }
 
-    private TextView ghostButton(String text) {
+    private TextView ghostButton(CharSequence text) {
         TextView b = new TextView(mAct);
-        b.setText(text);
+        Language.setText(b, text);
         b.setGravity(Gravity.CENTER);
         b.setTextSize(14);
         b.setTypeface(manrope(Typeface.BOLD));
@@ -1071,9 +1055,9 @@ public final class ContactsPage implements Page {
         return lp;
     }
 
-    private TextView sub(String t) {
+    private TextView sub(CharSequence t) {
         TextView v = new TextView(mAct);
-        v.setText(t);
+        Language.setText(v, t);
         v.setTextSize(12);
         v.setTextColor(col(R.color.ux_subtext));
         return v;
@@ -1088,6 +1072,8 @@ public final class ContactsPage implements Page {
         }
     }
 
+    @Override public void languageChanged() { mLastSignature = ""; render(); }
+
     private int col(int res) {
         return mAct.getResources().getColor(res, mAct.getTheme());
     }
@@ -1095,4 +1081,6 @@ public final class ContactsPage implements Page {
     private int dp(float v) {
         return (int) (v * mAct.getResources().getDisplayMetrics().density);
     }
+    private String tr(int resource, Object... arguments) { return Language.text(mAct, resource, arguments); }
+
 }

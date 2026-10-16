@@ -17,7 +17,10 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import com.eurobuddha.maxima.app.portal.ide.BaseView;
 import com.eurobuddha.maxima.app.portal.ide.NodeApi;
@@ -64,6 +67,15 @@ public class TerminalView extends BaseView {
     // History navigation state: -1 = live input.
     private int mHistPos = -1;
     private String mLiveDraft = "";
+
+    /** Completed help can be repainted from its snapshot without issuing another command. */
+    private static final class HelpResult {
+        final String command, json;
+        final long elapsed;
+        HelpResult(String command, JSONObject json, long elapsed) {
+            this.command = command; this.json = json.toString(); this.elapsed = elapsed;
+        }
+    }
 
     public TerminalView(Activity zActivity) {
         super(zActivity, R.layout.view_terminal);
@@ -150,15 +162,8 @@ public class TerminalView extends BaseView {
     }
 
     private void banner() {
-        appendEntry(OutputFormatter.colored(
-                "╔══════════════════════════════╗\n"
-              + "║   MINIMA  TERMINAL  IDE      ║\n"
-              + "╚══════════════════════════════╝\n"
-              + "Type a command — completions drop down as you type; ⇥ accepts.\n"
-              + "▲/▼ = history (long-press ▲ for list) · ★ = favorites (long-press to save)\n"
-              + "Long-press any output block to copy/share it.\n"
-              + "Menu ⋮ → Select & copy for drag-selection, Export session to save the lot.",
-                OutputFormatter.COL_DIM));
+        TextView view = appendEntry(msg(R.string.l10n_terminal_banner));
+        view.setTextColor(OutputFormatter.COL_DIM);
     }
 
     public void clearTerminal() {
@@ -197,68 +202,68 @@ public class TerminalView extends BaseView {
     private void showHistoryDialog() {
         List<String> hist = mHistory.getHistory(100);
         if (hist.isEmpty()) {
-            Toast.makeText(mActivity, "No history yet", Toast.LENGTH_SHORT).show();
+            Toast.makeText(mActivity, msg(R.string.l10n_terminal_history_empty), Toast.LENGTH_SHORT).show();
             return;
         }
         String[] items = hist.toArray(new String[0]);
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Command history")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_terminal_history))
                 .setItems(items, (d, which) -> {
                     mInput.setText(items[which]);
                     mInput.setSelection(mInput.getText().length());
                 })
-                .setNegativeButton("Close", null)
+                .setNegativeButton(msg(R.string.l10n_language_close), null)
                 .show();
     }
 
     private void saveFavorite() {
         String cmd = mInput.getText().toString().trim();
         if (cmd.isEmpty()) {
-            Toast.makeText(mActivity, "Type a command first, then long-press ★ to save it", Toast.LENGTH_SHORT).show();
+            Toast.makeText(mActivity, msg(R.string.l10n_terminal_type_first), Toast.LENGTH_SHORT).show();
             return;
         }
         EditText name = new EditText(mActivity);
-        name.setHint("Name this favorite");
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Save favorite")
+        Language.hint(name, msg(R.string.l10n_terminal_favorite_name));
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_terminal_save_favorite))
                 .setMessage(cmd)
                 .setView(name)
-                .setPositiveButton("Save", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_common_save), (d, w) -> {
                     String n = name.getText().toString().trim();
                     mHistory.addFavorite(n.isEmpty() ? cmd : n, cmd);
-                    Toast.makeText(mActivity, "Saved", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(mActivity, msg(R.string.l10n_common_saved), Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void showFavoritesDialog() {
         List<String[]> favs = mHistory.getFavorites();
         if (favs.isEmpty()) {
-            Toast.makeText(mActivity, "No favorites — type a command and long-press ★", Toast.LENGTH_LONG).show();
+            Toast.makeText(mActivity, msg(R.string.l10n_terminal_favorites_empty), Toast.LENGTH_LONG).show();
             return;
         }
         String[] labels = new String[favs.size()];
         for (int i = 0; i < favs.size(); i++) labels[i] = favs.get(i)[1];
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Favorites (long-press ★ on a command to add)")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_terminal_favorites))
                 .setItems(labels, (d, which) -> {
                     mInput.setText(favs.get(which)[2]);
                     mInput.setSelection(mInput.getText().length());
                 })
-                .setNeutralButton("Delete…", (d, w) -> showDeleteFavoriteDialog(favs, labels))
-                .setNegativeButton("Close", null)
+                .setNeutralButton(msg(R.string.l10n_terminal_delete_action), (d, w) -> showDeleteFavoriteDialog(favs, labels))
+                .setNegativeButton(msg(R.string.l10n_language_close), null)
                 .show();
     }
 
     private void showDeleteFavoriteDialog(List<String[]> favs, String[] labels) {
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Delete favorite")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_terminal_delete_favorite))
                 .setItems(labels, (d, which) -> {
                     mHistory.deleteFavorite(Long.parseLong(favs.get(which)[0]));
-                    Toast.makeText(mActivity, "Deleted", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(mActivity, msg(R.string.l10n_terminal_deleted), Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
@@ -273,7 +278,7 @@ public class TerminalView extends BaseView {
         Suggest.Result res = Suggest.suggest(mActivity, text, caret);
 
         if (res.paramHint != null) {
-            mParamHint.setText(res.paramHint + "   (tap for help)");
+            Language.setText(mParamHint, msg(R.string.l10n_terminal_tap_help, res.paramHint));
             mParamHint.setVisibility(View.VISIBLE);
             final String helpCmd = res.paramHint.split(" ")[0];
             mParamHint.setOnClickListener(v -> showHelpDialog(helpCmd));
@@ -333,12 +338,31 @@ public class TerminalView extends BaseView {
         android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
         sb.append(OutputFormatter.colored(item.label, OutputFormatter.COL_CMD));
         if (item.required) {
-            sb.append(OutputFormatter.colored(" required", OutputFormatter.COL_NUMBER));
+            sb.append(OutputFormatter.colored(msg(R.string.l10n_terminal_required).toString(), OutputFormatter.COL_NUMBER));
         }
         if (!item.desc.isEmpty()) {
-            sb.append(OutputFormatter.colored("  " + item.desc, OutputFormatter.COL_DIM));
+            sb.append(OutputFormatter.colored("  " + SystemMessages.text(mActivity, item.desc), OutputFormatter.COL_DIM));
         }
         return sb;
+    }
+
+    @Override public void languageChanged() {
+        // Repaint only existing completion labels. Never reset the highlighted item,
+        // caret, history position or pending command. Raw node output stays literal.
+        for (int i = 0; i < mItems.size() && i < mDropdown.getChildCount(); i++) {
+            ((TextView)mDropdown.getChildAt(i)).setText(rowText(mItems.get(i)));
+        }
+        for (int i = 0; i < mOutput.getChildCount(); i++) {
+            TextView result = (TextView)mOutput.getChildAt(i);
+            if (!(result.getTag() instanceof HelpResult)) continue;
+            HelpResult help = (HelpResult)result.getTag();
+            try {
+                JSONObject json = new JSONObject(help.json);
+                writeResult(result, renderHelp(help.command, json), !json.optBoolean("status", true), help.elapsed);
+            } catch (JSONException e) {
+                throw new IllegalStateException("Invalid saved help response", e);
+            }
+        }
     }
 
     private void moveSelection(int direction) {
@@ -384,15 +408,15 @@ public class TerminalView extends BaseView {
         tv.setTextSize(12);
         tv.setTextColor(OutputFormatter.COL_PLAIN);
         tv.setTextIsSelectable(true);
-        tv.setText(full);
+        Language.setText(tv, SystemMessages.message(full));
         int pad = (int) (mActivity.getResources().getDisplayMetrics().density * 16);
         ScrollView scroller = new ScrollView(mActivity);
         scroller.setPadding(pad, pad / 2, pad, pad / 2);
         scroller.addView(tv);
-        new AlertDialog.Builder(mActivity)
+        new LanguageDialog(mActivity)
                 .setTitle(command)
                 .setView(scroller)
-                .setPositiveButton("Close", null)
+                .setPositiveButton(msg(R.string.l10n_language_close), null)
                 .show();
     }
 
@@ -403,11 +427,11 @@ public class TerminalView extends BaseView {
 
         String warning = CommandRegistry.dangerWarning(zCommand);
         if (warning != null) {
-            new AlertDialog.Builder(mActivity)
-                    .setTitle("⚠ Risky command")
-                    .setMessage(warning)
-                    .setPositiveButton("Run anyway", (d, w) -> execute(zCommand))
-                    .setNegativeButton("Cancel", null)
+            new LanguageDialog(mActivity)
+                    .setTitle(msg(R.string.l10n_terminal_risky))
+                    .setMessage(SystemMessages.message(warning))
+                    .setPositiveButton(msg(R.string.l10n_terminal_run_anyway), (d, w) -> execute(zCommand))
+                    .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                     .show();
             return;
         }
@@ -418,7 +442,8 @@ public class TerminalView extends BaseView {
         mHistory.addHistory(zCommand);
         appendEntry(OutputFormatter.colored("❯ " + zCommand, OutputFormatter.COL_CMD));
 
-        final TextView result = appendEntry(OutputFormatter.colored("… running", OutputFormatter.COL_DIM));
+        final TextView result = appendEntry(msg(R.string.l10n_terminal_running));
+        result.setTextColor(OutputFormatter.COL_DIM);
         final long start = System.currentTimeMillis();
 
         mNode.cmd(zCommand, new NodeApi.Cb() {
@@ -428,6 +453,7 @@ public class TerminalView extends BaseView {
                 boolean failed = !json.optBoolean("status", true);
 
                 CharSequence rendered = renderHelp(zCommand, json);
+                if (rendered != null) result.setTag(new HelpResult(zCommand, json, ms));
                 if (rendered == null) {
                     String pretty;
                     try {
@@ -439,11 +465,7 @@ public class TerminalView extends BaseView {
                     pretty = pretty.replace("\\n", "\n").replace("\\t", "    ");
                     rendered = OutputFormatter.json(pretty, false);
                 }
-                result.setText(rendered);
-                if (failed) {
-                    result.append(OutputFormatter.colored("\n✖ command failed", OutputFormatter.COL_ERROR));
-                }
-                result.append(OutputFormatter.colored("\n⏱ " + ms + " ms", OutputFormatter.COL_DIM));
+                writeResult(result, rendered, failed, ms);
                 scrollToBottom();
             }
 
@@ -451,7 +473,7 @@ public class TerminalView extends BaseView {
             public void onError(String message) {
                 if (NodeApi.ERR_NOT_ENABLED.equals(message)) {
                     result.setText(OutputFormatter.colored(
-                            "✖ This app is not enabled yet.\nOpen Minima Core → Apps and enable Terminal IDE.",
+                            msg(R.string.l10n_terminal_not_enabled).toString(),
                             OutputFormatter.COL_ERROR));
                 } else {
                     result.setText(OutputFormatter.colored("✖ " + message, OutputFormatter.COL_ERROR));
@@ -459,6 +481,12 @@ public class TerminalView extends BaseView {
                 scrollToBottom();
             }
         });
+    }
+
+    private void writeResult(TextView result, CharSequence rendered, boolean failed, long elapsed) {
+        Language.setText(result, rendered);
+        if (failed) result.append(OutputFormatter.colored("\n" + msg(R.string.l10n_terminal_failed), OutputFormatter.COL_ERROR));
+        result.append(OutputFormatter.colored("\n⏱ " + elapsed + " ms", OutputFormatter.COL_DIM));
     }
 
     /**
@@ -479,7 +507,8 @@ public class TerminalView extends BaseView {
         String name = resp.optString("command", "");
         String bundled = HelpStore.full(mActivity, name);
         String brief = HelpStore.brief(mActivity, name);
-        if (bundled != null) fullhelp = bundled;
+        if (bundled != null) fullhelp = SystemMessages.text(mActivity, bundled);
+        if (brief != null) brief = HelpStore.displayBrief(brief).toString();
         if (brief == null) brief = resp.optString("help", "");
         if (!fullhelp.isEmpty()) {
             android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
@@ -512,6 +541,7 @@ public class TerminalView extends BaseView {
             // Bundled summary lists every accepted parameter; the node's may not.
             String line = HelpStore.brief(mActivity, n);
             if (line == null) line = resp.optString(n);
+            else line = HelpStore.displayBrief(line).toString();
             sb.append(OutputFormatter.colored(line + "\n", OutputFormatter.COL_PLAIN));
         }
         return sb;
@@ -560,13 +590,13 @@ public class TerminalView extends BaseView {
                     mActivity.getSystemService(Context.INPUT_METHOD_SERVICE);
             if (imm != null) imm.hideSoftInputFromWindow(mInput.getWindowToken(), 0);
             Toast.makeText(mActivity,
-                    "Long-press any output to select, drag the handles, then Copy",
+                    msg(R.string.l10n_terminal_selection_help),
                     Toast.LENGTH_LONG).show();
         }
     }
 
     public void copyAll() {
-        SessionExport.copy(mActivity, exportText(), "Minima terminal session");
+        SessionExport.copy(mActivity, exportText(), msg(R.string.l10n_terminal_session_label).toString());
     }
 
     /** Hand off to the activity's export sheet (Save to file / Share / Copy). */
@@ -577,19 +607,19 @@ public class TerminalView extends BaseView {
     /** Long-press on one output block: copy or share just that block. */
     private void showBlockMenu(final TextView block) {
         final String text = block.getText().toString();
-        final String[] actions = {
-                "Copy this block",
-                "Select text in this block…",
-                "Share this block…",
-                "Copy whole session",
-                "Select & copy mode",
+        final CharSequence[] actions = {
+                msg(R.string.l10n_terminal_copy_block),
+                msg(R.string.l10n_terminal_select_block),
+                msg(R.string.l10n_terminal_share_block),
+                msg(R.string.l10n_terminal_copy_session),
+                msg(R.string.l10n_terminal_selection_mode),
         };
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Output block")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_terminal_output_block))
                 .setItems(actions, (d, which) -> {
                     switch (which) {
                         case 0:
-                            SessionExport.copy(mActivity, text, "Minima terminal");
+                            SessionExport.copy(mActivity, text, msg(R.string.l10n_terminal_output_label).toString());
                             break;
                         case 1:
                             showSelectDialog(block.getText());
@@ -597,7 +627,7 @@ public class TerminalView extends BaseView {
                         case 2:
                             SessionExport.share(mActivity, text,
                                     SessionExport.timestampedName("minima-output"),
-                                    "Share output");
+                                    msg(R.string.l10n_terminal_share_output));
                             break;
                         case 3:
                             copyAll();
@@ -607,7 +637,7 @@ public class TerminalView extends BaseView {
                             break;
                     }
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
@@ -627,12 +657,12 @@ public class TerminalView extends BaseView {
         scroller.setPadding(pad, pad / 2, pad, pad / 2);
         scroller.addView(tv);
         final CharSequence full = text;
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Select & copy")
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_terminal_select_copy))
                 .setView(scroller)
-                .setPositiveButton("Copy all", (d, w) ->
-                        SessionExport.copy(mActivity, full, "Minima terminal"))
-                .setNegativeButton("Close", null)
+                .setPositiveButton(msg(R.string.l10n_terminal_copy_all), (d, w) ->
+                        SessionExport.copy(mActivity, full, msg(R.string.l10n_terminal_output_label).toString()))
+                .setNegativeButton(msg(R.string.l10n_language_close), null)
                 .show();
     }
 
@@ -645,7 +675,7 @@ public class TerminalView extends BaseView {
         TextView tv = new TextView(mActivity);
         tv.setTypeface(Typeface.MONOSPACE);
         tv.setTextSize(13);
-        tv.setText(text);
+        Language.setText(tv, text);
         tv.setPadding(0, 8, 0, 8);
         // In select mode the platform handles the long-press (start a selection);
         // otherwise it opens the explicit copy/share menu for this block.

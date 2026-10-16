@@ -17,6 +17,9 @@ import android.widget.TextView;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import com.eurobuddha.maxima.app.EventLog;
 import com.eurobuddha.maxima.app.MainActivity;
 import com.eurobuddha.maxima.app.R;
@@ -144,7 +147,7 @@ public final class WalletPage implements Page {
             mSupplyMinima = null;
             mAct.runOnUiThread(() -> {
                 if (mHeroAmt != null) {
-                    mHeroAmt.setText("…");
+                    Language.setText(mHeroAmt, "…");
                 }
                 if (mTokenList != null) {
                     mTokenList.removeAllViews();
@@ -194,7 +197,7 @@ public final class WalletPage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Wallet";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_wallet);
     }
 
     @Override
@@ -304,13 +307,11 @@ public final class WalletPage implements Page {
             // (Util.held) — NOT sendable. A coin funded before the wallet tracked it is
             // confirmed on-chain but not yet spendable, and showing sendable there made a
             // funded wallet look empty.
-            mHeroAmt.setText(Amounts.list(held));
+            Language.setText(mHeroAmt, Amounts.list(held));
         }
         if (mHeroSub != null) {
             boolean lag = isLess(mSpendMinima, held);
-            mHeroSub.setText(lag
-                    ? Amounts.list(mSpendMinima) + " sendable · tap Sync to unlock the rest"
-                    : Amounts.list(mSpendMinima) + " sendable now");
+            Language.setText(mHeroSub, m(lag ? R.string.l10n_android_wallet_sendable_lag : R.string.l10n_android_wallet_sendable_now, Amounts.list(mSpendMinima)));
         }
     }
 
@@ -350,7 +351,7 @@ public final class WalletPage implements Page {
     }
 
     private View emptyTokenHint() {
-        return sub("No coins yet — receive some MINIMA to get started.");
+        return sub(m(R.string.l10n_android_wallet_empty_coins));
     }
 
     private View tokenCard(CoinAggregator.Agg agg) {
@@ -363,13 +364,13 @@ public final class WalletPage implements Page {
         LinearLayout mid = new LinearLayout(mAct);
         mid.setOrientation(LinearLayout.VERTICAL);
         TextView sym = new TextView(mAct);
-        sym.setText(tokenTicker(agg));
+        Language.setText(sym, tokenTicker(agg));
         sym.setTextSize(14);
         sym.setTypeface(Typeface.DEFAULT_BOLD);
         sym.setLetterSpacing(0.02f);
         sym.setTextColor(col(R.color.ux_text));
         TextView nm = new TextView(mAct);
-        nm.setText(tokenName(agg));
+        Language.setText(nm, tokenDisplayName(agg));
         nm.setTextSize(11.5f);
         nm.setSingleLine(true);
         nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -384,13 +385,13 @@ public final class WalletPage implements Page {
         right.setOrientation(LinearLayout.VERTICAL);
         right.setGravity(Gravity.END);
         TextView amt = new TextView(mAct);
-        amt.setText(Amounts.list(agg.displayTotal.toString()));
+        Language.setText(amt, Amounts.list(agg.displayTotal.toString()));
         amt.setTextSize(15);
         amt.setTypeface(Typeface.DEFAULT_BOLD);
         amt.setTextColor(col(R.color.ux_text));
         amt.setGravity(Gravity.END);
         TextView cnt = new TextView(mAct);
-        cnt.setText((agg.count + (agg.count == 1 ? " coin" : " coins")).toUpperCase());
+        Language.setText(cnt, Language.upper(Language.count(R.plurals.l10n_cloud_wallet_coins, agg.count)));
         cnt.setTextSize(9.5f);
         cnt.setLetterSpacing(0.08f);
         cnt.setTextColor(col(R.color.ux_subtext));
@@ -439,7 +440,7 @@ public final class WalletPage implements Page {
             return "MINIMA";
         }
         String n = tokenName(agg);
-        if (n.length() <= 12 && !n.equals("Token")) {
+        if (n != null && n.length() <= 12 && !n.equals("Token")) {
             return n.toUpperCase();
         }
         String hex = agg.tokenid == null ? "" : agg.tokenid.replaceFirst("(?i)^0x", "");
@@ -466,7 +467,12 @@ public final class WalletPage implements Page {
             }
         } catch (Exception ignored) {
         }
-        return "Token";
+        return null;
+    }
+
+    private CharSequence tokenDisplayName(CoinAggregator.Agg agg) {
+        String name = tokenName(agg);
+        return name == null ? m(R.string.l10n_wallet_token) : name;
     }
 
     // ---------------------------------------------------------------
@@ -488,12 +494,12 @@ public final class WalletPage implements Page {
         LinearLayout hn = new LinearLayout(mAct);
         hn.setOrientation(LinearLayout.VERTICAL);
         TextView t1 = new TextView(mAct);
-        t1.setText(tokenTicker(agg));
+        Language.setText(t1, tokenTicker(agg));
         t1.setTextSize(17);
         t1.setTypeface(Typeface.DEFAULT_BOLD);
         t1.setTextColor(col(R.color.ux_text));
         TextView t2 = new TextView(mAct);
-        t2.setText(tokenName(agg) + (agg.isMinima() ? " · native" : ""));
+        Language.setText(t2, Language.join(tokenDisplayName(agg), agg.isMinima() ? Language.join(" · ", m(R.string.l10n_android_wallet_native)) : ""));
         t2.setTextSize(12);
         t2.setTextColor(col(R.color.ux_subtext));
         hn.addView(t1);
@@ -513,17 +519,17 @@ public final class WalletPage implements Page {
         } catch (Exception ignored) {
         }
 
-        body.addView(kv("Sendable", sendable));
-        body.addView(kv("Confirmed", conf));
-        body.addView(kv("Pending", pend));
-        body.addView(kv("Locked", locked));
-        body.addView(kv("Coins", String.valueOf(agg.count)));
-        LinearLayout supplyRow = kv("Supply",
+        body.addView(kv(m(R.string.l10n_wallet_sendable), sendable));
+        body.addView(kv(m(R.string.l10n_wallet_confirmed), conf));
+        body.addView(kv(m(R.string.l10n_wallet_pending), pend));
+        body.addView(kv(m(R.string.l10n_android_wallet_locked), locked));
+        body.addView(kv(m(R.string.l10n_wallet_coins), String.valueOf(agg.count)));
+        LinearLayout supplyRow = kv(m(R.string.l10n_wallet_supply),
                 agg.isMinima() ? (mSupplyMinima == null ? "…" : mSupplyMinima) : "—");
         final TextView supplyVal = (TextView) supplyRow.getChildAt(1);
         body.addView(supplyRow);
 
-        body.addView(copyField("Token ID", agg.tokenid, "Token ID copied"));
+        body.addView(copyField(m(R.string.l10n_wallet_token_id), agg.tokenid, m(R.string.l10n_cloud_wallet_token_copied)));
 
         if (agg.isMinima() && mSupplyMinima == null) {
             mPub.cmd("status", new WalletPublisher.Cb() {
@@ -533,7 +539,7 @@ public final class WalletPage implements Page {
                         String sup = resp == null ? null : resp.optString("minima", null);
                         if (sup != null && !sup.isEmpty()) {
                             mSupplyMinima = Amounts.list(sup);
-                            post(() -> supplyVal.setText(mSupplyMinima));
+                            post(() -> Language.setText(supplyVal, mSupplyMinima));
                         }
                     } catch (Exception ignored) {
                     }
@@ -544,7 +550,7 @@ public final class WalletPage implements Page {
             });
         }
 
-        sheet(tokenName(agg), body);
+        sheet(tokenDisplayName(agg), body);
     }
 
     // ---------------------------------------------------------------
@@ -554,7 +560,7 @@ public final class WalletPage implements Page {
     private void showSend() {
         final MaximaWallet w = mWallet;
         if (w == null) {
-            mAct.toast("Wallet still opening…");
+            toast(m(R.string.l10n_android_wallet_opening));
             return;
         }
         LinearLayout body = new LinearLayout(mAct);
@@ -568,7 +574,7 @@ public final class WalletPage implements Page {
         int fp = dp(12);
         toRow.setPadding(fp, dp(4), dp(6), dp(4));
         final EditText to = new EditText(mAct);
-        to.setHint("Mx… or 0x… address");
+        Language.hint(to, m(R.string.l10n_cloud_wallet_address_hint));
         to.setBackground(null);
         to.setTextColor(col(R.color.ux_text));
         to.setHintTextColor(col(R.color.ux_subtext));
@@ -576,16 +582,17 @@ public final class WalletPage implements Page {
         toRow.addView(to, new LinearLayout.LayoutParams(0, -2, 1f));
         ImageView scan = new ImageView(mAct);
         scan.setImageResource(R.drawable.ic_scan);
+        Language.description(scan, m(R.string.l10n_common_scan_qr));
         scan.setColorFilter(col(R.color.ux_on_accent));
         scan.setBackgroundResource(R.drawable.btn_send_circle);
         int sp = dp(8);
         scan.setPadding(sp, sp, sp, sp);
-        scan.setOnClickListener(v -> mAct.scanQr(contents -> to.setText(contents)));
+        scan.setOnClickListener(v -> mAct.scanQr(contents -> Language.setText(to, contents)));
         toRow.addView(scan, new LinearLayout.LayoutParams(dp(38), dp(38)));
         body.addView(toRow, marginBottom(dp(11)));
 
         final EditText amt = new EditText(mAct);
-        amt.setHint("Amount");
+        Language.hint(amt, m(R.string.l10n_wallet_amount));
         amt.setBackgroundResource(R.drawable.field_pill);
         amt.setPadding(fp, fp, fp, fp);
         amt.setTextColor(col(R.color.ux_text));
@@ -596,11 +603,11 @@ public final class WalletPage implements Page {
         body.addView(amt, marginBottom(dp(6)));
 
         final TextView status = sub("");
-        final TextView btn = primaryButton("Sign & send");
+        final TextView btn = primaryButton(m(R.string.l10n_desktop_chat_sign_send));
         body.addView(btn, marginBottom(dp(6)));
         body.addView(status);
 
-        BottomSheetDialog d = sheet("Send MINIMA", body);
+        BottomSheetDialog d = sheet(m(R.string.l10n_wallet_send_minima), body);
         btn.setOnClickListener(v -> sendPayment(w, to.getText().toString().trim(),
                 amt.getText().toString().trim(), status, d));
     }
@@ -608,25 +615,25 @@ public final class WalletPage implements Page {
     private void sendPayment(final MaximaWallet w, final String to, final String amtStr,
                              final TextView status, final BottomSheetDialog sheet) {
         if (to.isEmpty() || amtStr.isEmpty()) {
-            status.setText("Address and amount needed");
+            Language.setText(status, m(R.string.l10n_cloud_wallet_address_amount));
             return;
         }
         final MiniNumber amount;
         try {
             amount = new MiniNumber(amtStr);
         } catch (Exception e) {
-            status.setText("Bad amount");
+            Language.setText(status, m(R.string.l10n_desktop_chat_bad_amount));
             return;
         }
         if (!amount.isMore(MiniNumber.ZERO)) {
-            status.setText("Enter an amount greater than 0");
+            Language.setText(status, m(R.string.l10n_desktop_chat_positive_amount));
             return;
         }
         if (mSending) {
             return;   // already signing/publishing — never double-burn a key use
         }
         mSending = true;
-        status.setText("Selecting coins…");
+        Language.setText(status, m(R.string.l10n_wallet_selecting));
         mIo.execute(() -> {
             try {
                 final Object lock = new Object();
@@ -668,13 +675,13 @@ public final class WalletPage implements Page {
                     inputs.add(TxnFactory.fromCoinJson(cn, MaximaWallet.KEY_INDEX));
                 }
 
-                post(() -> status.setText("Signing…"));
+                post(() -> Language.setText(status, m(R.string.l10n_cloud_wallet_signing)));
                 TxnFactory factory = new TxnFactory(w.core());
                 final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, amount,
                         TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
                         "mxw" + System.currentTimeMillis());
 
-                post(() -> status.setText("Publishing via " + mPub.backendName() + "…"));
+                post(() -> Language.setText(status, m(R.string.l10n_wallet_publishing, SystemMessages.message(mPub.backendName()))));
                 mPub.publish(built.getTxnImportCommand(), built.getID(),
                         built.getTxnPostCommand(), new WalletPublisher.Cb() {
                             public void onResult(JSONObject r) {
@@ -682,8 +689,8 @@ public final class WalletPage implements Page {
                                 WalletLedger.add(mAct, true, amount.toString(), "MINIMA",
                                         to, built.getID(), "0x00");
                                 post(() -> {
-                                    status.setText("Sent ⛏ (mining)");
-                                    mAct.toast("Sent — mining into a block");
+                                    Language.setText(status, m(R.string.l10n_wallet_mining));
+                                    toast(m(R.string.l10n_android_wallet_mining));
                                     renderUses(w);
                                     mLastFetch = 0;
                                     render();
@@ -695,15 +702,15 @@ public final class WalletPage implements Page {
 
                             public void onError(String m) {
                                 mSending = false;
-                                post(() -> status.setText("Publish failed: " + m));
+                                post(() -> Language.setText(status, m(R.string.l10n_android_wallet_publish_failed, m)));
                             }
                         });
             } catch (CoinSelector.InsufficientFundsException ife) {
                 mSending = false;
-                post(() -> status.setText("Not enough confirmed funds"));
+                post(() -> Language.setText(status, m(R.string.l10n_wallet_insufficient)));
             } catch (Exception e) {
                 mSending = false;
-                post(() -> status.setText("Send failed: " + e.getMessage()));
+                post(() -> Language.setText(status, m(R.string.l10n_wallet_send_failed, e.getMessage())));
             }
         });
     }
@@ -775,9 +782,9 @@ public final class WalletPage implements Page {
             EventLog.add("wallet: coin sync imported=" + fi + " failed=" + ff);
             post(() -> {
                 if (fi > 0 && ff == 0) {
-                    mAct.toast("Coins synced — " + fi + " now spendable");
+                    toast(m(R.string.l10n_android_wallet_synced, fi));
                 } else if (ff > 0) {
-                    mAct.toast("Synced " + fi + ", " + ff + " pending — try again shortly");
+                    toast(m(R.string.l10n_android_wallet_sync_pending, fi, ff));
                 }
                 mLastFetch = 0;   // force the next render() to refetch balance + coins
                 render();
@@ -828,7 +835,7 @@ public final class WalletPage implements Page {
     private void showReceive() {
         final MaximaWallet w = mWallet;
         if (w == null || w.mxAddress() == null) {
-            mAct.toast("Wallet still opening…");
+            toast(m(R.string.l10n_android_wallet_opening));
             return;
         }
         LinearLayout body = new LinearLayout(mAct);
@@ -847,14 +854,13 @@ public final class WalletPage implements Page {
         qlp.bottomMargin = dp(14);
         body.addView(qr, qlp);
 
-        body.addView(copyField("Your address", w.mxAddress(), "Address copied"),
+        body.addView(copyField(m(R.string.l10n_native_contacts_your_address), w.mxAddress(), m(R.string.l10n_native_contacts_address_copied)),
                 new LinearLayout.LayoutParams(-1, -2));
-        TextView note = sub("Tap the address to copy the complete string. "
-                + "Received via " + mPub.backendName() + ".");
+        TextView note = sub(m(R.string.l10n_android_wallet_receive_help, SystemMessages.message(mPub.backendName())));
         note.setPadding(dp(2), dp(8), dp(2), 0);
         body.addView(note);
 
-        sheet("Receive MINIMA", body);
+        sheet(m(R.string.l10n_wallet_receive_minima), body);
     }
 
     // ---------------------------------------------------------------
@@ -878,8 +884,8 @@ public final class WalletPage implements Page {
             shownRows.add(r);
         }
         if (shownRows.isEmpty()) {
-            mHistory.addView(sub(mFilter == 0 ? "No payments yet"
-                    : mFilter == 1 ? "No sent payments" : "No received payments"));
+            mHistory.addView(sub(mFilter == 0 ? m(R.string.l10n_android_wallet_empty_history)
+                    : mFilter == 1 ? m(R.string.l10n_android_wallet_empty_sent) : m(R.string.l10n_android_wallet_empty_received)));
             return;
         }
         int shown = 0;
@@ -918,12 +924,12 @@ public final class WalletPage implements Page {
         LinearLayout mid = new LinearLayout(mAct);
         mid.setOrientation(LinearLayout.VERTICAL);
         TextView a = new TextView(mAct);
-        a.setText((r.sent ? "−" : "+") + Amounts.list(r.amount) + " " + r.token);
+        Language.setText(a, (r.sent ? "−" : "+") + Amounts.list(r.amount) + " " + r.token);
         a.setTextSize(14.5f);
         a.setTypeface(Typeface.DEFAULT_BOLD);
         a.setTextColor(col(r.sent ? R.color.ux_text : R.color.ux_success));
         TextView who = new TextView(mAct);
-        who.setText(previewWho(r) + "  ·  " + relTime(r.time));
+        Language.setText(who, Language.join(previewWho(r), "  ·  ", relTime(r.time)));
         who.setTextSize(11.5f);
         who.setSingleLine(true);
         who.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -940,25 +946,24 @@ public final class WalletPage implements Page {
         LinearLayout body = new LinearLayout(mAct);
         body.setOrientation(LinearLayout.VERTICAL);
 
-        body.addView(kv("Direction", r.sent ? "Sent" : "Received"));
-        body.addView(kv("Amount", (r.sent ? "−" : "+") + Amounts.full(r.amount) + " " + r.token));
-        body.addView(kv("Token", r.token));
-        body.addView(kv("When", fullTime(r.time)));
+        body.addView(kv(m(R.string.l10n_wallet_direction), r.sent ? m(R.string.l10n_wallet_sent) : m(R.string.l10n_wallet_received)));
+        body.addView(kv(m(R.string.l10n_wallet_amount), (r.sent ? "−" : "+") + Amounts.full(r.amount) + " " + r.token));
+        body.addView(kv(m(R.string.l10n_wallet_token), r.token));
+        body.addView(kv(m(R.string.l10n_wallet_when), fullTime(r.time)));
         if (!"0x00".equals(r.tokenid) && !r.tokenid.isEmpty()) {
-            body.addView(copyField("Token ID", r.tokenid, "Token ID copied"));
+            body.addView(copyField(m(R.string.l10n_wallet_token_id), r.tokenid, m(R.string.l10n_cloud_wallet_token_copied)));
         }
-        body.addView(copyField(r.sent ? "To" : "From",
-                r.who.isEmpty() ? "—" : r.who, "Address copied"));
-        body.addView(copyField("Transaction ID",
-                r.txid.isEmpty() ? "—" : r.txid, "Transaction ID copied"));
+        body.addView(copyField(r.sent ? m(R.string.l10n_wallet_to) : m(R.string.l10n_wallet_from),
+                r.who.isEmpty() ? "—" : r.who, m(R.string.l10n_native_contacts_address_copied)));
+        body.addView(copyField(m(R.string.l10n_wallet_transaction_id),
+                r.txid.isEmpty() ? "—" : r.txid, m(R.string.l10n_android_chat_tx_copied)));
 
-        sheet(r.sent ? "Sent · " + Amounts.list(r.amount) + " " + r.token
-                : "Received · " + Amounts.list(r.amount) + " " + r.token, body);
+        sheet(Language.join(r.sent ? m(R.string.l10n_wallet_sent) : m(R.string.l10n_wallet_received), " · ", Amounts.list(r.amount), " ", r.token), body);
     }
 
-    private String previewWho(WalletLedger.Row r) {
+    private CharSequence previewWho(WalletLedger.Row r) {
         if (r.who == null || r.who.isEmpty()) {
-            return r.sent ? "sent" : "received";
+            return r.sent ? m(R.string.l10n_wallet_sent) : m(R.string.l10n_wallet_received);
         }
         String s = r.who;
         if (s.length() > 20) {
@@ -974,11 +979,10 @@ public final class WalletPage implements Page {
     private void renderUses(MaximaWallet w) {
         int used = w.uses(mAct);
         if (mUsesBig != null) {
-            mUsesBig.setText(String.valueOf(used));
+            Language.setText(mUsesBig, String.valueOf(used));
         }
         if (mUses != null) {
-            mUses.setText(String.format(java.util.Locale.UK, "%,d of %,d signatures left",
-                    KEY_TOTAL - used, KEY_TOTAL));
+            Language.setText(mUses, m(R.string.l10n_android_wallet_signatures_left, KEY_TOTAL - used, KEY_TOTAL));
         }
     }
 
@@ -988,30 +992,29 @@ public final class WalletPage implements Page {
         final int cur = w == null ? 0 : w.uses(mAct);
         final EditText input = new EditText(mAct);
         input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        input.setText(String.valueOf(cur));
-        new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                .setTitle("Set signatures used")
-                .setMessage("Currently " + cur + ". Set this to AT LEAST the number of times this "
-                        + "seed's key #1000 has ever signed, anywhere. You can only raise it.")
+        Language.setText(input, String.valueOf(cur));
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_android_wallet_set_uses))
+                .setMessage(m(R.string.l10n_android_wallet_uses_warning, cur))
                 .setView(input)
-                .setNegativeButton("Cancel", (d, wc) -> showUsesExplainer())
-                .setPositiveButton("Set", (d, wc) -> {
+                .setNegativeButton(m(R.string.l10n_common_cancel), (d, wc) -> showUsesExplainer())
+                .setPositiveButton(m(R.string.l10n_native_settings_set), (d, wc) -> {
                     int n;
                     try {
                         n = Integer.parseInt(input.getText().toString().trim());
                     } catch (Exception e) {
-                        mAct.toast("Enter a number");
+                        toast(m(R.string.l10n_android_wallet_number_required));
                         showUsesExplainer();
                         return;
                     }
                     if (n <= cur) {
-                        mAct.toast("Ignored — can only raise above " + cur);
+                        toast(m(R.string.l10n_android_wallet_uses_ignored, cur));
                     } else {
                         MaximaWallet.setUsesAtLeast(mAct, n);
                         if (mWallet != null) {
                             renderUses(mWallet);
                         }
-                        mAct.toast("Set to " + n);
+                        toast(m(R.string.l10n_android_wallet_uses_set, n));
                     }
                     showUsesExplainer();
                 })
@@ -1019,13 +1022,10 @@ public final class WalletPage implements Page {
     }
 
     private void showUsesExplainer() {
-        new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                .setTitle("Why this matters")
-                .setMessage("Each signing key can be used a limited number of times. This counter "
-                        + "protects your funds: it only ever goes up, never down, and reusing a "
-                        + "spent key can expose it and lose money. You normally never touch this — "
-                        + "it is here only to correct a count that under-reports real use.")
-                .setPositiveButton("Got it", null)
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_android_wallet_why))
+                .setMessage(m(R.string.l10n_android_wallet_uses_help))
+                .setPositiveButton(m(R.string.l10n_help_got_it), null)
                 .show();
     }
 
@@ -1033,17 +1033,17 @@ public final class WalletPage implements Page {
         LinearLayout body = new LinearLayout(mAct);
         body.setOrientation(LinearLayout.VERTICAL);
         TextView src = sub(MaximaWallet.hasCustomPhrase(mAct)
-                ? "Independent imported phrase — separate address & key-use budget"
-                : "Parlons identity seed · key #1000 (one phrase backs chat, comms and wallet)");
+                ? m(R.string.l10n_android_wallet_independent)
+                : m(R.string.l10n_android_wallet_identity));
         src.setPadding(0, 0, 0, dp(12));
         body.addView(src);
-        TextView node = ghostButton("Wallet node");
+        TextView node = ghostButton(m(R.string.l10n_android_wallet_node));
         body.addView(node, marginBottom(dp(8)));
-        TextView imp = primaryButton("Import a phrase");
+        TextView imp = primaryButton(m(R.string.l10n_android_wallet_import_phrase));
         body.addView(imp, marginBottom(dp(8)));
-        TextView rev = ghostButton("Use Parlons seed");
+        TextView rev = ghostButton(m(R.string.l10n_android_wallet_use_identity));
         body.addView(rev);
-        BottomSheetDialog d = sheet("Wallet settings", body);
+        BottomSheetDialog d = sheet(m(R.string.l10n_android_wallet_settings), body);
         node.setOnClickListener(v -> { d.dismiss(); showNodeConfig(); });
         imp.setOnClickListener(v -> { d.dismiss(); importSeed(); });
         rev.setOnClickListener(v -> { d.dismiss(); revertSeed(); });
@@ -1060,45 +1060,42 @@ public final class WalletPage implements Page {
         LinearLayout body = new LinearLayout(mAct);
         body.setOrientation(LinearLayout.VERTICAL);
 
-        TextView explain = sub("Your Minima MegaMMR node endpoint + token. Default is the "
-                + "Parlons fleet (" + com.eurobuddha.maxima.app.wallet.WalletPublisher.fleetGatewayUrls().length
-                + " nodes, automatic failover); point it at your own Parlons Node to self-host. "
-                + "Your seed never leaves this phone.");
+        TextView explain = sub(m(R.string.l10n_android_wallet_node_help, WalletPublisher.fleetGatewayUrls().length));
         explain.setPadding(0, 0, 0, dp(12));
         body.addView(explain);
 
         final EditText urlF = new EditText(mAct);
-        urlF.setHint("https://your-node…/cmd");
+        Language.hint(urlF, "https://your-node…/cmd");
         urlF.setSingleLine(true);
-        urlF.setText(com.eurobuddha.maxima.app.wallet.WalletPublisher.currentGatewayUrl(mAct));
+        Language.setText(urlF, com.eurobuddha.maxima.app.wallet.WalletPublisher.currentGatewayUrl(mAct));
         styleField(urlF);
         body.addView(urlF, marginBottom(dp(8)));
 
         final EditText tokF = new EditText(mAct);
-        tokF.setHint("access token");
+        Language.hint(tokF, m(R.string.l10n_android_wallet_access_token));
         tokF.setSingleLine(true);
-        tokF.setText(com.eurobuddha.maxima.app.wallet.WalletPublisher.currentGatewayToken(mAct));
+        Language.setText(tokF, com.eurobuddha.maxima.app.wallet.WalletPublisher.currentGatewayToken(mAct));
         styleField(tokF);
         body.addView(tokF, marginBottom(dp(12)));
 
-        TextView save = primaryButton("Save node");
+        TextView save = primaryButton(m(R.string.l10n_android_wallet_save_node));
         body.addView(save, marginBottom(dp(8)));
-        TextView reset = ghostButton("Reset to the Parlons fleet");
+        TextView reset = ghostButton(m(R.string.l10n_android_wallet_reset_node));
         body.addView(reset);
 
-        BottomSheetDialog d = sheet("Wallet node", body);
+        BottomSheetDialog d = sheet(m(R.string.l10n_android_wallet_node), body);
         save.setOnClickListener(v -> {
             com.eurobuddha.maxima.app.wallet.WalletPublisher.saveGateway(mAct,
                     urlF.getText().toString(), tokF.getText().toString());
             rebuildPublisher();
             d.dismiss();
-            mAct.toast("Wallet node saved");
+            toast(m(R.string.l10n_android_wallet_node_saved));
         });
         reset.setOnClickListener(v -> {
             com.eurobuddha.maxima.app.wallet.WalletPublisher.saveGateway(mAct, "", "");
             rebuildPublisher();
             d.dismiss();
-            mAct.toast("Reset to the Parlons fleet");
+            toast(m(R.string.l10n_android_wallet_reset_node));
         });
     }
 
@@ -1122,27 +1119,23 @@ public final class WalletPage implements Page {
 
     private void importSeed() {
         final EditText input = new EditText(mAct);
-        input.setHint("12 / 24-word seed phrase");
+        Language.hint(input, m(R.string.l10n_android_wallet_phrase_hint));
         input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         input.setMinLines(2);
-        new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                .setTitle("Import a wallet seed")
-                .setMessage("This replaces the Parlons wallet's seed with the phrase you enter — "
-                        + "its address and funds change.\n\n⚠ ONLY import a seed whose key #1000 "
-                        + "has NOT signed on another wallet or node. Reusing a one-time signing "
-                        + "key can expose it and lose funds. An imported seed starts with a fresh "
-                        + "key-use count; re-importing the same phrase returns to its own count.")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_android_wallet_import_title))
+                .setMessage(m(R.string.l10n_android_wallet_import_warning))
                 .setView(input)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Import", (d, w) -> {
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_android_wallet_import), (d, w) -> {
                     String phrase = input.getText().toString().trim();
                     if (phrase.isEmpty()) {
-                        mAct.toast("No phrase entered");
+                        toast(m(R.string.l10n_android_wallet_phrase_required));
                         return;
                     }
                     MaximaWallet.setCustomPhrase(mAct, phrase);
-                    mAct.toast("Importing wallet seed…");
+                    toast(m(R.string.l10n_android_wallet_importing));
                     openWallet();
                 })
                 .show();
@@ -1150,17 +1143,16 @@ public final class WalletPage implements Page {
 
     private void revertSeed() {
         if (!MaximaWallet.hasCustomPhrase(mAct)) {
-            mAct.toast("Already using the Parlons seed");
+            toast(m(R.string.l10n_android_wallet_already_identity));
             return;
         }
-        new androidx.appcompat.app.AlertDialog.Builder(mAct)
-                .setTitle("Use the Parlons seed?")
-                .setMessage("Switch the wallet back to your Parlons identity seed (key #1000). "
-                        + "The imported wallet is not deleted — re-import its phrase to return to it.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Use Maxima seed", (d, w) -> {
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_android_wallet_revert_title))
+                .setMessage(m(R.string.l10n_android_wallet_revert_warning))
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_android_wallet_use_identity), (d, w) -> {
                     MaximaWallet.setCustomPhrase(mAct, null);
-                    mAct.toast("Back to the Parlons seed…");
+                    toast(m(R.string.l10n_android_wallet_reverting));
                     openWallet();
                 })
                 .show();
@@ -1177,8 +1169,8 @@ public final class WalletPage implements Page {
         seg.setBackgroundResource(R.drawable.seg_track);
         int s4 = dp(4);
         seg.setPadding(s4, s4, s4, s4);
-        mSegBalance = segItem("Balance");
-        mSegHistory = segItem("History");
+        mSegBalance = segItem(m(R.string.l10n_wallet_balance));
+        mSegHistory = segItem(m(R.string.l10n_wallet_history));
         seg.addView(mSegBalance, new LinearLayout.LayoutParams(0, -2, 1f));
         seg.addView(mSegHistory, new LinearLayout.LayoutParams(0, -2, 1f));
         mSegBalance.setOnClickListener(v -> setSeg(0));
@@ -1201,18 +1193,18 @@ public final class WalletPage implements Page {
         // Hero card.
         LinearLayout hero = card();
         hero.setBackgroundResource(R.drawable.card);
-        hero.addView(label("TOTAL BALANCE"));
+        hero.addView(label(m(R.string.l10n_cloud_wallet_total_balance)));
         LinearLayout amtRow = new LinearLayout(mAct);
         amtRow.setOrientation(LinearLayout.HORIZONTAL);
         amtRow.setGravity(Gravity.BOTTOM);
         mHeroAmt = new TextView(mAct);
-        mHeroAmt.setText("…");
+        Language.setText(mHeroAmt, "…");
         mHeroAmt.setTextSize(33);
         mHeroAmt.setLetterSpacing(-0.02f);
         mHeroAmt.setTypeface(manrope(Typeface.BOLD));
         mHeroAmt.setTextColor(col(R.color.ux_text));
         TextView unit = new TextView(mAct);
-        unit.setText(" MINIMA");
+        Language.setText(unit, " MINIMA");
         unit.setTextSize(15);
         unit.setTypeface(Typeface.DEFAULT_BOLD);
         unit.setPadding(0, 0, 0, dp(4));
@@ -1222,7 +1214,7 @@ public final class WalletPage implements Page {
         LinearLayout.LayoutParams arp = new LinearLayout.LayoutParams(-2, -2);
         arp.topMargin = dp(6);
         hero.addView(amtRow, arp);
-        mHeroSub = sub("sendable now");
+        mHeroSub = sub(m(R.string.l10n_android_wallet_sendable));
         // Tapping the sub-line re-runs the coin backfill (see syncCoins): useful if the
         // one-shot auto-sync couldn't reach the node, or funds arrived after open.
         mHeroSub.setOnClickListener(v -> {
@@ -1231,11 +1223,11 @@ public final class WalletPage implements Page {
                 return;
             }
             if (mSyncing) {
-                mAct.toast("Syncing coins…");
+                toast(m(R.string.l10n_android_wallet_syncing));
                 return;
             }
             if (isLess(mSpendMinima, held(mConfMinima, mUnconfMinima))) {
-                mAct.toast("Syncing coins…");
+                toast(m(R.string.l10n_android_wallet_syncing));
                 syncCoins(w, null);
             }
         });
@@ -1245,8 +1237,8 @@ public final class WalletPage implements Page {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams acp = new LinearLayout.LayoutParams(-1, -2);
         acp.topMargin = dp(14);
-        TextView send = primaryButton("Send");
-        TextView recv = ghostButton("Receive");
+        TextView send = primaryButton(m(R.string.l10n_chat_send));
+        TextView recv = ghostButton(m(R.string.l10n_wallet_receive));
         LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, -2, 1f);
         l.rightMargin = dp(5);
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -1258,18 +1250,18 @@ public final class WalletPage implements Page {
         recv.setOnClickListener(v -> showReceive());
         mBalancePane.addView(hero, marginBottom(dp(4)));
 
-        mBalancePane.addView(sectionLabel("YOUR TOKENS"));
+        mBalancePane.addView(sectionLabel(m(R.string.l10n_android_wallet_your_tokens)));
         mTokenList = new LinearLayout(mAct);
         mTokenList.setOrientation(LinearLayout.VERTICAL);
         mBalancePane.addView(mTokenList, marginBottom(dp(6)));
 
-        mBalancePane.addView(sectionLabel("keyuses"));
+        mBalancePane.addView(sectionLabel(m(R.string.l10n_help_keyuses_title)));
         LinearLayout sends = card();
         LinearLayout sr = new LinearLayout(mAct);
         sr.setOrientation(LinearLayout.HORIZONTAL);
         sr.setGravity(Gravity.CENTER_VERTICAL);
         mUsesBig = new TextView(mAct);
-        mUsesBig.setText("…");
+        Language.setText(mUsesBig, "…");
         mUsesBig.setTextSize(30);
         mUsesBig.setTypeface(manrope(Typeface.BOLD));
         mUsesBig.setTextColor(col(R.color.ux_accent));
@@ -1278,8 +1270,8 @@ public final class WalletPage implements Page {
         sr.addView(mUsesBig, ubp);
         LinearLayout st = new LinearLayout(mAct);
         st.setOrientation(LinearLayout.VERTICAL);
-        st.addView(label("SIGNATURES USED"));
-        TextView hint = sub("Long-press to adjust");
+        st.addView(label(m(R.string.l10n_wallet_used)));
+        TextView hint = sub(m(R.string.l10n_android_wallet_adjust_hint));
         hint.setPadding(0, dp(4), 0, 0);
         st.addView(hint);
         sr.addView(st, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -1290,7 +1282,7 @@ public final class WalletPage implements Page {
         });
         mBalancePane.addView(sends, marginBottom(dp(10)));
 
-        TextView settings = ghostButton("Wallet settings");
+        TextView settings = ghostButton(m(R.string.l10n_android_wallet_settings));
         settings.setOnClickListener(v -> showWalletSettings());
         mBalancePane.addView(settings, marginBottom(dp(12)));
     }
@@ -1298,11 +1290,11 @@ public final class WalletPage implements Page {
     private void buildHistoryPane() {
         LinearLayout chips = new LinearLayout(mAct);
         chips.setOrientation(LinearLayout.HORIZONTAL);
-        String[] labels = {"All", "Sent", "Received"};
+        CharSequence[] labels = {m(R.string.l10n_wallet_all), m(R.string.l10n_wallet_sent), m(R.string.l10n_wallet_received)};
         for (int i = 0; i < 3; i++) {
             final int idx = i;
             TextView c = new TextView(mAct);
-            c.setText(labels[i]);
+            Language.setText(c, labels[i]);
             c.setTextSize(12);
             c.setTypeface(Typeface.DEFAULT_BOLD);
             c.setPadding(dp(13), dp(6), dp(13), dp(6));
@@ -1349,7 +1341,7 @@ public final class WalletPage implements Page {
     // Sheet + widget helpers
     // ---------------------------------------------------------------
 
-    private BottomSheetDialog sheet(String title, View content) {
+    private BottomSheetDialog sheet(CharSequence title, View content) {
         LinearLayout root = new LinearLayout(mAct);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundResource(R.drawable.sheet_bg);
@@ -1363,7 +1355,7 @@ public final class WalletPage implements Page {
         root.addView(grab, gp);
 
         TextView t = new TextView(mAct);
-        t.setText(title);
+        Language.setText(t, title);
         t.setTextSize(17);
         t.setTypeface(manrope(Typeface.BOLD));
         t.setTextColor(col(R.color.ux_text));
@@ -1396,18 +1388,18 @@ public final class WalletPage implements Page {
 
     /** A [LABEL ......... value] row for detail sheets. The value TextView is
      *  child index 1, so a caller can update it later (e.g. async supply). */
-    private LinearLayout kv(String key, String value) {
+    private LinearLayout kv(CharSequence key, CharSequence value) {
         LinearLayout row = new LinearLayout(mAct);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(9), 0, dp(9));
         TextView k = new TextView(mAct);
-        k.setText(key.toUpperCase());
+        Language.setText(k, Language.upper(key));
         k.setTextSize(10);
         k.setLetterSpacing(0.1f);
         k.setTextColor(col(R.color.ux_subtext));
         TextView v = new TextView(mAct);
-        v.setText(value);
+        Language.setText(v, value);
         v.setTextSize(14);
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setGravity(Gravity.END);
@@ -1422,7 +1414,7 @@ public final class WalletPage implements Page {
         return v == null ? def : v;
     }
 
-    private LinearLayout copyField(String labelText, String value, String toastMsg) {
+    private LinearLayout copyField(CharSequence labelText, String value, CharSequence toastMsg) {
         LinearLayout box = new LinearLayout(mAct);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundResource(R.drawable.field_pill);
@@ -1435,7 +1427,7 @@ public final class WalletPage implements Page {
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView l = new TextView(mAct);
-        l.setText(labelText.toUpperCase());
+        Language.setText(l, Language.upper(labelText));
         l.setTextSize(10);
         l.setLetterSpacing(0.12f);
         l.setTextColor(col(R.color.ux_subtext));
@@ -1447,7 +1439,7 @@ public final class WalletPage implements Page {
         box.addView(head);
 
         TextView v = new TextView(mAct);
-        v.setText(value);
+        Language.setText(v, value);
         v.setTypeface(Typeface.MONOSPACE);
         v.setTextSize(12);
         v.setPadding(0, dp(7), 0, 0);
@@ -1458,7 +1450,7 @@ public final class WalletPage implements Page {
         box.setOnClickListener(view -> {
             ((ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE))
                     .setPrimaryClip(ClipData.newPlainText("maxima-wallet", value));
-            mAct.toast(toastMsg);
+            toast(toastMsg);
         });
         return box;
     }
@@ -1478,9 +1470,9 @@ public final class WalletPage implements Page {
         return androidx.core.content.ContextCompat.getDrawable(mAct, tv.resourceId);
     }
 
-    private TextView segItem(String text) {
+    private TextView segItem(CharSequence text) {
         TextView t = new TextView(mAct);
-        t.setText(text);
+        Language.setText(t, text);
         t.setGravity(Gravity.CENTER);
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1488,9 +1480,9 @@ public final class WalletPage implements Page {
         return t;
     }
 
-    private TextView primaryButton(String text) {
+    private TextView primaryButton(CharSequence text) {
         TextView b = new TextView(mAct);
-        b.setText(text);
+        Language.setText(b, text);
         b.setGravity(Gravity.CENTER);
         b.setTextSize(14);
         b.setTypeface(manrope(Typeface.BOLD));
@@ -1502,9 +1494,9 @@ public final class WalletPage implements Page {
         return b;
     }
 
-    private TextView ghostButton(String text) {
+    private TextView ghostButton(CharSequence text) {
         TextView b = new TextView(mAct);
-        b.setText(text);
+        Language.setText(b, text);
         b.setGravity(Gravity.CENTER);
         b.setTextSize(14);
         b.setTypeface(manrope(Typeface.BOLD));
@@ -1549,9 +1541,9 @@ public final class WalletPage implements Page {
         return lp;
     }
 
-    private TextView sectionLabel(String t) {
+    private TextView sectionLabel(CharSequence t) {
         TextView v = new TextView(mAct);
-        v.setText(t);
+        Language.setText(v, t);
         v.setTextSize(10);
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setLetterSpacing(0.15f);
@@ -1560,9 +1552,9 @@ public final class WalletPage implements Page {
         return v;
     }
 
-    private TextView label(String t) {
+    private TextView label(CharSequence t) {
         TextView v = new TextView(mAct);
-        v.setText(t);
+        Language.setText(v, t);
         v.setTextSize(10);
         v.setLetterSpacing(0.15f);
         v.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1570,9 +1562,9 @@ public final class WalletPage implements Page {
         return v;
     }
 
-    private TextView sub(String t) {
+    private TextView sub(CharSequence t) {
         TextView v = new TextView(mAct);
-        v.setText(t);
+        Language.setText(v, t);
         v.setTextSize(12);
         v.setTextColor(col(R.color.ux_subtext));
         return v;
@@ -1595,34 +1587,12 @@ public final class WalletPage implements Page {
         return (int) (v * mAct.getResources().getDisplayMetrics().density);
     }
 
-    private String relTime(long t) {
-        long diff = System.currentTimeMillis() - t;
-        long min = diff / 60000L;
-        if (min < 1) {
-            return "just now";
-        }
-        if (min < 60) {
-            return min + "m ago";
-        }
-        long hr = min / 60;
-        if (hr < 24) {
-            return hr + "h ago";
-        }
-        long day = hr / 24;
-        if (day == 1) {
-            return "yesterday";
-        }
-        if (day < 7) {
-            return day + "d ago";
-        }
-        return new java.text.SimpleDateFormat("d MMM", java.util.Locale.UK)
-                .format(new java.util.Date(t));
-    }
+    private CharSequence relTime(long t) { return Language.since(t); }
 
-    private String fullTime(long t) {
-        return new java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.UK)
-                .format(new java.util.Date(t));
-    }
+    private CharSequence fullTime(long t) { return Language.stamp(t, "yMMMdHm"); }
+
+    private static Language.Message m(int resource, Object... args) { return Language.msg(resource, args); }
+    private void toast(CharSequence value) { mAct.toast(value.toString()); }
 
     private void post(Runnable r) {
         mAct.runOnUiThread(r);

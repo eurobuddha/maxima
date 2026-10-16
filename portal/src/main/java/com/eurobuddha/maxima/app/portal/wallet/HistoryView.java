@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
 import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import android.graphics.Typeface;
 import android.view.Gravity;
@@ -103,7 +105,7 @@ public class HistoryView extends BaseView {
         List<NodeTx> rows = act.history().loadNodeTx(CAP);
         if (rows.isEmpty()) {
             TextView empty = new TextView(act);
-            empty.setText(fetching ? "Loading history…" : "No transactions yet.");
+            Language.setText(empty, fetching ? msg(R.string.l10n_node_history_loading) : msg(R.string.l10n_node_history_empty));
             empty.setTextColor(Design.dim());
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(40), 0, 0);
@@ -118,7 +120,7 @@ public class HistoryView extends BaseView {
         }
         if (shown == 0) {
             TextView empty = new TextView(act);
-            empty.setText("No " + filter + " transactions.");
+            Language.setText(empty, msg("sent".equals(filter) ? R.string.l10n_node_history_no_sent : "received".equals(filter) ? R.string.l10n_node_history_no_received : R.string.l10n_node_history_no_self));
             empty.setTextColor(Design.dim());
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(30), 0, 0);
@@ -126,7 +128,7 @@ public class HistoryView extends BaseView {
         }
         if (moreAvailable) {
             TextView more = new TextView(act);
-            more.setText("Load older ▾");
+            Language.setText(more, msg(R.string.l10n_node_history_older));
             more.setTextColor(Design.accent());
             more.setGravity(Gravity.CENTER);
             more.setPadding(0, dp(12), 0, dp(8));
@@ -138,31 +140,40 @@ public class HistoryView extends BaseView {
     /** All / Sent / Received / Self chips + the CSV/JSON export action. */
     private View filterBar() {
         LinearLayout bar = new LinearLayout(act);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setOrientation(LinearLayout.VERTICAL);
         bar.setPadding(dp(4), dp(2), dp(4), dp(8));
-        String[][] opts = {{"ALL", null}, {"SENT", "sent"}, {"RECEIVED", "received"}, {"SELF", "self"}};
-        for (String[] o : opts) {
-            final String value = o[1];
+        String[] opts = {null, "sent", "received", "self"};
+        LinearLayout filterRow = null;
+        for (int index = 0; index < opts.length; index++) {
+            final String value = opts[index];
+            if (index % 2 == 0) {
+                filterRow = new LinearLayout(act);
+                filterRow.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                rowParams.bottomMargin = dp(4);
+                bar.addView(filterRow, rowParams);
+            }
             TextView c = new TextView(act);
-            c.setText(o[0]);
+            Language.setText(c, Language.upper(value == null ? msg(R.string.l10n_wallet_all) : directionLabel(value)));
             c.setTextSize(10f);
             c.setLetterSpacing(0.08f);
             c.setTypeface(Design.typefaceBold());
-            c.setPadding(dp(10), dp(6), dp(10), dp(6));
+            c.setPadding(dp(10), dp(8), dp(10), dp(8));
+            c.setGravity(Gravity.CENTER);
             boolean on = (filter == null && value == null) || (filter != null && filter.equals(value));
             c.setTextColor(on ? Design.onAccent() : Design.dim());
             c.setBackgroundColor(on ? Design.accent() : Design.surface2());
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.rightMargin = dp(4);
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            if (index % 2 == 0) lp.rightMargin = dp(4);
             c.setLayoutParams(lp);
             c.setOnClickListener(v -> { filter = value; render(); });
-            bar.addView(c);
+            filterRow.addView(c);
         }
-        View spacer = new View(act);
-        bar.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
         TextView export = new TextView(act);
-        export.setText("⇩ EXPORT");
+        Language.setText(export, msg(R.string.l10n_node_history_export));
+        export.setGravity(Gravity.END);
         export.setTextSize(10f);
         export.setLetterSpacing(0.08f);
         export.setTypeface(Design.typefaceBold());
@@ -175,8 +186,8 @@ public class HistoryView extends BaseView {
 
     /** Share the (filtered) history as CSV or JSON via the system share sheet. */
     private void exportDialog() {
-        Sheet.create(act, "Export history")
-                .subtitle("Shares the rows currently shown, using the active filter.")
+        Sheet.create(act, msg(R.string.l10n_node_history_export_title))
+                .subtitle(msg(R.string.l10n_node_history_export_help))
                 .action("CSV", Sheet.Style.SECONDARY, () -> shareExport(true))
                 .action("JSON", Sheet.Style.PRIMARY, () -> shareExport(false))
                 .show();
@@ -216,16 +227,16 @@ public class HistoryView extends BaseView {
                 sb.append(arr.toString());
             }
         } catch (Exception e) {
-            Toast.makeText(act, "Export failed.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(act, msg(R.string.l10n_node_history_export_failed), Toast.LENGTH_SHORT).show();
             return;
         }
         android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(android.content.Intent.EXTRA_SUBJECT,
-                "NFT Wallet history export (" + (csv ? "CSV" : "JSON") + ")");
+                msg(R.string.l10n_node_history_export_subject, csv ? "CSV" : "JSON").toString());
         send.putExtra(android.content.Intent.EXTRA_TEXT, sb.toString());
-        try { act.startActivity(android.content.Intent.createChooser(send, "Export history")); }
-        catch (Exception e) { Toast.makeText(act, "No app can receive the export.", Toast.LENGTH_SHORT).show(); }
+        try { act.startActivity(android.content.Intent.createChooser(send, msg(R.string.l10n_node_history_export_title))); }
+        catch (Exception e) { Toast.makeText(act, msg(R.string.l10n_node_history_no_export_app), Toast.LENGTH_SHORT).show(); }
     }
 
     /** Quote a CSV field when it carries a comma/quote; escape embedded quotes. */
@@ -249,7 +260,7 @@ public class HistoryView extends BaseView {
         String sign = n.incoming ? "+" : "sent".equals(n.direction) ? "−" : "";
 
         TextView glyph = new TextView(act);
-        glyph.setText(g); glyph.setTextColor(color); glyph.setTextSize(18f); glyph.setWidth(dp(28));
+        Language.setText(glyph, g); glyph.setTextColor(color); glyph.setTextSize(18f); glyph.setWidth(dp(28));
         row.addView(glyph);
 
         LinearLayout mid = new LinearLayout(act);
@@ -258,17 +269,17 @@ public class HistoryView extends BaseView {
         mid.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         boolean reshuffle = n.isReshuffle();
         TextView line1 = new TextView(act);
-        line1.setText(reshuffle ? n.grossDisplay() : (sign + Format.amount(n.amount) + "  " + n.tokenName));
+        Language.setText(line1, reshuffle ? n.grossDisplay() : (sign + Format.amount(n.amount) + "  " + n.tokenName));
         line1.setTextColor(color); line1.setTextSize(15f); line1.setTypeface(Typeface.DEFAULT_BOLD);
         TextView line2 = new TextView(act);
         String cp = (n.counterparty == null || n.counterparty.isEmpty()) ? "" : Util.shorten(n.counterparty) + "  ·  ";
-        line2.setText((reshuffle ? n.reshuffleLabel() + "  ·  " : cp) + relative(n.timemilli));
+        Language.setText(line2, Language.join(reshuffle ? Language.join(reshuffleLabel(n), "  ·  ") : cp, relative(n.timemilli)));
         line2.setTextColor(Design.dim()); line2.setTextSize(12f);
         mid.addView(line1); mid.addView(line2);
         row.addView(mid);
 
         TextView right = new TextView(act);
-        right.setText("#" + n.block); right.setTextColor(Design.dim()); right.setTextSize(11f); right.setGravity(Gravity.END);
+        Language.setText(right, "#" + n.block); right.setTextColor(Design.dim()); right.setTextSize(11f); right.setGravity(Gravity.END);
         row.addView(right);
 
         row.setOnClickListener(v -> showDetail(n));
@@ -280,48 +291,48 @@ public class HistoryView extends BaseView {
     private void showDetail(NodeTx n) {
         LinearLayout box = new LinearLayout(act);
         box.setOrientation(LinearLayout.VERTICAL);
-        kv(box, "Direction", n.direction);
-        kv(box, "Amount", (n.incoming ? "+" : "sent".equals(n.direction) ? "−" : "") + Util.tidyAmount(n.amount) + " " + n.tokenName);
-        kv(box, "Block", String.valueOf(n.block));
-        kv(box, "Time", new SimpleDateFormat("dd MMM yyyy  HH:mm:ss", Locale.ENGLISH).format(new Date(n.timemilli)));
-        copyRow(box, "Txpow id", n.txpowid);
+        kv(box, msg(R.string.l10n_wallet_direction), directionLabel(n.direction));
+        kv(box, msg(R.string.l10n_wallet_amount), (n.incoming ? "+" : "sent".equals(n.direction) ? "−" : "") + Util.tidyAmount(n.amount) + " " + n.tokenName);
+        kv(box, msg(R.string.l10n_node_history_block), String.valueOf(n.block));
+        kv(box, msg(R.string.l10n_node_history_time), Language.stamp(n.timemilli, "yMMMdHms"));
+        copyRow(box, msg(R.string.l10n_node_history_txpow_id), n.txpowid);
         if (n.counterparty != null && !n.counterparty.isEmpty()) {
-            addressRow(box, n.incoming ? "From" : "To", n.counterparty);
+            addressRow(box, n.incoming ? msg(R.string.l10n_wallet_from) : msg(R.string.l10n_wallet_to), n.counterparty);
         }
-        kv(box, "Per-token effect", prettyDeltas(n.deltas));
-        addBreakdown(box, "Inputs", n.inputs);
-        addBreakdown(box, "Outputs", n.outputs);
-        Sheet.create(act, "Transaction")
+        kv(box, msg(R.string.l10n_node_history_effect), prettyDeltas(n.deltas));
+        addBreakdown(box, msg(R.string.l10n_node_history_inputs), n.inputs);
+        addBreakdown(box, msg(R.string.l10n_node_history_outputs), n.outputs);
+        Sheet.create(act, msg(R.string.l10n_wallet_transaction))
                 .body(box)
-                .action("Close", Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
     }
 
-    private void kv(LinearLayout p, String k, String v) {
+    private void kv(LinearLayout p, CharSequence k, CharSequence v) {
         TextView t = new TextView(act);
-        t.setText(k + ":  " + v);
+        Language.setText(t, Language.join(k, ":  ", v));
         t.setTextColor(Design.text()); t.setTextSize(13f); t.setPadding(0, dp(4), 0, dp(4));
         p.addView(t);
     }
 
-    private void copyRow(LinearLayout p, String k, final String v) {
+    private void copyRow(LinearLayout p, CharSequence k, final String v) {
         TextView l = new TextView(act);
-        l.setText(k);
+        Language.setText(l, k);
         l.setTextColor(Design.dim()); l.setTextSize(11.5f); l.setPadding(0, dp(7), 0, dp(1));
         p.addView(l);
         TextView t = new TextView(act);
-        t.setText(v);
+        Language.setText(t, v);
         t.setTextColor(Design.text()); t.setTextSize(11f); t.setTypeface(Typeface.MONOSPACE);
         t.setOnClickListener(view -> CoinDetailDialog.copy(act, k, v));
         p.addView(t);
     }
 
-    private void addBreakdown(LinearLayout p, String title, String json) {
+    private void addBreakdown(LinearLayout p, CharSequence title, String json) {
         try {
             JSONArray a = new JSONArray(json);
             if (a.length() == 0) return;
             TextView h = new TextView(act);
-            h.setText(title);
+            Language.setText(h, title);
             h.setTextColor(Design.accent()); h.setTextSize(12f); h.setTypeface(Typeface.DEFAULT_BOLD);
             h.setPadding(0, dp(14), 0, dp(2));
             p.addView(h);
@@ -345,11 +356,11 @@ public class HistoryView extends BaseView {
      * doesn't recognise is put to the node, whose {@code checkaddress relevant} flag is the
      * authoritative answer (the local pool is refreshed rarely and misses newaddress-minted ones).
      */
-    private void addressRow(LinearLayout p, String label, final String addr) {
+    private void addressRow(LinearLayout p, CharSequence label, final String addr) {
         if (addr == null || addr.isEmpty()) return;
 
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(11.5f);
         l.setPadding(0, dp(7), 0, dp(1));
@@ -359,11 +370,11 @@ public class HistoryView extends BaseView {
         row.setOrientation(LinearLayout.HORIZONTAL);
 
         TextView a = new TextView(act);
-        a.setText(addr);                       // FULL — never shortened
+        Language.setText(a, addr);                       // FULL — never shortened
         a.setTextColor(Design.text());
         a.setTextSize(11f);
         a.setTypeface(Typeface.MONOSPACE);
-        a.setOnClickListener(v -> CoinDetailDialog.copy(act, "Address", addr));
+        a.setOnClickListener(v -> CoinDetailDialog.copy(act, msg(R.string.l10n_common_address), addr));
         row.addView(a, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         final TextView badge = new TextView(act);
@@ -381,30 +392,30 @@ public class HistoryView extends BaseView {
     private static final java.util.HashMap<String, Boolean> OWN_CACHE = new java.util.HashMap<>();
 
     private void markOwnership(final String addr, final TextView badge) {
-        if (isMineLocally(addr)) { setBadge(badge, true, "YOURS"); return; }
+        if (isMineLocally(addr)) { setBadge(badge, true, msg(R.string.l10n_node_history_yours)); return; }
         Boolean cached = OWN_CACHE.get(addr);
-        if (cached != null) { setBadge(badge, cached, cached ? "YOURS" : "NOT YOURS"); return; }
-        if (!Util.isValidAddress(addr)) { badge.setText(""); return; }
+        if (cached != null) { setBadge(badge, cached, cached ? msg(R.string.l10n_node_history_yours) : msg(R.string.l10n_node_history_not_yours)); return; }
+        if (!Util.isValidAddress(addr)) { Language.setText(badge, ""); return; }
 
-        badge.setText("checking…");
+        Language.setText(badge, msg(R.string.l10n_node_history_checking));
         badge.setTextColor(Design.dim());
         act.node().cmd("checkaddress address:" + addr, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 JSONObject r = json.optJSONObject("response");
                 boolean mine = r != null && r.optBoolean("relevant", false);
                 OWN_CACHE.put(addr, mine);
-                setBadge(badge, mine, mine ? "YOURS" : "NOT YOURS");
+                setBadge(badge, mine, mine ? msg(R.string.l10n_node_history_yours) : msg(R.string.l10n_node_history_not_yours));
             }
             @Override public void onError(String message) {
                 // Say we don't know rather than implying it isn't yours.
-                badge.setText("UNVERIFIED");
+                Language.setText(badge, msg(R.string.l10n_node_history_unverified));
                 badge.setTextColor(Design.amber());
             }
         });
     }
 
-    private void setBadge(TextView badge, boolean mine, String text) {
-        badge.setText(text);
+    private void setBadge(TextView badge, boolean mine, CharSequence text) {
+        Language.setText(badge, text);
         badge.setTextColor(mine ? Design.success() : Design.dim());
     }
 
@@ -429,14 +440,24 @@ public class HistoryView extends BaseView {
         } catch (Exception e) { return "—"; }
     }
 
-    private static String relative(long ms) {
+    private static CharSequence directionLabel(String direction) {
+        switch (direction == null ? "" : direction) {
+            case "sent": return msg(R.string.l10n_wallet_sent);
+            case "received": return msg(R.string.l10n_wallet_received);
+            case "self": return msg(R.string.l10n_node_history_self);
+            default: return direction == null ? "" : direction;
+        }
+    }
+
+    private static CharSequence reshuffleLabel(NodeTx transaction) {
+        return Language.count(transaction.isSplit() ? R.plurals.l10n_node_history_split
+                : R.plurals.l10n_node_history_consolidation, transaction.reshuffleCoinCount());
+    }
+
+    private static CharSequence relative(long ms) {
         if (ms <= 0) return "";
-        long d = System.currentTimeMillis() - ms;
-        if (d < 60000) return "just now";
-        if (d < 3600000) return (d / 60000) + "m ago";
-        if (d < 86400000) return (d / 3600000) + "h ago";
-        if (d < 7 * 86400000L) return (d / 86400000) + "d ago";
-        return new SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH).format(new Date(ms));
+        return System.currentTimeMillis() - ms < 7 * 86400000L
+                ? Language.since(ms) : Language.stamp(ms, "yMMMd");
     }
 
     private int dp(int v) { return (int) (v * act.getResources().getDisplayMetrics().density); }

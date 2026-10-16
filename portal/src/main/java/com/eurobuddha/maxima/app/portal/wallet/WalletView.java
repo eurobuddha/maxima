@@ -1,5 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import com.eurobuddha.maxima.app.R;
 
 import android.content.ClipData;
@@ -79,22 +82,32 @@ public class WalletView extends BaseView {
         sendBtn.setTextColor(Design.onAccent());
         toolsBtn.setTextColor(Design.accent());
         clearBtn.setTextColor(Design.accent());
+        if (act.getResources().getConfiguration().fontScale > 1.2f) {
+            LinearLayout actions = (LinearLayout) toolsBtn.getParent();
+            actions.setOrientation(LinearLayout.VERTICAL);
+            for (Button button : new Button[]{toolsBtn, clearBtn, sendBtn}) {
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) button.getLayoutParams();
+                lp.width = LinearLayout.LayoutParams.MATCH_PARENT;
+                lp.weight = 0f;
+                button.setLayoutParams(lp);
+            }
+        }
     }
 
     /** Shows a one-line status message under the selection bar; green on ok, red on failure. */
-    private void setStatus(String msg, boolean ok) {
+    private void setStatus(CharSequence msg, boolean ok) {
         statusView.setVisibility(View.VISIBLE);
-        statusView.setText(msg);
+        Language.setText(statusView, msg);
         statusView.setTextColor(ok ? Design.success() : Design.red());
     }
 
     /** The "Tools ▾" dropdown: Split / Consolidate / Distribute / Untrack on the current selection. */
     private void showToolsMenu(View anchor) {
         PopupMenu menu = new PopupMenu(act, anchor);
-        menu.getMenu().add(0, 1, 0, "Split selected…");
-        menu.getMenu().add(0, 2, 1, "Consolidate");
-        menu.getMenu().add(0, 3, 2, "Distribute selected…");
-        menu.getMenu().add(0, 4, 3, "Untrack selected");
+        menu.getMenu().add(0, 1, 0, msg(R.string.l10n_node_wallet_split_selected));
+        menu.getMenu().add(0, 2, 1, msg(R.string.l10n_node_wallet_consolidate));
+        menu.getMenu().add(0, 3, 2, msg(R.string.l10n_node_wallet_distribute_selected));
+        menu.getMenu().add(0, 4, 3, msg(R.string.l10n_node_wallet_untrack_selected));
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1: tools.showSplit(); return true;
@@ -112,13 +125,13 @@ public class WalletView extends BaseView {
     public void refresh() {
         List<Coin> sel = act.selectedCoins();
         if (sel.isEmpty()) {
-            selCount.setText("Pick coins to send");
-            selTotal.setText("");
+            Language.setText(selCount, msg(R.string.l10n_node_wallet_pick_coins));
+            Language.setText(selTotal, "");
             sendBtn.setEnabled(false);
             clearBtn.setEnabled(false);
         } else {
-            selCount.setText(sel.size() + (sel.size() == 1 ? " coin selected" : " coins selected"));
-            selTotal.setText(act.selectedTotalString() + " " + sel.get(0).tokenName);
+            Language.setText(selCount, Language.count(R.plurals.l10n_node_wallet_selected_coins, sel.size()));
+            Language.setText(selTotal, act.selectedTotalString() + " " + sel.get(0).tokenName);
             sendBtn.setEnabled(true);
             clearBtn.setEnabled(true);
         }
@@ -127,7 +140,7 @@ public class WalletView extends BaseView {
         DistributeManager dm = act.distribute();
         if (dm != null && dm.isActive()) {
             statusView.setVisibility(View.VISIBLE);
-            statusView.setText(dm.statusLine());
+            Language.setText(statusView, dm.statusLine());
             statusView.setTextColor(Design.accent());
         }
 
@@ -176,7 +189,7 @@ public class WalletView extends BaseView {
         for (String[] a : act.myAddresses()) if (!order.containsKey(a[0])) order.put(a[0], a[1]);
 
         if (order.isEmpty()) {
-            addNote("No addresses yet. Make sure the wallet is enabled in Minima Core.");
+            addNote(msg(R.string.l10n_node_wallet_no_addresses));
             return;
         }
 
@@ -213,7 +226,7 @@ public class WalletView extends BaseView {
 
         if (count == 0) {
             TextView empty = new TextView(act);
-            empty.setText("empty");
+            Language.setText(empty, msg(R.string.l10n_node_wallet_empty));
             empty.setTypeface(Design.typeface());
             empty.setAllCaps(true);
             empty.setTextSize(10f);
@@ -244,14 +257,14 @@ public class WalletView extends BaseView {
         row.setPadding(dp(8), dp(5), dp(8), dp(5));
 
         TextView caret = new TextView(act);
-        caret.setText(isCollapsed ? "▶" : "▼");
+        Language.setText(caret, isCollapsed ? "▶" : "▼");
         caret.setTextSize(8f);
         caret.setTextColor(Design.dim());
         caret.setPadding(0, 0, dp(8), 0);
         row.addView(caret);
 
         TextView addr = new TextView(act);
-        addr.setText(Util.shorten(mini));
+        Language.setText(addr, Util.shorten(mini));
         addr.setTypeface(Design.typeface());
         addr.setTextSize(11f);
         addr.setTextColor(Design.heading());
@@ -259,7 +272,7 @@ public class WalletView extends BaseView {
         row.addView(addr);
 
         TextView copy = new TextView(act);
-        copy.setText("COPY");
+        Language.setText(copy, msg(R.string.l10n_common_copy));
         copy.setTypeface(Design.typeface());
         copy.setTextSize(9f);
         copy.setTextColor(Design.dim());
@@ -268,7 +281,7 @@ public class WalletView extends BaseView {
         cb.setColor(Design.bg());
         cb.setStroke(dp(1), Design.border());
         copy.setBackground(cb);
-        copy.setOnClickListener(v -> copyToClipboard("Address", mini));
+        copy.setOnClickListener(v -> copyToClipboard(msg(R.string.l10n_common_address), mini));
         row.addView(copy);
 
         row.setOnClickListener(v -> {
@@ -287,8 +300,7 @@ public class WalletView extends BaseView {
         row.setPadding(dp(8), dp(4), dp(8), dp(4));
 
         TextView meta = new TextView(act);
-        meta.setText(Util.tidyAmount(minimaAmt.toPlainString()) + " MINIMA  ·  "
-                + count + (count == 1 ? " coin" : " coins"));
+        Language.setText(meta, Language.join(Util.tidyAmount(minimaAmt.toPlainString()), " MINIMA  ·  ", Language.count(R.plurals.l10n_cloud_wallet_coins, count)));
         meta.setTypeface(Design.typeface());
         meta.setAllCaps(true);
         meta.setTextSize(10f);
@@ -298,7 +310,7 @@ public class WalletView extends BaseView {
 
         if (isContract) {
             TextView badge = new TextView(act);
-            badge.setText("CONTRACT");
+            Language.setText(badge, msg(R.string.l10n_node_wallet_contract));
             badge.setTypeface(Design.typeface(), Typeface.BOLD);
             badge.setTextSize(8.5f);
             badge.setTextColor(Design.amber());
@@ -353,27 +365,34 @@ public class WalletView extends BaseView {
         box.setImageBitmap(Identicon.squareCheck(dp(14), selected, Design.bg(), Design.border(), Design.accent()));
         row.addView(box);
 
+        boolean largeText = act.getResources().getConfiguration().fontScale > 1.2f;
+        LinearLayout details = new LinearLayout(act);
+        details.setOrientation(LinearLayout.VERTICAL);
+        if (largeText) row.addView(details, new LinearLayout.LayoutParams(0, WRAP, 1f));
+
         TextView amt = new TextView(act);
-        amt.setText(Util.tidyAmount(c.amount));
+        Language.setText(amt, Util.tidyAmount(c.amount));
         amt.setTypeface(Design.typeface(), Typeface.BOLD);
         amt.setTextSize(12f);
         amt.setTextColor(Design.heading());
         amt.setGravity(Gravity.END);
-        amt.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1f));
-        row.addView(amt);
+        amt.setLayoutParams(largeText
+                ? new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP)
+                : new LinearLayout.LayoutParams(0, WRAP, 1f));
+        (largeText ? details : row).addView(amt);
 
         TextView tok = new TextView(act);
-        tok.setText(c.tokenName == null ? "" : c.tokenName.toUpperCase());
+        Language.setText(tok, c.tokenName == null ? "" : c.tokenName.toUpperCase());
         tok.setTypeface(Design.typeface(), Typeface.BOLD);
         tok.setTextSize(9f);
         tok.setTextColor(Design.dim());
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(WRAP, WRAP);
         tlp.leftMargin = dp(8);
         tok.setLayoutParams(tlp);
-        row.addView(tok);
+        (largeText ? details : row).addView(tok);
 
         TextView st = new TextView(act);
-        st.setText(!c.confirmed ? "PENDING" : (c.sendable ? "·" : "WATCH"));
+        Language.setText(st, !c.confirmed ? msg(R.string.l10n_wallet_pending) : (c.sendable ? "·" : msg(R.string.l10n_node_wallet_watch)));
         st.setTypeface(Design.typeface());
         st.setTextSize(9f);
         st.setTextColor(!c.confirmed ? Design.amber() : Design.dim2());
@@ -389,17 +408,17 @@ public class WalletView extends BaseView {
     }
 
     /** Copies text to the clipboard and toasts confirmation; no-op on empty. */
-    private void copyToClipboard(String label, String text) {
+    private void copyToClipboard(CharSequence label, String text) {
         if (text == null || text.isEmpty()) return;
         ClipboardManager cm = (ClipboardManager) act.getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(ClipData.newPlainText(label, text));
-        Toast.makeText(act, label + " copied", Toast.LENGTH_SHORT).show();
+        Toast.makeText(act, msg(R.string.l10n_node_wallet_copied, label), Toast.LENGTH_SHORT).show();
     }
 
     /** Adds a centered dim placeholder note (e.g. the "no addresses yet" message). */
-    private void addNote(String text) {
+    private void addNote(CharSequence text) {
         TextView tv = new TextView(act);
-        tv.setText(text);
+        Language.setText(tv, text);
         tv.setTextColor(Design.dim());
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(0, dp(40), 0, 0);

@@ -2,7 +2,8 @@ package com.eurobuddha.maxima.app.portal.ide.ide;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.text.format.DateUtils;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -10,7 +11,10 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import com.eurobuddha.maxima.app.portal.ide.BaseView;
 import com.eurobuddha.maxima.app.portal.ide.NodeApi;
@@ -57,13 +61,20 @@ public class ScriptsView extends BaseView {
     @Override
     public void refreshView() {
         mScripts = mDB.getAll();
-        List<String> labels = new ArrayList<>();
+        List<CharSequence> labels = new ArrayList<>();
         for (ScriptDB.Script s : mScripts) {
-            String when = DateUtils.getRelativeTimeSpanString(s.modified).toString();
             String deployed = s.address.isEmpty() ? "" : "  ⛓ " + shorten(s.address);
-            labels.add(s.name + "\n" + s.source.trim().length() + " chars · " + when + deployed);
+            labels.add(Language.join(s.name, "\n",
+                    Language.count(R.plurals.l10n_scripts_characters, s.source.trim().length()),
+                    " · ", Language.since(s.modified), deployed));
         }
-        mList.setAdapter(new ArrayAdapter<>(mActivity, android.R.layout.simple_list_item_1, labels));
+        mList.setAdapter(new ArrayAdapter<CharSequence>(mActivity, android.R.layout.simple_list_item_1, labels) {
+            @Override public View getView(int position, View recycled, ViewGroup parent) {
+                View row = super.getView(position, recycled, parent);
+                Language.setText((TextView)row.findViewById(android.R.id.text1), getItem(position));
+                return row;
+            }
+        });
         mEmpty.setVisibility(mScripts.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
     }
 
@@ -71,56 +82,63 @@ public class ScriptsView extends BaseView {
         return addr.length() > 14 ? addr.substring(0, 10) + "…" + addr.substring(addr.length() - 4) : addr;
     }
 
+    /** Labels follow the existing template indices; executable source stays unchanged. */
+    private static CharSequence[] templateLabels() {
+        return new CharSequence[]{msg(R.string.l10n_scripts_blank), msg(R.string.l10n_scripts_signature),
+                msg(R.string.l10n_scripts_timelock), msg(R.string.l10n_scripts_hashlock),
+                msg(R.string.l10n_scripts_multisig), msg(R.string.l10n_scripts_random),
+                msg(R.string.l10n_scripts_covenant)};
+    }
+
     private void newScriptDialog() {
-        new AlertDialog.Builder(mActivity)
-                .setTitle("New script from…")
-                .setItems(Templates.names(), (d, which) -> nameDialog(which))
-                .setNegativeButton("Cancel", null)
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_scripts_from_template))
+                .setItems(templateLabels(), (d, which) -> nameDialog(which))
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void nameDialog(int templateIdx) {
         EditText name = new EditText(mActivity);
-        name.setHint("Script name");
-        new AlertDialog.Builder(mActivity)
-                .setTitle("Name the script")
+        Language.hint(name, msg(R.string.l10n_scripts_name));
+        new LanguageDialog(mActivity)
+                .setTitle(msg(R.string.l10n_scripts_name_title))
                 .setView(name)
-                .setPositiveButton("Create", (d, w) -> {
+                .setPositiveButton(msg(R.string.l10n_scripts_create), (d, w) -> {
                     String n = name.getText().toString().trim();
-                    if (n.isEmpty()) n = Templates.ALL[templateIdx][0].equals("Blank")
-                            ? "untitled" : Templates.ALL[templateIdx][0];
+                    if (n.isEmpty()) n = templateIdx == 0
+                            ? msg(R.string.l10n_scripts_untitled).toString() : templateLabels()[templateIdx].toString();
                     long id = mDB.insert(n, Templates.ALL[templateIdx][1]);
                     refreshView();
                     openEditor(id);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void scriptActionsDialog(ScriptDB.Script s) {
-        new AlertDialog.Builder(mActivity)
+        new LanguageDialog(mActivity)
                 .setTitle(s.name)
-                .setItems(new String[]{"Open", "Duplicate", "Delete"}, (d, which) -> {
+                .setItems(new CharSequence[]{msg(R.string.l10n_scripts_open), msg(R.string.l10n_scripts_duplicate), msg(R.string.l10n_scripts_delete)}, (d, which) -> {
                     if (which == 0) {
                         openEditor(s.id);
                     } else if (which == 1) {
-                        mDB.insert(s.name + " copy", s.source);
+                        mDB.insert(msg(R.string.l10n_scripts_copy_name, s.name).toString(), s.source);
                         refreshView();
                     } else {
-                        new AlertDialog.Builder(mActivity)
-                                .setTitle("Delete '" + s.name + "'?")
-                                .setMessage("This only deletes the local copy. A deployed script "
-                                        + "stays on the node (use removescript to untrack it).")
-                                .setPositiveButton("Delete", (dd, ww) -> {
+                        new LanguageDialog(mActivity)
+                                .setTitle(msg(R.string.l10n_scripts_delete_title, s.name))
+                                .setMessage(msg(R.string.l10n_scripts_delete_body))
+                                .setPositiveButton(msg(R.string.l10n_scripts_delete), (dd, ww) -> {
                                     mDB.delete(s.id);
                                     refreshView();
-                                    Toast.makeText(mActivity, "Deleted", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(mActivity, msg(R.string.l10n_terminal_deleted), Toast.LENGTH_SHORT).show();
                                 })
-                                .setNegativeButton("Cancel", null)
+                                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                                 .show();
                     }
                 })
-                .setNegativeButton("Close", null)
+                .setNegativeButton(msg(R.string.l10n_language_close), null)
                 .show();
     }
 
@@ -142,17 +160,17 @@ public class ScriptsView extends BaseView {
     /** Browse scripts registered on the node (the `scripts` command) and import them. */
     private void showNodeScripts() {
         if (mNode == null) return;
-        Toast.makeText(mActivity, "Loading node scripts…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(mActivity, msg(R.string.l10n_scripts_loading), Toast.LENGTH_SHORT).show();
         mNode.cmd("scripts", new NodeApi.Cb() {
             @Override
             public void onResult(JSONObject json) {
                 JSONArray arr = json.optJSONArray("response");
                 if (arr == null || arr.length() == 0) {
-                    Toast.makeText(mActivity, "No scripts on the node", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(mActivity, msg(R.string.l10n_scripts_node_empty), Toast.LENGTH_SHORT).show();
                     return;
                 }
                 int n = arr.length();
-                String[] labels = new String[n];
+                CharSequence[] labels = new CharSequence[n];
                 String[] scripts = new String[n];
                 String[] addresses = new String[n];
                 for (int i = 0; i < n; i++) {
@@ -160,7 +178,7 @@ public class ScriptsView extends BaseView {
                     if (s == null) {   // malformed element — don't NPE
                         scripts[i] = "";
                         addresses[i] = "";
-                        labels[i] = "(unreadable script entry)";
+                        labels[i] = msg(R.string.l10n_scripts_unreadable);
                         continue;
                     }
                     scripts[i] = s.optString("script", "");
@@ -168,40 +186,41 @@ public class ScriptsView extends BaseView {
                     boolean def = s.optBoolean("default", false);
                     String snippet = scripts[i].length() > 60
                             ? scripts[i].substring(0, 60) + "…" : scripts[i];
-                    labels[i] = (def ? "[wallet] " : "") + shorten(addresses[i]) + "\n" + snippet;
+                    labels[i] = def ? msg(R.string.l10n_scripts_wallet_entry, shorten(addresses[i]), snippet)
+                            : shorten(addresses[i]) + "\n" + snippet;
                 }
-                new AlertDialog.Builder(mActivity)
-                        .setTitle("Scripts on node (" + n + ")")
+                new LanguageDialog(mActivity)
+                        .setTitle(msg(R.string.l10n_scripts_node_title, n))
                         .setItems(labels, (d, which) -> nodeScriptActions(
                                 addresses[which], scripts[which]))
-                        .setNegativeButton("Close", null)
+                        .setNegativeButton(msg(R.string.l10n_language_close), null)
                         .show();
             }
 
             @Override
             public void onError(String message) {
-                Toast.makeText(mActivity, "Node error: " + message, Toast.LENGTH_LONG).show();
+                Toast.makeText(mActivity, msg(R.string.l10n_scripts_node_error, SystemMessages.message(message)), Toast.LENGTH_LONG).show();
             }
         });
     }
 
     private void nodeScriptActions(String address, String script) {
-        new AlertDialog.Builder(mActivity)
+        new LanguageDialog(mActivity)
                 .setTitle(shorten(address))
                 .setMessage(script)
-                .setPositiveButton("Import to library", (d, w) -> {
-                    long id = mDB.insert("from node " + shorten(address), script);
+                .setPositiveButton(msg(R.string.l10n_scripts_import), (d, w) -> {
+                    long id = mDB.insert(msg(R.string.l10n_scripts_from_node, shorten(address)).toString(), script);
                     mDB.setAddress(id, address);
                     refreshView();
                     openEditor(id);
                 })
-                .setNeutralButton("Copy address", (d, w) -> {
+                .setNeutralButton(msg(R.string.l10n_contacts_copy_address), (d, w) -> {
                     android.content.ClipboardManager cb = (android.content.ClipboardManager)
                             mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
-                    cb.setPrimaryClip(android.content.ClipData.newPlainText("address", address));
-                    Toast.makeText(mActivity, "Copied", Toast.LENGTH_SHORT).show();
+                    cb.setPrimaryClip(android.content.ClipData.newPlainText(msg(R.string.l10n_contacts_copy_address), address));
+                    Toast.makeText(mActivity, msg(R.string.l10n_common_copied), Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 }

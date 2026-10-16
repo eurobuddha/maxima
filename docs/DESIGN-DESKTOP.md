@@ -120,17 +120,31 @@ bootstrap set cannot be crowded out by construction.
   jdk.crypto.ec`). Locally: `./gradlew :desktop:jpackage -PjpackageJdk=<jdk
   with jmods>` (the pinned Android Studio JBR has no jpackage). Verified: a
   28 MB `MaximaNode-1.0.0.dmg` builds on this machine.
-- CI: `.github/workflows/desktop-node.yml` — three-OS matrix (macos-14 /
-  windows-latest / ubuntu-latest, Temurin 21), `-PskipAndroid=true` keeps AGP
-  out of configuration, artifacts on every run, GitHub Release on
-  `desktop-v*` tags.
-- Signing: macOS Developer ID + notarytool + stapler run in CI only when the
-  repo secrets exist (`MACOS_CERT_P12/…`, `APPLE_ID/…`); Windows Authenticode
-  when `WINDOWS_CERT_PFX/…` exist. Locally (since 1.5.33, 2026-09-04):
-  `desktop/release-mac.sh` builds with `-PmacSignIdentity`, notarizes through
-  the `minimadesk` notarytool keychain profile, staples, then
-  `desktop/verify-mac.sh` proves Gatekeeper accepts the DMG. Unsigned builds
-  (right-click-Open) remain the fallback when nothing is configured.
+- CI: `.github/workflows/desktop-node.yml` uses three native runners with Temurin 21.
+  `desktop/release-check.py` requires signing configuration and checks the app version,
+  package version and release tag before packaging. Verified artifacts are retained on
+  manual runs. A `desktop-vX.Y.Z` tag publishes only after all three platform jobs succeed.
+- Mac: `desktop/release-mac.sh` signs and notarizes the app, staples it, then packages,
+  signs, notarizes and staples the DMG. `desktop/verify-mac.sh` checks both the container
+  and the app inside it. Local releases use the existing `minimadesk` keychain profile.
+  CI uses a temporary keychain and profile; `GRADLE_JAVA_HOME` overrides the local Gradle
+  JDK path and `NOTARY_KEYCHAIN` selects that keychain explicitly.
+- Windows: `desktop/release-windows.ps1` signs the launcher before packaging the MSI,
+  then signs the MSI. Both signatures must pass SignTool's Authenticode verification
+  with a timestamp; nonzero signing or verification results stop publication.
+- Linux: `desktop/sign-linux.py` uses the configured OpenPGP identity in an isolated
+  temporary keyring. It produces and verifies a detached `.deb.asc` signature and
+  exports `Parlons-signing-key.asc`. It never creates a production signing identity.
+  Verify a download with `gpg --verify <installer>.deb.asc <installer>.deb` after
+  importing the release public key and confirming its fingerprint through a trusted source.
+- Required repository secrets:
+  - Mac: `MACOS_CERT_P12` (base64), `MACOS_CERT_PASSWORD`, `MACOS_SIGN_IDENTITY`,
+    `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`.
+  - Windows: `WINDOWS_CERT_PFX` (base64), `WINDOWS_CERT_PASSWORD`.
+  - Linux: `LINUX_SIGNING_KEY` (armored private key), `LINUX_SIGNING_FINGERPRINT`
+    (full fingerprint), and `LINUX_SIGNING_PASSPHRASE` if the key is protected.
+  Missing required configuration stops the build. Keys and passwords belong in the
+  signing configuration, never in the repository. Every installer filename includes its version.
 
 ## Verification
 

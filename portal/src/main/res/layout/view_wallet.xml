@@ -9,7 +9,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:gravity="center_vertical"
         android:background="@color/ux_card"
         android:paddingStart="12dp"
@@ -18,16 +18,16 @@
         android:paddingBottom="8dp">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/selCount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Pick coins to send"
+                android:text="@string/l10n_node_wallet_pick_coins"
+                android:tag="l10n:text=l10n_node_wallet_pick_coins"
                 android:textColor="@color/ux_text"
                 android:textSize="13sp" />
 
@@ -39,42 +39,55 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/toolsBtn"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:insetLeft="2dp"
-            android:insetRight="2dp"
-            android:text="Tools ▾"
-            style="?attr/materialButtonOutlinedStyle" />
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <Button
+                android:id="@+id/toolsBtn"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:insetLeft="2dp"
+                android:insetRight="2dp"
+                android:text="@string/l10n_node_wallet_tools"
+                android:tag="l10n:text=l10n_node_wallet_tools"
+                style="?attr/materialButtonOutlinedStyle" />
 
-        <Button
-            android:id="@+id/clearBtn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:insetLeft="2dp"
-            android:insetRight="2dp"
-            android:text="Clear"
-            style="?attr/materialButtonOutlinedStyle" />
+            <Button
+                android:id="@+id/clearBtn"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:insetLeft="2dp"
+                android:insetRight="2dp"
+                android:text="@string/l10n_common_clear"
+                android:tag="l10n:text=l10n_common_clear"
+                style="?attr/materialButtonOutlinedStyle" />
 
-        <Button
-            android:id="@+id/sendBtn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:insetLeft="2dp"
-            android:insetRight="0dp"
-            android:text="Send →"
-            android:backgroundTint="@color/ux_accent"
-            android:textColor="@color/black" />
+            <Button
+                android:id="@+id/sendBtn"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:insetLeft="2dp"
+                android:insetRight="0dp"
+                android:text="@string/l10n_node_wallet_send"
+                android:tag="l10n:text=l10n_node_wallet_send"
+                android:backgroundTint="@color/ux_accent"
+                android:textColor="@color/black" />
+        </LinearLayout>
     </LinearLayout>
 
     <TextView

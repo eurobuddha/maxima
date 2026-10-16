@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
 import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import android.graphics.Typeface;
 import android.text.TextUtils;
@@ -58,6 +60,7 @@ public class GalleryView extends BaseView {
     /** tokenid of the collection we've drilled into, or null at the top level. */
     private String openCollection = null;
     private String openCollectionName = "";
+    private CharSequence openCollectionDisplay = "";
 
     /** tokenid → token record (script + meta) from `tokens tokenid:`; null value = fetch in flight. */
     private final Map<String, JSONObject> tokenRecords = new HashMap<>();
@@ -81,14 +84,14 @@ public class GalleryView extends BaseView {
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         // Either tab returns you to the top level: staying inside a collection while switching to
         // Favourites would show a filtered subset with no visible reason for what's missing.
-        tabCollected = tabBtn("COLLECTED", v -> { showFavs = false; closeCollection(); });
-        tabFavs = tabBtn("FAVOURITES", v -> { showFavs = true; closeCollection(); });
+        tabCollected = tabBtn(msg(R.string.l10n_node_gallery_collected), v -> { showFavs = false; closeCollection(); });
+        tabFavs = tabBtn(msg(R.string.l10n_node_gallery_favourites), v -> { showFavs = true; closeCollection(); });
         tabs.addView(tabCollected, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         tabs.addView(tabFavs, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         header.addView(tabs);
 
         search = new EditText(act);
-        search.setHint("Search by name, creator or tokenid");
+        Language.hint(search, msg(R.string.l10n_node_gallery_search));
         search.setHintTextColor(Design.dim2());
         search.setTextColor(Design.text());
         search.setTextSize(13f);
@@ -126,7 +129,7 @@ public class GalleryView extends BaseView {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         crumbActions = new TextView(act);
-        crumbActions.setText("COLLECTION ⌄");
+        Language.setText(crumbActions, msg(R.string.l10n_node_gallery_collection_menu));
         crumbActions.setTextColor(Design.dim());
         crumbActions.setTextSize(10f);
         crumbActions.setLetterSpacing(0.08f);
@@ -150,9 +153,9 @@ public class GalleryView extends BaseView {
         header.addView(emptyNote);
     }
 
-    private TextView tabBtn(String label, View.OnClickListener click) {
+    private TextView tabBtn(CharSequence label, View.OnClickListener click) {
         TextView t = new TextView(act);
-        t.setText(label);
+        Language.setText(t, label);
         t.setTextSize(11f);
         t.setLetterSpacing(0.1f);
         t.setTypeface(Design.typefaceBold());
@@ -171,7 +174,7 @@ public class GalleryView extends BaseView {
         tabFavs.setBackgroundColor(fav ? Design.accent() : Design.surface2());
         if (openCollection != null) {
             crumbBar.setVisibility(View.VISIBLE);
-            crumbBack.setText("←  All NFTs   ·   " + openCollectionName);
+            Language.setText(crumbBack, msg(R.string.l10n_node_gallery_all_nfts, openCollectionDisplay));
         } else {
             crumbBar.setVisibility(View.GONE);
         }
@@ -189,7 +192,7 @@ public class GalleryView extends BaseView {
 
     private void rebuild() {
         items.clear();
-        String q = search == null ? "" : search.getText().toString().trim().toLowerCase();
+        String q = search == null ? "" : search.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
         Set<String> favs = favs();
         // Group only at the top level of the Collected tab. Favourites are per item, and once
         // you've drilled in the whole point is to see the items.
@@ -198,14 +201,14 @@ public class GalleryView extends BaseView {
         for (TokenBalance b : act.balances()) {
             if (!isNftCandidate(b)) continue;
             if (HiddenTokens.isHidden(act, b.tokenid)) continue;
+            // Drilled in: regular NFTs and other collections are both out of scope.
+            if (openCollection != null && !openCollection.equals(b.tokenid)) continue;
             JSONObject record = tokenRecords.get(b.tokenid);
             if (record == null) { ensureRecord(b.tokenid); }
             String script = record == null ? "" : record.optString("script", "");
             boolean stateNft = !script.isEmpty() && StateNft.isStateNftScript(script);
 
             if (stateNft) {
-                // Drilled in: every other collection is out of scope.
-                if (openCollection != null && !openCollection.equals(b.tokenid)) continue;
                 StateNft.Meta meta = StateNft.parseMeta(b.tokenid, record);
                 List<GItem> mine = new ArrayList<>();
                 for (Coin c : act.coins()) {
@@ -217,9 +220,10 @@ public class GalleryView extends BaseView {
                     it.meta = meta;
                     it.coin = c;
                     it.idx = idx == null ? -1 : parseInt(idx);
+                    it.stampedIndex = idx;
                     it.name = meta.name + (idx != null ? " #" + idx : " (unstamped)");
                     it.creator = b.meta == null ? "" : b.meta.owner;
-                    it.sub = "state · " + (idx != null ? "#" + idx + " of " + meta.size : "unstamped");
+                    it.sub = idx != null ? msg(R.string.l10n_node_gallery_state_index, idx, meta.size) : msg(R.string.l10n_node_gallery_state_unstamped);
                     it.imageUrl = StateNft.imageUrl(meta, it.idx <= 0 ? 1 : it.idx, c.raw);
                     it.favKey = b.tokenid + "#" + it.idx;
                     it.webvalidate = meta.webvalidate;
@@ -241,7 +245,7 @@ public class GalleryView extends BaseView {
                 it.idx = -1;
                 it.name = b.name;
                 it.creator = b.meta == null ? "" : b.meta.owner;
-                it.sub = "nft · " + Format.amount(b.sendable) + "/" + Format.amount(b.total);
+                it.sub = msg(R.string.l10n_node_gallery_nft_balance, Format.amount(b.sendable), Format.amount(b.total));
                 it.imageUrl = b.meta == null ? "" : b.meta.iconUrl;
                 it.favKey = b.tokenid;
                 it.webvalidate = b.meta == null ? "" : b.meta.webvalidate;
@@ -265,9 +269,9 @@ public class GalleryView extends BaseView {
         items.addAll(filtered);
 
         emptyNote.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
-        emptyNote.setText(showFavs ? "No favourites yet — open an NFT and tap ♥."
-                : openCollection != null ? "You no longer hold any items of this collection."
-                : "No NFTs yet — mint one from the Mint tab.");
+        Language.setText(emptyNote, showFavs ? msg(R.string.l10n_node_gallery_empty_favourites)
+                : openCollection != null ? msg(R.string.l10n_node_gallery_empty_collection)
+                : msg(R.string.l10n_node_gallery_empty_gallery));
         adapter.notifyDataSetChanged();
     }
 
@@ -275,7 +279,7 @@ public class GalleryView extends BaseView {
     private static String blob(String... parts) {
         StringBuilder sb = new StringBuilder();
         for (String p : parts) if (p != null) sb.append(p).append(' ');
-        return sb.toString().toLowerCase();
+        return sb.toString().toLowerCase(java.util.Locale.ROOT);
     }
 
     /** The single card that stands in for a whole StateNFT collection at the top level. */
@@ -289,7 +293,7 @@ public class GalleryView extends BaseView {
         it.idx = -1;
         it.name = meta.name;
         it.creator = b.meta == null ? "" : b.meta.owner;
-        it.sub = "collection · " + mine.size() + " of " + meta.size + " held";
+        it.sub = msg(R.string.l10n_node_gallery_collection_held, mine.size(), meta.size);
         // The token record's own icon is the collection's cover; fall back to the lowest-numbered
         // item you hold, which is what the mint form defaults the icon to anyway.
         String cover = b.meta == null ? "" : b.meta.iconUrl;
@@ -309,6 +313,7 @@ public class GalleryView extends BaseView {
     private void openCollection(GItem card) {
         openCollection = card.tokenid;
         openCollectionName = card.name == null ? "Collection" : card.name;
+        openCollectionDisplay = displayName(card);
         refresh();
         grid.scrollToPosition(0);
     }
@@ -316,6 +321,7 @@ public class GalleryView extends BaseView {
     private void closeCollection() {
         openCollection = null;
         openCollectionName = "";
+        openCollectionDisplay = "";
         refresh();
         grid.scrollToPosition(0);
     }
@@ -336,16 +342,15 @@ public class GalleryView extends BaseView {
         JSONObject record = tokenRecords.get(tokenid);
         if (record != null) creatorPk = StateNft.creatorPk(record.optString("script", ""));
         final String pk = creatorPk;
-        Sheet.create(act, name)
-                .subtitle("Actions that apply to every item of this collection you still hold. "
-                        + "Each item is its own transaction — the chain requires that.")
-                .action("Send the whole collection", Sheet.Style.PRIMARY,
+        Sheet.create(act, openCollectionDisplay).stackActions()
+                .subtitle(msg(R.string.l10n_node_gallery_collection_help))
+                .action(msg(R.string.l10n_node_gallery_send_collection), Sheet.Style.PRIMARY,
                         () -> StateNftActions.transferCollectionDialog(act, tokenid, name,
                                 () -> act.reload()))
-                .action("Bury the whole collection", Sheet.Style.DANGER,
+                .action(msg(R.string.l10n_node_gallery_bury_collection), Sheet.Style.DANGER,
                         () -> StateNftActions.buryCollectionDialog(act, tokenid, name, pk,
                                 () -> act.reload()))
-                .action("Close", Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
     }
 
@@ -388,7 +393,9 @@ public class GalleryView extends BaseView {
     // ===================== grid =====================
 
     private static class GItem {
-        String tokenid, name, creator, sub, imageUrl, favKey, webvalidate, externalUrl, description;
+        String tokenid, name, creator, imageUrl, favKey, webvalidate, externalUrl, description;
+        CharSequence sub;
+        String stampedIndex;      // original state index, kept verbatim for the display name
         String searchBlob;         // lower-cased haystack; a collection's includes its item names
         boolean stateNft;
         boolean collection;        // this card stands for a whole collection, not one item
@@ -397,6 +404,16 @@ public class GalleryView extends BaseView {
         Coin coin;                 // state item's UTXO
         TokenBalance balance;      // regular NFT's balance row
         StateNft.Meta meta;        // state collection meta
+    }
+
+    private static CharSequence displayName(GItem item) {
+        if (item.stateNft && item.meta != null) {
+            CharSequence name = item.meta.nameProvided ? item.meta.name : msg(R.string.l10n_node_gallery_collection);
+            if (item.collection) return name;
+            return item.stampedIndex != null ? Language.join(name, " #", item.stampedIndex)
+                    : msg(R.string.l10n_node_gallery_unstamped_name, name);
+        }
+        return item.balance != null ? Util.displayName(item.balance) : item.name == null ? "NFT" : item.name;
     }
 
     private class Holder extends RecyclerView.ViewHolder {
@@ -475,26 +492,27 @@ public class GalleryView extends BaseView {
 
         @Override public void onBindViewHolder(Holder h, int position) {
             final GItem it = items.get(position);
-            h.name.setText(it.name == null ? "NFT" : it.name);
-            h.sub.setText(it.sub == null ? "" : it.sub.toUpperCase());
+            Language.setText(h.name, displayName(it));
+            Language.setText(h.sub, it.sub == null ? "" : it.sub);
 
             if (it.collection) {
                 // The chip carries the count, so a stack of items reads as a stack at a glance.
                 h.idxChip.setVisibility(View.VISIBLE);
-                h.idxChip.setText("▣ " + it.owned + (it.owned == 1 ? " ITEM" : " ITEMS"));
+                Language.setText(h.idxChip, Language.count(R.plurals.l10n_node_gallery_owned_items, it.owned));
             } else if (it.stateNft && it.idx > 0 && it.meta != null) {
                 h.idxChip.setVisibility(View.VISIBLE);
-                h.idxChip.setText("#" + it.idx + " / " + it.meta.size);
+                Language.setText(h.idxChip, "#" + it.idx + " / " + it.meta.size);
             } else {
                 h.idxChip.setVisibility(View.GONE);
             }
 
             boolean fav = favs().contains(it.favKey);
             h.heart.setText(fav ? "♥" : "♡");
+            Language.description(h.heart, fav ? msg(R.string.l10n_node_gallery_unfavourite) : msg(R.string.l10n_node_gallery_favourite));
             h.heart.setTextColor(fav ? 0xFFFF5A6E : 0xFFFFFFFF);
             h.heart.setOnClickListener(v -> toggleFav(it.favKey));
 
-            h.art.setImageBitmap(Identicon.forToken(it.tokenid + "#" + it.idx, dp(150)));
+            h.art.setImageBitmap(Identicon.forToken(it.tokenid, dp(150)));
             if (it.imageUrl != null && !it.imageUrl.isEmpty()) {
                 ImageLoader.loadOver(act, it.imageUrl, h.art, null);
             }
@@ -508,21 +526,21 @@ public class GalleryView extends BaseView {
     // ===================== detail =====================
 
     private void showDetail(final GItem it) {
-        final Sheet sheet = Sheet.create(act, it.name);
+        final Sheet sheet = Sheet.create(act, displayName(it)).stackActions();
         LinearLayout box = sheet.body();
 
         // hero
         final ImageView hero = new ImageView(act);
         hero.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(200)));
         hero.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        hero.setImageBitmap(Identicon.forToken(it.tokenid + "#" + it.idx, dp(200)));
+        hero.setImageBitmap(Identicon.forToken(it.tokenid, dp(200)));
         if (it.imageUrl != null && !it.imageUrl.isEmpty()) {
             ImageLoader.loadOver(act, it.imageUrl, hero, null);
             hero.setOnClickListener(v -> showImageFull(it.imageUrl));
         }
         box.addView(hero);
         TextView hint = new TextView(act);
-        hint.setText("tap image for full resolution");
+        Language.setText(hint, msg(R.string.l10n_node_gallery_full_resolution));
         hint.setTextColor(Design.dim());
         hint.setTextSize(10f);
         hint.setGravity(Gravity.CENTER);
@@ -530,19 +548,21 @@ public class GalleryView extends BaseView {
         box.addView(hint);
 
         // chips line
-        StringBuilder chips = new StringBuilder();
+        CharSequence chips = "";
         if (it.stateNft) {
-            chips.append(it.idx > 0 ? "#" + it.idx + " of " + (it.meta == null ? "?" : it.meta.size) : "unstamped");
-            chips.append("  ·  LOCKED EDITION");
+            chips = Language.join(it.idx > 0 ? msg(R.string.l10n_node_gallery_index_of,
+                    it.idx, it.meta == null ? "?" : it.meta.size) : msg(R.string.l10n_node_gallery_unstamped),
+                    "  ·  ", msg(R.string.l10n_node_gallery_locked_edition));
         } else if (it.balance != null) {
-            chips.append("1".equals(it.balance.total) ? "1 OF 1" : it.balance.total + " EDITIONS");
+            chips = "1".equals(it.balance.total) ? msg(R.string.l10n_node_gallery_one_of_one)
+                    : msg(R.string.l10n_node_gallery_editions, it.balance.total);
         }
         if (it.webvalidate != null && !it.webvalidate.isEmpty()
                 && Boolean.TRUE.equals(WebValidate.status(it.tokenid))) {
-            chips.append("  ·  ✓ WEB VALIDATED");
+            chips = Language.join(chips, "  ·  ", msg(R.string.l10n_node_gallery_web_validated));
         }
         TextView chipLine = new TextView(act);
-        chipLine.setText(chips.toString());
+        Language.setText(chipLine, chips);
         chipLine.setTextColor(Design.accent());
         chipLine.setTextSize(10f);
         chipLine.setLetterSpacing(0.06f);
@@ -559,27 +579,27 @@ public class GalleryView extends BaseView {
             box.addView(d);
         }
 
-        kvCopy(box, "Token ID", it.tokenid);
-        if (it.coin != null) kvCopy(box, "Coin ID", it.coin.coinid);
-        if (it.creator != null && !it.creator.isEmpty()) kvCopy(box, "Creator", it.creator);
-        if (it.stateNft && it.idx > 0) kvCopy(box, "Identity (state 0)", it.idx + " · sealed");
-        if (it.externalUrl != null && !it.externalUrl.isEmpty()) linkRow(box, "External URL", it.externalUrl);
-        if (it.webvalidate != null && !it.webvalidate.isEmpty()) linkRow(box, "Web validation", it.webvalidate);
+        kvCopy(box, msg(R.string.l10n_wallet_token_id), it.tokenid);
+        if (it.coin != null) kvCopy(box, msg(R.string.l10n_node_wallet_coin_id), it.coin.coinid);
+        if (it.creator != null && !it.creator.isEmpty()) kvCopy(box, msg(R.string.l10n_node_gallery_creator), it.creator);
+        if (it.stateNft && it.idx > 0) kvCopy(box, msg(R.string.l10n_node_gallery_identity), msg(R.string.l10n_node_gallery_sealed, it.idx), it.idx + " · sealed");
+        if (it.externalUrl != null && !it.externalUrl.isEmpty()) linkRow(box, msg(R.string.l10n_node_gallery_external_url), it.externalUrl);
+        if (it.webvalidate != null && !it.webvalidate.isEmpty()) linkRow(box, msg(R.string.l10n_node_balance_web_validation), it.webvalidate);
 
         final boolean fav = favs().contains(it.favKey);
-        sheet.action("Close", Sheet.Style.SECONDARY, null);
-        sheet.action(fav ? "♥ Unfavourite" : "♡ Favourite", Sheet.Style.SECONDARY,
+        sheet.action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null);
+        sheet.action(fav ? msg(R.string.l10n_node_gallery_unfavourite) : msg(R.string.l10n_node_gallery_favourite), Sheet.Style.SECONDARY,
                 () -> toggleFav(it.favKey));
 
         if (it.stateNft && it.coin != null) {
             final String display = it.name;
             final String collection = it.meta == null ? it.name : it.meta.name;
-            sheet.action("Transfer", Sheet.Style.PRIMARY, () ->
+            sheet.action(msg(R.string.l10n_node_wallet_transfer), Sheet.Style.PRIMARY, () ->
                     StateNftActions.transferDialog(act, it.tokenid, display, it.coin.raw));
             final android.app.Dialog dlg = sheet.show();
             // Bury lives behind long-press on Transfer? No — add a dedicated row instead.
             TextView bury = new TextView(act);
-            bury.setText("✝  Bury this item (irreversible)");
+            Language.setText(bury, msg(R.string.l10n_node_gallery_bury_item));
             bury.setTextColor(Design.red());
             bury.setTextSize(12f);
             bury.setPadding(0, dp(12), 0, dp(4));
@@ -590,7 +610,7 @@ public class GalleryView extends BaseView {
             box.addView(bury);
 
             TextView sendAll = new TextView(act);
-            sendAll.setText("→  Send the WHOLE collection (every item you hold)");
+            Language.setText(sendAll, msg(R.string.l10n_node_gallery_send_all));
             sendAll.setTextColor(Design.accent());
             sendAll.setTextSize(12f);
             sendAll.setPadding(0, dp(8), 0, dp(2));
@@ -602,7 +622,7 @@ public class GalleryView extends BaseView {
             box.addView(sendAll);
 
             TextView buryAll = new TextView(act);
-            buryAll.setText("✝  Bury the WHOLE collection (every item you hold)");
+            Language.setText(buryAll, msg(R.string.l10n_node_gallery_bury_all));
             buryAll.setTextColor(Design.red());
             buryAll.setTextSize(12f);
             buryAll.setPadding(0, dp(2), 0, dp(4));
@@ -615,7 +635,7 @@ public class GalleryView extends BaseView {
             });
             box.addView(buryAll);
         } else {
-            sheet.action("Send", Sheet.Style.PRIMARY, () -> act.sendToken(it.tokenid));
+            sheet.action(msg(R.string.l10n_chat_send), Sheet.Style.PRIMARY, () -> act.sendToken(it.tokenid));
             sheet.show();
         }
 
@@ -642,38 +662,45 @@ public class GalleryView extends BaseView {
         dlg.show();
     }
 
-    private void kvCopy(LinearLayout box, final String label, final String value) {
+    private void kvCopy(LinearLayout box, final CharSequence label, final String value) {
+        kvCopy(box, label, value.length() > 26 ? Util.shorten(value) : value, value);
+    }
+
+    private void kvCopy(LinearLayout box, final CharSequence label, CharSequence shown, final String value) {
         LinearLayout r = new LinearLayout(act);
-        r.setOrientation(LinearLayout.HORIZONTAL);
+        boolean stacked = act.getResources().getConfiguration().fontScale > 1.2f;
+        r.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         r.setPadding(0, dp(4), 0, dp(4));
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(12f);
-        r.addView(l, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        r.addView(l, new LinearLayout.LayoutParams(stacked ? ViewGroup.LayoutParams.MATCH_PARENT : 0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, stacked ? 0f : 1f));
         TextView v = new TextView(act);
-        v.setText(value.length() > 26 ? Util.shorten(value) : value);
+        Language.setText(v, shown);
         v.setTextColor(Design.text());
         v.setTextSize(12f);
         v.setTypeface(Typeface.MONOSPACE);
         v.setGravity(Gravity.END);
-        r.addView(v, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f));
+        r.addView(v, new LinearLayout.LayoutParams(stacked ? ViewGroup.LayoutParams.MATCH_PARENT : 0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, stacked ? 0f : 1.4f));
         r.setOnClickListener(x -> CoinDetailDialog.copy(act, label, value));
         box.addView(r);
     }
 
-    private void linkRow(LinearLayout box, String label, final String url) {
+    private void linkRow(LinearLayout box, CharSequence label, final String url) {
         LinearLayout r = new LinearLayout(act);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setPadding(0, dp(6), 0, dp(6));
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(12f);
         r.addView(l, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView v = new TextView(act);
         boolean web = Util.isWebUrl(url);
-        v.setText(web ? "↗ open" : "blocked");
+        Language.setText(v, web ? Language.join("↗ ", msg(R.string.l10n_node_wallet_open)) : msg(R.string.l10n_node_balance_blocked));
         v.setTextColor(web ? Design.accent() : Design.red());
         v.setTextSize(12f);
         v.setGravity(Gravity.END);

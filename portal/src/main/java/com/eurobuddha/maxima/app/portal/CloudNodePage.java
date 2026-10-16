@@ -1,6 +1,9 @@
 package com.eurobuddha.maxima.app.portal;
 
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.view.Gravity;
@@ -44,6 +47,7 @@ public final class CloudNodePage implements Page {
     private volatile boolean mBusy;
     private long mLastLoad;
     private boolean mBuilt;
+    private String mLoadError;
 
     // status snapshot
     private String mName = "";
@@ -72,7 +76,7 @@ public final class CloudNodePage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Node";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_node);
     }
 
     @Override
@@ -187,11 +191,7 @@ public final class CloudNodePage implements Page {
                 mAct.runOnUiThread(() -> {
                     mLastLoad = System.currentTimeMillis();
                     mBusy = false;
-                    if (!mBuilt) {
-                        mRoot.removeAllViews();
-                        mRoot.addView(PortalUi.label(mAct, "Can't reach your node.\n" + m));
-                        mBuilt = true;
-                    }
+                    if (!mBuilt) showUnavailable(m);
                 });
             }
         });
@@ -217,7 +217,15 @@ public final class CloudNodePage implements Page {
         return status.containsKey("nodeConsole") ? bool(status, "nodeConsole") : bool(status, "identityImport");
     }
 
+    private void showUnavailable(String error) {
+        mLoadError = error == null ? "" : error;
+        mRoot.removeAllViews();
+        mRoot.addView(PortalUi.label(mAct, m(R.string.l10n_native_node_unreachable, SystemMessages.message(mLoadError))));
+        mBuilt = true;
+    }
+
     private void rebuild() {
+        mLoadError = null;
         mBuilt = true;
         Context c = mAct;
         mRoot.removeAllViews();
@@ -229,17 +237,17 @@ public final class CloudNodePage implements Page {
         identRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout identCol = new LinearLayout(c);
         identCol.setOrientation(LinearLayout.VERTICAL);
-        identCol.addView(PortalUi.label(c, "Your name"));
+        identCol.addView(PortalUi.label(c, Language.msg(R.string.l10n_settings_your_name)));
         TextView identName = new TextView(c);
-        identName.setText(mName.isEmpty() ? "(not set)" : mName);
+        Language.setText(identName, mName.isEmpty() ? tr(R.string.l10n_native_node_unset) : mName);
         identName.setTextColor(c.getColor(R.color.ux_text));
         identName.setTextSize(18);
         identName.setTypeface(identName.getTypeface(), Typeface.BOLD);
         identCol.addView(identName);
-        identCol.addView(PortalUi.label(c, "How you appear in your contacts' lists — on every device."));
+        identCol.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_name_help)));
         identRow.addView(identCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView edit = PortalUi.ghost(c, "Edit");
+        TextView edit = PortalUi.ghost(c, Language.msg(R.string.l10n_native_node_edit));
         edit.setOnClickListener(v -> promptSetName());
         identRow.addView(edit);
         ident.addView(identRow);
@@ -258,58 +266,55 @@ public final class CloudNodePage implements Page {
         dot.setBackgroundResource(R.drawable.status_dot);
         dot.getBackground().mutate().setTint(c.getColor(mHosts > 0 ? R.color.ux_success : R.color.ux_error));
         titleRow.addView(dot);
-        TextView t = PortalUi.title(c, mHosts > 0 ? "Always on — online" : "Node unreachable");
+        TextView t = PortalUi.title(c, mHosts > 0 ? tr(R.string.l10n_native_node_always_online) : tr(R.string.l10n_native_node_offline));
         titleRow.addView(t);
         head.addView(titleRow);
         head.addView(PortalUi.gap(c, 4));
-        String sub = (mName.isEmpty() ? "Your account" : mName)
+        String sub = (mName.isEmpty() ? tr(R.string.l10n_contacts_owner) : mName)
                 + (mVersion.isEmpty() ? "" : "  ·  parlons-cloud " + mVersion);
         head.addView(PortalUi.label(c, sub));
         if (mStatusOk) {
             head.addView(PortalUi.gap(c, 8));
-            head.addView(PortalUi.kv(c, "Uptime", uptime(mUptime)));
-            head.addView(PortalUi.kv(c, "Relays attached", String.valueOf(mHosts)));
-            head.addView(PortalUi.kv(c, "Mailbox held", mMailboxHeld ? "yes" : "no"));
+            head.addView(PortalUi.kv(c, tr(R.string.l10n_native_node_uptime), uptime(mUptime)));
+            head.addView(PortalUi.kv(c, tr(R.string.l10n_node_relays_attached), String.valueOf(mHosts)));
+            head.addView(PortalUi.kv(c, tr(R.string.l10n_native_node_mailbox), mMailboxHeld ? tr(R.string.l10n_native_node_yes) : tr(R.string.l10n_native_node_no)));
         } else {
             head.addView(PortalUi.gap(c, 6));
-            head.addView(PortalUi.label(c, "Update the node to parlons-cloud 0.4.1+ for full status."));
+            head.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_update_status)));
         }
         mRoot.addView(head);
 
         // --- superpowers ---
-        mRoot.addView(PortalUi.section(c, "Why a VPS node is king"));
+        mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_node_benefits)));
         LinearLayout powers = PortalUi.card(c);
-        powers.addView(power(c, "Always on",
-                "Your account never goes dark — messages arrive even with every phone asleep."));
+        powers.addView(power(c, tr(R.string.l10n_native_node_always_on),
+                tr(R.string.l10n_native_node_always_help)));
         powers.addView(divider(c, powers));
-        powers.addView(power(c, "One account, every device",
-                mAuthorized.size() + " device" + (mAuthorized.size() == 1 ? "" : "s")
-                        + " paired — each drives this same account."));
+        powers.addView(power(c, tr(R.string.l10n_native_node_every_device),
+                Language.count(R.plurals.l10n_native_node_device_count, mAuthorized.size())));
         powers.addView(divider(c, powers));
-        powers.addView(power(c, "You are a relay",
-                mRelayOn ? ("Carrying traffic for the network"
-                        + (mMeshPeers > 0 ? " · mesh: " + mMeshPeers + " peers" : ""))
-                        : "Relay off"));
+        powers.addView(power(c, tr(R.string.l10n_native_node_relay),
+                mRelayOn ? (mMeshPeers > 0 ? Language.count(R.plurals.l10n_native_node_mesh_peers, mMeshPeers) : Language.msg(R.string.l10n_native_node_carrying)) : Language.msg(R.string.l10n_native_node_relay_off)));
         mRoot.addView(powers);
 
         // --- permanent address ---
-        mRoot.addView(PortalUi.section(c, "Permanent address"));
+        mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_node_address)));
         LinearLayout addr = PortalUi.card(c);
-        addr.addView(PortalUi.label(c, "The address that never changes — reaches you on any device."));
+        addr.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_address_help)));
         addr.addView(PortalUi.gap(c, 8));
-        TextView val = PortalUi.value(c, mPermanent.isEmpty() ? "(resolving…)" : mPermanent);
+        TextView val = PortalUi.value(c, mPermanent.isEmpty() ? tr(R.string.l10n_native_contacts_resolving) : mPermanent);
         val.setTextSize(13);
         addr.addView(val);
         addr.addView(PortalUi.gap(c, 10));
         LinearLayout btns = new LinearLayout(c);
         btns.setOrientation(LinearLayout.HORIZONTAL);
-        TextView copy = PortalUi.ghost(c, "Copy");
+        TextView copy = PortalUi.ghost(c, Language.msg(R.string.l10n_common_copy));
         LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp1.rightMargin = PortalUi.dp(c, 6);
         copy.setOnClickListener(v -> copy(mPermanent));
         btns.addView(copy, lp1);
-        TextView qr = PortalUi.ghost(c, "Show QR");
+        TextView qr = PortalUi.ghost(c, Language.msg(R.string.l10n_contacts_show_qr));
         LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp2.leftMargin = PortalUi.dp(c, 6);
@@ -319,47 +324,44 @@ public final class CloudNodePage implements Page {
         mRoot.addView(addr);
 
         if (mHosting) {
-            mRoot.addView(PortalUi.section(c, "Hosted accounts"));
+            mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_hosting_title)));
             LinearLayout hosting = PortalUi.card(c);
-            hosting.addView(PortalUi.label(c, "Host friends on this server. Each person gets their own account and invitation, without access to your account or Minima terminal."));
-            TextView manage = PortalUi.button(c, "Manage hosted accounts");
+            hosting.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_hosting_help)));
+            TextView manage = PortalUi.button(c, Language.msg(R.string.l10n_native_node_manage_hosting));
             manage.setOnClickListener(v -> hostedAction("list", ""));
             hosting.addView(manage); mRoot.addView(hosting);
         }
 
         if (mNodeConsole) {
             // Server tools are shown only when the server explicitly advertises its console.
-            mRoot.addView(PortalUi.section(c, "Node tools"));
+            mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_node_tools)));
             LinearLayout tools = PortalUi.card(c);
-            TextView ide = PortalUi.button(c, "Open Terminal IDE");
+            TextView ide = PortalUi.button(c, Language.msg(R.string.l10n_native_node_open_ide));
             ide.setOnClickListener(v -> mAct.startActivity(
                     new android.content.Intent(mAct, com.eurobuddha.maxima.app.portal.ide.IdeActivity.class)));
             tools.addView(ide);
             tools.addView(PortalUi.gap(c, 6));
-            tools.addView(PortalUi.label(c, "The full Minima command line of YOUR node, plus the KISS "
-                    + "script IDE and the manual-transaction workbench - every command runs on the node "
-                    + "over this paired channel, output complete and copyable."));
+            tools.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_ide_help)));
             mRoot.addView(tools);
             mRoot.addView(PortalUi.gap(c, 12));
 
-            mRoot.addView(PortalUi.section(c, "Transport & hosts"));
+            mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_node_transport)));
             LinearLayout ctrl = PortalUi.card(c);
-            TextView open = PortalUi.button(c, "Open control panel");
+            TextView open = PortalUi.button(c, Language.msg(R.string.l10n_native_node_open_panel));
             open.setOnClickListener(v -> mAct.startActivity(
                     new android.content.Intent(mAct, CloudNodePanelActivity.class)));
             ctrl.addView(open);
             ctrl.addView(PortalUi.gap(c, 6));
-            ctrl.addView(PortalUi.label(c, "Hosts, reachability, relay stats, MLS/location and the "
-                    + "live event log — everything a VPS operator runs."));
+            ctrl.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_panel_help)));
             mRoot.addView(ctrl);
 
         }
 
         // --- paired devices ---
-        mRoot.addView(PortalUi.section(c, "Paired devices (" + mAuthorized.size() + ")"));
+        mRoot.addView(PortalUi.section(c, tr(R.string.l10n_native_node_devices, mAuthorized.size())));
         LinearLayout devs = PortalUi.card(c);
         if (mAuthorized.isEmpty()) {
-            devs.addView(PortalUi.label(c, "No devices paired."));
+            devs.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_node_no_devices)));
         } else {
             for (int i = 0; i < mAuthorized.size(); i++) {
                 if (i > 0) devs.addView(divider(c, devs));
@@ -369,7 +371,7 @@ public final class CloudNodePage implements Page {
         mRoot.addView(devs);
 
         if (!mPending.isEmpty()) {
-            mRoot.addView(PortalUi.section(c, "Pending approval (" + mPending.size() + ")"));
+            mRoot.addView(PortalUi.section(c, tr(R.string.l10n_native_node_pending, mPending.size())));
             LinearLayout pend = PortalUi.card(c);
             for (int i = 0; i < mPending.size(); i++) {
                 if (i > 0) pend.addView(divider(c, pend));
@@ -378,30 +380,30 @@ public final class CloudNodePage implements Page {
             mRoot.addView(pend);
         }
 
-        TextView newCode = PortalUi.ghost(c, "Pair my other device");
+        TextView newCode = PortalUi.ghost(c, Language.msg(R.string.l10n_native_node_pair_other));
         newCode.setOnClickListener(v -> newCode());
         LinearLayout.LayoutParams nclp = PortalUi.matchWrap(c);
         nclp.bottomMargin = PortalUi.dp(c, 24);
         newCode.setLayoutParams(nclp);
         mRoot.addView(newCode);
         mRoot.addView(PortalUi.label(c, mHosting
-                ? "Device pairing gives access to this account. To invite a friend, create a separate hosted account."
-                : "Device pairing gives access to this account. Share a device invite only with someone who should control this account."));
+                ? tr(R.string.l10n_native_node_pair_hosted_help)
+                : tr(R.string.l10n_native_node_pair_help)));
     }
 
-    private View power(Context c, String title, String desc) {
+    private View power(Context c, CharSequence title, CharSequence desc) {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         int pv = PortalUi.dp(c, 8);
         col.setPadding(0, pv, 0, pv);
         TextView t = new TextView(c);
-        t.setText(title);
+        Language.setText(t, title);
         t.setTextColor(c.getColor(R.color.ux_text));
         t.setTextSize(15);
         t.setTypeface(t.getTypeface(), Typeface.BOLD);
         col.addView(t);
         TextView d = new TextView(c);
-        d.setText(desc);
+        Language.setText(d, desc);
         d.setTextColor(c.getColor(R.color.ux_subtext));
         d.setTextSize(13);
         col.addView(d);
@@ -417,19 +419,19 @@ public final class CloudNodePage implements Page {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView nm = new TextView(c);
-        nm.setText(dev.label.isEmpty() ? "device" : dev.label);
+        Language.setText(nm, dev.label.isEmpty() ? tr(R.string.l10n_native_node_device) : dev.label);
         nm.setTextColor(c.getColor(R.color.ux_text));
         nm.setTextSize(15);
         col.addView(nm);
         boolean isThisDevice = sameKey(dev.key, CloudSession.deviceKeyOrEmpty(mAct));
         TextView sub = new TextView(c);
-        sub.setText(isThisDevice ? "this device" : "paired");
+        Language.setText(sub, isThisDevice ? tr(R.string.l10n_native_node_this_device) : tr(R.string.l10n_native_node_paired));
         sub.setTextColor(c.getColor(isThisDevice ? R.color.ux_success : R.color.ux_subtext));
         sub.setTextSize(12);
         col.addView(sub);
         row.addView(col, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView revoke = PortalUi.ghost(c, "Revoke");
+        TextView revoke = PortalUi.ghost(c, Language.msg(R.string.l10n_common_revoke));
         revoke.setTextColor(c.getColor(R.color.ux_error));
         revoke.setOnClickListener(v -> confirmRevoke(dev));
         row.addView(revoke);
@@ -443,25 +445,23 @@ public final class CloudNodePage implements Page {
         int pv = PortalUi.dp(c, 8);
         row.setPadding(0, pv, 0, pv);
         TextView k = new TextView(c);
-        k.setText("A device wants to pair");
+        Language.setText(k, tr(R.string.l10n_native_node_wants_pair));
         k.setTextColor(c.getColor(R.color.ux_text));
         k.setTextSize(15);
         row.addView(k, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView approve = PortalUi.button(c, "Approve");
+        TextView approve = PortalUi.button(c, Language.msg(R.string.l10n_common_approve));
         approve.setOnClickListener(v -> approve(key));
         row.addView(approve);
         return row;
     }
 
     private void confirmRevoke(Dev dev) {
-        new AlertDialog.Builder(mAct)
-                .setTitle("Revoke this device?")
-                .setMessage((dev.label.isEmpty() ? "This device" : dev.label)
-                        + " will lose access to your account. Your identity is NOT changed — other "
-                        + "devices keep working. This can't be undone (they'd need a new code to re-pair).")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Revoke", (d, w) -> revoke(dev.key))
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_native_node_revoke_title))
+                .setMessage(m(R.string.l10n_native_node_revoke_help, dev.label.isEmpty() ? m(R.string.l10n_native_settings_this_device) : dev.label))
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_common_revoke), (d, w) -> revoke(dev.key))
                 .show();
     }
 
@@ -470,41 +470,41 @@ public final class CloudNodePage implements Page {
     public void promptSetName() {
         final android.widget.EditText field = new android.widget.EditText(mAct);
         field.setText(mName);
-        field.setHint("e.g. eurobuddha");
+        Language.hint(field, Language.msg(R.string.l10n_native_node_name_example));
         field.setSingleLine(true);
         int pad = PortalUi.dp(mAct, 20);
         android.widget.FrameLayout wrap = new android.widget.FrameLayout(mAct);
         wrap.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
         wrap.addView(field);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Your name")
-                .setMessage("Shown to your contacts, and re-announced to all of them now.")
+        new LanguageDialog(mAct)
+                .setTitle(m(R.string.l10n_settings_your_name))
+                .setMessage(m(R.string.l10n_native_node_name_announce))
                 .setView(wrap)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Set", (d, w) -> {
+                .setNegativeButton(m(R.string.l10n_common_cancel), null)
+                .setPositiveButton(m(R.string.l10n_native_settings_set), (d, w) -> {
                     String name = field.getText().toString().trim();
                     if (name.isEmpty()) {
-                        mAct.toast("Name can't be empty");
+                        mAct.toast(tr(R.string.l10n_native_contacts_name_required));
                         return;
                     }
-                    act(r -> r.setName(name), "Name set — announcing to your contacts…",
-                            "Could not set name");
+                    act(r -> r.setName(name), m(R.string.l10n_native_node_name_set),
+                            m(R.string.l10n_native_node_name_failed));
                 })
                 .show();
         field.requestFocus();
     }
 
     private void approve(String key) {
-        act(r -> r.approve(key), "Approved", "Could not approve");
+        act(r -> r.approve(key), m(R.string.l10n_common_approved), m(R.string.l10n_native_node_approve_failed));
     }
 
     private void revoke(String key) {
-        act(r -> r.revoke(key), "Revoked", "Could not revoke");
+        act(r -> r.revoke(key), m(R.string.l10n_common_revoked), m(R.string.l10n_native_node_revoke_failed));
     }
 
     private void hostedAction(String action, String name) {
         final String account = CloudSession.account(mAct);
-        mAct.toast("Loading hosted accounts…");
+        mAct.toast(tr(R.string.l10n_native_node_loading_hosting));
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 if (!account.equals(CloudSession.account(mAct))) return;
@@ -516,14 +516,14 @@ public final class CloudNodePage implements Page {
                 final JSONObject reply = result; final String failure = error;
                 mAct.runOnUiThread(() -> {
                     if (mAct.isFinishing() || !account.equals(CloudSession.account(mAct))) return;
-                    if (reply == null || failure != null) { mAct.toast(failure == null ? "Could not reach the host" : failure); return; }
+                    if (reply == null || failure != null) { mAct.toast(failure == null ? tr(R.string.l10n_native_node_host_unreachable) : SystemMessages.text(mAct, failure)); return; }
                     if ("invite".equals(action)) {
                         String invite = str(reply, "invite");
-                        new AlertDialog.Builder(mAct).setTitle("Invitation for " + name)
-                                .setMessage("This invitation pairs a device to " + name + "’s account. Keep it private until used.\n\n" + invite)
-                                .setPositiveButton("Copy invite", (d,w) -> copy(invite, "Hosted account invite"))
-                                .setNeutralButton("QR", (d,w) -> showQr("Invitation for " + name, invite))
-                                .setNegativeButton("Close", null).show();
+                        new LanguageDialog(mAct).setTitle(m(R.string.l10n_native_node_invite_title, name))
+                                .setMessage(m(R.string.l10n_native_node_invite_message, name, invite))
+                                .setPositiveButton(m(R.string.l10n_pairing_copy_invite), (d,w) -> copy(invite, tr(R.string.l10n_native_node_host_invite)))
+                                .setNeutralButton("QR", (d,w) -> showQr(m(R.string.l10n_native_node_invite_title, name), invite))
+                                .setNegativeButton(m(R.string.l10n_language_close), null).show();
                     } else showHostedAccounts(reply);
                 });
             }
@@ -536,41 +536,55 @@ public final class CloudNodePage implements Page {
     private void showHostedAccounts(JSONObject reply) {
         JSONArray accounts = (JSONArray) reply.get("accounts");
         boolean online = bool(reply, "online");
-        List<JSONObject> rows = new ArrayList<>(); List<String> labels = new ArrayList<>();
+        boolean managed = bool(reply, "managed"), enabled = bool(reply, "enabled");
+        boolean chatOnly = "chat-only".equals(str(reply, "access"));
+        List<JSONObject> rows = new ArrayList<>(); List<CharSequence> labels = new ArrayList<>();
         if (accounts != null) for (Object o : accounts) {
             JSONObject row = (JSONObject) o; rows.add(row);
-            labels.add(str(row, "name") + " — " + str(row, "state"));
+            labels.add(Language.join(str(row, "name"), " — ", SystemMessages.message(str(row, "state"))));
         }
-        AlertDialog.Builder dialog = new AlertDialog.Builder(mAct)
-                .setTitle(online ? "Hosted accounts (" + rows.size() + "/" + lng(reply, "limit") + ")" : "Hosting service offline")
-                .setNegativeButton("Close", null)
-                .setNeutralButton("Refresh", (d,w) -> hostedAction("list", ""));
-        if (rows.isEmpty()) dialog.setMessage(online ? "Create an account for a friend, then share their invitation." : "Ask the server operator to start the hosted-account service.");
-        else dialog.setItems(labels.toArray(new String[0]), (d,i) -> {
+        AlertDialog.Builder dialog = new LanguageDialog(mAct)
+                .setTitle(online ? m(R.string.l10n_native_node_hosting_count, rows.size(), lng(reply, "limit")) : m(R.string.l10n_native_node_hosting_offline))
+                .setNegativeButton(m(R.string.l10n_language_close), null)
+                .setNeutralButton(m(R.string.l10n_common_refresh), (d,w) -> hostedAction("list", ""));
+        if (managed) dialog.setNeutralButton(m(R.string.l10n_native_node_hosting_options), (d,w) ->
+                new LanguageDialog(mAct).setTitle(m(R.string.l10n_native_node_hosting_computer))
+                        .setItems(new CharSequence[]{m(R.string.l10n_common_refresh), enabled ? m(R.string.l10n_hosting_stop) : m(R.string.l10n_hosting_enable)}, (x,i) -> {
+                            if (i == 0) hostedAction("list", "");
+                            else new LanguageDialog(mAct).setTitle(enabled ? m(R.string.l10n_native_node_stop_hosting) : m(R.string.l10n_native_node_enable_hosting))
+                                    .setMessage(enabled ? m(R.string.l10n_native_node_stop_help)
+                                            : m(R.string.l10n_native_node_enable_help))
+                                    .setNegativeButton(m(R.string.l10n_common_cancel), null).setPositiveButton(enabled ? m(R.string.l10n_native_node_stop) : m(R.string.l10n_native_node_enable),
+                                            (a,b) -> hostedAction(enabled ? "disable" : "enable", "")).show();
+                        }).setNegativeButton(m(R.string.l10n_language_close), null).show());
+        if (rows.isEmpty()) dialog.setMessage(online
+                ? (chatOnly ? m(R.string.l10n_native_node_empty_chat_only) : m(R.string.l10n_native_node_empty_hosting))
+                : managed ? (enabled ? m(R.string.l10n_hosting_starting) : m(R.string.l10n_native_node_hosting_stopped)) : m(R.string.l10n_native_node_operator_start));
+        else dialog.setItems(labels.toArray(new CharSequence[0]), (d,i) -> {
             JSONObject row = rows.get(i); String name = str(row, "name");
             boolean paused = bool(row, "paused");
-            if (!online) { mAct.toast("Hosting service is offline"); return; }
-            List<String> actions = new ArrayList<>();
+            if (!online) { mAct.toast(tr(R.string.l10n_native_node_hosting_is_offline)); return; }
+            List<CharSequence> actions = new ArrayList<>();
             boolean ready = "running".equals(str(row, "state"));
-            if (ready) actions.add("Show invitation");
-            actions.add(paused ? "Resume account" : "Pause account");
-            new AlertDialog.Builder(mAct).setTitle(name).setItems(actions.toArray(new String[0]), (a,j) -> {
+            if (ready) actions.add(m(R.string.l10n_hosting_show_invite));
+            actions.add(paused ? m(R.string.l10n_native_node_resume_account) : m(R.string.l10n_native_node_pause_account));
+            new LanguageDialog(mAct).setTitle(name).setItems(actions.toArray(new CharSequence[0]), (a,j) -> {
                 if (ready && j == 0) hostedAction("invite", name);
-                else new AlertDialog.Builder(mAct).setTitle(paused ? "Resume " + name + "?" : "Pause " + name + "?")
-                        .setMessage(paused ? "Their account will reconnect on this server." : "Their account will go offline. Its identity and chats will be kept.")
-                        .setNegativeButton("Cancel", null).setPositiveButton(paused ? "Resume" : "Pause",
+                else new LanguageDialog(mAct).setTitle(paused ? m(R.string.l10n_native_node_resume_title, name) : m(R.string.l10n_native_node_pause_title, name))
+                        .setMessage(paused ? m(R.string.l10n_native_node_resume_help) : m(R.string.l10n_native_node_pause_help))
+                        .setNegativeButton(m(R.string.l10n_common_cancel), null).setPositiveButton(paused ? m(R.string.l10n_common_resume) : m(R.string.l10n_common_pause),
                                 (x,y) -> hostedAction(paused ? "resume" : "pause", name)).show();
-            }).setNegativeButton("Close", null).show();
+            }).setNegativeButton(m(R.string.l10n_language_close), null).show();
         });
-        if (online) dialog.setPositiveButton("Create account", (d,w) -> {
+        if (online) dialog.setPositiveButton(m(R.string.l10n_hosting_create), (d,w) -> {
             android.widget.EditText field = new android.widget.EditText(mAct);
-            field.setSingleLine(true); field.setHint("Account name, e.g. alice");
+            field.setSingleLine(true); Language.hint(field, Language.msg(R.string.l10n_native_node_account_example));
             LinearLayout wrap = new LinearLayout(mAct); int pad = PortalUi.dp(mAct, 20);
             wrap.setPadding(pad, pad, pad, 0); wrap.addView(field, PortalUi.matchWrap(mAct));
-            new AlertDialog.Builder(mAct).setTitle("Host a friend")
-                    .setMessage("Creates a separate account on your server. The host holds its keys and chat history. Share its invite only with that person.")
-                    .setView(wrap).setNegativeButton("Cancel", null)
-                    .setPositiveButton("Create", (x,y) -> hostedAction("create", field.getText().toString().trim())).show();
+            new LanguageDialog(mAct).setTitle(m(R.string.l10n_native_node_host_friend))
+                    .setMessage(chatOnly ? m(R.string.l10n_native_node_create_chat_help) : m(R.string.l10n_native_node_create_help))
+                    .setView(wrap).setNegativeButton(m(R.string.l10n_common_cancel), null)
+                    .setPositiveButton(m(R.string.l10n_common_create), (x,y) -> hostedAction("create", field.getText().toString().trim())).show();
         });
         dialog.show();
     }
@@ -578,24 +592,24 @@ public final class CloudNodePage implements Page {
     private void newCode() {
         if (!mAdminPassword) { newCode(""); return; }
         android.widget.EditText password = new android.widget.EditText(mAct);
-        password.setSingleLine(true); password.setHint("Admin password");
+        password.setSingleLine(true); Language.hint(password, Language.msg(R.string.l10n_pairing_admin_password));
         password.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         LinearLayout wrap = new LinearLayout(mAct); int pad = PortalUi.dp(mAct, 20);
         wrap.setPadding(pad, pad, pad, 0); wrap.addView(password, PortalUi.matchWrap(mAct));
-        new AlertDialog.Builder(mAct).setTitle("Invite a device")
-                .setMessage("Enter the admin password to give another device access to this owner account and Minima terminal. Leave it empty to create a separate hosted account for a friend.")
-                .setView(wrap).setNegativeButton("Cancel", (d,w) -> password.setText(""))
-                .setPositiveButton("Continue", (d,w) -> {
+        new LanguageDialog(mAct).setTitle(m(R.string.l10n_native_node_invite_device))
+                .setMessage(m(R.string.l10n_native_node_admin_help))
+                .setView(wrap).setNegativeButton(m(R.string.l10n_common_cancel), (d,w) -> password.setText(""))
+                .setPositiveButton(m(R.string.l10n_common_continue), (d,w) -> {
                     String value = password.getText().toString(); password.setText("");
                     if (value.isEmpty()) {
                         if (mHosting) hostedAction("list", "");
-                        else mAct.toast("Hosting is not enabled on this server yet");
+                        else mAct.toast(tr(R.string.l10n_native_node_hosting_not_enabled));
                     } else newCode(value);
                 }).show();
     }
 
     private void newCode(String adminPassword) {
-        mAct.toast("Minting…");
+        mAct.toast(tr(R.string.l10n_native_node_minting));
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String note = null, error = null, code = "", invite = "";
@@ -615,22 +629,19 @@ public final class CloudNodePage implements Page {
                 final String fcode = code, finvite = invite;
                 mAct.runOnUiThread(() -> {
                     if (ferr == null) {
-                        AlertDialog.Builder dialog = new AlertDialog.Builder(mAct)
-                                .setTitle("New pairing code minted")
-                                .setMessage((fnote == null || fnote.isEmpty())
-                                        ? (fcode.isEmpty() ? "The account did not return a code. Update the account server and try again."
-                                                : "One-time pairing code: " + fcode)
-                                        : fnote)
-                                .setNegativeButton("Close", null);
+                        AlertDialog.Builder dialog = new LanguageDialog(mAct)
+                                .setTitle(m(R.string.l10n_native_node_code_minted))
+                                .setMessage(pairingMessage(fcode, finvite, fnote))
+                                .setNegativeButton(m(R.string.l10n_language_close), null);
                         if (!finvite.isEmpty()) {
-                            dialog.setPositiveButton("Copy invite", (d, w) -> copy(finvite, "Invite"));
-                            dialog.setNeutralButton("QR", (d, w) -> showQr("Pair a device", finvite));
+                            dialog.setPositiveButton(m(R.string.l10n_pairing_copy_invite), (d, w) -> copy(finvite, tr(R.string.l10n_native_node_invite)));
+                            dialog.setNeutralButton("QR", (d, w) -> showQr(m(R.string.l10n_native_node_pair_device), finvite));
                         } else if (!fcode.isEmpty()) {
-                            dialog.setPositiveButton("Copy code", (d, w) -> copy(fcode, "Pairing code"));
+                            dialog.setPositiveButton(m(R.string.l10n_native_node_copy_code), (d, w) -> copy(fcode, tr(R.string.l10n_onboarding_code_label)));
                         }
                         dialog.show();
                     } else {
-                        mAct.toast(ferr);
+                        mAct.toast(SystemMessages.text(mAct, ferr));
                     }
                 });
             }
@@ -640,11 +651,22 @@ public final class CloudNodePage implements Page {
         });
     }
 
+    /** Prefer structured reply fields; the legacy English note must not hide translated guidance. */
+    static CharSequence pairingMessage(String code, String invite, String note) {
+        if (code != null && !code.isEmpty()) {
+            return invite == null || invite.isEmpty()
+                    ? Language.msg(R.string.l10n_pairing_code_manual_message, code)
+                    : Language.msg(R.string.l10n_pairing_code_invite_message, code, invite);
+        }
+        return note == null || note.isEmpty() ? Language.msg(R.string.l10n_native_node_no_code)
+                : SystemMessages.message(note);
+    }
+
     private interface Call {
         JSONObject run(ParlonsRemote r) throws Exception;
     }
 
-    private void act(Call call, String okMsg, String failMsg) {
+    private void act(Call call, Language.Message okMsg, Language.Message failMsg) {
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
@@ -659,16 +681,16 @@ public final class CloudNodePage implements Page {
                 final String err = error;
                 mAct.runOnUiThread(() -> {
                     if (err == null) {
-                        mAct.toast(okMsg);
+                        mAct.toast(okMsg.toString());
                         mLastLoad = 0;
                         render();
                     } else {
-                        mAct.toast(failMsg + ": " + err);
+                        mAct.toast(tr(R.string.l10n_native_node_action_failed, failMsg.toString(), SystemMessages.text(mAct, err)));
                     }
                 });
             }
             public void err(String m) {
-                mAct.runOnUiThread(() -> mAct.toast(failMsg + ": " + m));
+                mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_native_node_action_failed, failMsg.toString(), SystemMessages.text(mAct, m))));
             }
         });
     }
@@ -683,7 +705,7 @@ public final class CloudNodePage implements Page {
     }
 
     private void copy(String s) {
-        copy(s, "Address");
+        copy(s, tr(R.string.l10n_common_address));
     }
 
     private void copy(String s, String label) {
@@ -691,14 +713,14 @@ public final class CloudNodePage implements Page {
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(android.content.ClipData.newPlainText(label, s));   // full, never truncated
-        mAct.toast(label + " copied");
+        mAct.toast(tr(R.string.l10n_native_node_copied, label));
     }
 
     private void showQr(String s) {
-        showQr("Permanent address", s);
+        showQr(m(R.string.l10n_native_node_address), s);
     }
 
-    private void showQr(String title, String s) {
+    private void showQr(CharSequence title, String s) {
         if (s == null || s.isEmpty()) return;
         int px = PortalUi.dp(mAct, 260);
         Bitmap bmp = Qr.encode(s, px);
@@ -706,23 +728,29 @@ public final class CloudNodePage implements Page {
         iv.setImageBitmap(bmp);
         int pad = PortalUi.dp(mAct, 20);
         iv.setPadding(pad, pad, pad, pad);
-        new AlertDialog.Builder(mAct)
+        new LanguageDialog(mAct)
                 .setTitle(title)
                 .setView(iv)
-                .setPositiveButton("Close", null)
+                .setPositiveButton(m(R.string.l10n_language_close), null)
                 .show();
     }
 
-    private static String uptime(long ms) {
-        if (ms <= 0) return "just started";
+    private String uptime(long ms) {
+        if (ms <= 0) return tr(R.string.l10n_native_node_started);
         long s = ms / 1000;
         long d = s / 86400;
         long h = (s % 86400) / 3600;
         long m = (s % 3600) / 60;
-        if (d > 0) return d + "d " + h + "h";
-        if (h > 0) return h + "h " + m + "m";
-        return m + "m";
+        if (d > 0) return tr(R.string.l10n_native_node_days_hours, d, h);
+        if (h > 0) return tr(R.string.l10n_native_node_hours_minutes, h, m);
+        return tr(R.string.l10n_native_node_minutes, m);
     }
+
+    @Override public void languageChanged() { if (mBuilt && mLoadError == null) rebuild(); }
+
+    private static Language.Message m(int resource, Object... args) { return Language.msg(resource, args); }
+
+    private String tr(int resource, Object... args) { return Language.text(mAct, resource, args); }
 
     private static boolean sameKey(String a, String b) {
         return a != null && !a.isEmpty() && a.equalsIgnoreCase(b);

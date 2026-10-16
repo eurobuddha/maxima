@@ -29,7 +29,7 @@ import javax.swing.border.EmptyBorder;
  * a search field, and the contact list. Tapping a contact opens the chat;
  * an info action opens the contact card with every host address copyable in full.
  */
-public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
+public final class ContactsPanel extends JPanel implements MaximaWindow.Tab, MaximaWindow.Responsive {
 
     private final DesktopNode node;
     private final Theme t;
@@ -39,8 +39,9 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
     private final JPanel mBody = new JPanel();
     private final JPanel mList = new JPanel();
     private final JLabel mHostInfo = new JLabel("…");
-    private final JLabel mCount = new JLabel("CONTACTS · 0");
+    private final JLabel mCount = new JLabel();
     private JTextField mSearch;
+    private JPanel mActions;
     private String mQuery = "";
     private String mLastSig = "";
 
@@ -66,7 +67,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         add(sp, BorderLayout.CENTER);
     }
 
-    public String label() { return "Contacts"; }
+    public String label() { return Language.text("nav.contacts"); }
     public JComponent view() { return this; }
 
     private void buildScaffold() {
@@ -82,11 +83,11 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         JPanel idcol = new JPanel();
         idcol.setOpaque(false);
         idcol.setLayout(new BoxLayout(idcol, BoxLayout.Y_AXIS));
-        JLabel idtitle = new JLabel("Your Maxima address");
-        idtitle.setFont(t.bold(16f));
+        JLabel idtitle = Language.bind(new JLabel(), Language.msg("desktopChat.yourAddress"));
+        Language.font(idtitle, t.bold(16f));
         idtitle.setForeground(t.text);
         idtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        mHostInfo.setFont(t.font(12.5f));
+        Language.font(mHostInfo, t.font(12.5f));
         mHostInfo.setForeground(t.subtext);
         mHostInfo.setAlignmentX(Component.LEFT_ALIGNMENT);
         idcol.add(idtitle);
@@ -96,12 +97,13 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         id.add(idrow);
         id.add(k.vgap(14));
         JPanel actions = new JPanel();
+        mActions = actions;
         actions.setOpaque(false);
         actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
         actions.setAlignmentX(Component.LEFT_ALIGNMENT);
-        DKit.HoverButton share = k.primaryButton("Share my address");
+        DKit.HoverButton share = k.primaryButton(Language.msg("nativeContacts.shareMyAddress"));
         share.onClick(this::showShareDialog);
-        DKit.HoverButton add = k.ghostButton("Add contact");
+        DKit.HoverButton add = k.ghostButton(Language.msg("contacts.add"));
         add.onClick(this::showAddDialog);
         actions.add(share);
         actions.add(Box.createRigidArea(new Dimension(10, 0)));
@@ -123,9 +125,10 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mSearch = new JTextField();
         mSearch.setOpaque(false);
         mSearch.setBorder(new EmptyBorder(9, 0, 9, 0));
-        mSearch.setFont(t.font(13.5f));
+        Language.font(mSearch, t.font(13.5f));
         mSearch.setForeground(t.text);
         mSearch.setCaretColor(t.text);
+        Language.tooltip(mSearch, Language.msg("common.search"));
         mSearch.getDocument().addDocumentListener(new SimpleDoc(() -> {
             mQuery = mSearch.getText();
             mLastSig = "";
@@ -136,7 +139,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(14));
 
         // Count + list.
-        mCount.setFont(t.semibold(10.5f));
+        Language.font(mCount, t.semibold(10.5f));
         mCount.setForeground(t.subtext);
         mCount.setAlignmentX(Component.LEFT_ALIGNMENT);
         mBody.add(mCount);
@@ -164,16 +167,16 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
         int hosts = 0;
         try { hosts = Math.max(0, node.port().myAddresses().size()); } catch (Exception ignored) { }
-        mHostInfo.setText(hosts == 0 ? "waiting for a host…"
-                : "Reachable through " + hosts + (hosts == 1 ? " host" : " hosts"));
-        mCount.setText("CONTACTS · " + all.size());
+        Language.bind(mHostInfo, hosts == 0 ? Language.msg("desktopChat.waitingHost")
+                : Language.msg("nativeContacts.hosts", "count", hosts));
+        Language.bind(mCount, Language.msg("nativeContacts.listCount", "count", all.size()), value -> value.toUpperCase(Language.locale()));
 
         List<Contact> cs = filtered(all);
         mList.removeAll();
         if (cs.isEmpty()) {
             JLabel e = k.sub(all.isEmpty()
-                    ? "Nobody yet — share your address or add a friend to get started."
-                    : "No contact matches \"" + mQuery.trim() + "\".");
+                    ? Language.msg("desktopChat.emptyContacts")
+                    : Language.msg("nativeContacts.noMatches", "query", mQuery.trim()));
             e.setBorder(new EmptyBorder(8, 8, 8, 8));
             mList.add(e);
         } else {
@@ -182,6 +185,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                 mList.add(contactRow(cs.get(i)));
             }
         }
+        if (getWidth() > 0) onWidth(getWidth());
         mList.revalidate();
         mList.repaint();
     }
@@ -208,17 +212,17 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
             body.add(row);
             body.add(k.vgap(4));
         }
-        if (n == 0) body.add(k.sub("No one else to send it to yet."));
-        holder[0] = dialog("Send " + displayName(zWho) + " to…", body, 360);
+        if (n == 0) body.add(k.sub(Language.msg("desktopChat.noRecipients")));
+        holder[0] = dialog(Language.msg("nativeContacts.sendNameTo", "name", displayName(zWho)), body, 360);
     }
 
     private List<Contact> filtered(List<Contact> all) {
-        String q = mQuery.trim().toLowerCase();
+        String q = mQuery.trim();
         if (q.isEmpty()) return all;
         List<Contact> out = new ArrayList<>();
         for (Contact c : all) {
-            if ((c.name != null && c.name.toLowerCase().contains(q))
-                    || (c.publicKey != null && c.publicKey.toLowerCase().contains(q))) {
+            if ((c.name != null && com.eurobuddha.maxima.app.i18n.SearchText.indexOf(c.name, q) >= 0)
+                    || (c.publicKey != null && com.eurobuddha.maxima.app.i18n.SearchText.indexOf(c.publicKey, q) >= 0)) {
                 out.add(c);
             }
         }
@@ -237,11 +241,11 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mid.setOpaque(false);
         mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
         JLabel nm = new JLabel(name);
-        nm.setFont(t.semibold(13.5f));
+        Language.font(nm, t.semibold(13.5f), name);
         nm.setForeground(t.text);
         nm.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel pr = new JLabel(presence(c));
-        pr.setFont(t.font(11.5f));
+        JLabel pr = Language.render(new JLabel(), () -> presence(c));
+        Language.font(pr, t.font(11.5f));
         pr.setForeground(t.subtext);
         JPanel prRow = new JPanel();
         prRow.setOpaque(false);
@@ -258,12 +262,17 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         mid.add(prRow);
         row.add(mid, BorderLayout.CENTER);
         Icons.Btn info = new Icons.Btn(Icons.CONTACTS, t.subtext, DKit.alpha(t.subtext, 40), 30, 17, 1.6f);
+        Language.tooltip(info, Language.msg("chat.details"));
         info.onClick(() -> showContactCard(c));
         row.add(info, BorderLayout.EAST);
         row.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) { window.openChat(c.publicKey); }
         });
         return row;
+    }
+
+    @Override public void onWidth(int width) {
+        DKit.layoutActions(mActions, Math.max(1, Math.min(720, width - 44) - 32));
     }
 
     // ---- dialogs ----
@@ -273,8 +282,8 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(4, 4, 4, 4));
-        JLabel qrHolder = new JLabel("Resolving address…", javax.swing.SwingConstants.CENTER);
-        qrHolder.setFont(t.font(12f));
+        JLabel qrHolder = Language.bind(new JLabel("", javax.swing.SwingConstants.CENTER), Language.msg("desktopChat.resolving"));
+        Language.font(qrHolder, t.font(12f));
         qrHolder.setForeground(t.subtext);
         qrHolder.setAlignmentX(Component.CENTER_ALIGNMENT);
         qrHolder.setPreferredSize(new Dimension(230, 230));
@@ -291,7 +300,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         copyHolder.setOpaque(false);
         body.add(copyHolder);
 
-        JDialog d = dialog("Share my address", body, 320);
+        JDialog d = dialog(Language.msg("nativeContacts.shareMyAddress"), body, 320);
 
         new Thread(() -> {
             final String ip = toIpForm(myAddress());
@@ -303,7 +312,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                 // resolving even after you move networks. Fall back to the live IP.
                 String share = !perm.isEmpty() ? perm : ip;
                 if (share == null || share.isEmpty()) {
-                    qrHolder.setText("Couldn't resolve a shareable address. Try again when online.");
+                    Language.bind(qrHolder, Language.msg("desktopChat.resolveFailed"));
                     return;
                 }
                 java.awt.image.BufferedImage qr = DesktopQr.encode(share, 230,
@@ -316,20 +325,20 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                 fields.setOpaque(false);
                 fields.setLayout(new BoxLayout(fields, BoxLayout.Y_AXIS));
                 if (!perm.isEmpty()) {
-                    fields.add(k.copyField("permanent MAX# address", perm, false));
+                    fields.add(k.copyField(Language.msg("desktopChat.permanent"), perm, false));
                     if (ip != null && !ip.isEmpty()) {
                         fields.add(k.vgap(8));
-                        fields.add(k.copyField("current address", ip, false));
+                        fields.add(k.copyField(Language.msg("desktopChat.currentAddress"), ip, false));
                     }
                 } else {
-                    fields.add(k.copyField("maxima address", ip, false));
+                    fields.add(k.copyField(Language.msg("desktopChat.maximaAddress"), ip, false));
                 }
                 // KeetChat identity (keets pubkey via the linked node) - what a
                 // KeetChat user adds as a contact. Shown in FULL, copyable.
                 String kpk = node.chat().keetsPubkey();
                 if (kpk != null) {
                     fields.add(k.vgap(8));
-                    fields.add(k.copyField("KeetChat address (keets)", kpk, false));
+                    fields.add(k.copyField(Language.msg("desktopChat.keetsAddress"), kpk, false));
                 }
                 copyHolder.add(fields, BorderLayout.CENTER);
                 copyHolder.revalidate();
@@ -344,15 +353,14 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         body.setBorder(new EmptyBorder(4, 4, 4, 4));
-        body.add(k.sub("Paste a friend's address, then introduce yourself. They appear "
-                + "here once they reply."));
+        body.add(k.sub(Language.msg("desktopChat.introduceHelp")));
         body.add(k.vgap(10));
         JTextField paste = k.field("Mx…@host:port");
         paste.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         paste.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(paste);
         body.add(k.vgap(12));
-        DKit.HoverButton intro = k.primaryButton("Introduce myself");
+        DKit.HoverButton intro = k.primaryButton(Language.msg("nativeContacts.introduce"));
         JPanel r = new JPanel();
         r.setOpaque(false);
         r.setLayout(new BoxLayout(r, BoxLayout.X_AXIS));
@@ -360,11 +368,12 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         r.add(intro);
         r.add(Box.createHorizontalGlue());
         body.add(r);
-        JDialog d = dialog("Add a contact", body, 380);
+        JDialog d = dialog(Language.msg("contacts.addHeading"), body, 380);
         intro.onClick(() -> { if (introduce(paste.getText().trim())) d.dispose(); });
     }
 
     private void showContactCard(Contact c) {
+        List<JPanel> actionRows = new ArrayList<>();
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
@@ -380,11 +389,11 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         hc.setOpaque(false);
         hc.setLayout(new BoxLayout(hc, BoxLayout.Y_AXIS));
         JLabel nm = new JLabel(displayName(c));
-        nm.setFont(t.bold(16f));
+        Language.font(nm, t.bold(16f), displayName(c));
         nm.setForeground(t.text);
         nm.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel pr = new JLabel(presence(c));
-        pr.setFont(t.font(12f));
+        JLabel pr = Language.render(new JLabel(), () -> presence(c));
+        Language.font(pr, t.font(12f));
         pr.setForeground(t.subtext);
         pr.setAlignmentX(Component.LEFT_ALIGNMENT);
         hc.add(nm);
@@ -394,7 +403,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         body.add(head);
         body.add(k.vgap(12));
 
-        DKit.HoverButton msg = k.primaryButton("Message");
+        DKit.HoverButton msg = k.primaryButton(Language.msg("chat.message"));
         JPanel mr = new JPanel();
         mr.setOpaque(false);
         mr.setLayout(new BoxLayout(mr, BoxLayout.X_AXIS));
@@ -406,50 +415,51 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
         String addr = c.primaryAddress();
         if (addr != null && !addr.isEmpty()) {
-            body.add(k.copyField("maxima address", addr, false));
+            body.add(k.copyField(Language.msg("desktopChat.maximaAddress"), addr, false));
             int idx = 0;
             for (String a : c.addresses) {
                 if (a != null && !a.equals(addr)) {
                     body.add(k.vgap(6));
-                    body.add(k.copyField("host " + (++idx), a, false));
+                    body.add(k.copyField(Language.msg("nativeContacts.hostNumber", "number", ++idx), a, false));
                 }
             }
         }
         // Share this contact: the permanent address when we know their directory (it survives
         // their relay changes), else the current one; and send it to another contact as a card.
         final String share = c.shareAddress();
-        final DKit.HoverButton sendTo = k.ghostButton("Send to a contact…");
+        final DKit.HoverButton sendTo = k.ghostButton(Language.msg("contacts.sendTo"));
         if (!share.isEmpty()) {
             if (!share.equals(addr)) {
                 body.add(k.vgap(6));
-                body.add(k.copyField("share address (permanent)", share, false));
+                body.add(k.copyField(Language.msg("nativeContacts.permanentShare"), share, false));
             }
             body.add(k.vgap(6));
             JPanel sr = new JPanel();
             sr.setOpaque(false);
             sr.setLayout(new BoxLayout(sr, BoxLayout.X_AXIS));
             sr.setAlignmentX(Component.LEFT_ALIGNMENT);
-            DKit.HoverButton copyShare = k.ghostButton("Copy share address");
+            DKit.HoverButton copyShare = k.ghostButton(Language.msg("desktopChat.copyShare"));
             copyShare.onClick(() -> java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
                     .setContents(new java.awt.datatransfer.StringSelection(share), null));
             sr.add(copyShare);
             sr.add(k.hgap(8));
             sr.add(sendTo);
             sr.add(Box.createHorizontalGlue());
+            actionRows.add(sr);
             body.add(sr);
         }
         if (c.minimaAddress != null && !c.minimaAddress.isEmpty()) {
             body.add(k.vgap(6));
-            body.add(k.copyField("payment address (MINIMA)", c.minimaAddress, false));
+            body.add(k.copyField(Language.msg("nativeContacts.paymentAddress"), c.minimaAddress, false));
         }
         body.add(k.vgap(10));
         DKit.RoundPanel meta = k.card();
-        meta.add(k.kvLine("Software", softwareLabel(c)));
+        meta.add(k.kvLine(Language.msg("nativeContacts.software"), softwareLabel(c)));
         meta.add(k.divider());
-        meta.add(k.kvLine("Last seen", c.lastSeen > 0 ? presence(c) : "never"));
+        meta.add(k.kvLine(Language.msg("nativeContacts.lastSeen"), () -> c.lastSeen > 0 ? presence(c) : Language.text("nativeContacts.never")));
         body.add(meta);
         body.add(k.vgap(12));
-        DKit.HoverButton remove = k.dangerButton("Remove contact");
+        DKit.HoverButton remove = k.dangerButton(Language.msg("contacts.remove"));
         JPanel rr = new JPanel();
         rr.setOpaque(false);
         rr.setLayout(new BoxLayout(rr, BoxLayout.X_AXIS));
@@ -458,7 +468,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         rr.add(Box.createHorizontalGlue());
         body.add(rr);
 
-        JDialog d = dialog(displayName(c), body, 420);
+        JDialog d = dialog(displayName(c), body, 420, actionRows.toArray(new JPanel[0]));
         msg.onClick(() -> { d.dispose(); window.openChat(c.publicKey); });
         sendTo.onClick(() -> { d.dispose(); showSendContactPicker(c, share); });
         remove.onClick(() -> {
@@ -477,17 +487,16 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
         if (address.matches("(?i)0x[0-9a-f]{64}")) {
             if (!node.chat().hasKeets()) {
                 javax.swing.JOptionPane.showMessageDialog(this,
-                        "KeetChat contacts need a linked minimaCore Desktop node\n"
-                        + "(Settings \u2192 Node link), with keets enabled there.");
+                        Language.text("desktopChat.keetsRequired"));
                 return false;
             }
             com.eurobuddha.maxima.core.contacts.Contact kc = node.port().storeKeetsContact(address, "");
             if (kc == null) {
-                javax.swing.JOptionPane.showMessageDialog(this, "This engine can't store KeetChat contacts.");
+                javax.swing.JOptionPane.showMessageDialog(this, Language.text("nativeContacts.keetsUnsupported"));
                 return false;
             }
             refresh();
-            javax.swing.JOptionPane.showMessageDialog(this, "KeetChat contact added \u2014 say hello!");
+            javax.swing.JOptionPane.showMessageDialog(this, Language.text("nativeContacts.keetsAdded"));
             return true;
         }
         // Accept BOTH forms the phone accepts: a live Mx…@host:port address AND a
@@ -497,7 +506,7 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                     || address.startsWith("MAX#"));
         if (!ok) {
             javax.swing.JOptionPane.showMessageDialog(this,
-                    "Paste an Mx…@host:port address or a permanent MAX#… address.");
+                    Language.text("desktopChat.invalidAddress"));
             return false;
         }
         new Thread(() -> {
@@ -505,10 +514,10 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
                 node.port().introduce(address, true);
                 javax.swing.SwingUtilities.invokeLater(() ->
                         javax.swing.JOptionPane.showMessageDialog(this,
-                                "Introduction sent. They'll appear once they reply."));
+                                Language.text("desktopChat.introSent")));
             } catch (Exception e) {
                 javax.swing.SwingUtilities.invokeLater(() ->
-                        javax.swing.JOptionPane.showMessageDialog(this, "Couldn't introduce: " + e.getMessage()));
+                        javax.swing.JOptionPane.showMessageDialog(this, Language.text("desktopChat.introError", "error", Language.system(e.getMessage()))));
             }
         }, "introduce").start();
         return true;
@@ -516,15 +525,42 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
     // ---- helpers ----
 
-    private JDialog dialog(String title, JComponent body, int width) {
-        JDialog d = new JDialog(window.frame(), title, false);
+    private JDialog dialog(CharSequence title, JComponent body, int width, JPanel... actionRows) {
+        JDialog d = new JDialog(window.frame(), title.toString(), false);
+        d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        Language.title(d, title);
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setBackground(t.card);
         wrap.setBorder(new EmptyBorder(16, 18, 18, 18));
-        wrap.add(body, BorderLayout.CENTER);
+        JScrollPane scroll = new JScrollPane(new DKit.ScrollableColumn(body),
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(t.card);
+        wrap.add(scroll, BorderLayout.CENTER);
         d.setContentPane(wrap);
-        d.pack();
-        d.setSize(Math.max(width, d.getWidth()), d.getHeight());
+        Runnable reflow = () -> {
+            java.awt.Insets padding = body.getInsets();
+            int available = Math.max(1, scroll.getViewport().getExtentSize().width - padding.left - padding.right);
+            for (JPanel row : actionRows) DKit.layoutActions(row, available);
+        };
+        scroll.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) { reflow.run(); }
+        });
+        Runnable languageChanged = () -> {
+            Language.refresh(d);
+            reflow.run();
+        };
+        Language.addListener(languageChanged);
+        d.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosed(java.awt.event.WindowEvent e) { Language.removeListener(languageChanged); }
+        });
+        Dimension screen = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+        d.setSize(Math.min(screen.width - 80, Math.max(width, 490)), 500);
+        d.validate();
+        reflow.run();
+        d.validate();
+        d.setSize(d.getWidth(), Math.min(screen.height - 80,
+                Math.max(300 * t.textPercent() / 100, body.getPreferredSize().height + 70)));
         d.setLocationRelativeTo(window.frame());
         d.setVisible(true);
         return d;
@@ -573,39 +609,37 @@ public final class ContactsPanel extends JPanel implements MaximaWindow.Tab {
 
     /** core / classic pill next to a contact's presence; null for a plain peer. */
     private JComponent peerPill(Contact c) {
-        String label;
+        CharSequence label;
         boolean core;
         if (c.isKeets()) { label = "keets"; core = true; }
-        else if (c.isClassic()) { label = "classic"; core = false; }
-        else if ("core".equals(c.kind)) { label = "core"; core = true; }
+        else if (c.isClassic()) { label = Language.msg("desktopChat.classic"); core = false; }
+        else if ("core".equals(c.kind)) { label = Language.msg("desktopChat.core"); core = true; }
         else return null;
         DKit.RoundPanel p = k.round(core ? DKit.alpha(t.accent, 45) : t.input, 999);
         p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
         p.setBorder(new EmptyBorder(1, 8, 1, 8));
-        JLabel l = new JLabel(label);
-        l.setFont(t.semibold(9.5f));
+        JLabel l = Language.bind(new JLabel(), label);
+        Language.font(l, t.semibold(9.5f));
         l.setForeground(core ? t.text : t.subtext);
         p.add(l);
         p.setMaximumSize(p.getPreferredSize());
         return p;
     }
 
-    private String softwareLabel(Contact c) {
+    private CharSequence softwareLabel(Contact c) {
         if (c.isKeets()) return "KeetChat (keets)";
         if (c.isClassic()) return "Classic Maxima";
         if ("core".equals(c.kind)) return "Minima Core";
-        return "Parlons app";
+        return Language.msg("desktopChat.app");
     }
 
     private String presence(Contact c) {
         if (c.isKeets()) return "KeetChat";
         long ls = c.lastSeen;
-        if (ls <= 0) return "offline";
+        if (ls <= 0) return Language.text("nativeContacts.offline");
         long d = System.currentTimeMillis() - ls;
-        if (d < 30 * 60 * 1000L) return "online";
-        long m = d / 60000;
-        String ago = m < 60 ? m + "m" : (m < 1440 ? (m / 60) + "h" : (m / 1440) + "d");
-        return "last seen " + ago + " ago";
+        if (d < 30 * 60 * 1000L) return Language.text("presence.online");
+        return Language.text("presence.lastSeen", "time", Language.relative(d));
     }
 
     private static String shortKey(String key) {

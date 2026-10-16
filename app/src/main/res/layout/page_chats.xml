@@ -10,6 +10,7 @@
         android:orientation="vertical">
 
         <EditText
+            android:tag="l10n:hint=l10n_chat_search"
             android:id="@+id/chats_search"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -18,7 +19,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="4dp"
             android:background="@drawable/input"
-            android:hint="Search chats"
+            android:hint="@string/l10n_chat_search"
             android:importantForAutofill="no"
             android:inputType="text"
             android:maxLines="1"
@@ -53,13 +54,14 @@
         android:visibility="gone" />
 
     <ImageButton
+        android:tag="l10n:description=l10n_chat_new_chat"
         android:id="@+id/btn_new_group"
         android:layout_width="56dp"
         android:layout_height="56dp"
         android:layout_gravity="bottom|end"
         android:layout_margin="18dp"
         android:background="@drawable/fab_new"
-        android:contentDescription="New chat"
+        android:contentDescription="@string/l10n_chat_new_chat"
         android:elevation="5dp"
         android:padding="17dp"
         android:scaleType="fitCenter"

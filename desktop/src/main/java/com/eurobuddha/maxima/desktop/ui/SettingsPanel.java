@@ -26,7 +26,7 @@ import javax.swing.border.EmptyBorder;
  * restore a seed phrase), and about. Phone-only items (app-lock, battery, Android
  * app IPC) are intentionally omitted.
  */
-public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
+public final class SettingsPanel extends JPanel implements MaximaWindow.Tab, MaximaWindow.Responsive {
 
     private final DesktopNode node;
     private final Theme t;
@@ -35,6 +35,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
     private final JPanel mBody = new JPanel();
     private JLabel mKeyValue;
     private boolean mBuilt;
+    private final java.util.List<JPanel> mActionRows = new java.util.ArrayList<>();
 
     private static final Preferences PREFS =
             Preferences.userRoot().node("com/eurobuddha/maxima/desktop");
@@ -58,7 +59,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         add(sp, BorderLayout.CENTER);
     }
 
-    public String label() { return "Settings"; }
+    public String label() { return Language.text("nav.settings"); }
     public JComponent view() { return this; }
 
     public void refresh() {
@@ -70,18 +71,29 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
 
     private void build() {
         mBody.removeAll();
+        mActionRows.clear();
+
+        mBody.add(k.sectionLabel(Language.msg("language.title")));
+        mBody.add(k.vgap(8));
+        DKit.RoundPanel languageCard = k.card();
+        languageCard.add(k.sub(Language.msg("language.description")));
+        languageCard.add(k.vgap(8));
+        languageCard.add(k.ghostButton(Language.msg("language.change"))
+                .onClick(() -> Language.chooser(this)));
+        mBody.add(languageCard);
+        mBody.add(k.vgap(14));
 
         // ---- your name + maxima publickey ----
-        mBody.add(k.sectionLabel("Your name"));
+        mBody.add(k.sectionLabel(Language.msg("settings.yourName")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel nameCard = k.card();
         JPanel nameRow = rowX();
-        JTextField name = k.field("Display name");
+        JTextField name = k.field(Language.msg("desktop.displayName"));
         name.setText(currentName());
         name.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         nameRow.add(name);
         nameRow.add(Box.createRigidArea(new Dimension(9, 0)));
-        DKit.HoverButton set = k.primaryButton("Set");
+        DKit.HoverButton set = k.primaryButton(Language.msg("nativeSettings.set"));
         set.onClick(() -> {
             String nm = name.getText().trim();
             if (nm.isEmpty()) return;
@@ -94,72 +106,73 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         nameRow.add(set);
         nameCard.add(nameRow);
         nameCard.add(k.vgap(10));
-        JComponent keyField = k.copyField("maxima publickey", node.port().publicKeyHex(), false);
+        JComponent keyField = k.copyField(Language.msg("desktop.publicKey"), node.port().publicKeyHex(), false);
         nameCard.add(keyField);
         mKeyValue = findValueLabel(keyField);
         mBody.add(nameCard);
         mBody.add(k.vgap(14));
 
-        mBody.add(k.sectionLabel("Connected apps"));
+        mBody.add(k.sectionLabel(Language.msg("settings.connectedApps")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel apps = k.card();
-        apps.add(k.sub("minimaDocs can view, add and remove contacts and exchange document invitations."));
-        apps.add(k.sub("Account: " + node.port().name() + " · Parlons Desktop"));
-        apps.add(k.sub(node.docsLink().approvals() + " connected minimaDocs workspace(s)"));
+        apps.add(k.sub(Language.msg("desktop.docsHelp")));
+        apps.add(k.sub(Language.msg("desktop.docsAccount", "name", node.port().name())));
+        apps.add(k.sub(Language.msg("desktop.docsCount", "count", node.docsLink().approvals())));
         JPanel actions = rowX();
-        DKit.HoverButton connectDocs = k.primaryButton("Connect minimaDocs");
+        mActionRows.add(actions);
+        DKit.HoverButton connectDocs = k.primaryButton(Language.msg("settings.docsConnect"));
         connectDocs.onClick(() -> {
             try {
                 JPanel content = new JPanel(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-                content.add(k.sub("Paste into minimaDocs People. This link expires in two minutes and works once."));
-                content.add(k.copyField("Connection link", node.docsLink().approve(), false));
-                dialog("Connect minimaDocs · " + node.port().name(), content, 640);
-            } catch (Exception e) { javax.swing.JOptionPane.showMessageDialog(this, "Could not create link. Revoke old connections and retry."); }
+                content.add(k.sub(Language.msg("desktop.docsPaste")));
+                content.add(k.copyField(Language.msg("desktop.connectionLink"), node.docsLink().approve(), false));
+                dialog(Language.text("desktop.docsTitle", "name", node.port().name()), content, 640);
+            } catch (Exception e) { javax.swing.JOptionPane.showMessageDialog(this, Language.text("desktop.docsFailed")); }
         });
-        DKit.HoverButton revokeDocs = k.ghostButton("Revoke minimaDocs");
+        DKit.HoverButton revokeDocs = k.ghostButton(Language.msg("settings.docsRevoke"));
         revokeDocs.onClick(() -> {
             int answer = javax.swing.JOptionPane.showConfirmDialog(this,
-                    "Disconnect every minimaDocs workspace from this Parlons account? Document access is unchanged.",
-                    "Revoke minimaDocs", javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE);
+                    Language.text("desktop.docsRevokeQuestion"),
+                    Language.text("settings.docsRevoke"), javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE);
             if (answer != javax.swing.JOptionPane.OK_OPTION) return;
             try { node.docsLink().revoke(); rebuild(); }
-            catch (Exception e) { javax.swing.JOptionPane.showMessageDialog(this, "Revocation could not be saved. Please retry."); }
+            catch (Exception e) { javax.swing.JOptionPane.showMessageDialog(this, Language.text("desktop.docsRevokeFailed")); }
         });
         actions.add(connectDocs); actions.add(revokeDocs); apps.add(actions); mBody.add(apps); mBody.add(k.vgap(14));
 
         // ---- privacy ----
-        mBody.add(k.sectionLabel("Privacy"));
+        mBody.add(k.sectionLabel(Language.msg("settings.privacy")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel priv = k.card();
         boolean rr = PREFS.getBoolean("readReceipts", true);
         node.setReadReceipts(rr);
-        priv.add(switchRow("Read receipts",
-                rr ? "Contacts are told when you read their message"
-                        : "Contacts see delivery only, never when you read", rr, on -> {
+        priv.add(switchRow(Language.msg("settings.readReceipts"),
+                rr ? Language.msg("nativeSettings.receiptsOn")
+                        : Language.msg("nativeSettings.receiptsOff"), rr, on -> {
             PREFS.putBoolean("readReceipts", on);
             node.setReadReceipts(on);
             rebuild();
         }));
         priv.add(k.divider());
         boolean snd = Chirp.enabled();
-        priv.add(switchRow("Message sound",
-                snd ? "Pssst! when a message arrives" : "Silent", snd, on -> {
+        priv.add(switchRow(Language.msg("nativeSettings.sound"),
+                snd ? Language.msg("nativeSettings.soundOn") : Language.msg("desktop.silent"), snd, on -> {
             Chirp.setEnabled(on);
             if (on) Chirp.play();   // audition it, like flipping it on the phone
             rebuild();
         }));
         priv.add(k.divider());
-        priv.add(k.kvLine("Delivery receipts", "always on"));
+        priv.add(k.kvLine(Language.msg("nativeSettings.delivery"), Language.msg("desktop.alwaysOn")));
         mBody.add(priv);
         mBody.add(k.vgap(14));
 
         // ---- appearance ----
-        mBody.add(k.sectionLabel("Appearance"));
+        mBody.add(k.sectionLabel(Language.msg("settings.appearance")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel appear = k.card();
         String cur = PREFS.get("appearance", "system");
         int sel = cur.equals("light") ? 1 : cur.equals("dark") ? 2 : 0;
-        DKit.Segmented seg = k.segmented(new String[]{"System", "Light", "Dark"}, sel, i -> {
+        DKit.Segmented seg = k.segmented(new CharSequence[]{Language.msg("theme.systemLabel"), Language.msg("theme.lightLabel"), Language.msg("theme.darkLabel")}, sel, i -> {
             String val = i == 1 ? "light" : i == 2 ? "dark" : "system";
             PREFS.put("appearance", val);
             Theme.Mode m = val.equals("dark") ? Theme.Mode.DARK
@@ -172,13 +185,13 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(14));
 
         // ---- node ----
-        mBody.add(k.sectionLabel("Node"));
+        mBody.add(k.sectionLabel(Language.msg("nav.node")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel nodeCard = k.card();
         boolean core = PREFS.getBoolean("coreNode", true);
-        nodeCard.add(switchRow("Run as core node",
-                core ? "Shown to contacts as an always-on core node"
-                        : "Shown to contacts as an ordinary node", core, on -> {
+        nodeCard.add(switchRow(Language.msg("nativeSettings.core"),
+                core ? Language.msg("nativeSettings.coreOn")
+                        : Language.msg("desktop.ordinaryNode"), core, on -> {
             PREFS.putBoolean("coreNode", on);
             try { if (node.node() != null) node.node().setNodeKind(on ? "core" : ""); }
             catch (Exception ignored) { }
@@ -189,9 +202,9 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         // exports its contact book to the built-in store FIRST (or contacts added
         // on the jar vanish), then flips the pref and restarts the engine in place.
         boolean jarOn = DesktopNode.jarMode();
-        nodeCard.add(switchRow("Classic engine",
-                jarOn ? "Routing runs on classic Maxima (maxima.jar)"
-                        : "Routing runs on the built-in engine — flip for classic Maxima",
+        nodeCard.add(switchRow(Language.msg("nativeSettings.classic"),
+                jarOn ? Language.msg("nativeSettings.classicOn")
+                        : Language.msg("desktop.builtinHelp"),
                 jarOn, on -> {
             java.util.prefs.Preferences pf =
                     java.util.prefs.Preferences.userRoot().node(DesktopNode.PREFS);
@@ -213,7 +226,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(14));
 
         // ---- node link: KeetChat via a local minimaCore Desktop node ----
-        mBody.add(k.sectionLabel("Node link (KeetChat)"));
+        mBody.add(k.sectionLabel(Language.msg("desktop.nodeLink")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel linkCard = k.card();
         javax.swing.JTextField linkUrl = new javax.swing.JTextField(
@@ -223,52 +236,56 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         }
         javax.swing.JPasswordField linkPw = new javax.swing.JPasswordField(
                 com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.configuredPassword());
-        javax.swing.JLabel linkState = new javax.swing.JLabel(
+        linkUrl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        linkPw.setAlignmentX(Component.LEFT_ALIGNMENT);
+        javax.swing.JLabel linkState = k.sub(
                 node.chat().hasKeets()
                         ? (node.chat().keetsPubkey() != null
-                                ? "Linked \u2014 KeetChat contacts available"
-                                : "Linked \u2014 waiting for the node's keets")
-                        : "Not linked \u2014 KeetChat contacts unavailable");
-        linkState.setFont(t.font(11f));
+                                ? Language.msg("desktop.linked")
+                                : Language.msg("desktop.linkedWaiting"))
+                        : Language.msg("desktop.unlinked"));
+        Language.font(linkState, t.font(11f));
         linkState.setForeground(t.subtext);
-        javax.swing.JButton linkSave = new javax.swing.JButton("Save & connect");
-        javax.swing.JButton linkClear = new javax.swing.JButton("Clear");
+        javax.swing.JButton linkSave = Language.bind(new javax.swing.JButton(), Language.msg("desktop.linkConnect"));
+        javax.swing.JButton linkClear = Language.bind(new javax.swing.JButton(), Language.msg("common.clear"));
         linkSave.addActionListener(ev -> {
             com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.save(
                     linkUrl.getText().trim(), new String(linkPw.getPassword()));
-            linkState.setText("Connecting\u2026");
+            k.setSub(linkState, Language.msg("connection.connecting"));
             node.restartKeets();
             new Thread(() -> {
                 try { Thread.sleep(2500); } catch (InterruptedException ignored) { }
                 String kpk = node.chat().keetsPubkey();
-                javax.swing.SwingUtilities.invokeLater(() -> linkState.setText(
-                        kpk != null ? "Linked \u2014 KeetChat contacts available"
-                                    : "Linked \u2014 node answered no keets identity yet"));
+                javax.swing.SwingUtilities.invokeLater(() -> k.setSub(linkState,
+                        kpk != null ? Language.msg("desktop.linked")
+                                    : Language.msg("desktop.linkedNoIdentity")));
             }, "keets-link-check").start();
         });
         linkClear.addActionListener(ev -> {
             com.eurobuddha.maxima.desktop.wallet.DesktopNodeLink.clear();
-            linkState.setText("Not linked \u2014 KeetChat contacts unavailable");
+            k.setSub(linkState, Language.msg("desktop.unlinked"));
         });
         javax.swing.JPanel linkRow = new javax.swing.JPanel();
         linkRow.setOpaque(false);
+        linkRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         linkRow.setLayout(new BoxLayout(linkRow, BoxLayout.Y_AXIS));
-        javax.swing.JLabel linkHint = new javax.swing.JLabel(
-                "A minimaCore Desktop node on THIS machine (0.18.4+). Its chat app owns"
-                + " the inbox and relays KeetChat messages here.");
-        linkHint.setFont(t.font(11f));
+        javax.swing.JLabel linkHint = k.sub(Language.msg("desktop.linkHelp"));
+        Language.font(linkHint, t.font(11f));
         linkHint.setForeground(t.subtext);
         linkRow.add(linkHint);
         linkRow.add(k.vgap(6));
-        linkRow.add(k.kvLine("RPC URL", ""));
+        linkRow.add(k.kvLine(Language.msg("desktop.rpcUrl"), ""));
         linkRow.add(linkUrl);
         linkRow.add(k.vgap(6));
-        linkRow.add(k.kvLine("RPC password (if set)", ""));
+        linkRow.add(k.kvLine(Language.msg("desktop.rpcPassword"), ""));
         linkRow.add(linkPw);
         linkRow.add(k.vgap(8));
         javax.swing.JPanel linkBtns = new javax.swing.JPanel(
                 new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0));
         linkBtns.setOpaque(false);
+        linkBtns.setAlignmentX(Component.LEFT_ALIGNMENT);
+        linkBtns.setMinimumSize(new Dimension(0, 0));
+        mActionRows.add(linkBtns);
         linkBtns.add(linkSave);
         linkBtns.add(linkClear);
         linkRow.add(linkBtns);
@@ -280,16 +297,17 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(14));
 
         // ---- keys & security ----
-        mBody.add(k.sectionLabel("Keys & security"));
+        mBody.add(k.sectionLabel(Language.msg("nativeSettings.keysSecurity")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel keys = k.card();
-        keys.add(k.kvLine("Seed phrase", "24 words"));
-        keys.add(k.sub("These words are your identity AND a spendable Minima wallet seed."));
+        keys.add(k.kvLine(Language.msg("nativeSettings.seed"), Language.msg("nativeSettings.seedWords")));
+        keys.add(k.sub(Language.msg("desktop.seedWarning")));
         keys.add(k.vgap(10));
         JPanel kr = rowX();
-        DKit.HoverButton show = k.dangerButton("Show seed phrase");
+        mActionRows.add(kr);
+        DKit.HoverButton show = k.dangerButton(Language.msg("nativeSettings.showSeed"));
         show.onClick(this::showSeed);
-        DKit.HoverButton restore = k.ghostButton("Restore a seed phrase");
+        DKit.HoverButton restore = k.ghostButton(Language.msg("nativeSettings.restoreSeed"));
         restore.onClick(this::restoreSeed);
         kr.add(show);
         kr.add(Box.createRigidArea(new Dimension(8, 0)));
@@ -300,16 +318,16 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         mBody.add(k.vgap(14));
 
         // ---- about ----
-        mBody.add(k.sectionLabel("About"));
+        mBody.add(k.sectionLabel(Language.msg("nativeSettings.about")));
         mBody.add(k.vgap(8));
         DKit.RoundPanel about = k.card();
-        about.add(k.sub("Maxima desktop — a decentralized, relay-routed messenger. "
-                + "Your identity lives only on your devices; no server holds your account."));
+        about.add(k.sub(Language.msg("desktop.about")));
         about.add(k.vgap(6));
-        about.add(k.kvLine("Version", DesktopMain.APP_VERSION));
+        about.add(k.kvLine(Language.msg("common.version"), DesktopMain.APP_VERSION));
         mBody.add(about);
 
         mBody.add(Box.createVerticalGlue());
+        if (getWidth() > 0) onWidth(getWidth());
         mBody.revalidate();
         mBody.repaint();
     }
@@ -320,18 +338,17 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
 
     private void showSeed() {
         int ok = javax.swing.JOptionPane.showConfirmDialog(this,
-                "Your 24 words are your identity AND a spendable wallet seed.\n"
-                        + "Make sure nobody is looking. Reveal them?",
-                "Show seed phrase?", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                Language.text("desktop.revealQuestion"),
+                Language.text("nativeDialog.showSeedQuestion"), javax.swing.JOptionPane.OK_CANCEL_OPTION,
                 javax.swing.JOptionPane.WARNING_MESSAGE);
         if (ok != javax.swing.JOptionPane.OK_OPTION) return;
         String phrase = node.seedPhrase();
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
-        body.add(k.sub("Write these down, offline. Anyone with them is you."));
+        body.add(k.sub(Language.msg("desktop.seedOffline")));
         body.add(k.vgap(10));
-        JTextArea ta = new JTextArea(phrase.isEmpty() ? "(unavailable)" : phrase);
+        JTextArea ta = new JTextArea(phrase.isEmpty() ? Language.text("desktop.unavailable") : phrase);
         ta.setLineWrap(true);
         ta.setWrapStyleWord(true);
         ta.setEditable(false);
@@ -343,12 +360,12 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         body.add(ta);
         body.add(k.vgap(12));
         JPanel r = rowX();
-        DKit.HoverButton copy = k.primaryButton("Copy (auto-clears in 60s)");
+        DKit.HoverButton copy = k.primaryButton(Language.msg("desktop.copySeed"));
         copy.onClick(() -> copySeedAutoClear(phrase));
         r.add(copy);
         r.add(Box.createHorizontalGlue());
         body.add(r);
-        dialog("Your seed phrase", body, 460);
+        dialog(Language.text("desktop.yourSeed"), body, 460);
     }
 
     private void copySeedAutoClear(String phrase) {
@@ -365,7 +382,7 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         });
         tm.setRepeats(false);
         tm.start();
-        javax.swing.JOptionPane.showMessageDialog(this, "Copied — will auto-clear in 60s.");
+        javax.swing.JOptionPane.showMessageDialog(this, Language.text("desktop.seedCopied"));
     }
 
     private void restoreSeed() {
@@ -374,10 +391,9 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         input.setWrapStyleWord(true);
         int ok = javax.swing.JOptionPane.showConfirmDialog(this,
                 new Object[]{
-                    "This REPLACES the identity on this machine with the one your words derive.\n"
-                            + "Contacts and chats here are cleared. Paste your 24 words:",
+                    Language.text("desktop.restoreQuestion"),
                     new JScrollPane(input)},
-                "Restore a seed phrase", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                Language.text("nativeSettings.restoreSeed"), javax.swing.JOptionPane.OK_CANCEL_OPTION,
                 javax.swing.JOptionPane.WARNING_MESSAGE);
         if (ok != javax.swing.JOptionPane.OK_OPTION) return;
         String phrase = input.getText().trim();
@@ -385,26 +401,26 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         try {
             node.restoreSeed(phrase);
             javax.swing.JOptionPane.showMessageDialog(this,
-                    "Identity restored. Maxima will now close — reopen it to use the restored identity.");
+                    Language.text("desktop.restored"));
             System.exit(0);
         } catch (Exception e) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Couldn't restore: " + e.getMessage());
+            javax.swing.JOptionPane.showMessageDialog(this, Language.text("desktop.restoreError", "error", Language.system(e.getMessage())));
         }
     }
 
     // ---- helpers ----
 
-    private JComponent switchRow(String title, String hint, boolean on,
+    private JComponent switchRow(CharSequence title, CharSequence hint, boolean on,
                                  java.util.function.Consumer<Boolean> cb) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(6, 0, 6, 0));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
+        row.setMinimumSize(new Dimension(0, 0));
         JPanel left = new JPanel();
         left.setOpaque(false);
         left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
-        JLabel tl = new JLabel(title);
-        tl.setFont(t.semibold(13.5f));
+        JLabel tl = Language.bind(new JLabel(), title);
+        Language.font(tl, t.semibold(13.5f));
         tl.setForeground(t.text);
         tl.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel hl = k.sub(hint);
@@ -425,8 +441,16 @@ public final class SettingsPanel extends JPanel implements MaximaWindow.Tab {
         r.setOpaque(false);
         r.setLayout(new BoxLayout(r, BoxLayout.X_AXIS));
         r.setAlignmentX(Component.LEFT_ALIGNMENT);
+        r.setMinimumSize(new Dimension(0, 0));
         r.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         return r;
+    }
+
+    /** Keep the same controls; stack long translated actions when the column is narrow. */
+    @Override public void onWidth(int width) {
+        int available = Math.max(1, Math.min(720, width - 44) - 56);
+        for (JPanel row : mActionRows) DKit.layoutActions(row, available);
+        mBody.revalidate();
     }
 
     private JDialog dialog(String title, JComponent body, int width) {

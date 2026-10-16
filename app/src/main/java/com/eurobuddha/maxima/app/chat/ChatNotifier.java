@@ -4,6 +4,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.ChatPreview;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.content.Intent;
 import android.os.Build;
 
@@ -67,9 +70,9 @@ public final class ChatNotifier {
                 && nm.getNotificationChannel(CHANNEL_ID_MUTED) != null)) {
             return;
         }
-        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Messages",
+        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, Language.text(zCtx,R.string.l10n_notification_messages),
                 NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Incoming Parlons messages");
+        ch.setDescription(Language.text(zCtx,R.string.l10n_notification_incoming_messages));
         ch.enableVibration(true);
         ch.setShowBadge(true);
         // The Parlons "pssssst!" - channel sound settings are immutable after
@@ -86,8 +89,8 @@ public final class ChatNotifier {
                         .build());
         nm.createNotificationChannel(ch);
         NotificationChannel muted = new NotificationChannel(CHANNEL_ID_MUTED,
-                "Messages (muted)", NotificationManager.IMPORTANCE_HIGH);
-        muted.setDescription("Incoming Parlons messages, sound off");
+                Language.text(zCtx,R.string.l10n_notification_messages_muted), NotificationManager.IMPORTANCE_HIGH);
+        muted.setDescription(Language.text(zCtx,R.string.l10n_notification_incoming_muted));
         muted.enableVibration(true);
         muted.setShowBadge(true);
         muted.setSound(null, null);
@@ -134,7 +137,7 @@ public final class ChatNotifier {
             fresh = fresh.subList(fresh.size() - 8, fresh.size());
         }
 
-        Person me = new Person.Builder().setName("You").build();
+        Person me = new Person.Builder().setName(Language.text(zCtx,R.string.l10n_notification_you)).build();
         NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(me);
         if (group) {
             style.setConversationTitle(Names.of(zNode, zChat, zConversation));
@@ -153,10 +156,7 @@ public final class ChatNotifier {
                         .build();
                 people.put(e.sender, p);
             }
-            String line = ChatPay.isPayment(e.body) ? ChatPay.preview(e.body)
-                    : com.eurobuddha.maxima.core.chat.ChatContact.isCard(e.body)
-                    ? com.eurobuddha.maxima.core.chat.ChatContact.preview(e.body)
-                    : ChatMedia.preview(e.body);
+            String line = ChatPreview.text(zCtx,e.body);
             style.addMessage(line, e.time, p);
         }
 

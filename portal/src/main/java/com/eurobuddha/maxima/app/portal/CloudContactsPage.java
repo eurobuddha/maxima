@@ -1,6 +1,10 @@
 package com.eurobuddha.maxima.app.portal;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.text.InputType;
@@ -45,6 +49,9 @@ public final class CloudContactsPage implements Page {
     private final View mView;
     private final LinearLayout mRoot;
     private EditText mAddField;
+    private EditText mSearchField;
+    private TextView mAddressValue;
+    private TextView mContactCount;
     private String mPermanent = "";
     private final List<C> mContacts = new ArrayList<>();
     private volatile boolean mBusy;
@@ -80,8 +87,8 @@ public final class CloudContactsPage implements Page {
         if (shown.isEmpty()) {
             LinearLayout empty = PortalUi.card(c);
             empty.addView(PortalUi.label(c, mQuery.isEmpty()
-                    ? "No contacts yet. Add someone by their address below."
-                    : "No contacts match \"" + mQuery + "\"."));
+                    ? Language.msg(R.string.l10n_native_contacts_empty_cloud)
+                    : Language.msg(R.string.l10n_native_contacts_no_matches, mQuery)));
             mContactsHost.addView(empty);
         } else {
             LinearLayout list = PortalUi.card(c);
@@ -107,8 +114,8 @@ public final class CloudContactsPage implements Page {
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT, s);            // full address, never truncated
-        send.putExtra(Intent.EXTRA_SUBJECT, "My Parlons Cloud address");
-        mAct.startActivity(Intent.createChooser(send, "Share your address"));
+        send.putExtra(Intent.EXTRA_SUBJECT, tr(R.string.l10n_native_contacts_my_cloud_address));
+        mAct.startActivity(Intent.createChooser(send, tr(R.string.l10n_native_contacts_share_your_address)));
     }
 
     public CloudContactsPage(MainActivity zAct, View zView) {
@@ -124,16 +131,13 @@ public final class CloudContactsPage implements Page {
 
     @Override
     public CharSequence title() {
-        return "Contacts";
+        return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_contacts);
     }
 
     @Override
     public void render() {
         if (mBusy) {
             return;
-        }
-        if (mBuilt && !mQuery.isEmpty()) {
-            return;   // an active search filters in place; don't tear the page down under the user
         }
         long now = System.currentTimeMillis();
         if (mBuilt && now - mLastLoad < 4000) {
@@ -187,7 +191,7 @@ public final class CloudContactsPage implements Page {
                     mBusy = false;
                     if (!mBuilt) {
                         mRoot.removeAllViews();
-                        mRoot.addView(PortalUi.label(mAct, "Can't reach your account.\n" + m));
+                        mRoot.addView(PortalUi.label(mAct, Language.msg(R.string.l10n_native_chat_unreachable, m)));
                         mBuilt = true;
                     }
                 });
@@ -214,34 +218,44 @@ public final class CloudContactsPage implements Page {
     /** Called by MainActivity after a QR scan resolves to an address. */
     public void onScanned(String zContents) {
         if (mAddField != null && zContents != null) {
-            mAddField.setText(zContents.trim());
+            Language.setText(mAddField, zContents.trim());
         }
     }
 
     private void rebuild() {
         mBuilt = true;
+        if (mAddressValue != null) {
+            // Keep both input widgets, their drafts, selections and composing text alive.
+            Language.setText(mAddressValue, mPermanent.isEmpty()
+                    ? Language.msg(R.string.l10n_native_contacts_resolving) : mPermanent);
+            Language.setText(mContactCount, Language.upper(Language.msg(R.string.l10n_native_contacts_list_count, mContacts.size())));
+            mSearchField.setVisibility(mContacts.size() >= 5 || mSearchField.length() > 0 ? View.VISIBLE : View.GONE);
+            repopulateContacts();
+            return;
+        }
         mRoot.removeAllViews();
         Context c = mAct;
 
         // --- your account address (the always-reachable one) ---
-        mRoot.addView(PortalUi.section(c, "Your account address"));
+        mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_native_contacts_account_address)));
         LinearLayout addr = PortalUi.card(c);
-        TextView hint = PortalUi.label(c, "Share this so people can reach you — it stays the same on every device.");
+        TextView hint = PortalUi.label(c, Language.msg(R.string.l10n_native_contacts_account_address_help));
         addr.addView(hint);
         addr.addView(PortalUi.gap(c, 8));
-        TextView val = PortalUi.value(c, mPermanent.isEmpty() ? "(resolving…)" : mPermanent);
+        TextView val = PortalUi.value(c, mPermanent.isEmpty() ? Language.msg(R.string.l10n_native_contacts_resolving) : mPermanent);
+        mAddressValue = val;
         val.setTextSize(13);
         addr.addView(val);
         addr.addView(PortalUi.gap(c, 10));
         LinearLayout btns = new LinearLayout(c);
         btns.setOrientation(LinearLayout.HORIZONTAL);
-        TextView copy = PortalUi.ghost(c, "Copy");
+        TextView copy = PortalUi.ghost(c, Language.msg(R.string.l10n_common_copy));
         LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp1.rightMargin = PortalUi.dp(c, 6);
         copy.setOnClickListener(v -> copyToClipboard(mPermanent));
         btns.addView(copy, lp1);
-        TextView qr = PortalUi.ghost(c, "Show QR");
+        TextView qr = PortalUi.ghost(c, Language.msg(R.string.l10n_contacts_show_qr));
         LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp2.leftMargin = PortalUi.dp(c, 6);
@@ -249,20 +263,21 @@ public final class CloudContactsPage implements Page {
         btns.addView(qr, lp2);
         addr.addView(btns);
         addr.addView(PortalUi.gap(c, 6));
-        TextView share = PortalUi.ghost(c, "Share address");
+        TextView share = PortalUi.ghost(c, Language.msg(R.string.l10n_native_contacts_share_address));
         share.setOnClickListener(v -> shareAddress(mPermanent));
         addr.addView(share);
         mRoot.addView(addr);
 
         // --- contacts ---
-        mRoot.addView(PortalUi.section(c, "Contacts (" + mContacts.size() + ")"));
-        // Search filter — only shown once there are enough contacts to be worth filtering. Filters
-        // the list card IN PLACE (see repopulateContacts) so the field keeps focus while typing;
-        // render() skips its full rebuild while a query is active, so the field is never torn down.
-        if (mContacts.size() >= 5 || !mQuery.isEmpty()) {
+        mContactCount = PortalUi.section(c, Language.msg(R.string.l10n_native_contacts_list_count, mContacts.size()));
+        mRoot.addView(mContactCount);
+        // Build once, then update only the list so drafts and IME composition survive refresh.
+        {
             EditText search = new EditText(c);
-            search.setHint("Search contacts");
-            search.setText(mQuery);
+            mSearchField = search;
+            search.setVisibility(mContacts.size() >= 5 || !mQuery.isEmpty() ? View.VISIBLE : View.GONE);
+            Language.hint(search, Language.msg(R.string.l10n_contacts_search));
+            Language.setText(search, mQuery);
             search.setSelection(mQuery.length());
             search.setSingleLine(true);
             search.setTextColor(c.getColor(R.color.ux_text));
@@ -289,10 +304,10 @@ public final class CloudContactsPage implements Page {
         repopulateContacts();
 
         // --- add a contact ---
-        mRoot.addView(PortalUi.section(c, "Add a contact"));
+        mRoot.addView(PortalUi.section(c, Language.msg(R.string.l10n_contacts_add_heading)));
         LinearLayout add = PortalUi.card(c);
         mAddField = new EditText(c);
-        mAddField.setHint("Mx…@host:port address");
+        Language.hint(mAddField, Language.msg(R.string.l10n_native_contacts_address_hint));
         mAddField.setTextColor(c.getColor(R.color.ux_text));
         mAddField.setHintTextColor(c.getColor(R.color.ux_subtext));
         mAddField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -310,13 +325,13 @@ public final class CloudContactsPage implements Page {
         add.addView(PortalUi.gap(c, 8));
         LinearLayout addBtns = new LinearLayout(c);
         addBtns.setOrientation(LinearLayout.HORIZONTAL);
-        TextView scan = PortalUi.ghost(c, "Scan QR");
+        TextView scan = PortalUi.ghost(c, Language.msg(R.string.l10n_common_scan_qr));
         LinearLayout.LayoutParams alp1 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         alp1.rightMargin = PortalUi.dp(c, 6);
         scan.setOnClickListener(v -> mAct.scanIntoContacts());
         addBtns.addView(scan, alp1);
-        TextView doAdd = PortalUi.button(c, "Add");
+        TextView doAdd = PortalUi.button(c, Language.msg(R.string.l10n_common_add));
         LinearLayout.LayoutParams alp2 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         alp2.leftMargin = PortalUi.dp(c, 6);
@@ -346,12 +361,12 @@ public final class CloudContactsPage implements Page {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView nm = new TextView(c);
-        nm.setText(contact.name.isEmpty() ? contact.key : contact.name);
+        Language.setText(nm, contact.name.isEmpty() ? contact.key : contact.name);
         nm.setTextColor(c.getColor(R.color.ux_text));
         nm.setTextSize(16);
         col.addView(nm);
         TextView sub = new TextView(c);
-        sub.setText(contact.address.isEmpty() ? "reachable via your account" : "tap to chat");
+        Language.setText(sub, contact.address.isEmpty() ? Language.msg(R.string.l10n_native_contacts_via_account) : Language.msg(R.string.l10n_native_contacts_tap_chat));
         sub.setTextColor(c.getColor(R.color.ux_subtext));
         sub.setTextSize(12);
         col.addView(sub);
@@ -400,19 +415,19 @@ public final class CloudContactsPage implements Page {
         box.addView(PortalUi.title(c, nm));
         if (info != null && bool(info, "ok")) {
             String kind = str(info, "kind");
-            box.addView(PortalUi.kv(c, "Software", bool(info, "classic") ? "Classic Maxima"
+            box.addView(PortalUi.kv(c, Language.msg(R.string.l10n_native_contacts_software), bool(info, "classic") ? "Classic Maxima"
                     : kind.isEmpty() ? "Parlons" : kind));
             long ls = lng(info, "lastSeen");
-            box.addView(PortalUi.kv(c, "Last seen", presence(ls)));
+            box.addView(PortalUi.kv(c, Language.msg(R.string.l10n_native_contacts_last_seen), presence(ls)));
             box.addView(PortalUi.gap(c, 8));
-            box.addView(PortalUi.label(c, "Public key"));
+            box.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_contacts_public_key)));
             TextView k = PortalUi.value(c, str(info, "key"));
             k.setTextSize(11);
             box.addView(k);
             JSONArray addrs = (JSONArray) info.get("addresses");
             if (addrs != null && !addrs.isEmpty()) {
                 box.addView(PortalUi.gap(c, 8));
-                box.addView(PortalUi.label(c, "Addresses"));
+                box.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_contacts_addresses)));
                 for (Object o : addrs) {
                     TextView a = PortalUi.value(c, String.valueOf(o));
                     a.setTextSize(11);
@@ -422,7 +437,7 @@ public final class CloudContactsPage implements Page {
             String wallet = str(info, "wallet");
             if (!wallet.isEmpty()) {
                 box.addView(PortalUi.gap(c, 8));
-                box.addView(PortalUi.label(c, "Payment address (MINIMA)"));
+                box.addView(PortalUi.label(c, Language.msg(R.string.l10n_native_contacts_payment_address)));
                 TextView w = PortalUi.value(c, wallet);
                 w.setTextSize(11);
                 box.addView(w);
@@ -430,22 +445,22 @@ public final class CloudContactsPage implements Page {
         }
         android.widget.ScrollView scroll = new android.widget.ScrollView(c);
         scroll.addView(box);
-        new AlertDialog.Builder(c)
+        new LanguageDialog(c)
                 .setView(scroll)
-                .setPositiveButton("Message", (d, w) -> {
+                .setPositiveButton(Language.msg(R.string.l10n_chat_message), (d, w) -> {
                     Intent i = new Intent(mAct, CloudChatActivity.class);
                     i.putExtra(CloudChatActivity.EXTRA_PEER, contact.key);
                     i.putExtra(CloudChatActivity.EXTRA_NAME, contact.name);
                     mAct.startActivity(i);
                 })
-                .setNeutralButton("More", (d, w) -> moreMenu(contact))
-                .setNegativeButton("Close", null)
+                .setNeutralButton(Language.msg(R.string.l10n_common_more), (d, w) -> moreMenu(contact))
+                .setNegativeButton(Language.msg(R.string.l10n_language_close), null)
                 .show();
     }
 
     private void moreMenu(C contact) {
-        new AlertDialog.Builder(mAct)
-                .setItems(new CharSequence[]{"Rename", "Reconnect now", "Remove contact"},
+        new LanguageDialog(mAct)
+                .setItems(new CharSequence[]{Language.msg(R.string.l10n_common_rename), Language.msg(R.string.l10n_native_contacts_reconnect_now), Language.msg(R.string.l10n_contacts_remove)},
                         (d, which) -> {
                             if (which == 0) {
                                 promptRename(contact);
@@ -460,12 +475,11 @@ public final class CloudContactsPage implements Page {
 
     private void confirmRemove(C contact) {
         String nm = contact.name.isEmpty() ? contact.key : contact.name;
-        new AlertDialog.Builder(mAct)
-                .setTitle("Remove " + nm + "?")
-                .setMessage("They stay able to write to you and keep your address — this just "
-                        + "removes them from your list.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Remove", (d, w) -> {
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_contacts_remove_name, nm))
+                .setMessage(Language.msg(R.string.l10n_native_contacts_remove_help))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_remove), (d, w) -> {
                     CloudSession.connect(mAct, new CloudSession.Cb() {
                         public void ok(ParlonsRemote r) {
                             String error = null;
@@ -480,31 +494,23 @@ public final class CloudContactsPage implements Page {
                             }
                             final String err = error;
                             mAct.runOnUiThread(() -> {
-                                mAct.toast(err == null ? "Removed" : "Failed: " + err);
+                                mAct.toast(err == null ? tr(R.string.l10n_common_removed) : tr(R.string.l10n_native_chat_operation_failed, SystemMessages.text(mAct, err)));
                                 mLastLoad = 0;
                                 render();
                             });
                         }
                         public void err(String m) {
-                            mAct.runOnUiThread(() -> mAct.toast("Failed: " + m));
+                            mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_native_chat_operation_failed, SystemMessages.text(mAct, m))));
                         }
                     });
                 })
                 .show();
     }
 
-    private static String presence(long lastSeen) {
-        if (lastSeen <= 0) {
-            return "never";
-        }
-        long ago = System.currentTimeMillis() - lastSeen;
-        if (ago < 30 * 60_000L) {
-            return "online now";
-        }
-        long m = ago / 60_000, h = m / 60, d = h / 24;
-        if (d > 0) return d + "d ago";
-        if (h > 0) return h + "h ago";
-        return m + "m ago";
+    private String presence(long lastSeen) {
+        if (lastSeen <= 0) return tr(R.string.l10n_native_contacts_never);
+        long age = System.currentTimeMillis() - lastSeen;
+        return age < 30 * 60_000L ? tr(R.string.l10n_native_contacts_online_now) : Language.ago(age);
     }
 
     private static long lng(JSONObject o, String k) {
@@ -519,7 +525,7 @@ public final class CloudContactsPage implements Page {
 
     /** Force the account to re-resolve this contact's current address from their directory. */
     private void reconnect(C contact) {
-        mAct.toast("Reconnecting…");
+        mAct.toast(tr(R.string.l10n_connection_reconnecting));
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String msg;
@@ -529,8 +535,8 @@ public final class CloudContactsPage implements Page {
                     if (ok instanceof Boolean && (Boolean) ok) {
                         Object up = res.get("updated");
                         msg = (up instanceof Boolean && (Boolean) up)
-                                ? "Fresh address found — reconnected"
-                                : "Address unchanged — they may just be offline";
+                                ? tr(R.string.l10n_native_contacts_reconnected)
+                                : tr(R.string.l10n_native_contacts_address_unchanged);
                     } else {
                         msg = String.valueOf(res.get("error"));
                     }
@@ -539,13 +545,13 @@ public final class CloudContactsPage implements Page {
                 }
                 final String fmsg = msg;
                 mAct.runOnUiThread(() -> {
-                    mAct.toast(fmsg);
+                    mAct.toast(SystemMessages.text(mAct, fmsg));
                     mLastLoad = 0;
                     render();
                 });
             }
             public void err(String m) {
-                mAct.runOnUiThread(() -> mAct.toast(m));
+                mAct.runOnUiThread(() -> mAct.toast(SystemMessages.text(mAct, m)));
             }
         });
     }
@@ -553,21 +559,21 @@ public final class CloudContactsPage implements Page {
     /** Long-press → rename: a local display-name override stored on the account. */
     private void promptRename(C contact) {
         final EditText field = new EditText(mAct);
-        field.setText(contact.name);
-        field.setHint("Name for this contact");
+        Language.setText(field, contact.name);
+        Language.hint(field, Language.msg(R.string.l10n_native_contacts_contact_name));
         field.setSingleLine(true);
         int pad = PortalUi.dp(mAct, 20);
         android.widget.FrameLayout wrap = new android.widget.FrameLayout(mAct);
         wrap.setPadding(pad, PortalUi.dp(mAct, 8), pad, 0);
         wrap.addView(field);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Rename contact")
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_contacts_rename_contact))
                 .setView(wrap)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Rename", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_common_rename), (d, w) -> {
                     String name = field.getText().toString().trim();
                     if (name.isEmpty()) {
-                        mAct.toast("Name can't be empty");
+                        mAct.toast(tr(R.string.l10n_native_contacts_name_required));
                         return;
                     }
                     CloudSession.connect(mAct, new CloudSession.Cb() {
@@ -585,16 +591,16 @@ public final class CloudContactsPage implements Page {
                             final String err = error;
                             mAct.runOnUiThread(() -> {
                                 if (err == null) {
-                                    mAct.toast("Renamed");
+                                    mAct.toast(tr(R.string.l10n_common_renamed));
                                     mLastLoad = 0;
                                     render();
                                 } else {
-                                    mAct.toast("Could not rename: " + err);
+                                    mAct.toast(tr(R.string.l10n_native_contacts_rename_failed, SystemMessages.text(mAct, err)));
                                 }
                             });
                         }
                         public void err(String m) {
-                            mAct.runOnUiThread(() -> mAct.toast("Could not rename: " + m));
+                            mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_native_contacts_rename_failed, SystemMessages.text(mAct, m))));
                         }
                     });
                 })
@@ -604,16 +610,16 @@ public final class CloudContactsPage implements Page {
 
     private void addContact(String address) {
         if (address.isEmpty()) {
-            mAct.toast("Paste or scan an address first");
+            mAct.toast(tr(R.string.l10n_native_contacts_paste_first));
             return;
         }
         // Mirror the app's introduceAddr guard: a Parlons address is Mx…@host:port or a MAX#…
         // permanent address. Reject anything else up-front and KEEP the field so it can be fixed.
         if (!address.startsWith("Mx") && !address.startsWith("MAX#")) {
-            mAct.toast("That doesn't look like a Parlons address — it should start with Mx… or MAX#…");
+            mAct.toast(tr(R.string.l10n_native_contacts_address_format));
             return;
         }
-        mAct.toast("Adding…");
+        mAct.toast(tr(R.string.l10n_native_contacts_adding));
         CloudSession.connect(mAct, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String error = null;
@@ -629,9 +635,9 @@ public final class CloudContactsPage implements Page {
                 final String err = friendlyAddError(error);
                 mAct.runOnUiThread(() -> {
                     if (err == null) {
-                        mAct.toast("Contact added");
-                        if (mAddField != null) {
-                            mAddField.setText("");
+                        mAct.toast(tr(R.string.l10n_contacts_added));
+                        if (mAddField != null && mAddField.getText().toString().trim().equals(address)) {
+                            Language.setText(mAddField, "");
                         }
                         // The node's introduce handshake is async — the contact may not be in the
                         // store on the first read. Refresh now AND again shortly so it appears.
@@ -640,38 +646,38 @@ public final class CloudContactsPage implements Page {
                         mRoot.postDelayed(() -> { mLastLoad = 0; render(); }, 2500);
                     } else {
                         // Keep the field populated so the user can retry / correct it.
-                        mAct.toast("Could not add: " + err);
+                        mAct.toast(tr(R.string.l10n_native_contacts_add_failed, err));
                     }
                 });
             }
             public void err(String m) {
                 final String fm = friendlyAddError(m);
-                mAct.runOnUiThread(() -> mAct.toast("Could not add: " + fm));
+                mAct.runOnUiThread(() -> mAct.toast(tr(R.string.l10n_native_contacts_add_failed, fm)));
             }
         });
     }
 
     /** Map the node's introduce/resolve exceptions to plain English — no raw Java in a toast. */
-    private static String friendlyAddError(String raw) {
+    private String friendlyAddError(String raw) {
         if (raw == null) {
             return null;
         }
         String r = raw.toLowerCase();
         if (r.contains("could not resolve") || r.contains("no record")) {
-            return "that account isn't reachable right now — check they're online, or re-scan their address";
+            return tr(R.string.l10n_native_contacts_resolve_failed);
         }
         if (r.contains("no reachable address") || r.contains("unreachable")) {
-            return "none of their addresses answered — they may be offline";
+            return tr(R.string.l10n_native_contacts_none_answered);
         }
         if (r.contains("timeout") || r.contains("timed out")) {
-            return "the network didn't answer in time — try again";
+            return tr(R.string.l10n_native_contacts_network_timeout);
         }
         // Strip a leading exception class name (java.lang.IllegalStateException: …).
         int colon = raw.indexOf(": ");
         if (colon > 0 && raw.substring(0, colon).matches("[a-zA-Z0-9_.$]+(Exception|Error)")) {
-            return raw.substring(colon + 2);
+            return SystemMessages.text(mAct, raw.substring(colon + 2));
         }
-        return raw;
+        return SystemMessages.text(mAct, raw);
     }
 
     private void copyToClipboard(String s) {
@@ -681,7 +687,7 @@ public final class CloudContactsPage implements Page {
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) mAct.getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(android.content.ClipData.newPlainText("address", s));   // full, never truncated
-        mAct.toast("Address copied");
+        mAct.toast(tr(R.string.l10n_native_contacts_address_copied));
     }
 
     private void showQr(String s) {
@@ -694,10 +700,10 @@ public final class CloudContactsPage implements Page {
         iv.setImageBitmap(bmp);
         int pad = PortalUi.dp(mAct, 20);
         iv.setPadding(pad, pad, pad, pad);
-        new AlertDialog.Builder(mAct)
-                .setTitle("Your account address")
+        new LanguageDialog(mAct)
+                .setTitle(Language.msg(R.string.l10n_native_contacts_account_address))
                 .setView(iv)
-                .setPositiveButton("Close", null)
+                .setPositiveButton(Language.msg(R.string.l10n_language_close), null)
                 .show();
     }
 
@@ -705,4 +711,10 @@ public final class CloudContactsPage implements Page {
         Object v = o.get(k);
         return v == null ? "" : String.valueOf(v);
     }
+    @Override public void languageChanged() {
+        if (mAddressValue != null) rebuild();
+    }
+
+    private String tr(int resource, Object... arguments) { return Language.text(mAct, resource, arguments); }
+
 }

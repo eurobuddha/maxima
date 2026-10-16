@@ -2,6 +2,9 @@ package com.eurobuddha.maxima.app.portal;
 
 import android.content.Intent;
 import android.os.Bundle;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -24,9 +27,7 @@ import com.eurobuddha.maxima.cloud.ParlonsRemote;
 import org.minima.utils.json.JSONArray;
 import org.minima.utils.json.JSONObject;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -91,7 +92,6 @@ public final class CloudChatActivity extends AppCompatActivity {
     private final java.util.Map<String, Long> mImageFailed =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    private final SimpleDateFormat mHm = new SimpleDateFormat("HH:mm", Locale.UK);
 
     private int mPollN;                   // every Nth poll is a full reconcile, rest are deltas
     private long mNewestServerTime;       // newest SERVER entry time — the delta cursor
@@ -153,7 +153,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.chat_title)).setText(mName);
         TextView sub = findViewById(R.id.chat_subtitle);
         if (sub != null) {
-            sub.setText("on your cloud account");
+            Language.setText(sub, Language.msg(R.string.l10n_android_chat_cloud_subtitle));
         }
         View avatar = findViewById(R.id.chat_avatar);
         if (avatar instanceof TextView) {
@@ -274,6 +274,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         // Send button shows a mic when the field is empty (tap to record a voice note) and a
         // send arrow once there's text — same affordance as Parlons.
         send.setImageResource(R.drawable.ic_mic);
+        Language.description(send, Language.msg(R.string.l10n_desktop_chat_voice_note));
         send.setOnClickListener(v -> {
             if (mInput.getText().toString().trim().isEmpty()) {
                 startVoiceNote();
@@ -290,6 +291,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 if (has != hasText) {
                     hasText = has;
                     send.setImageResource(has ? R.drawable.ic_send : R.drawable.ic_mic);
+                    Language.description(send, Language.msg(has ? R.string.l10n_chat_send : R.string.l10n_desktop_chat_voice_note));
                 }
             }
         });
@@ -307,7 +309,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 && mPeer != null && mPeer.equalsIgnoreCase(String.valueOf(ev.get("peer")))) {
             runOnUiThread(() -> {
                 if (!isFinishing() && !isDestroyed()) {
-                    Toast.makeText(this, "Payment failed: " + str(ev, "error"),
+                    Toast.makeText(this, tr(R.string.l10n_android_chat_pay_failed, SystemMessages.message(str(ev, "error"))),
                             Toast.LENGTH_LONG).show();
                     load();
                 }
@@ -674,7 +676,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                         echo.state = "failed";
                         saveEchoes();
                         notifyRow(echo.id);
-                        Toast.makeText(CloudChatActivity.this, "Send failed: " + err,
+                        Toast.makeText(CloudChatActivity.this, tr(R.string.l10n_wallet_send_failed, SystemMessages.message(err)),
                                 Toast.LENGTH_LONG).show();
                     } else {
                         // Accepted ("queued") — the real entry + its ticks arrive via
@@ -691,7 +693,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                     saveEchoes();
                     notifyRow(echo.id);
                     Toast.makeText(CloudChatActivity.this,
-                            "Send failed: " + m, Toast.LENGTH_LONG).show();
+                            tr(R.string.l10n_wallet_send_failed, SystemMessages.message(m)), Toast.LENGTH_LONG).show();
                 });
             }
         });
@@ -700,14 +702,12 @@ public final class CloudChatActivity extends AppCompatActivity {
     /** Tapping a failed message: force the node to re-resolve the peer's address NOW, then let
      *  the resend heartbeat re-drive the failed entries with the fresh address. */
     private void offerReconnect() {
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Message not delivered")
-                .setMessage("Your node couldn't reach " + mName + " at any known address. "
-                        + "Reconnect asks their directory for their current address, then failed "
-                        + "messages are re-sent automatically.")
-                .setNegativeButton("Not now", null)
-                .setPositiveButton("Reconnect", (d, w) -> {
-                    Toast.makeText(this, "Reconnecting…", Toast.LENGTH_SHORT).show();
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_not_delivered))
+                .setMessage(Language.msg(R.string.l10n_android_chat_reconnect_help, mName))
+                .setNegativeButton(Language.msg(R.string.l10n_android_chat_not_now), null)
+                .setPositiveButton(Language.msg(R.string.l10n_android_chat_reconnect), (d, w) -> {
+                    Toast.makeText(this, tr(R.string.l10n_android_chat_reconnecting), Toast.LENGTH_SHORT).show();
                     CloudSession.connect(this, new CloudSession.Cb() {
                         public void ok(ParlonsRemote r) {
                             String msg;
@@ -716,8 +716,8 @@ public final class CloudChatActivity extends AppCompatActivity {
                                 Object ok = res.get("ok");
                                 if (ok instanceof Boolean && (Boolean) ok) {
                                     msg = bool(res, "updated")
-                                            ? "Fresh address found — resending shortly"
-                                            : "Address unchanged — they may just be offline";
+                                            ? tr(R.string.l10n_android_chat_resend_soon)
+                                            : tr(R.string.l10n_native_contacts_address_unchanged);
                                 } else {
                                     msg = String.valueOf(res.get("error"));
                                 }
@@ -726,11 +726,11 @@ public final class CloudChatActivity extends AppCompatActivity {
                             }
                             final String fmsg = msg;
                             runOnUiThread(() -> Toast.makeText(CloudChatActivity.this,
-                                    fmsg, Toast.LENGTH_LONG).show());
+                                    SystemMessages.text(CloudChatActivity.this, fmsg), Toast.LENGTH_LONG).show());
                         }
                         public void err(String m) {
                             runOnUiThread(() -> Toast.makeText(CloudChatActivity.this,
-                                    m, Toast.LENGTH_LONG).show());
+                                    SystemMessages.text(CloudChatActivity.this, m), Toast.LENGTH_LONG).show());
                         }
                     });
                 })
@@ -738,36 +738,18 @@ public final class CloudChatActivity extends AppCompatActivity {
     }
 
     private String stamp(long t) {
-        return t > 0 ? mHm.format(new Date(t)) : "";
+        return t > 0 ? Language.date(t, "Hm") : "";
     }
 
-    private final java.text.SimpleDateFormat mFull =
-            new java.text.SimpleDateFormat("d MMM yyyy · HH:mm", Locale.UK);
-    private final java.text.SimpleDateFormat mDayFmt =
-            new java.text.SimpleDateFormat("EEEE, d MMM yyyy", Locale.UK);
 
-    /** "Today" / "Yesterday" / "Monday, 1 Sep 2026" for the date separator. */
+    /** Selected-language calendar day for the date separator. */
     private String dayLabel(long t) {
-        if (t <= 0) {
-            return "";
-        }
-        java.util.Calendar now = java.util.Calendar.getInstance();
-        java.util.Calendar then = java.util.Calendar.getInstance();
-        then.setTimeInMillis(t);
-        boolean sameYear = now.get(java.util.Calendar.YEAR) == then.get(java.util.Calendar.YEAR);
-        int dd = now.get(java.util.Calendar.DAY_OF_YEAR) - then.get(java.util.Calendar.DAY_OF_YEAR);
-        if (sameYear && dd == 0) {
-            return "Today";
-        }
-        if (sameYear && dd == 1) {
-            return "Yesterday";
-        }
-        return mDayFmt.format(new Date(t));
+        return t > 0 ? Language.dayLabel(this, t, false) : "";
     }
 
     /** Long-press a bubble → Copy / Copy tx id (payments) / Save+Share (photos) / Info. */
     private void bubbleMenu(Msg m) {
-        java.util.List<String> items = new ArrayList<>();
+        java.util.List<Integer> items = new ArrayList<>();
         boolean pay = com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body);
         boolean media = !pay && com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(m.body);
         String mime = media ? com.eurobuddha.maxima.core.chat.ChatMedia.mime(m.body) : "";
@@ -776,70 +758,61 @@ public final class CloudChatActivity extends AppCompatActivity {
         String text = pay ? com.eurobuddha.maxima.core.chat.ChatPay.preview(m.body)
                 : media ? (mime.startsWith("audio/") ? "" : com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body)) : com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body)
                         ? com.eurobuddha.maxima.core.chat.ChatContact.address(m.body) : m.body;
-        if (text != null && !text.isEmpty()) items.add(media ? "Copy caption" : com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body) ? "Copy contact address" : "Copy message");
+        if (text != null && !text.isEmpty()) items.add(media ? R.string.l10n_chat_copy_caption : com.eurobuddha.maxima.core.chat.ChatContact.isCard(m.body) ? R.string.l10n_chat_copy_contact : R.string.l10n_chat_copy_message);
         if (pay) {
-            items.add("Copy transaction id");
+            items.add(R.string.l10n_desktop_chat_copy_tx);
         }
         if (hasImg) {
-            items.add("Save photo");
-            items.add("Share photo");
+            items.add(R.string.l10n_android_chat_save_photo);
+            items.add(R.string.l10n_android_chat_share_photo);
         }
-        items.add("Info");
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
-                    String pick = items.get(which);
-                    switch (pick) {
-                        case "Copy contact address":
-                        case "Copy message":
-                        case "Copy caption":
-                            copyText(text);
-                            break;
-                        case "Copy transaction id":
-                            copyText(com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body));
-                            break;
-                        case "Save photo":
-                            saveImage(m.id);
-                            break;
-                        case "Share photo":
-                            shareImage(m.id);
-                            break;
-                        case "Info":
-                            infoDialog(m);
-                            break;
+        items.add(R.string.l10n_desktop_chat_info);
+        new LanguageDialog(this)
+                .actions(items, (d, which) -> {
+                    int pick = items.get(which);
+                    if (pick == R.string.l10n_chat_copy_contact || pick == R.string.l10n_chat_copy_message || pick == R.string.l10n_chat_copy_caption) {
+                        copyText(text);
+                    } else if (pick == R.string.l10n_desktop_chat_copy_tx) {
+                        copyText(com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body));
+                    } else if (pick == R.string.l10n_android_chat_save_photo) {
+                        saveImage(m.id);
+                    } else if (pick == R.string.l10n_android_chat_share_photo) {
+                        shareImage(m.id);
+                    } else {
+                        infoDialog(m);
                     }
                 })
                 .show();
     }
 
     private void infoDialog(Msg m) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(m.mine ? "You" : (m.sname.isEmpty() ? mName : m.sname)).append('\n');
-        sb.append(mFull.format(new Date(m.time))).append('\n');
+        Language.TextBuilder sb = new Language.TextBuilder();
+        sb.append(m.mine ? Language.msg(R.string.l10n_notification_you) : (m.sname.isEmpty() ? mName : m.sname)).append('\n');
+        sb.append(Language.stamp(m.time, "yMMMdHm")).append('\n');
         if (m.arrived > 0 && m.arrived - m.time >= 60_000L) {
-            sb.append("Arrived: ").append(mFull.format(new Date(m.arrived))).append('\n');
+            sb.append(Language.msg(R.string.l10n_desktop_chat_arrived_at, Language.stamp(m.arrived, "yMMMdHm"))).append('\n');
         }
         if (m.mine) {
-            String st;
+            CharSequence st;
             switch (m.state == null ? "" : m.state) {
-                case "read": st = "Read"; break;
-                case "delivered": st = "Delivered"; break;
-                case "sent": st = "Sent (relay took it)"; break;
-                case "failed": st = "Failed to send"; break;
-                default: st = "Sending…";
+                case "read": st = Language.msg(R.string.l10n_android_chat_read); break;
+                case "delivered": st = Language.msg(R.string.l10n_android_chat_delivered); break;
+                case "sent": st = Language.msg(R.string.l10n_android_chat_sent_relay); break;
+                case "failed": st = Language.msg(R.string.l10n_android_chat_failed_send); break;
+                default: st = Language.msg(R.string.l10n_android_chat_sending);
             }
-            sb.append("Status: ").append(st).append('\n');
+            sb.append(Language.msg(R.string.l10n_desktop_chat_status, st)).append('\n');
             if (mGroup && m.delivered > 0) {
-                sb.append("Delivered to ").append(m.delivered).append(" member(s)\n");
+                sb.append(Language.count(R.plurals.l10n_android_chat_delivered_members, m.delivered)).append("\n");
             }
         }
         if (com.eurobuddha.maxima.core.chat.ChatPay.isPayment(m.body)) {
-            sb.append("\nTransaction id:\n")
-                    .append(com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body));
+            sb.append("\n").append(Language.msg(R.string.l10n_desktop_chat_transaction, com.eurobuddha.maxima.core.chat.ChatPay.txid(m.body)));
         }
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Message info")
-                .setMessage(sb.toString())
-                .setPositiveButton("Close", null)
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_message_info))
+                .setMessage(sb.build())
+                .setPositiveButton(Language.msg(R.string.l10n_language_close), null)
                 .show();
     }
 
@@ -850,10 +823,12 @@ public final class CloudChatActivity extends AppCompatActivity {
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         cm.setPrimaryClip(android.content.ClipData.newPlainText("text", s));   // full value
-        toast("Copied");
+        toast(tr(R.string.l10n_common_copied));
     }
 
-    private void toast(String zMsg) {
+    private String tr(int resource, Object... arguments) { return Language.text(this, resource, arguments); }
+
+    private void toast(CharSequence zMsg) {
         Toast.makeText(this, zMsg, Toast.LENGTH_SHORT).show();
     }
 
@@ -867,6 +842,18 @@ public final class CloudChatActivity extends AppCompatActivity {
             {"Objects & symbols", "🎉 🎁 🎈 ⚽ 🏀 🎸 🎮 🎲 🚗 ✈️ 🚀 ⛵ 🏠 💡 🔑 💰 💎 ⏰ 📱 💻 🎧 📷 ✅ ❌ ❗ ❓ 💯 🎖️ 🏆 🚩"},
     };
 
+    private static int emojiLabel(String category) {
+        switch (category) {
+            case "Smileys": return R.string.l10n_emoji_smileys;
+            case "Gestures": return R.string.l10n_emoji_gestures;
+            case "Hearts": return R.string.l10n_emoji_hearts;
+            case "Animals & nature": return R.string.l10n_emoji_nature;
+            case "Food & drink": return R.string.l10n_emoji_food;
+            case "Objects & symbols": return R.string.l10n_emoji_objects;
+            default: throw new IllegalArgumentException("Unknown emoji category");
+        }
+    }
+
     private void showEmojiPanel() {
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         LinearLayout box = new LinearLayout(this);
@@ -876,7 +863,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         final android.app.Dialog dlg = new android.app.Dialog(this);
         for (String[] cat : EMOJI) {
             TextView label = new TextView(this);
-            label.setText(cat[0].toUpperCase(Locale.UK));
+            Language.setText(label, Language.upper(Language.msg(emojiLabel(cat[0]))));
             label.setTextSize(11);
             label.setTypeface(null, android.graphics.Typeface.BOLD);
             label.setTextColor(getColor(R.color.ux_subtext));
@@ -920,49 +907,49 @@ public final class CloudChatActivity extends AppCompatActivity {
     private void contactDetails() {
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
-                String text;
+                CharSequence text;
                 try {
                     JSONObject i = r.contactInfo(mPeer);
-                    StringBuilder sb = new StringBuilder();
+                    Language.TextBuilder sb = new Language.TextBuilder();
                     sb.append(str(i, "name")).append("\n\n");
                     String kind = str(i, "kind");
-                    sb.append("Software: ").append(bool(i, "classic") ? "Classic Maxima"
-                            : kind.isEmpty() ? "Parlons" : kind).append('\n');
+                    sb.append(Language.msg(R.string.l10n_android_chat_software, bool(i, "classic") ? "Classic Maxima"
+                            : kind.isEmpty() ? "Parlons" : kind)).append('\n');
                     long ls = lng(i, "lastSeen");
-                    sb.append("Last seen: ").append(ls > 0 ? mFull.format(new Date(ls))
-                            : "never").append("\n\n");
-                    sb.append("Public key:\n").append(str(i, "key")).append("\n\n");
+                    sb.append(Language.msg(R.string.l10n_android_chat_last_seen, ls > 0 ? Language.stamp(ls, "yMMMdHm")
+                            : Language.msg(R.string.l10n_ios_never_seen))).append("\n\n");
+                    sb.append(Language.msg(R.string.l10n_android_chat_public_key, str(i, "key"))).append("\n\n");
                     JSONArray addrs = (JSONArray) i.get("addresses");
                     if (addrs != null && !addrs.isEmpty()) {
-                        sb.append("Addresses:\n");
+                        sb.append(Language.msg(R.string.l10n_native_contacts_addresses)).append("\n");
                         for (Object o : addrs) {
-                            sb.append(o).append('\n');
+                            sb.append(String.valueOf(o)).append('\n');
                         }
                     }
                     String wallet = str(i, "wallet");
                     if (!wallet.isEmpty()) {
-                        sb.append("\nPayment address:\n").append(wallet);
+                        sb.append("\n").append(Language.msg(R.string.l10n_android_chat_payment_address, wallet));
                     }
-                    text = sb.toString();
+                    text = sb.build();
                 } catch (Exception e) {
-                    text = "Couldn't load: " + e.getMessage();
+                    text = Language.msg(R.string.l10n_android_chat_load_failed, SystemMessages.message(e.getMessage()));
                 }
-                final String ft = text;
+                final CharSequence ft = text;
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) {
                         return;
                     }
-                    new androidx.appcompat.app.AlertDialog.Builder(CloudChatActivity.this)
-                            .setTitle("Contact")
+                    new LanguageDialog(CloudChatActivity.this)
+                            .setTitle(Language.msg(R.string.l10n_notification_contact))
                             .setMessage(ft)
-                            .setPositiveButton("Close", null)
-                            .setNeutralButton("Copy key", (d, w) ->
+                            .setPositiveButton(Language.msg(R.string.l10n_language_close), null)
+                            .setNeutralButton(Language.msg(R.string.l10n_android_chat_copy_key), (d, w) ->
                                     copyText(mPeer))
                             .show();
                 });
             }
             public void err(String m) {
-                runOnUiThread(() -> toast("Couldn't load: " + m));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_load_failed, SystemMessages.message(m))));
             }
         });
     }
@@ -984,11 +971,11 @@ public final class CloudChatActivity extends AppCompatActivity {
                         return;
                     }
                     if (fi == null || !bool(fi, "ok")) {
-                        toast("Couldn't load group: " + (fi == null ? fe : str(fi, "error")));
+                        toast(tr(R.string.l10n_android_chat_load_group_failed, SystemMessages.message(fi == null ? fe : str(fi, "error"))));
                         return;
                     }
                     JSONArray members = (JSONArray) fi.get("members");
-                    StringBuilder sb = new StringBuilder();
+                    Language.TextBuilder sb = new Language.TextBuilder();
                     sb.append(str(fi, "name")).append("  (")
                             .append(members == null ? 0 : members.size()).append(")\n\n");
                     if (members != null) {
@@ -997,28 +984,28 @@ public final class CloudChatActivity extends AppCompatActivity {
                             boolean meRow = bool(mm, "me");
                             String nm = str(mm, "name");
                             // The account isn't its own contact, so its name resolves to the raw
-                            // key — show "You" instead.
-                            sb.append("• ").append(meRow ? "You" : nm);
+                            // key — show the translated "You" label instead.
+                            sb.append("• ").append(meRow ? Language.msg(R.string.l10n_notification_you) : nm);
                             if (bool(mm, "admin")) {
-                                sb.append("  (admin)");
+                                sb.append("  (").append(Language.msg(R.string.l10n_chat_admin)).append(")");
                             }
                             sb.append('\n');
                         }
                     }
-                    sb.append("\nNo shared group key — removing someone really removes them.");
+                    sb.append("\n").append(Language.msg(R.string.l10n_android_chat_no_group_key));
                     androidx.appcompat.app.AlertDialog.Builder b =
-                            new androidx.appcompat.app.AlertDialog.Builder(CloudChatActivity.this)
-                                    .setTitle("Group")
-                                    .setMessage(sb.toString())
-                                    .setPositiveButton("Close", null);
+                            new LanguageDialog(CloudChatActivity.this)
+                                    .setTitle(Language.msg(R.string.l10n_chat_group))
+                                    .setMessage(sb.build())
+                                    .setPositiveButton(Language.msg(R.string.l10n_language_close), null);
                     if (bool(fi, "iAmAdmin")) {
-                        b.setNeutralButton("Edit members", (d, w) -> editMembers(fi));
+                        b.setNeutralButton(Language.msg(R.string.l10n_desktop_chat_edit_members), (d, w) -> editMembers(fi));
                     }
                     b.show();
                 });
             }
             public void err(String m) {
-                runOnUiThread(() -> toast("Couldn't load group: " + m));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_load_group_failed, SystemMessages.message(m))));
             }
         });
     }
@@ -1073,12 +1060,12 @@ public final class CloudChatActivity extends AppCompatActivity {
                     for (int i = 0; i < keys.size(); i++) {
                         checked[i] = current.contains(keys.get(i));
                     }
-                    new androidx.appcompat.app.AlertDialog.Builder(CloudChatActivity.this)
-                            .setTitle("Members")
+                    new LanguageDialog(CloudChatActivity.this)
+                            .setTitle(Language.msg(R.string.l10n_desktop_chat_members))
                             .setMultiChoiceItems(names.toArray(new CharSequence[0]), checked,
                                     (d, which, isChecked) -> checked[which] = isChecked)
-                            .setNegativeButton("Cancel", null)
-                            .setPositiveButton("Save", (d, w) -> {
+                            .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                            .setPositiveButton(Language.msg(R.string.l10n_common_save), (d, w) -> {
                                 List<String> members = new ArrayList<>();
                                 for (int i = 0; i < checked.length; i++) {
                                     if (checked[i]) {
@@ -1091,15 +1078,14 @@ public final class CloudChatActivity extends AppCompatActivity {
                 });
             }
             public void err(String m) {
-                runOnUiThread(() -> toast(m));
+                runOnUiThread(() -> toast(SystemMessages.text(CloudChatActivity.this, m)));
             }
         });
     }
 
     private void saveMembers(List<String> zMembers) {
         if (zMembers.size() + 1 > com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS) {
-            toast("A group holds at most " + com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS
-                    + " people including you - nothing changed");
+            toast(Language.count(R.plurals.l10n_android_chat_group_limit, com.eurobuddha.maxima.core.chat.Group.MAX_MEMBERS).toString());
             return;
         }
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
@@ -1115,10 +1101,10 @@ public final class CloudChatActivity extends AppCompatActivity {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }
                 final String fe = error;
-                runOnUiThread(() -> toast(fe == null ? "Group updated" : "Failed: " + fe));
+                runOnUiThread(() -> toast(fe == null ? tr(R.string.l10n_android_chat_group_updated) : tr(R.string.l10n_native_chat_operation_failed, SystemMessages.message(fe))));
             }
             public void err(String m) {
-                runOnUiThread(() -> toast("Failed: " + m));
+                runOnUiThread(() -> toast(tr(R.string.l10n_native_chat_operation_failed, SystemMessages.message(m))));
             }
         });
     }
@@ -1233,7 +1219,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         for (Msg m : mMsgs) if (m.time > 0) oldest = Math.min(oldest, m.time);
         if (oldest != Long.MAX_VALUE) mPhotoViewer.setHistory(before -> {
             ParlonsRemote remote = CloudSession.remoteOrNull();
-            if (remote == null) throw new IllegalStateException("Not connected");
+            if (remote == null) throw new IllegalStateException(tr(R.string.l10n_native_contacts_not_connected));
             java.util.List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> page = new java.util.ArrayList<>();
             for (Msg m : parseMsgs(remote.conversation(mPeer, 100, before))) {
                 page.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(m.id, m.body, m.time));
@@ -1260,9 +1246,9 @@ public final class CloudChatActivity extends AppCompatActivity {
                 try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
                     b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
                 }
-                runOnUiThread(() -> toast("Saved to Photos"));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_saved)));
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Save failed"));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_save_failed)));
             }
         }, "portal-save-image").start();
     }
@@ -1288,10 +1274,10 @@ public final class CloudChatActivity extends AppCompatActivity {
                     i.setType("image/jpeg");
                     i.putExtra(Intent.EXTRA_STREAM, uri);
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(Intent.createChooser(i, "Share photo"));
+                    startActivity(Intent.createChooser(i, tr(R.string.l10n_android_chat_share_photo)));
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Could not share image"));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_share_failed)));
             }
         }, "portal-share-image").start();
     }
@@ -1314,24 +1300,24 @@ public final class CloudChatActivity extends AppCompatActivity {
         return mFileUi;
     }
     private void attachSheet() {
-        final java.util.List<String> items = new ArrayList<>();
-        items.add("Photo library");
-        items.add("Private file");
-        items.add("File transfers");
-        items.add("Voice note");
+        final java.util.List<Integer> items = new ArrayList<>();
+        items.add(R.string.l10n_android_chat_photo_library);
+        items.add(R.string.l10n_files_private);
+        items.add(R.string.l10n_files_title);
+        items.add(R.string.l10n_desktop_chat_voice_note);
         if (!mGroup) {
-            items.add("Send payment");
+            items.add(R.string.l10n_desktop_chat_send_payment);
         }
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
-                    String pick = items.get(which);
-                    if ("Private file".equals(pick)) {
+        new LanguageDialog(this)
+                .actions(items, (d, which) -> {
+                    int pick = items.get(which);
+                    if (R.string.l10n_files_private == pick) {
                         fileUi().pick();
-                    } else if ("File transfers".equals(pick)) {
+                    } else if (R.string.l10n_files_title == pick) {
                         fileUi().transfers();
-                    } else if ("Send payment".equals(pick)) {
+                    } else if (R.string.l10n_desktop_chat_send_payment == pick) {
                         payContact();
-                    } else if ("Voice note".equals(pick)) {
+                    } else if (R.string.l10n_desktop_chat_voice_note == pick) {
                         startVoiceNote();
                     } else {
                         pickPhoto();
@@ -1347,27 +1333,27 @@ public final class CloudChatActivity extends AppCompatActivity {
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), 0);
         final EditText amt = new EditText(this);
-        amt.setHint("Amount (MINIMA)");
+        Language.hint(amt, Language.msg(R.string.l10n_android_chat_amount));
         amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                 | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         box.addView(amt);
         final EditText memo = new EditText(this);
-        memo.setHint("Memo (optional)");
+        Language.hint(memo, Language.msg(R.string.l10n_android_chat_memo));
         memo.setSingleLine(true);
         box.addView(memo);
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Send payment to " + mName)
-                .setMessage("Paid from your cloud account's wallet.")
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_pay_cloud, mName))
+                .setMessage(Language.msg(R.string.l10n_android_chat_cloud_wallet))
                 .setView(box)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Send", (d, w) -> {
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_chat_send), (d, w) -> {
                     final String amount = amt.getText().toString().trim();
                     final String note = memo.getText().toString().trim();
                     if (amount.isEmpty()) {
-                        toast("Enter an amount");
+                        toast(tr(R.string.l10n_android_chat_enter_amount));
                         return;
                     }
-                    toast("Payment building on your node…");
+                    toast(tr(R.string.l10n_android_chat_payment_building));
                     CloudSession.connectInteractive(this, new CloudSession.Cb() {
                         public void ok(com.eurobuddha.maxima.cloud.ParlonsRemote r) {
                             String error = null;
@@ -1386,7 +1372,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                                     return;
                                 }
                                 if (err != null) {
-                                    toast("Payment failed: " + err);
+                                    toast(tr(R.string.l10n_android_chat_pay_failed, SystemMessages.message(err)));
                                 }
                                 load();
                             });
@@ -1394,7 +1380,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                         public void err(String m) {
                             runOnUiThread(() -> {
                                 if (!isFinishing() && !isDestroyed()) {
-                                    toast("Payment failed: " + m);
+                                    toast(tr(R.string.l10n_android_chat_pay_failed, SystemMessages.message(m)));
                                 }
                             });
                         }
@@ -1406,7 +1392,7 @@ public final class CloudChatActivity extends AppCompatActivity {
     private void pickPhoto() {
         Intent i = new Intent(Intent.ACTION_GET_CONTENT);
         i.setType("image/*");
-        startActivityForResult(Intent.createChooser(i, "Send photo"), PICK_PHOTO);
+        startActivityForResult(Intent.createChooser(i, tr(R.string.l10n_android_chat_send_photo)), PICK_PHOTO);
     }
 
     private void takePhoto() {
@@ -1429,7 +1415,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             }
             startActivityForResult(i, TAKE_PHOTO);
         } catch (Exception e) {
-            toast("No camera available");
+            toast(tr(R.string.l10n_android_chat_no_camera));
         }
     }
 
@@ -1489,7 +1475,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             box.addView(iv);
         }
         final EditText cap = new EditText(this);
-        cap.setHint("Add a caption…");
+        Language.hint(cap, Language.msg(R.string.l10n_android_chat_caption));
         cap.setHintTextColor(getColor(R.color.ux_subtext));
         cap.setTextColor(getColor(R.color.ux_text));
         cap.setInputType(android.text.InputType.TYPE_CLASS_TEXT
@@ -1497,23 +1483,23 @@ public final class CloudChatActivity extends AppCompatActivity {
                 | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         cap.setMaxLines(4);
         box.addView(cap);
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Send photo")
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_android_chat_send_photo))
                 .setView(box)
-                .setPositiveButton("Send",
+                .setPositiveButton(Language.msg(R.string.l10n_chat_send),
                         (d, w) -> sendPhoto(uri, cap.getText().toString().trim()))
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
                 .show();
     }
 
     private void sendPhoto(final android.net.Uri uri, final String caption) {
-        toast("Sending photo…");
+        toast(tr(R.string.l10n_android_chat_sending_photo));
         new Thread(() -> {
             try {
                 byte[] jpeg = readScaledJpeg(uri, 1400);
                 uploadMedia(jpeg, "image/jpeg", caption);
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Photo failed: " + e.getMessage()));
+                runOnUiThread(() -> toast(tr(R.string.l10n_android_chat_photo_failed, SystemMessages.message(e.getMessage()))));
             }
         }, "portal-media").start();
     }
@@ -1538,7 +1524,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         final String err = error;
         runOnUiThread(() -> {
             if (err != null) {
-                toast("Send failed: " + err);
+                toast(tr(R.string.l10n_wallet_send_failed, SystemMessages.message(err)));
             }
             load();
         });
@@ -1652,7 +1638,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         try {
             rec.start();
         } catch (Exception e) {
-            toast("Microphone unavailable");
+            toast(tr(R.string.l10n_android_chat_no_microphone));
             return;
         }
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
@@ -1685,11 +1671,11 @@ public final class CloudChatActivity extends AppCompatActivity {
         rowBox.addView(timer);
 
         final androidx.appcompat.app.AlertDialog dlg =
-                new androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("Voice note")
+                new LanguageDialog(this)
+                        .setTitle(Language.msg(R.string.l10n_desktop_chat_voice_note))
                         .setView(box)
-                        .setPositiveButton("Send", null)
-                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton(Language.msg(R.string.l10n_chat_send), null)
+                        .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
                         .create();
         dlg.setCanceledOnTouchOutside(false);
         dlg.show();
@@ -1713,8 +1699,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 int sSec = rec.elapsedSeconds();
                 dot.setAlpha(dot.getAlpha() > 0.5f ? 0.25f : 1f);
                 if (sSec >= com.eurobuddha.maxima.app.chat.VoiceNote.MAX_SECONDS) {
-                    timer.setText(fmtSecs(com.eurobuddha.maxima.app.chat.VoiceNote.MAX_SECONDS)
-                            + "  max");
+                    Language.setText(timer, Language.msg(R.string.l10n_android_chat_max_duration, fmtSecs(com.eurobuddha.maxima.app.chat.VoiceNote.MAX_SECONDS)));
                     rec.stopQuiet();
                 } else {
                     timer.setText(fmtSecs(sSec));
@@ -1733,13 +1718,13 @@ public final class CloudChatActivity extends AppCompatActivity {
                     try {
                         bytes = rec.bytes();
                     } catch (Exception e) {
-                        toast("Recording failed");
+                        toast(tr(R.string.l10n_android_chat_record_failed));
                         dlg.dismiss();
                         return;
                     }
                     dlg.dismiss();
                     if (bytes == null || bytes.length == 0 || secs < 1) {
-                        toast("Too short - hold on a moment longer");
+                        toast(tr(R.string.l10n_android_chat_record_short));
                         return;
                     }
                     sendVoice(bytes, rec.mime(), secs,
@@ -1763,7 +1748,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     private void sendVoice(final byte[] zBytes, final String zMime, final int zSecs,
                            final String zWave) {
-        toast("Sending voice note…");
+        toast(tr(R.string.l10n_android_chat_sending_voice));
         new Thread(() -> {
             // Caption slot carries "duration|waveformhex" — the bubble draws the real
             // shape without decoding the audio; previews show only the duration.
@@ -1776,6 +1761,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         boolean playing = m.id.equals(mAudioPlayingId) && mAudioPlayer != null;
         int ink = getColor(m.mine ? R.color.ux_bubble_out_text : R.color.ux_bubble_in_text);
         h.audioBtn.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        Language.description(h.audioBtn, Language.msg(playing ? R.string.l10n_desktop_chat_stop : R.string.l10n_media_play));
         h.audioBtn.setColorFilter(ink);
         h.audioTime.setTextColor(ink);
         String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body);
@@ -1798,7 +1784,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             h.audioTime.setText(fmtSecs(pos / 1000) + " / " + fmtSecs(dur / 1000));
             h.audioBar.setProgress(pos / (float) dur);
         } else {
-            h.audioTime.setText(total.isEmpty() ? "voice note" : total);
+            h.audioTime.setText(total.isEmpty() ? tr(R.string.l10n_desktop_chat_voice_note) : total);
             h.audioBar.setProgress(0f);
         }
         h.audio.setOnClickListener(v -> toggleAudio(m));
@@ -1838,7 +1824,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                     return;
                 }
                 if (player == null) {
-                    toast("Could not play voice note");
+                    toast(tr(R.string.l10n_android_chat_play_voice));
                     return;
                 }
                 try {
@@ -1849,7 +1835,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                     audioTick();
                     notifyRow(m.id);
                 } catch (Exception ex) {
-                    toast("Playback failed");
+                    toast(tr(R.string.l10n_android_chat_playback_failed));
                     stopAudio();
                 }
             });
@@ -2003,9 +1989,9 @@ public final class CloudChatActivity extends AppCompatActivity {
                 if (m.mine && "failed".equals(m.state)) {
                     // A failed PAYMENT must never read like a safe retry — the broadcast may
                     // have happened. Say so where the eye lands.
-                    payLine += "\n⚠ unconfirmed — check the balance before paying again";
+                    payLine += "\n" + tr(R.string.l10n_android_chat_unconfirmed);
                 }
-                h.body.setText(payLine);
+                com.eurobuddha.maxima.app.i18n.Language.setText(h.body, payLine);
                 h.body.setTextColor(ink);
                 h.body.setTypeface(null, android.graphics.Typeface.BOLD);
             } else if (media && mime.startsWith("audio") && !com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)) {
@@ -2015,7 +2001,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 bindAudio(h, m);
             } else if (com.eurobuddha.maxima.core.chat.ChatFile.isFile(m.body)) {
                 h.audio.setVisibility(View.GONE); h.image.setVisibility(View.GONE); h.image.setImageDrawable(null);
-                h.body.setVisibility(View.VISIBLE); h.body.setText(com.eurobuddha.maxima.app.chat.PrivateFileUi.label(m.body));
+                h.body.setVisibility(View.VISIBLE); com.eurobuddha.maxima.app.i18n.Language.setText(h.body, com.eurobuddha.maxima.app.chat.PrivateFileUi.label(m.body));
                 h.body.setOnClickListener(v -> fileUi().showBody(m.body));
                 h.body.setTextColor(ink);
             } else if (media) {
@@ -2023,7 +2009,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.image.setVisibility(View.VISIBLE);
                 String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(m.body);
                 h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
-                h.body.setText(cap);
+                com.eurobuddha.maxima.app.i18n.Language.setText(h.body, cap);
                 h.body.setTextColor(ink);
                 h.body.setTypeface(null, android.graphics.Typeface.NORMAL);   // recycled pay bubble
                 bindImage(h.image, m.body, m.id);
@@ -2031,7 +2017,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 h.image.setVisibility(View.GONE);
                 h.audio.setVisibility(View.GONE);
                 h.body.setVisibility(View.VISIBLE);
-                h.body.setText(m.body);
+                com.eurobuddha.maxima.app.i18n.Language.setText(h.body, m.body);
                 h.body.setTextColor(ink);
                 h.body.setTypeface(null, android.graphics.Typeface.NORMAL);
             }
@@ -2050,7 +2036,7 @@ public final class CloudChatActivity extends AppCompatActivity {
             } else {
                 // Dual clock: a late relay delivery shows "sent 13:56 · arrived 14:02".
                 if (m.arrived > 0 && m.arrived - m.time >= 60_000L) {
-                    meta = "sent " + stamp(m.time) + " · arrived " + stamp(m.arrived);
+                    meta = tr(R.string.l10n_desktop_chat_late_delivery, stamp(m.time), stamp(m.arrived));
                 }
                 h.meta.setText(meta);
                 h.meta.setTextColor(getColor(R.color.ux_subtext));
@@ -2110,4 +2096,11 @@ public final class CloudChatActivity extends AppCompatActivity {
             audioBar = v.findViewById(R.id.bubble_audio_bar);
         }
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        if (mList != null) mAdapter.notifyDataSetChanged();
+    }
+
 }

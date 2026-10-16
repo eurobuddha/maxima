@@ -10,4 +10,7 @@ public interface Page {
     CharSequence title();
 
     void render();
+
+    /** Update locale-dependent display data without rebuilding forms. */
+    default void languageChanged() {}
 }

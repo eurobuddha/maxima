@@ -15,7 +15,8 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Your Minima address"
+            android:text="@string/l10n_wallet_your_address"
+            android:tag="l10n:text=l10n_wallet_your_address"
             android:textColor="@color/ux_subtext"
             android:textSize="13sp"
             android:layout_marginBottom="12dp" />
@@ -45,7 +46,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Copy address"
+            android:text="@string/l10n_contacts_copy_address"
+            android:tag="l10n:text=l10n_contacts_copy_address"
             android:backgroundTint="@color/ux_accent"
             android:textColor="@color/black" />
 
@@ -54,7 +56,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Next address"
+            android:text="@string/l10n_node_wallet_next_address"
+            android:tag="l10n:text=l10n_node_wallet_next_address"
             style="?attr/materialButtonOutlinedStyle" />
 
         <!-- Address safety report (checkaddress on our own address) -->
@@ -74,7 +77,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:text="YOUR ADDRESSES  ·  TAP TO SHOW"
+            android:text="@string/l10n_node_wallet_address_pool"
+            android:tag="l10n:text=l10n_node_wallet_address_pool"
             android:textColor="@color/ux_subtext"
             android:textSize="11sp"
             android:letterSpacing="0.1"

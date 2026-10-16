@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal;
 
 import android.os.Bundle;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -58,7 +60,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         back.setOnClickListener(v -> finish());
         bar.addView(back);
         TextView title = new TextView(this);
-        title.setText("Node control panel");
+        Language.setText(title,m(R.string.l10n_node_panel_title));
         title.setTextSize(20);
         title.setTextColor(getColor(R.color.ux_on_header));
         bar.addView(title);
@@ -83,7 +85,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         });
         getWindow().setStatusBarColor(getColor(R.color.ux_header));
 
-        mRoot.addView(PortalUi.label(this, "Loading…"));
+        mRoot.addView(PortalUi.label(this, m(R.string.l10n_common_loading)));
         refresh(false);
     }
 
@@ -122,7 +124,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
                     if (!isFinishing() && !isDestroyed() && mFigures == null) {
                         mRoot.removeAllViews();
                         mRoot.addView(PortalUi.label(CloudNodePanelActivity.this,
-                                "Can't reach your node.\n" + m));
+                                m(R.string.l10n_native_node_unreachable, SystemMessages.message(m))));
                     }
                 });
             }
@@ -132,51 +134,57 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
     private void rebuild() {
         mRoot.removeAllViews();
         if (mFigures == null) {
-            mRoot.addView(PortalUi.label(this, "Loading…"));
+            mRoot.addView(PortalUi.label(this, m(R.string.l10n_common_loading)));
             return;
         }
 
         // --- always-on + reachability ---
-        mRoot.addView(PortalUi.section(this, "Status"));
+        mRoot.addView(PortalUi.section(this, m(R.string.l10n_node_panel_status)));
         LinearLayout st = PortalUi.card(this);
         if (mStatus != null) {
-            st.addView(PortalUi.kv(this, "Version", str(mStatus, "version")));
-            st.addView(PortalUi.kv(this, "Uptime", uptime(lng(mStatus, "uptime"))));
+            st.addView(PortalUi.kv(this, m(R.string.l10n_common_version), str(mStatus, "version")));
+            st.addView(PortalUi.kv(this, m(R.string.l10n_native_node_uptime), uptime(lng(mStatus, "uptime"))));
         }
-        st.addView(PortalUi.kv(this, "Contacts", String.valueOf(lng(mFigures, "contacts"))));
-        st.addView(PortalUi.kv(this, "Mailbox held", String.valueOf(lng(mFigures, "mailboxHeld"))));
-        st.addView(PortalUi.kv(this, "Outbox", String.valueOf(lng(mFigures, "outbox"))));
+        st.addView(PortalUi.kv(this, m(R.string.l10n_help_contacts_title), String.valueOf(lng(mFigures, "contacts"))));
+        st.addView(PortalUi.kv(this, m(R.string.l10n_native_node_mailbox), String.valueOf(lng(mFigures, "mailboxHeld"))));
+        st.addView(PortalUi.kv(this, m(R.string.l10n_help_outbox_title), String.valueOf(lng(mFigures, "outbox"))));
         String own = str(mFigures, "ownRelay");
         if (!own.isEmpty()) {
             // A Parlons Node: its own cape IS its public door - no separate "direct port" story.
-            st.addView(PortalUi.kv(this, "Public relay", own));
-            st.addView(PortalUi.kv(this, "Relay check",
-                    bool(mFigures, "ownRelayVerified") ? "verified — relays to this node"
-                    : bool(mFigures, "ownRelayAttached") ? "attached, verifying…" : "not attached"));
+            st.addView(PortalUi.gap(this, 8));
+            st.addView(PortalUi.label(this, m(R.string.l10n_node_panel_public_relay)));
+            st.addView(PortalUi.value(this, own));
+            st.addView(PortalUi.gap(this, 8));
+            st.addView(PortalUi.label(this, m(R.string.l10n_node_panel_relay_check)));
+            st.addView(PortalUi.value(this,
+                    bool(mFigures, "ownRelayVerified") ? m(R.string.l10n_node_panel_verified)
+                    : bool(mFigures, "ownRelayAttached") ? m(R.string.l10n_node_panel_verifying) : m(R.string.l10n_node_not_attached)));
         } else {
-            st.addView(PortalUi.kv(this, "Directly reachable",
-                    bool(mFigures, "directlyReachable") ? "yes" : "no"));
+            st.addView(PortalUi.kv(this, m(R.string.l10n_native_network_directly_reachable),
+                    bool(mFigures, "directlyReachable") ? m(R.string.l10n_native_node_yes) : m(R.string.l10n_native_node_no)));
             String da = str(mFigures, "directAddress");
             if (!da.isEmpty()) {
-                st.addView(PortalUi.kv(this, "Direct address", da));
+                st.addView(PortalUi.gap(this, 8));
+                st.addView(PortalUi.label(this, m(R.string.l10n_node_direct_address)));
+                st.addView(PortalUi.value(this, da));
             }
         }
         mRoot.addView(st);
 
         // --- relay contribution ---
-        mRoot.addView(PortalUi.section(this, "Relay (you carry traffic for the network)"));
+        mRoot.addView(PortalUi.section(this, m(R.string.l10n_node_panel_relay)));
         LinearLayout rl = PortalUi.card(this);
-        rl.addView(PortalUi.kv(this, "Clients attached",
+        rl.addView(PortalUi.kv(this, m(R.string.l10n_desktop_network_clients),
                 String.valueOf(lng(mFigures, "relayConnections"))));
-        rl.addView(PortalUi.kv(this, "Messages relayed",
+        rl.addView(PortalUi.kv(this, m(R.string.l10n_desktop_network_relayed),
                 String.valueOf(lng(mFigures, "relayRelayed"))));
-        rl.addView(PortalUi.kv(this, "Blobs stored", String.valueOf(lng(mFigures, "relayStored"))));
+        rl.addView(PortalUi.kv(this, m(R.string.l10n_node_panel_blobs), String.valueOf(lng(mFigures, "relayStored"))));
         JSONArray mesh = arr(mFigures, "meshPeers");
-        rl.addView(PortalUi.kv(this, "Mesh peers", String.valueOf(mesh.size())));
+        rl.addView(PortalUi.kv(this, m(R.string.l10n_node_mesh_peers), String.valueOf(mesh.size())));
         mRoot.addView(rl);
 
         // --- hosts ---
-        mRoot.addView(PortalUi.section(this, "Hosts"));
+        mRoot.addView(PortalUi.section(this, m(R.string.l10n_help_hosts_title)));
         LinearLayout hc = PortalUi.card(this);
         JSONArray hosts = arr(mFigures, "hosts");
         {
@@ -202,7 +210,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
                 t.setTypeface(android.graphics.Typeface.MONOSPACE);
                 row.addView(t, new LinearLayout.LayoutParams(0,
                         LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-                TextView rm = PortalUi.ghost(this, "Detach");
+                TextView rm = PortalUi.ghost(this, m(R.string.l10n_node_panel_detach));
                 rm.setTextColor(getColor(R.color.ux_error));
                 rm.setOnClickListener(v -> hostOp("", host));
                 row.addView(rm);
@@ -211,13 +219,13 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         }
         hc.addView(PortalUi.gap(this, 8));
         final EditText add = new EditText(this);
-        add.setHint("host:port  (e.g. 45.77.246.226:9501)");
+        Language.hint(add,m(R.string.l10n_node_panel_host_hint));
         add.setSingleLine(true);
         add.setTextColor(getColor(R.color.ux_text));
         add.setHintTextColor(getColor(R.color.ux_subtext));
         add.setTextSize(13);
         hc.addView(add);
-        TextView addBtn = PortalUi.button(this, "Add & connect");
+        TextView addBtn = PortalUi.button(this, m(R.string.l10n_native_network_add_connect));
         addBtn.setOnClickListener(v -> {
             // Typed host:port, a comma list, or the text of a relay's QR.
             String h = add.getText().toString().trim();
@@ -230,7 +238,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         LinearLayout sw = new LinearLayout(this);
         sw.setOrientation(LinearLayout.HORIZONTAL);
         sw.setGravity(Gravity.CENTER_VERTICAL);
-        sw.addView(PortalUi.label(this, "Account uses the built-in relay list"),
+        sw.addView(PortalUi.label(this, m(R.string.l10n_node_panel_builtin)),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         androidx.appcompat.widget.SwitchCompat toggle = new androidx.appcompat.widget.SwitchCompat(this);
         toggle.setChecked(!mFigures.containsKey("builtin") || bool(mFigures, "builtin"));
@@ -240,13 +248,12 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         mRoot.addView(hc);
 
         // --- MLS / location ---
-        mRoot.addView(PortalUi.section(this, "Location (MLS)"));
+        mRoot.addView(PortalUi.section(this, m(R.string.l10n_node_panel_location)));
         LinearLayout ml = PortalUi.card(this);
         boolean pinned = mMls != null && bool(mMls, "pinned");
         ml.addView(PortalUi.label(this, pinned
-                ? "Pinned — contacts always resolve you at a fixed permanent address."
-                : "Pin a permanent address so contacts always resolve you, or republish your "
-                        + "directory record now."));
+                ? m(R.string.l10n_node_panel_pinned)
+                : m(R.string.l10n_node_panel_pin_help)));
         // The permanent MAX# address — shown IN FULL and tap-to-copy (never truncated).
         final String perm = mMls != null && !str(mMls, "permanent").isEmpty()
                 ? str(mMls, "permanent")
@@ -258,30 +265,31 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
             pv.setTextColor(getColor(R.color.ux_subtext));
             pv.setTextSize(10);
             pv.setTypeface(android.graphics.Typeface.MONOSPACE);
-            pv.setOnClickListener(v -> copyText("permanent address", perm));
+            pv.setOnClickListener(v -> copyText(Language.text(this, R.string.l10n_native_node_address), perm));
             ml.addView(pv);
-            TextView copyPerm = PortalUi.ghost(this, "Copy permanent address");
-            copyPerm.setOnClickListener(v -> copyText("permanent address", perm));
+            TextView copyPerm = PortalUi.ghost(this, m(R.string.l10n_node_panel_copy_permanent));
+            copyPerm.setOnClickListener(v -> copyText(Language.text(this, R.string.l10n_native_node_address), perm));
             ml.addView(copyPerm);
         }
         ml.addView(PortalUi.gap(this, 8));
         LinearLayout mlBtns = new LinearLayout(this);
-        mlBtns.setOrientation(LinearLayout.HORIZONTAL);
-        TextView pin = PortalUi.ghost(this, pinned ? "Re-pin" : "Pin permanent");
+        boolean largeText = getResources().getConfiguration().fontScale > 1.2f;
+        mlBtns.setOrientation(largeText ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        TextView pin = PortalUi.ghost(this, pinned ? m(R.string.l10n_node_panel_repin) : m(R.string.l10n_node_panel_pin));
         pin.setOnClickListener(v -> mlsOp("pin"));
-        mlBtns.addView(pin, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mlBtns.addView(pin, new LinearLayout.LayoutParams(largeText ? LinearLayout.LayoutParams.MATCH_PARENT : 0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, largeText ? 0f : 1f));
         if (pinned) {
-            TextView clr = PortalUi.ghost(this, "Clear pin");
+            TextView clr = PortalUi.ghost(this, m(R.string.l10n_node_panel_clear_pin));
             clr.setTextColor(getColor(R.color.ux_error));
             clr.setOnClickListener(v -> mlsOp("clear"));
-            mlBtns.addView(clr, new LinearLayout.LayoutParams(0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            mlBtns.addView(clr, new LinearLayout.LayoutParams(largeText ? LinearLayout.LayoutParams.MATCH_PARENT : 0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, largeText ? 0f : 1f));
         }
-        TextView rep = PortalUi.ghost(this, "Republish");
+        TextView rep = PortalUi.ghost(this, m(R.string.l10n_node_republish));
         rep.setOnClickListener(v -> mlsOp("republish"));
-        mlBtns.addView(rep, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mlBtns.addView(rep, new LinearLayout.LayoutParams(largeText ? LinearLayout.LayoutParams.MATCH_PARENT : 0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, largeText ? 0f : 1f));
         ml.addView(mlBtns);
         mRoot.addView(ml);
 
@@ -289,18 +297,18 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         LinearLayout logHead = new LinearLayout(this);
         logHead.setOrientation(LinearLayout.HORIZONTAL);
         logHead.setGravity(Gravity.CENTER_VERTICAL);
-        logHead.addView(PortalUi.section(this, "Event log"), new LinearLayout.LayoutParams(0,
+        logHead.addView(PortalUi.section(this, m(R.string.l10n_help_log_title)), new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView clear = PortalUi.ghost(this, "Clear");
+        TextView clear = PortalUi.ghost(this, m(R.string.l10n_common_clear));
         clear.setOnClickListener(v -> {
-            if (mBusy) { Toast.makeText(this, "Busy — try again", Toast.LENGTH_SHORT).show(); }
+            if (mBusy) { Toast.makeText(this, m(R.string.l10n_node_panel_busy), Toast.LENGTH_SHORT).show(); }
             else { refresh(true); }
         });
         logHead.addView(clear);
         mRoot.addView(logHead);
         LinearLayout lc = PortalUi.card(this);
         if (mLog == null || mLog.isEmpty()) {
-            lc.addView(PortalUi.label(this, "(nothing yet)"));
+            lc.addView(PortalUi.label(this, m(R.string.l10n_node_panel_empty)));
         } else {
             for (int i = 0; i < mLog.size(); i++) {
                 TextView t = new TextView(this);
@@ -313,9 +321,9 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         }
         mRoot.addView(lc);
 
-        TextView refreshBtn = PortalUi.ghost(this, "Refresh");
+        TextView refreshBtn = PortalUi.ghost(this, m(R.string.l10n_common_refresh));
         refreshBtn.setOnClickListener(v -> {
-            if (mBusy) { Toast.makeText(this, "Busy — try again", Toast.LENGTH_SHORT).show(); }
+            if (mBusy) { Toast.makeText(this, m(R.string.l10n_node_panel_busy), Toast.LENGTH_SHORT).show(); }
             else { refresh(false); }
         });
         LinearLayout.LayoutParams rlp = PortalUi.matchWrap(this);
@@ -343,7 +351,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
                 mMain.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (fe != null) {
-                        Toast.makeText(CloudNodePanelActivity.this, fe, Toast.LENGTH_LONG).show();
+                        Toast.makeText(CloudNodePanelActivity.this, SystemMessages.text(CloudNodePanelActivity.this, fe), Toast.LENGTH_LONG).show();
                     }
                     refresh(false);
                 });
@@ -351,14 +359,14 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
             public void err(String m) {
                 mMain.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    Toast.makeText(CloudNodePanelActivity.this, m, Toast.LENGTH_LONG).show();
+                    Toast.makeText(CloudNodePanelActivity.this, SystemMessages.text(CloudNodePanelActivity.this, m), Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
 
     private void hostOp(String add, String remove) {
-        Toast.makeText(this, add.isEmpty() ? "Detaching…" : "Connecting…",
+        Toast.makeText(this, add.isEmpty() ? m(R.string.l10n_node_panel_detaching) : m(R.string.l10n_connection_connecting),
                 Toast.LENGTH_SHORT).show();
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
@@ -375,7 +383,7 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
                 mMain.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (fe != null) {
-                        Toast.makeText(CloudNodePanelActivity.this, fe, Toast.LENGTH_LONG).show();
+                        Toast.makeText(CloudNodePanelActivity.this, SystemMessages.text(CloudNodePanelActivity.this, fe), Toast.LENGTH_LONG).show();
                     }
                     refresh(false);
                 });
@@ -383,14 +391,14 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
             public void err(String m) {
                 mMain.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    Toast.makeText(CloudNodePanelActivity.this, m, Toast.LENGTH_LONG).show();
+                    Toast.makeText(CloudNodePanelActivity.this, SystemMessages.text(CloudNodePanelActivity.this, m), Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
 
     private void mlsOp(final String action) {
-        Toast.makeText(this, "Working…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, m(R.string.l10n_native_network_working), Toast.LENGTH_SHORT).show();
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 String msg;
@@ -413,25 +421,27 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
                 mMain.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (fres != null) mMls = fres;   // remember pin state + permanent addr
-                    Toast.makeText(CloudNodePanelActivity.this, fmsg, Toast.LENGTH_LONG).show();
+                    Toast.makeText(CloudNodePanelActivity.this, SystemMessages.text(CloudNodePanelActivity.this, fmsg), Toast.LENGTH_LONG).show();
                     refresh(false);
                 });
             }
             public void err(String m) {
                 mMain.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    Toast.makeText(CloudNodePanelActivity.this, m, Toast.LENGTH_LONG).show();
+                    Toast.makeText(CloudNodePanelActivity.this, SystemMessages.text(CloudNodePanelActivity.this, m), Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
 
-    private static String uptime(long ms) {
-        if (ms <= 0) return "just started";
-        long s = ms / 1000, d = s / 86400, h = (s % 86400) / 3600, m = (s % 3600) / 60;
-        if (d > 0) return d + "d " + h + "h";
-        if (h > 0) return h + "h " + m + "m";
-        return m + "m";
+    private static Language.Message m(int resource, Object... args) { return Language.msg(resource,args); }
+
+    private static CharSequence uptime(long ms) {
+        if (ms <= 0) return m(R.string.l10n_native_node_started);
+        long s = ms / 1000, d = s / 86400, h = (s % 86400) / 3600, minutes = (s % 3600) / 60;
+        if (d > 0) return m(R.string.l10n_native_node_days_hours,d,h);
+        if (h > 0) return m(R.string.l10n_native_node_hours_minutes,h,minutes);
+        return m(R.string.l10n_native_node_minutes,minutes);
     }
 
     private static String str(JSONObject o, String k) {
@@ -460,6 +470,12 @@ public final class CloudNodePanelActivity extends AppCompatActivity {
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         cm.setPrimaryClip(android.content.ClipData.newPlainText(label, value));
-        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, m(R.string.l10n_common_copied), Toast.LENGTH_SHORT).show();
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
 }

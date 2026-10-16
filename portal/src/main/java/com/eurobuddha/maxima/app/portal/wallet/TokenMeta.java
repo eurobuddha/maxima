@@ -12,6 +12,8 @@ import java.net.URLDecoder;
 public class TokenMeta {
 
     public String name = "Token";
+    /** Whether the chain supplied a nonempty name; UI can localize only the fallback. */
+    public boolean nameProvided = false;
     public String ticker = "";
     public String iconUrl = "";
     public String description = "";
@@ -26,11 +28,13 @@ public class TokenMeta {
         TokenMeta m = new TokenMeta();
         if (Util.isMinima(tokenid)) {
             m.name = "Minima";
+            m.nameProvided = true;
             m.ticker = "MINIMA";
             return m;
         }
         if (token instanceof String) {
             m.name = (String) token;
+            m.nameProvided = !m.name.isEmpty();
             return m;
         }
         if (token instanceof JSONObject) {
@@ -42,8 +46,10 @@ public class TokenMeta {
             if (nameNode instanceof JSONObject) {
                 meta = (JSONObject) nameNode;
                 m.name = meta.optString("name", "Token");
+                m.nameProvided = meta.has("name") && !meta.isNull("name") && !m.name.isEmpty();
             } else if (nameNode instanceof String) {
                 m.name = (String) nameNode;
+                m.nameProvided = !m.name.isEmpty();
             }
 
             // Canonical location is c.token.url; resolve it (artimage / data / http / svg / base64) exactly

@@ -12,7 +12,8 @@
         android:padding="24dp"
         android:gravity="center"
         android:textColor="@color/ide_dim"
-        android:text="No scripts yet.\n\nTap NEW SCRIPT to start from a template —\nedit, lint, test in the node&#8217;s own VM, then deploy." />
+        android:tag="l10n:text=l10n_scripts_empty"
+        android:text="@string/l10n_scripts_empty" />
 
     <ListView
         android:id="@+id/scripts_list"
@@ -32,16 +33,18 @@
             android:id="@+id/scripts_new"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_marginEnd="8dp"
-            android:text="New script" />
+            android:tag="l10n:text=l10n_scripts_new"
+            android:text="@string/l10n_scripts_new" />
 
         <Button
             android:id="@+id/scripts_node"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="On node" />
+            android:layout_height="match_parent"
+            android:tag="l10n:text=l10n_scripts_on_node"
+            android:text="@string/l10n_scripts_on_node" />
 
     </LinearLayout>
 

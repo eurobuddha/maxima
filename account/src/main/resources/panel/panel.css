@@ -79,8 +79,8 @@ a { color: inherit; }
 .ibtn:hover { background: rgba(255,255,255,.1); }
 .ibtn .ic { width: 22px; height: 22px; }
 .ibtn.narrow { width: 36px; }
-.tabs { display: flex; background: var(--header); }
-.tabs button { flex: 1; padding: 13px 2px 12px; color: rgba(255,255,255,.6); font-size: 13.5px; font-weight: 500; position: relative; white-space: nowrap; }
+.tabs { display: flex; background: var(--header); overflow-x: auto; flex-shrink: 0; }
+.tabs button { flex: 1 0 auto; padding: 13px 10px 12px; color: rgba(255,255,255,.6); font-size: 13.5px; font-weight: 500; position: relative; white-space: nowrap; }
 .tabs button.on { color: var(--onheader); }
 .tabs button.on::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 34px; height: 2px; background: var(--onheader); transform: translateX(-50%); }
 .page { flex: 1; min-height: 0; overflow-y: auto; position: relative; display: flex; flex-direction: column; }
@@ -267,3 +267,15 @@ button:disabled { cursor: default; opacity: .55; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; }
 .emoji-choice { background: transparent; border-radius: 6px; font-size: 25px; min-height: 40px; }
 .emoji-choice:hover, .emoji-choice:focus-visible { background: var(--press); }
+
+/* The language picker uses the same card and button vocabulary as Settings. */
+.language-dialog { width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; margin: auto; padding: 24px; border: 1px solid var(--divider); border-radius: 18px; background: var(--card); color: var(--text); box-shadow: 0 18px 60px rgba(0,0,0,.22); }
+.language-dialog::backdrop { background: var(--scrim); }
+.language-dialog h2 { font-size: 19px; margin: 0 0 18px; font-weight: 700; }
+.language-option { display: block; width: 100%; min-height: 52px; margin: 8px 0; padding: 12px 16px; border: 1px solid var(--divider); border-radius: 10px; text-align: start; font-size: 17px; }
+.language-option:hover, .language-option[aria-pressed="true"] { background: var(--selected); border-color: var(--text); }
+.language-option:focus-visible, .language-change:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+:lang(zh-Hans) { line-break: strict; }
+.hosted-account-row { flex-wrap: wrap; }
+.hosted-account-row .mid { flex-basis: 100%; }
+.hosted-account-row .btn { flex: 1 1 auto; white-space: normal; }

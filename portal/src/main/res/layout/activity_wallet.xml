@@ -22,6 +22,8 @@
 
         <TextView
             android:id="@+id/designToggle"
+            android:contentDescription="@string/l10n_common_back"
+            android:tag="l10n:description=l10n_common_back"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="‹"
@@ -39,7 +41,8 @@
                 android:id="@+id/brandTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Wallet"
+                android:text="@string/l10n_nav_wallet"
+                android:tag="l10n:text=l10n_nav_wallet"
                 android:textColor="@color/ux_accent"
                 android:textStyle="bold"
                 android:textSize="17sp" />
@@ -47,7 +50,8 @@
                 android:id="@+id/brandSub"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="YOUR NODE'S WALLET"
+                android:text="@string/l10n_nav_wallet"
+                android:tag="l10n:text=l10n_nav_wallet"
                 android:textColor="@color/ux_subtext"
                 android:textSize="9sp"
                 android:letterSpacing="0.15" />
@@ -55,6 +59,8 @@
 
         <TextView
             android:id="@+id/settingsBtn"
+            android:contentDescription="@string/l10n_nav_settings"
+            android:tag="l10n:description=l10n_nav_settings"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="⚙"
@@ -72,7 +78,7 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Pairing banner: shown until the user enables this app in Minima Core -->
+    <!-- Pairing banner: shown while the account connection is unavailable -->
     <LinearLayout
         android:id="@+id/pairingBanner"
         android:layout_width="match_parent"
@@ -86,7 +92,8 @@
             android:id="@+id/pairingTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="This wallet is not enabled yet"
+            android:text="@string/l10n_node_wallet_connection"
+            android:tag="l10n:text=l10n_node_wallet_connection"
             android:textColor="@color/ux_accent"
             android:textStyle="bold"
             android:textSize="15sp" />
@@ -96,7 +103,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Open Minima Core → Apps and enable &quot;NFT Wallet&quot;, then come back."
+            android:text="@string/l10n_node_wallet_connection_help"
+            android:tag="l10n:text=l10n_node_wallet_connection_help"
             android:textColor="@color/ux_subtext"
             android:textSize="13sp" />
 
@@ -105,7 +113,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="Open Minima Core" />
+            android:text="@string/l10n_native_settings_open_core"
+            android:tag="l10n:text=l10n_native_settings_open_core" />
     </LinearLayout>
 
     <!-- Tab strip with scroll affordances: seven tabs overflow a narrow/cover display and there
@@ -118,6 +127,8 @@
 
         <TextView
             android:id="@+id/tabScrollLeft"
+            android:contentDescription="@string/l10n_node_wallet_previous_tabs"
+            android:tag="l10n:description=l10n_node_wallet_previous_tabs"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
@@ -142,6 +153,8 @@
 
         <TextView
             android:id="@+id/tabScrollRight"
+            android:contentDescription="@string/l10n_node_wallet_next_tabs"
+            android:tag="l10n:description=l10n_node_wallet_next_tabs"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"

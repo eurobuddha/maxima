@@ -1,6 +1,7 @@
 package com.eurobuddha.maxima.app;
 
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.content.SharedPreferences;
 import android.os.Build;
 
@@ -108,7 +109,7 @@ public final class AppLock {
                 .setAllowedAuthenticators(authenticators());
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             // A negative button is required when DEVICE_CREDENTIAL isn't allowed.
-            b.setNegativeButtonText("Cancel");
+            b.setNegativeButtonText(Language.text(zActivity, R.string.l10n_common_cancel));
         }
         BiometricPrompt.PromptInfo info = b.build();
 
@@ -134,7 +135,7 @@ public final class AppLock {
         try {
             bp.authenticate(info);
         } catch (Exception e) {
-            zCallback.onError("Lock prompt failed: " + e.getMessage());
+            zCallback.onError(Language.text(zActivity, R.string.l10n_native_lock_failed, e.getMessage()));
         }
     }
 

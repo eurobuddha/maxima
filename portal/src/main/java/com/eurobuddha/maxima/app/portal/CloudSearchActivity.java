@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal;
 
 import android.content.Intent;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SearchText;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,8 +28,6 @@ import com.eurobuddha.maxima.cloud.ParlonsRemote;
 import org.minima.utils.json.JSONArray;
 import org.minima.utils.json.JSONObject;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Locale;
 
 /**
@@ -41,7 +41,8 @@ public final class CloudSearchActivity extends AppCompatActivity {
     private LinearLayout mResults;
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private volatile int mGen;
-    private final SimpleDateFormat mDay = new SimpleDateFormat("d MMM yyyy", Locale.UK);
+    private String mDisplayedQuery;
+    private JSONObject mDisplayedResults;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -61,10 +62,11 @@ public final class CloudSearchActivity extends AppCompatActivity {
         back.setTextSize(26);
         back.setTextColor(getColor(R.color.ux_on_header));
         back.setPadding(0, 0, PortalUi.dp(this, 14), 0);
+        Language.description(back, Language.msg(R.string.l10n_common_back));
         back.setOnClickListener(v -> finish());
         bar.addView(back);
         mField = new EditText(this);
-        mField.setHint("Search messages…");
+        Language.hint(mField, Language.msg(R.string.l10n_search_messages));
         mField.setSingleLine(true);
         mField.setTextColor(getColor(R.color.ux_on_header));
         mField.setHintTextColor(getColor(R.color.ux_subtext));
@@ -135,6 +137,7 @@ public final class CloudSearchActivity extends AppCompatActivity {
     }
 
     private void render(String q, JSONObject res) {
+        mDisplayedQuery = q; mDisplayedResults = res;
         mResults.removeAllViews();
         if (res == null) {
             return;
@@ -142,11 +145,11 @@ public final class CloudSearchActivity extends AppCompatActivity {
         JSONArray convs = (JSONArray) res.get("conversations");
         JSONArray msgs = (JSONArray) res.get("messages");
         if ((convs == null || convs.isEmpty()) && (msgs == null || msgs.isEmpty())) {
-            mResults.addView(PortalUi.label(this, "No matches."));
+            mResults.addView(PortalUi.label(this, Language.msg(R.string.l10n_chat_no_matches)));
             return;
         }
         if (convs != null && !convs.isEmpty()) {
-            mResults.addView(PortalUi.section(this, "Contacts & groups"));
+            mResults.addView(PortalUi.section(this, Language.msg(R.string.l10n_search_contacts_groups)));
             for (Object o : convs) {
                 JSONObject c = (JSONObject) o;
                 addRow(str(c, "peer"), str(c, "name"), bool(c, "group"),
@@ -154,7 +157,7 @@ public final class CloudSearchActivity extends AppCompatActivity {
             }
         }
         if (msgs != null && !msgs.isEmpty()) {
-            mResults.addView(PortalUi.section(this, "Messages"));
+            mResults.addView(PortalUi.section(this, Language.msg(R.string.l10n_search_message_section)));
             for (Object o : msgs) {
                 JSONObject m = (JSONObject) o;
                 addRow(str(m, "peer"), str(m, "name"), bool(m, "group"),
@@ -181,7 +184,7 @@ public final class CloudSearchActivity extends AppCompatActivity {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView t = new TextView(this);
-        t.setText(name + (time > 0 ? "   " + mDay.format(new Date(time)) : ""));
+        t.setText(name + (time > 0 ? "   " + Language.date(time, "yMMMd") : ""));
         t.setTextColor(getColor(R.color.ux_text));
         t.setTextSize(15);
         col.addView(t);
@@ -204,16 +207,8 @@ public final class CloudSearchActivity extends AppCompatActivity {
     }
 
     private CharSequence highlight(String text, String q) {
-        // regionMatches on the ORIGINAL string — lowercasing the haystack can change its length
-        // (e.g. İ→i̇) and shift/blow the substring indices.
-        int at = -1;
+        int at = SearchText.indexOf(text, q);
         int n = q.length();
-        for (int i = 0; i + n <= text.length(); i++) {
-            if (text.regionMatches(true, i, q, 0, n)) {
-                at = i;
-                break;
-            }
-        }
         if (at < 0) {
             return text.length() > 80 ? text.substring(0, 80) + "…" : text;
         }
@@ -246,4 +241,11 @@ public final class CloudSearchActivity extends AppCompatActivity {
         Object v = o.get(k);
         return v instanceof Boolean && (Boolean) v;
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        Language.configurationChanged(this);
+        if (mDisplayedQuery != null && mResults != null) render(mDisplayedQuery, mDisplayedResults);
+    }
+
 }

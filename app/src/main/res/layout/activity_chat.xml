@@ -23,11 +23,12 @@
         android:paddingBottom="6dp">
 
         <ImageButton
+            android:tag="l10n:description=l10n_common_back"
             android:id="@+id/btn_chat_back"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Back"
+            android:contentDescription="@string/l10n_common_back"
             android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_back"
@@ -71,44 +72,48 @@
         </LinearLayout>
 
         <ImageButton
+            android:tag="l10n:description=l10n_common_theme"
             android:id="@+id/btn_chat_theme"
             android:layout_width="38dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Theme"
+            android:contentDescription="@string/l10n_common_theme"
             android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_theme"
             app:tint="@color/ux_on_header" />
 
         <ImageButton
+            android:tag="l10n:description=l10n_call_video"
             android:id="@+id/btn_chat_video"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Video call"
+            android:contentDescription="@string/l10n_call_video"
             android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_videocall"
             app:tint="@color/ux_on_header" />
 
         <ImageButton
+            android:tag="l10n:description=l10n_call_voice"
             android:id="@+id/btn_chat_call"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Voice call"
+            android:contentDescription="@string/l10n_call_voice"
             android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_call"
             app:tint="@color/ux_on_header" />
 
         <ImageButton
+            android:tag="l10n:description=l10n_chat_details"
             android:id="@+id/btn_chat_info"
             android:layout_width="38dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Details"
+            android:contentDescription="@string/l10n_chat_details"
             android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_more"
@@ -144,13 +149,14 @@
             android:visibility="gone" />
 
         <ImageButton
+            android:tag="l10n:description=l10n_chat_latest"
             android:id="@+id/btn_scroll_bottom"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_gravity="bottom|end"
             android:layout_margin="14dp"
             android:background="@drawable/fab_circle"
-            android:contentDescription="Jump to latest"
+            android:contentDescription="@string/l10n_chat_latest"
             android:elevation="4dp"
             android:padding="9dp"
             android:scaleType="fitCenter"
@@ -183,23 +189,25 @@
             android:paddingEnd="6dp">
 
             <ImageButton
+                android:tag="l10n:description=l10n_chat_emoji"
                 android:id="@+id/btn_chat_emoji"
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Emoji"
+                android:contentDescription="@string/l10n_chat_emoji"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_emoji"
                 app:tint="@color/ux_subtext" />
 
             <EditText
+                android:tag="l10n:hint=l10n_chat_message"
                 android:id="@+id/chat_input"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:background="@android:color/transparent"
-                android:hint="Message"
+                android:hint="@string/l10n_chat_message"
                 android:importantForAutofill="no"
                 android:inputType="textCapSentences|textMultiLine"
                 android:maxLines="5"
@@ -212,22 +220,24 @@
                 android:textSize="15sp" />
 
             <ImageButton
+                android:tag="l10n:description=l10n_chat_attach"
                 android:id="@+id/btn_chat_attach"
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Attach"
+                android:contentDescription="@string/l10n_chat_attach"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_attach"
                 app:tint="@color/ux_subtext" />
 
             <ImageButton
+                android:tag="l10n:description=l10n_media_camera"
                 android:id="@+id/btn_chat_camera"
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Camera"
+                android:contentDescription="@string/l10n_media_camera"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_camera"
@@ -235,12 +245,13 @@
         </LinearLayout>
 
         <ImageButton
+            android:tag="l10n:description=l10n_chat_send"
             android:id="@+id/btn_chat_send"
             android:layout_width="46dp"
             android:layout_height="46dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/btn_send_circle"
-            android:contentDescription="Send"
+            android:contentDescription="@string/l10n_chat_send"
             android:padding="12dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_mic"

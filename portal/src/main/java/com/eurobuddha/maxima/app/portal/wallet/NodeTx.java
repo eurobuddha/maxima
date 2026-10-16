@@ -107,6 +107,8 @@ public class NodeTx {
     public boolean isSplit() { return "self".equals(direction) && count(outputs) > count(inputs) && count(outputs) > 1; }
     public boolean isConsolidation() { return "self".equals(direction) && count(inputs) > count(outputs) && count(inputs) > 1; }
     public boolean isReshuffle() { return isSplit() || isConsolidation(); }
+    /** Count used by the localized history label; keeps JSON parsing in the model. */
+    public int reshuffleCoinCount() { return count(isSplit() ? outputs : inputs); }
     public String reshuffleLabel() {
         return isSplit() ? ("Split · " + count(outputs) + " coins") : ("Consolidation · " + count(inputs) + " coins");
     }

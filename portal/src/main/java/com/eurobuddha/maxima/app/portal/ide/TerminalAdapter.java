@@ -79,6 +79,10 @@ public class TerminalAdapter extends PagerAdapter {
         }
     }
 
+    public void languageChanged() {
+        for (BaseView view : mAllViews) view.languageChanged();
+    }
+
     public void onDestroy() {
         for (BaseView v : mAllViews) {
             if (v != null) v.onDestroy();

@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
@@ -39,18 +43,16 @@ public final class StateNftActions {
             // An unstamped unit still carries the sentinel — the creator bypass is LIVE on it, so a
             // recipient would hold a coin the creator can rewrite; and an active mint's MOVE phase
             // would fight to pull it back. Only sealed identities leave the wallet.
-            Sheet.create(act, "Cannot transfer")
-                .subtitle("This item has not been stamped yet — its identity isn't sealed, and "
-                            + "the creator key could still rewrite it. Wait for the mint to finish stamping.")
-                .action("Close", Sheet.Style.SECONDARY, null)
+            Sheet.create(act, msg(R.string.l10n_node_nft_cannot_transfer))
+                .subtitle(msg(R.string.l10n_node_nft_unstamped_transfer))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
             return;
         }
         if (!StateNft.replayableState(coin)) {
-            Sheet.create(act, "Cannot transfer")
-                .subtitle("This coin carries state this wallet does not recognise as safe to replay. "
-                            + "Transferring it could corrupt or misuse the transaction — refusing.")
-                .action("Close", Sheet.Style.SECONDARY, null)
+            Sheet.create(act, msg(R.string.l10n_node_nft_cannot_transfer))
+                .subtitle(msg(R.string.l10n_node_nft_unsafe_transfer))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
             return;
         }
@@ -62,8 +64,7 @@ public final class StateNftActions {
         box.setPadding(pad, dp(act, 8), pad, dp(act, 8));
 
         TextView t = new TextView(act);
-        t.setText("The item's on-chain identity is replayed verbatim to the new owner. "
-                + "One transaction, owner signature only.");
+        Language.setText(t, msg(R.string.l10n_node_nft_transfer_help));
         t.setTextColor(Design.dim());
         t.setTextSize(12f);
         box.addView(t);
@@ -72,7 +73,7 @@ public final class StateNftActions {
         addrRow.setOrientation(LinearLayout.HORIZONTAL);
         addrRow.setGravity(Gravity.CENTER_VERTICAL);
         final EditText addr = new EditText(act);
-        addr.setHint("Recipient  Mx…  or  0x…");
+        Language.hint(addr, msg(R.string.l10n_node_nft_recipient));
         addr.setHintTextColor(Design.dim2());
         addr.setTextColor(Design.text());
         addr.setTextSize(13f);
@@ -83,6 +84,7 @@ public final class StateNftActions {
         addrRow.addView(addr, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         TextView scan = new TextView(act);
         scan.setText(" ⌗ ");
+        Language.description(scan, msg(R.string.l10n_common_scan_qr));
         scan.setTextColor(Design.accent());
         scan.setTextSize(16f);
         scan.setOnClickListener(v -> act.scanQr(text -> { if (text != null) addr.setText(text.trim()); }));
@@ -93,13 +95,14 @@ public final class StateNftActions {
         addrRow.setLayoutParams(arlp);
         box.addView(addrRow);
 
-        Sheet.create(act, "Transfer " + displayName)
+        Sheet.create(act, msg(R.string.l10n_node_nft_transfer_title, displayName))
+                .stackActions()
                 .body(box)
-                .action("Back", Sheet.Style.SECONDARY, null)
-                .action("Transfer →", Sheet.Style.PRIMARY, () -> {
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_nft_transfer_action), Sheet.Style.PRIMARY, () -> {
                     String to = addr.getText().toString().trim();
                     if (!Util.isValidAddress(to)) {
-                        android.widget.Toast.makeText(act, "That isn't a valid Minima address.",
+                        android.widget.Toast.makeText(act, Language.text(act, R.string.l10n_node_send_not_minima_address),
                                 android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
@@ -114,19 +117,17 @@ public final class StateNftActions {
         String txn = "tr" + shortId(coinid);
         List<String> cmds = StateNft.transferCommands(txn, tokenid, coin, to);
         final Sheet.Progress progress = progressDialog(act,
-                "Transferring " + displayName, "Building and posting the transaction…");
+                msg(R.string.l10n_node_nft_transferring, displayName), msg(R.string.l10n_node_nft_building_transfer));
         CmdChain.run(act.node(), cmds, "txndelete id:" + txn, new CmdChain.Done() {
             @Override public void ok(JSONObject last) {
                 act.node().cmd("txndelete id:" + txn, NOOP);
-                setMessage(progress, "Posted. Waiting for the chain to accept it — the coin must "
-                        + "leave your UTXO set. This can take a few minutes. You can close this; "
-                        + "the wallet keeps watching.");
+                setMessage(progress, msg(R.string.l10n_node_nft_waiting_transfer));
                 makeDismissable(progress);
                 watchDeparture(act, tokenid, coinid, progress,
-                        "✓ Transferred — " + displayName + " now belongs to " + Util.shorten(to) + ".");
+                        msg(R.string.l10n_node_nft_transferred, displayName, Util.shorten(to)));
             }
             @Override public void fail(String message) {
-                setMessage(progress, "Failed: " + message);
+                setMessage(progress, msg(R.string.l10n_node_send_failed, message));
                 makeDismissable(progress);
             }
         });
@@ -139,17 +140,16 @@ public final class StateNftActions {
                                   String displayName, JSONObject coin) {
         if (!idsSafe(act, tokenid, coin)) return;
         if (StateNft.stamped(coin) == null) {
-            Sheet.create(act, "Cannot bury")
-                .subtitle("Only stamped items can be buried from the wallet. Unstamped mint "
-                            + "coins are managed by the mint pipeline.")
-                .action("Close", Sheet.Style.SECONDARY, null)
+            Sheet.create(act, msg(R.string.l10n_node_nft_cannot_bury))
+                .subtitle(msg(R.string.l10n_node_nft_unstamped_bury))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
             return;
         }
         if (!StateNft.replayableState(coin)) {
-            Sheet.create(act, "Cannot bury")
-                .subtitle("This coin carries state this wallet does not recognise as safe to replay — refusing.")
-                .action("Close", Sheet.Style.SECONDARY, null)
+            Sheet.create(act, msg(R.string.l10n_node_nft_cannot_bury))
+                .subtitle(msg(R.string.l10n_node_nft_unsafe_bury))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
             return;
         }
@@ -161,9 +161,7 @@ public final class StateNftActions {
         box.setPadding(pad, dp(act, 8), pad, dp(act, 8));
 
         TextView t = new TextView(act);
-        t.setText("Burying sends " + displayName + " to the graveyard — an address whose contract "
-                + "is RETURN FALSE. Nobody, ever, can spend it again.\n\nType the collection name to confirm:\n"
-                + collectionName);
+        Language.setText(t, msg(R.string.l10n_node_nft_bury_warning, displayName, collectionName));
         t.setTextColor(Design.red());
         t.setTextSize(12f);
         box.addView(t);
@@ -181,12 +179,13 @@ public final class StateNftActions {
         confirm.setLayoutParams(clp);
         box.addView(confirm);
 
-        Sheet.create(act, "Bury " + displayName + "?")
+        Sheet.create(act, msg(R.string.l10n_node_nft_bury_title, displayName))
+                .stackActions()
                 .body(box)
-                .action("Back", Sheet.Style.SECONDARY, null)
-                .action("Bury forever", Sheet.Style.DANGER, () -> {
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_nft_bury_forever), Sheet.Style.DANGER, () -> {
                     if (!confirm.getText().toString().trim().equals(collectionName)) {
-                        android.widget.Toast.makeText(act, "Type the exact collection name to confirm.",
+                        android.widget.Toast.makeText(act, Language.text(act, R.string.l10n_node_nft_exact_name),
                                 android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
@@ -201,18 +200,17 @@ public final class StateNftActions {
         // Stamped unit: identity-preserving path, owner signature only (creatorPk empty).
         List<String> cmds = StateNft.buryCommands(txn, tokenid, "", coin, true);
         final Sheet.Progress progress = progressDialog(act,
-                "Burying " + displayName, "Building and posting the graveyard transaction…");
+                msg(R.string.l10n_node_nft_burying, displayName), msg(R.string.l10n_node_nft_building_bury));
         CmdChain.run(act.node(), cmds, "txndelete id:" + txn, new CmdChain.Done() {
             @Override public void ok(JSONObject last) {
                 act.node().cmd("txndelete id:" + txn, NOOP);
-                setMessage(progress, "Posted. Waiting for the chain to accept it… You can close this; "
-                        + "the wallet keeps watching.");
+                setMessage(progress, msg(R.string.l10n_node_nft_waiting_bury));
                 makeDismissable(progress);
                 watchDeparture(act, tokenid, coinid, progress,
-                        "✝ Buried — " + displayName + " is at the graveyard, unspendable forever.");
+                        msg(R.string.l10n_node_nft_buried, displayName));
             }
             @Override public void fail(String message) {
-                setMessage(progress, "Failed: " + message);
+                setMessage(progress, msg(R.string.l10n_node_send_failed, message));
                 makeDismissable(progress);
             }
         });
@@ -234,10 +232,9 @@ public final class StateNftActions {
     public static void transferCollectionDialog(final WalletActivity act, final String tokenid,
                                                 final String collectionName, final Runnable onDone) {
         if (!Util.isValidHexId(tokenid)) {
-            Sheet.create(act, "Refusing this collection")
-                    .subtitle("Its token id is not plain hex, so this wallet will not build "
-                            + "transactions from it.")
-                    .action("Close", Sheet.Style.SECONDARY, null)
+            Sheet.create(act, msg(R.string.l10n_node_nft_refuse_collection))
+                    .subtitle(msg(R.string.l10n_node_nft_bad_token_id))
+                    .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                     .show();
             return;
         }
@@ -249,11 +246,7 @@ public final class StateNftActions {
         box.setPadding(pad, dp(act, 8), pad, dp(act, 8));
 
         TextView t = new TextView(act);
-        t.setText("Sends every stamped item of “" + collectionName + "” that you still hold to one "
-                + "address.\n\nEach item is its own transaction — the chain requires that, because "
-                + "every item carries a different sealed identity — so this takes a few minutes and "
-                + "the items arrive one by one.\n\nUnstamped items and items you have already sent "
-                + "are skipped.");
+        Language.setText(t, msg(R.string.l10n_node_nft_transfer_collection_help, collectionName));
         t.setTextColor(Design.dim());
         t.setTextSize(12f);
         box.addView(t);
@@ -262,7 +255,7 @@ public final class StateNftActions {
         addrRow.setOrientation(LinearLayout.HORIZONTAL);
         addrRow.setGravity(Gravity.CENTER_VERTICAL);
         final EditText addr = new EditText(act);
-        addr.setHint("Recipient  Mx…  or  0x…");
+        Language.hint(addr, msg(R.string.l10n_node_nft_recipient));
         addr.setHintTextColor(Design.dim2());
         addr.setTextColor(Design.text());
         addr.setTextSize(13f);
@@ -273,6 +266,7 @@ public final class StateNftActions {
         addrRow.addView(addr, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         TextView scan = new TextView(act);
         scan.setText(" ⌗ ");
+        Language.description(scan, msg(R.string.l10n_common_scan_qr));
         scan.setTextColor(Design.accent());
         scan.setTextSize(16f);
         scan.setOnClickListener(v -> act.scanQr(text -> { if (text != null) addr.setText(text.trim()); }));
@@ -283,13 +277,14 @@ public final class StateNftActions {
         addrRow.setLayoutParams(arlp);
         box.addView(addrRow);
 
-        Sheet.create(act, "Send the whole collection")
+        Sheet.create(act, msg(R.string.l10n_node_gallery_send_collection))
+                .stackActions()
                 .body(box)
-                .action("Back", Sheet.Style.SECONDARY, null)
-                .action("Send all →", Sheet.Style.PRIMARY, () -> {
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_nft_send_all), Sheet.Style.PRIMARY, () -> {
                     String to = addr.getText().toString().trim();
                     if (!Util.isValidAddress(to)) {
-                        android.widget.Toast.makeText(act, "That isn't a valid Minima address.",
+                        android.widget.Toast.makeText(act, Language.text(act, R.string.l10n_node_send_not_minima_address),
                                 android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
@@ -302,7 +297,7 @@ public final class StateNftActions {
                                           final String collectionName, final String to,
                                           final Runnable onDone) {
         final Sheet.Progress progress = progressDialog(act,
-                "Sending " + collectionName, "Finding the items you still hold…");
+                msg(R.string.l10n_node_nft_sending, collectionName), msg(R.string.l10n_node_nft_finding_items));
         act.node().cmd("coins relevant:true tokenid:" + tokenid, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 org.json.JSONArray arr = json.optJSONArray("response");
@@ -322,9 +317,8 @@ public final class StateNftActions {
                 }
                 if (coins.isEmpty()) {
                     setMessage(progress, skipped > 0
-                            ? "Nothing sendable here — " + skipped + " item(s) were skipped as "
-                              + "unstamped or unsafe to replay."
-                            : "You hold no items of this collection.");
+                            ? msg(R.string.l10n_node_nft_nothing_sendable, skipped)
+                            : msg(R.string.l10n_node_nft_no_items));
                     makeDismissable(progress);
                     return;
                 }
@@ -333,9 +327,8 @@ public final class StateNftActions {
             }
             @Override public void onError(String message) {
                 setMessage(progress, NodeApi.ERR_TOO_LONG.equals(message)
-                        ? "The node's coin list for this collection is too large to fetch here — "
-                          + "send the items individually from the Gallery."
-                        : "Could not list the items: " + message);
+                        ? msg(R.string.l10n_node_nft_transfer_list_too_long)
+                        : msg(R.string.l10n_node_nft_list_items_error, message));
                 makeDismissable(progress);
             }
         });
@@ -347,14 +340,11 @@ public final class StateNftActions {
                                      final Sheet.Progress progress, final Runnable onDone) {
         if (i >= coins.size()) {
             int failed = coins.size() - done[0];
-            setMessage(progress, "Posted " + done[0] + " of " + coins.size() + " transfers"
-                    + (skipped > 0 ? " (" + skipped + " skipped)" : "") + ".\n\n"
-                    // A bare count leaves the user guessing between "not enough Minima", "already
-                    // spent" and "node not enabled" — three very different next steps.
-                    + (failed > 0 && firstError[0] != null
-                        ? failed + " failed. First error: " + firstError[0] + "\n\n" : "")
-                    + "The chain has the last word — items leave your wallet as each spend "
-                    + "confirms, over the next few blocks.");
+            setMessage(progress, Language.join(msg(R.string.l10n_node_nft_transfers_posted, done[0], coins.size()),
+                    skipped > 0 ? Language.join(" ", msg(R.string.l10n_node_nft_skipped, skipped)) : "",
+                    "\n\n", failed > 0 && firstError[0] != null
+                        ? Language.join(msg(R.string.l10n_node_nft_failed, failed, firstError[0]), "\n\n") : "",
+                    msg(R.string.l10n_node_nft_transfer_confirmations)));
             makeDismissable(progress);
             act.reload();
             if (onDone != null) onDone.run();
@@ -362,8 +352,7 @@ public final class StateNftActions {
         }
         final JSONObject coin = coins.get(i);
         String idx = StateNft.stamped(coin);
-        setMessage(progress, "Sending " + (i + 1) + " of " + coins.size()
-                + (idx == null ? "" : "  (#" + idx + ")") + "…");
+        setMessage(progress, msg(R.string.l10n_node_nft_sending_item, i + 1, coins.size(), idx == null ? "" : "  (#" + idx + ")"));
         final String txn = "tc" + shortId(coin.optString("coinid", ""));
         java.util.List<String> cmds = StateNft.transferCommands(txn, tokenid, coin, to);
         CmdChain.run(act.node(), cmds, "txndelete id:" + txn, new CmdChain.Done() {
@@ -398,10 +387,9 @@ public final class StateNftActions {
                                             final String collectionName, final String creatorPk,
                                             final Runnable onDone) {
         if (!Util.isValidHexId(tokenid)) {
-            Sheet.create(act, "Refusing this collection")
-                .subtitle("Its token id is not plain hex, so this wallet will not build "
-                            + "transactions from it.")
-                .action("Close", Sheet.Style.SECONDARY, null)
+            Sheet.create(act, msg(R.string.l10n_node_nft_refuse_collection))
+                .subtitle(msg(R.string.l10n_node_nft_bad_token_id))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
             return;
         }
@@ -413,11 +401,7 @@ public final class StateNftActions {
         box.setPadding(pad, dp(act, 8), pad, dp(act, 8));
 
         TextView t = new TextView(act);
-        t.setText("This buries EVERY item of “" + collectionName + "” that you still hold — one "
-                + "transaction each, all to the graveyard address whose contract is RETURN FALSE. "
-                + "They can never be spent, moved or recovered by anyone, including you.\n\n"
-                + "Items already transferred to someone else are not affected.\n\n"
-                + "Type the collection name to confirm:\n" + collectionName);
+        Language.setText(t, msg(R.string.l10n_node_nft_bury_collection_warning, collectionName));
         t.setTextColor(Design.red());
         t.setTextSize(12f);
         box.addView(t);
@@ -435,12 +419,13 @@ public final class StateNftActions {
         confirm.setLayoutParams(clp);
         box.addView(confirm);
 
-        Sheet.create(act, "Bury the whole collection?")
+        Sheet.create(act, msg(R.string.l10n_node_nft_bury_collection_title))
+                .stackActions()
                 .body(box)
-                .action("Back", Sheet.Style.SECONDARY, null)
-                .action("Bury everything", Sheet.Style.DANGER, () -> {
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_nft_bury_everything), Sheet.Style.DANGER, () -> {
                     if (!confirm.getText().toString().trim().equals(collectionName)) {
-                        android.widget.Toast.makeText(act, "Type the exact collection name to confirm.",
+                        android.widget.Toast.makeText(act, Language.text(act, R.string.l10n_node_nft_exact_name),
                                 android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
@@ -453,7 +438,7 @@ public final class StateNftActions {
                                       final String collectionName, final String creatorPk,
                                       final Runnable onDone) {
         final Sheet.Progress progress = progressDialog(act,
-                "Burying " + collectionName, "Finding the coins you still hold…");
+                msg(R.string.l10n_node_nft_burying, collectionName), msg(R.string.l10n_node_nft_finding_coins));
         act.node().cmd("coins relevant:true tokenid:" + tokenid, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 org.json.JSONArray arr = json.optJSONArray("response");
@@ -468,7 +453,7 @@ public final class StateNftActions {
                     }
                 }
                 if (coins.isEmpty()) {
-                    setMessage(progress, "You hold no coins of this collection — nothing to bury.");
+                    setMessage(progress, msg(R.string.l10n_node_nft_nothing_to_bury));
                     makeDismissable(progress);
                     if (onDone != null) onDone.run();
                     return;
@@ -477,9 +462,8 @@ public final class StateNftActions {
             }
             @Override public void onError(String message) {
                 setMessage(progress, NodeApi.ERR_TOO_LONG.equals(message)
-                        ? "The node's coin list for this collection is too large to fetch here — "
-                          + "bury the items individually from the Gallery."
-                        : "Could not list the coins: " + message);
+                        ? msg(R.string.l10n_node_nft_bury_list_too_long)
+                        : msg(R.string.l10n_node_nft_list_coins_error, message));
                 makeDismissable(progress);
             }
         });
@@ -489,16 +473,14 @@ public final class StateNftActions {
                                  final java.util.List<JSONObject> coins, final int i, final int[] done,
                                  final Sheet.Progress progress, final Runnable onDone) {
         if (i >= coins.size()) {
-            setMessage(progress, "Posted " + done[0] + " of " + coins.size() + " burials.\n\n"
-                    + "The chain has the last word — the items disappear from your wallet as each "
-                    + "spend confirms, over the next few blocks.");
+            setMessage(progress, msg(R.string.l10n_node_nft_burials_posted, done[0], coins.size()));
             makeDismissable(progress);
             act.reload();
             if (onDone != null) onDone.run();
             return;
         }
         final JSONObject coin = coins.get(i);
-        setMessage(progress, "Burying " + (i + 1) + " of " + coins.size() + "…");
+        setMessage(progress, msg(R.string.l10n_node_nft_burying_item, i + 1, coins.size()));
         final String txn = "bc" + shortId(coin.optString("coinid", ""));
         // Stamped units preserve their identity into the graveyard; unstamped ones still carry the
         // sentinel, so they need the creator signature to satisfy the bypass.
@@ -525,7 +507,7 @@ public final class StateNftActions {
      * The only proof is the input coin disappearing from {@code coins relevant:true tokenid:}.
      */
     private static void watchDeparture(WalletActivity act, String tokenid, String coinid,
-                                       Sheet.Progress progress, String successMsg) {
+                                       Sheet.Progress progress, CharSequence successMsg) {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
         final Runnable[] poll = new Runnable[1];
@@ -555,9 +537,7 @@ public final class StateNftActions {
                 if (NodeApi.ERR_TOO_LONG.equals(message)) {
                     // The reply was capped, so absence proves nothing — say so instead of
                     // polling to a false "may have been rejected".
-                    setMessage(progress, "Posted, but this wallet can't confirm it here — the node's "
-                            + "coin list for this token is too large to fetch. Check the item in "
-                            + "Gallery in a few minutes.");
+                    setMessage(progress, msg(R.string.l10n_node_nft_cannot_confirm));
                     makeDismissable(progress);
                     act.reload();
                     return;
@@ -566,9 +546,7 @@ public final class StateNftActions {
             }
             private void reschedule() {
                 if (++tries[0] >= WATCH_TRIES) {
-                    setMessage(progress, "Still unconfirmed after " + WATCH_TRIES
-                            + " checks — the spend may have been rejected. The coin is still yours "
-                            + "if it stays in the coin list.");
+                    setMessage(progress, Language.count(R.plurals.l10n_node_nft_unconfirmed, WATCH_TRIES));
                     makeDismissable(progress);
                     return;
                 }
@@ -589,10 +567,9 @@ public final class StateNftActions {
     private static boolean idsSafe(WalletActivity act, String tokenid, JSONObject coin) {
         String coinid = coin == null ? "" : coin.optString("coinid", "");
         if (Util.isValidHexId(tokenid) && Util.isValidHexId(coinid)) return true;
-        Sheet.create(act, "Refusing this coin")
-                .subtitle("Its token or coin id is not a plain hex value. That should be impossible "
-                        + "for a genuine coin, so this wallet will not build a transaction from it.")
-                .action("Close", Sheet.Style.SECONDARY, null)
+        Sheet.create(act, msg(R.string.l10n_node_nft_refuse_coin))
+                .subtitle(msg(R.string.l10n_node_nft_bad_coin_id))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
                 .show();
         return false;
     }
@@ -602,11 +579,11 @@ public final class StateNftActions {
         @Override public void onError(String message) {}
     };
 
-    private static Sheet.Progress progressDialog(WalletActivity act, String title, String msg) {
+    private static Sheet.Progress progressDialog(WalletActivity act, CharSequence title, CharSequence msg) {
         return Sheet.progress(act, title, msg);
     }
 
-    private static void setMessage(Sheet.Progress d, String msg) { d.text(msg); }
+    private static void setMessage(Sheet.Progress d, CharSequence msg) { d.text(msg); }
 
     /** The work is over — let the user close it, and give them the button. */
     private static void makeDismissable(Sheet.Progress d) { d.finish(); }

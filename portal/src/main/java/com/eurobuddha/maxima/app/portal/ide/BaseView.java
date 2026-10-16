@@ -15,6 +15,7 @@ public class BaseView {
 
         LayoutInflater inflater = (LayoutInflater) mActivity.getSystemService(mActivity.LAYOUT_INFLATER_SERVICE);
         mMainView = inflater.inflate(zViewResID, null);
+        com.eurobuddha.maxima.app.i18n.Language.apply(mMainView);
     }
 
     public Activity getActivity(){
@@ -26,6 +27,9 @@ public class BaseView {
     }
 
     public void refreshView(){}
+
+    /** Update display labels without refreshing data or rebuilding forms. */
+    public void languageChanged() {}
 
     /** Release resources (e.g. close SQLite handles). Called when the host Activity is destroyed. */
     public void onDestroy(){}

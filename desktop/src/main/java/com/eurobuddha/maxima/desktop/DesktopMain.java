@@ -1,6 +1,7 @@
 package com.eurobuddha.maxima.desktop;
 
 import com.eurobuddha.maxima.core.MaximaNode;
+import com.eurobuddha.maxima.desktop.ui.Language;
 import com.eurobuddha.maxima.core.identity.MaximaIdentity;
 import com.eurobuddha.maxima.core.net.ReachabilityManager;
 import com.eurobuddha.maxima.core.session.Bootstrap;
@@ -39,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 public final class DesktopMain {
 
     /** User-facing desktop app version (independent of the relay protocol). */
-    public static final String APP_VERSION = "1.5.112";
+    public static final String APP_VERSION = "1.5.113";
 
     private static final String PROTOCOL = "1.0.48";
     private static final int RATE = 600;
@@ -58,7 +59,8 @@ public final class DesktopMain {
     private RelayRuntime mRuntime;
     private MaximaNode mProbeClient;
     private ReachabilityManager mReachMgr;
-    private TrayIcon mTray;
+    private volatile TrayIcon mTray;
+    private Runnable mTrayLanguage;
     private MenuItem mStatusItem;
     private MenuItem mAddressItem;
     private MenuItem mStatsItem;
@@ -81,7 +83,7 @@ public final class DesktopMain {
         Files.createDirectories(dataDir);
 
         if (!acquireSingleInstanceLock(dataDir)) {
-            note("Maxima is already running.");
+            note(Language.text("desktop.alreadyRunning"));
             return;
         }
 
@@ -93,6 +95,14 @@ public final class DesktopMain {
         boolean relayOnly = java.awt.GraphicsEnvironment.isHeadless()
                 || "1".equals(System.getenv("MAXIMA_RELAY"))
                 || java.util.Arrays.asList(mArgs).contains("--relay");
+        if (!java.awt.GraphicsEnvironment.isHeadless()) {
+            boolean[] proceed = {true};
+            javax.swing.SwingUtilities.invokeAndWait(() -> {
+                if (!Language.hasChoice()) proceed[0] = Language.chooser(null);
+                Language.applyDialogLabels();
+            });
+            if (!proceed[0]) { releaseLock(); return; }
+        }
         if (!relayOnly) {
             launchWindow(dataDir);
             return;
@@ -370,14 +380,20 @@ public final class DesktopMain {
     // ---- tray ----
 
     private void installTray(Path dataDir) throws Exception {
+        if (!java.awt.EventQueue.isDispatchThread()) {
+            javax.swing.SwingUtilities.invokeAndWait(() -> {
+                try { installTray(dataDir); } catch (Exception e) { throw new IllegalStateException(e); }
+            });
+            return;
+        }
         SystemTray tray = SystemTray.getSystemTray();
         PopupMenu menu = new PopupMenu();
 
-        mStatusItem = new MenuItem("Maxima relay — starting…");
+        mStatusItem = new MenuItem(Language.text("desktopTray.status", "status", Language.text("desktopTray.starting")));
         mStatusItem.setEnabled(false);
         menu.add(mStatusItem);
 
-        mAddressItem = new MenuItem("Finding a public address…");
+        mAddressItem = new MenuItem(Language.text("desktopTray.finding"));
         mAddressItem.setEnabled(false);
         menu.add(mAddressItem);
 
@@ -387,7 +403,7 @@ public final class DesktopMain {
 
         menu.addSeparator();
 
-        MenuItem copy = new MenuItem("Copy my public address");
+        MenuItem copy = new MenuItem(Language.text("desktopTray.copyAddress"));
         copy.addActionListener(e -> {
             if (!mPublicAddress.isEmpty()) {
                 Toolkit.getDefaultToolkit().getSystemClipboard()
@@ -396,11 +412,11 @@ public final class DesktopMain {
         });
         menu.add(copy);
 
-        MenuItem recheck = new MenuItem("Re-check reachability");
+        MenuItem recheck = new MenuItem(Language.text("desktopTray.recheck"));
         recheck.addActionListener(e -> mReachMgr.tick());
         menu.add(recheck);
 
-        MenuItem open = new MenuItem("Open data folder");
+        MenuItem open = new MenuItem(Language.text("desktopTray.openData"));
         open.addActionListener(e -> {
             try {
                 if (Desktop.isDesktopSupported()) {
@@ -413,7 +429,11 @@ public final class DesktopMain {
 
         menu.addSeparator();
 
-        MenuItem quit = new MenuItem("Quit");
+        MenuItem language = new MenuItem(Language.text("language.change"));
+        language.addActionListener(e -> Language.chooser(null));
+        menu.add(language);
+
+        MenuItem quit = new MenuItem(Language.text("desktopTray.quit"));
         quit.addActionListener(e -> {
             shutdown();
             System.exit(0);
@@ -423,11 +443,24 @@ public final class DesktopMain {
         mTray = new TrayIcon(TrayIcons.working(TRAY_SIZE), "Maxima Node", menu);
         mTray.setImageAutoSize(true);
         tray.add(mTray);
+        mTrayLanguage = () -> {
+            copy.setLabel(Language.text("desktopTray.copyAddress"));
+            recheck.setLabel(Language.text("desktopTray.recheck"));
+            open.setLabel(Language.text("desktopTray.openData"));
+            language.setLabel(Language.text("language.change"));
+            quit.setLabel(Language.text("desktopTray.quit"));
+            refreshTray();
+        };
+        Language.addListener(mTrayLanguage);
         refreshTray();
     }
 
     private void refreshTray() {
         if (mTray == null) {
+            return;
+        }
+        if (!java.awt.EventQueue.isDispatchThread()) {
+            java.awt.EventQueue.invokeLater(this::refreshTray);
             return;
         }
         try {
@@ -441,21 +474,22 @@ public final class DesktopMain {
                 default:
                     mTray.setImage(TrayIcons.working(TRAY_SIZE));
             }
+            String detail = "starting…".equals(mReachDetail) ? Language.text("desktopTray.starting")
+                    : com.eurobuddha.maxima.desktop.ui.NetworkPanel.reachDetail(mReachDetail);
             if (mStatusItem != null) {
-                mStatusItem.setLabel("Maxima relay — " + mReachDetail);
+                mStatusItem.setLabel(Language.text("desktopTray.status", "status", detail));
             }
             if (mAddressItem != null) {
                 mAddressItem.setLabel(mPublicAddress.isEmpty()
-                        ? "Not publicly reachable yet"
-                        : "Public: " + mPublicAddress);
+                        ? Language.text("desktopTray.notReachable")
+                        : Language.text("desktopTray.public", "address", mPublicAddress));
             }
             if (mStatsItem != null) {
-                mStatsItem.setLabel("Clients attached: " + mAttachedClients
-                        + "   ·   relayed: " + mRelayed);
+                mStatsItem.setLabel(Language.text("desktopTray.stats", "clients", mAttachedClients, "relayed", mRelayed));
             }
             mTray.setToolTip(mPublicAddress.isEmpty()
-                    ? "Maxima Node — " + mReachDetail
-                    : "Maxima Node — reachable at " + mPublicAddress);
+                    ? Language.text("desktopTray.tooltip", "status", detail)
+                    : Language.text("desktopTray.reachable", "address", mPublicAddress));
         } catch (Exception ignored) {
         }
     }
@@ -480,14 +514,14 @@ public final class DesktopMain {
                 area.setColumns(32);
                 area.setRows(3);
                 Object[] msg = {
-                    "Your Maxima node created a new identity.",
-                    "These 24 words ARE your identity AND a spendable Minima wallet seed.",
-                    "Write them down and keep them safe — anyone with them is you.",
+                    Language.text("desktop.newIdentity"),
+                    Language.text("desktop.newSeedWarning"),
+                    Language.text("desktop.newSeedKeep"),
                     area,
-                    "(Also saved, owner-only, at " + seed.file + ")"
+                    Language.text("desktop.seedFile", "path", seed.file)
                 };
                 javax.swing.JOptionPane.showMessageDialog(null, msg,
-                        "Back up your Maxima seed", javax.swing.JOptionPane.WARNING_MESSAGE);
+                        Language.text("desktop.backupSeed"), javax.swing.JOptionPane.WARNING_MESSAGE);
             });
         } catch (Exception ignored) {
         }
@@ -496,6 +530,7 @@ public final class DesktopMain {
     // ---- lifecycle ----
 
     private void shutdown() {
+        if (mTrayLanguage != null) Language.removeListener(mTrayLanguage);
         try {
             if (mReachMgr != null) {
                 mReachMgr.shutdown();

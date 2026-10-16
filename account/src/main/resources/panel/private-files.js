@@ -14,16 +14,17 @@
   }
   function size(n) { n = Number(n) || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
   function create({ api, sheet, closeSheet, esc, toast }) {
+    const I = root.ParlonsI18n, tr = I.t;
     const pendingUploads = new Map();
     async function call(action, params) { const r = await api('files', { action, ...params }); if (r.ok === false || r.ok === 'false') throw Error(r.error || 'Transfer failed'); return r; }
     function show(id, ref, peer, group) {
       const offer = parse(ref); let exists = false, paused = false, busy = false, finished = false;
-      const panel = sheet('<div class="h">' + esc(offer ? offer.name : 'Private file') + '</div>'
-        + '<p class="sub">Encrypted file sharing with this conversation. Active downloads can also upload encrypted pieces.</p>'
-        + '<p class="file-status" aria-live="polite">' + (offer ? esc(size(offer.size)) : 'Preparing…') + '</p>'
+      const panel = sheet('<div class="h">' + esc(offer ? offer.name : tr('files.private')) + '</div>'
+        + '<p class="sub" data-i18n="files.description">Encrypted file sharing with this conversation. Active downloads can also upload encrypted pieces.</p>'
+        + '<p class="file-status" aria-live="polite">' + (offer ? esc(size(offer.size)) : esc(tr('files.preparing'))) + '</p>'
         + '<progress class="file-progress" max="100" value="0" style="width:100%"></progress>'
-        + '<div class="actions"><button class="btn file-action">Download</button><a class="btn ghost file-save" hidden>Save file</a>'
-        + '<button class="btn ghost danger file-remove" hidden>Remove local transfer</button></div>');
+        + '<div class="actions"><button class="btn file-action" data-i18n="files.download">Download</button><a class="btn ghost file-save" data-i18n="files.save" hidden>Save file</a>'
+        + '<button class="btn ghost danger file-remove" data-i18n="files.remove" hidden>Remove local transfer</button></div>');
       const status = panel.querySelector('.file-status'), action = panel.querySelector('.file-action'), save = panel.querySelector('.file-save');
       const remove = panel.querySelector('.file-remove');
       async function tick() {
@@ -31,37 +32,38 @@
         try {
           const s = await call('status', { id }); if (!panel.isConnected) return;
           id = s.fileId || id; exists = true; paused = s.paused === 'true' || s.status === 'Failed';
-          status.textContent = s.status + (s.error ? '\n' + s.error : '') + '\n' + size(s.done) + ' / ' + size(s.size);
+          I.render(status, () => I.system(s.status) + (s.error ? '\n' + I.system(s.error) : '') + '\n' + size(s.done) + ' / ' + size(s.size));
           panel.querySelector('progress').value = 100 * Number(s.done || 0) / Math.max(1, Number(s.size || 0));
           finished = s.ready === 'true'; save.hidden = !finished; save.href = '/private-file?id=' + encodeURIComponent(id);
           save.setAttribute('download', s.name || 'Parlons file');
           const preparing = s.status === 'Preparing' || s.status === 'Uploading';
-          action.textContent = paused ? 'Resume' : 'Pause sharing'; action.disabled = busy || preparing; remove.hidden = preparing;
-        } catch (e) { if (!exists) status.textContent = offer ? 'Ready to download · ' + size(offer.size) : e.message; }
+          I.bind(action, paused ? 'files.resume' : 'files.pause'); action.disabled = busy || preparing; remove.hidden = preparing;
+        } catch (e) { if (!exists) I.render(status, () => offer ? tr('files.ready', { size: size(offer.size) }) : I.system(e.message)); }
         if (panel.isConnected) setTimeout(tick, 1500);
       }
       action.onclick = async () => {
         if (busy) return; busy = true; action.disabled = true;
         try { if (!exists) { if (!offer) throw Error('Transfer unavailable'); await call('download', { ref, peer, group }); }
           else await call(paused ? 'resume' : 'pause', { id });
-        } catch (e) { toast(e.message, 'err'); } finally { busy = false; action.disabled = false; }
+        } catch (e) { toast(I.system(e.message), 'err'); } finally { busy = false; action.disabled = false; }
       };
-      remove.onclick = async () => { if (!confirm('Remove this local transfer and stop sharing it? Saved copies are kept.')) return;
-        try { await call('remove', { id }); closeSheet(); } catch (e) { toast(e.message, 'err'); } };
+      remove.onclick = async () => { if (!confirm(tr('files.removeConfirm'))) return;
+        try { await call('remove', { id }); closeSheet(); } catch (e) { toast(I.system(e.message), 'err'); } };
       tick();
     }
     function updateUpload(u) {
       if (!u.panel || !u.panel.isConnected) return;
-      u.panel.querySelector('.file-status').textContent = u.error
-        ? 'Upload paused: ' + u.error + '. Resume to continue.' : 'Uploading to your account…';
+      I.render(u.panel.querySelector('.file-status'), () => u.error
+        ? tr('files.uploadPausedDetail', { error: I.system(u.error) }) : tr('files.uploadingAccount'));
       u.panel.querySelector('progress').value = 100 * u.offset / Math.max(1, u.file.size);
       const resume = u.panel.querySelector('.resume');
       resume.hidden = !u.error; resume.disabled = u.running;
     }
     function showUpload(u) {
-      u.panel = sheet('<div class="h">Sending ' + esc(u.file.name) + '</div><p class="sub file-status" aria-live="polite"></p>'
-        + '<progress max="100" value="0" style="width:100%"></progress><div class="actions"><button class="btn resume" hidden>Resume upload</button>'
-        + '<button class="btn ghost cancel">Cancel upload</button><button class="btn ghost hide">Hide</button></div>');
+      u.panel = sheet('<div class="h"></div><p class="sub file-status" aria-live="polite"></p>'
+        + '<progress max="100" value="0" style="width:100%"></progress><div class="actions"><button class="btn resume" data-i18n="files.resumeUpload" hidden>Resume upload</button>'
+        + '<button class="btn ghost cancel" data-i18n="files.cancelUpload">Cancel upload</button><button class="btn ghost hide" data-i18n="files.hide">Hide</button></div>');
+      I.bind(u.panel.querySelector('.h'), 'files.sending', { name: u.file.name });
       u.panel.querySelector('.resume').onclick = () => runUpload(u);
       u.panel.querySelector('.cancel').onclick = () => { u.cancel = true; if (!u.running) return runUpload(u); };
       u.panel.querySelector('.hide').onclick = closeSheet;
@@ -99,35 +101,35 @@
         }
         await uploadCall(u, 'finish', { id });
         pendingUploads.delete(id);
-        if (u.panel.isConnected) { closeSheet(); show(id, null, peer, group); } else toast('File is being prepared');
+        if (u.panel.isConnected) { closeSheet(); show(id, null, peer, group); } else toast(tr('files.preparingNotice'));
       } catch (e) {
         if (u.cancel) {
           try { await call('cancelUpload', { id }); } catch (_) {}
           pendingUploads.delete(id); if (u.panel.isConnected) closeSheet();
         } else {
           u.error = e.message || 'Connection interrupted';
-          toast('Upload paused. Resume from File transfers.', 'err');
+          toast(tr('files.pausedNotice'), 'err');
         }
       } finally { u.running = false; updateUpload(u); }
     }
     async function send(file, peer, group) {
-      if (file.size > MAX) { toast('Choose a file up to 512 MB', 'err'); return; }
+      if (file.size > MAX) { toast(tr('files.limit'), 'err'); return; }
       const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, '0')).join('');
       const u = { id, file, peer, group, offset: 0, running: false, cancel: false, error: '', panel: null };
       pendingUploads.set(id, u); showUpload(u); await runUpload(u);
     }
     async function list() {
       try { const transfers = JSON.parse((await call('list')).transfers);
-        const panel = sheet('<div class="h">File transfers</div><div class="file-list"></div>');
-        if (!transfers.length && !pendingUploads.size) panel.querySelector('.file-list').textContent = 'No local file transfers';
+        const panel = sheet('<div class="h" data-i18n="files.title">File transfers</div><div class="file-list"></div>');
+        if (!transfers.length && !pendingUploads.size) I.bind(panel.querySelector('.file-list'), 'files.empty');
         pendingUploads.forEach(u => {
           const b = document.createElement('button'); b.className = 'btn ghost';
-          b.textContent = u.file.name + (u.running ? ' · Uploading' : ' · Upload paused');
+          I.render(b, () => u.file.name + ' · ' + tr(u.running ? 'files.uploading' : 'files.paused'));
           b.onclick = () => { closeSheet(); showUpload(u); }; panel.querySelector('.file-list').appendChild(b);
         });
-        transfers.filter(f => !pendingUploads.has(f.id)).forEach(f => { const b = document.createElement('button'); b.className = 'btn ghost'; b.textContent = f.name + ' · ' + f.status;
+        transfers.filter(f => !pendingUploads.has(f.id)).forEach(f => { const b = document.createElement('button'); b.className = 'btn ghost'; I.render(b, () => f.name + ' · ' + I.system(f.status));
           b.onclick = () => { closeSheet(); show(f.id); }; panel.querySelector('.file-list').appendChild(b); });
-      } catch (e) { toast(e.message, 'err'); }
+      } catch (e) { toast(I.system(e.message), 'err'); }
     }
     return { show, send, list };
   }

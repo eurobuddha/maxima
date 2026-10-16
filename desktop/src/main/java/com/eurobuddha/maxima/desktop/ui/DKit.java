@@ -76,48 +76,66 @@ public final class DKit {
 
     // ---- labels ----
 
-    public JLabel label(String s, Font f, Color c) {
-        JLabel l = new JLabel(s);
-        l.setFont(f);
+    public JLabel label(CharSequence s, Font f, Color c) {
+        JLabel l = new JLabel();
+        Language.bind(l, s);
+        Language.font(l, f, l.getText());
         l.setForeground(c);
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
         return l;
     }
 
-    public JLabel title(String s) {
+    public JLabel title(CharSequence s) {
         return label(s, t.extrabold(20f), t.text);
     }
 
     /** Uppercase section eyebrow, matching the phone's sectionLabel. */
-    public JLabel sectionLabel(String s) {
-        JLabel l = label(s.toUpperCase(), t.semibold(10.5f), t.subtext);
+    public JLabel sectionLabel(CharSequence s) {
+        JLabel l = label(s, t.semibold(10.5f), t.subtext);
+        Language.bind(l, s, value -> value.toUpperCase(Language.locale()));
         return l;
     }
 
-    public JLabel sub(String s) {
+    public JLabel sub(CharSequence s) {
         // Wrap long sub text so nothing overflows horizontally.
-        JLabel l = new JLabel("<html>" + esc(s) + "</html>");
-        l.setFont(t.font(12.5f));
+        JLabel l = new WrappingLabel();
+        setSub(l, s);
+        Language.font(l, t.font(12.5f), l.getText());
         l.setForeground(t.subtext);
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
         return l;
     }
 
+    public void setSub(JLabel label, CharSequence value) {
+        Language.bind(label, value, text -> "<html>" + esc(text) + "</html>");
+    }
+
+    public void renderSub(JLabel label, java.util.function.Supplier<String> value) {
+        Language.render(label, () -> "<html>" + esc(value.get()) + "</html>");
+    }
+
     /** A label-left / value-right line (like the phone's kv row). */
-    public JComponent kvLine(String label, String value) {
+    public JComponent kvLine(CharSequence label, CharSequence value) {
         JPanel row = new JPanel(new java.awt.BorderLayout(10, 0));
         row.setOpaque(false);
         row.setBorder(new EmptyBorder(4, 0, 4, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel l = new JLabel(label);
-        l.setFont(t.font(12.5f));
+        JLabel l = Language.bind(new JLabel(), label);
+        Language.font(l, t.font(12.5f), l.getText());
         l.setForeground(t.subtext);
-        JLabel v = new JLabel(value);
-        v.setFont(t.semibold(12.5f));
+        JLabel v = Language.bind(new JLabel(), value);
+        Language.font(v, t.semibold(12.5f), v.getText());
         v.setForeground(t.text);
         row.add(l, java.awt.BorderLayout.WEST);
         row.add(v, java.awt.BorderLayout.EAST);
+        return row;
+    }
+
+    public JComponent kvLine(CharSequence label, java.util.function.Supplier<String> value) {
+        JComponent row = kvLine(label, "");
+        JLabel display = (JLabel) ((java.awt.BorderLayout) row.getLayout()).getLayoutComponent(java.awt.BorderLayout.EAST);
+        Language.render(display, value);
         return row;
     }
 
@@ -140,7 +158,7 @@ public final class DKit {
 
     // ---- status pill (the ONLY stadium/999 shape) ----
 
-    public JComponent pill(String textStr, int kind) {
+    public JComponent pill(CharSequence textStr, int kind) {
         Color c = pillColor(kind);
         RoundPanel p = new RoundPanel(alpha(c, 34), 999);
         p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
@@ -152,21 +170,21 @@ public final class DKit {
 
     // ---- buttons (10px rounded rectangles) ----
 
-    public HoverButton primaryButton(String s) {
+    public HoverButton primaryButton(CharSequence s) {
         return new HoverButton(s, t.accent, t.onAccent, t);
     }
 
-    public HoverButton ghostButton(String s) {
+    public HoverButton ghostButton(CharSequence s) {
         return new HoverButton(s, t.input, t.text, t);
     }
 
-    public HoverButton dangerButton(String s) {
+    public HoverButton dangerButton(CharSequence s) {
         return new HoverButton(s, t.input, t.error, t);
     }
 
     // ---- fields ----
 
-    public JTextField field(String placeholder) {
+    public JTextField field(CharSequence placeholder) {
         PlaceholderField f = new PlaceholderField(placeholder, t);
         return f;
     }
@@ -176,14 +194,15 @@ public final class DKit {
     /** A copyable value field. RULE 1: the FULL value is copied, never truncated,
      *  and the value WRAPS (no horizontal overflow). {@code upperLabel=false} keeps a
      *  term-of-art label verbatim. */
-    public JComponent copyField(String labelText, String value, boolean upperLabel) {
+    public JComponent copyField(CharSequence labelText, String value, boolean upperLabel) {
         RoundPanel box = new RoundPanel(t.input, R_FIELD);
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
         box.setBorder(new EmptyBorder(10, 14, 10, 14));
         box.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel l = label(upperLabel ? labelText.toUpperCase() : labelText,
-                t.semibold(10f), t.subtext);
+        JLabel l = label(labelText, t.semibold(10f), t.subtext);
+        java.util.function.UnaryOperator<String> casing = valueText -> upperLabel ? valueText.toUpperCase(Language.locale()) : valueText;
+        Language.bind(l, labelText, casing);
 
         WrapText v = new WrapText(value == null ? "" : value);
         v.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -193,13 +212,13 @@ public final class DKit {
         box.add(l);
         box.add(v);
         box.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        box.setToolTipText("Click to copy");
+        Language.tooltip(box, Language.msg("desktop.clickCopy"));
         MouseAdapter copyOnClick = new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 copy(value);
-                l.setText(upperLabel ? "COPIED" : "copied");
+                Language.bind(l, Language.msg("common.copied"), casing);
                 javax.swing.Timer tm = new javax.swing.Timer(1200, ev ->
-                        l.setText(upperLabel ? labelText.toUpperCase() : labelText));
+                        Language.bind(l, labelText, casing));
                 tm.setRepeats(false);
                 tm.start();
             }
@@ -211,7 +230,7 @@ public final class DKit {
 
     // ---- segmented control (System/Light/Dark, Balance/History …) ----
 
-    public Segmented segmented(String[] labels, int selected, java.util.function.IntConsumer onPick) {
+    public Segmented segmented(CharSequence[] labels, int selected, java.util.function.IntConsumer onPick) {
         return new Segmented(labels, selected, t, onPick);
     }
 
@@ -233,6 +252,7 @@ public final class DKit {
      *  is narrower. This is how the non-chat pages stay phone-like on a wide desktop
      *  window instead of stretching a single column edge to edge. */
     public JComponent centered(JComponent body, int maxWidth) {
+        body.setMinimumSize(new Dimension(0, 0));
         body.setMaximumSize(new Dimension(maxWidth, Integer.MAX_VALUE));
         JPanel rowp = new JPanel();
         rowp.setOpaque(false);
@@ -241,6 +261,25 @@ public final class DKit {
         rowp.add(body);
         rowp.add(Box.createHorizontalGlue());
         return rowp;
+    }
+
+    /** Shared Settings/Contacts action reflow; preserves button instances and listeners. */
+    public static void layoutActions(JPanel row, int available) {
+        java.util.List<Component> buttons = new java.util.ArrayList<>();
+        int needed = 0;
+        for (Component child : row.getComponents()) if (child instanceof DKit.HoverButton || child instanceof javax.swing.AbstractButton) {
+            buttons.add(child); needed += child.getPreferredSize().width + 8;
+        }
+        boolean stack = needed - 8 > available;
+        row.removeAll();
+        row.setLayout(new BoxLayout(row, stack ? BoxLayout.Y_AXIS : BoxLayout.X_AXIS));
+        for (int i = 0; i < buttons.size(); i++) {
+            if (i > 0) row.add(Box.createRigidArea(new Dimension(stack ? 0 : 8, stack ? 8 : 0)));
+            row.add(buttons.get(i));
+        }
+        if (!stack) row.add(Box.createHorizontalGlue());
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+        row.revalidate();
     }
 
     // ---- helpers ----
@@ -268,6 +307,26 @@ public final class DKit {
     // ============================================================
     // Widgets
     // ============================================================
+
+    /** HTML equivalent of WrapText's width-dependent height, for translated help text. */
+    static final class WrappingLabel extends JLabel {
+        @Override public void setBounds(int x, int y, int width, int height) {
+            boolean changed = width != getWidth();
+            super.setBounds(x, y, width, height);
+            if (changed) revalidate();
+        }
+        @Override public Dimension getPreferredSize() {
+            javax.swing.text.View view = (javax.swing.text.View) getClientProperty(javax.swing.plaf.basic.BasicHTML.propertyKey);
+            int width = getWidth();
+            if (view == null || width <= 0) return super.getPreferredSize();
+            java.awt.Insets insets = getInsets();
+            view.setSize(Math.max(1, width - insets.left - insets.right), 0);
+            return new Dimension(width, (int) Math.ceil(view.getPreferredSpan(javax.swing.text.View.Y_AXIS))
+                    + insets.top + insets.bottom);
+        }
+        @Override public Dimension getMinimumSize() { return new Dimension(0, getPreferredSize().height); }
+        @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE, getPreferredSize().height); }
+    }
 
     /**
      * A read-only, transparent, always-wrapping text block. The key to reliable
@@ -372,12 +431,13 @@ public final class DKit {
         private Runnable action;
         private final Theme theme;
 
-        HoverButton(String s, Color bg, Color fg, Theme t) {
-            super(s, SwingConstants.CENTER);
+        HoverButton(CharSequence s, Color bg, Color fg, Theme t) {
+            super("", SwingConstants.CENTER);
+            Language.bind(this, s);
             base = bg;
             theme = t;
             setForeground(fg);
-            setFont(t.semibold(13f));
+            Language.font(this, t.semibold(13f), getText());
             setOpaque(false);
             setBorder(new EmptyBorder(11, 18, 11, 18));
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -419,13 +479,13 @@ public final class DKit {
 
     /** Placeholder-aware text field with the phone's field_pill look (12px). */
     public static final class PlaceholderField extends JTextField {
-        private final String placeholder;
+        private final CharSequence placeholder;
         private final Theme theme;
 
-        PlaceholderField(String zPlaceholder, Theme t) {
+        PlaceholderField(CharSequence zPlaceholder, Theme t) {
             placeholder = zPlaceholder == null ? "" : zPlaceholder;
             theme = t;
-            setFont(t.font(13f));
+            Language.font(this, t.font(13f));
             setForeground(t.text);
             setCaretColor(t.text);
             setOpaque(false);
@@ -439,14 +499,14 @@ public final class DKit {
             g2.fillRoundRect(0, 0, getWidth(), getHeight(), R_FIELD * 2, R_FIELD * 2);
             g2.dispose();
             super.paintComponent(g);
-            if (getText().isEmpty() && !placeholder.isEmpty()) {
+            if (getText().isEmpty() && placeholder.length() > 0) {
                 Graphics2D g3 = (Graphics2D) g.create();
                 g3.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g3.setColor(theme.subtext);
-                g3.setFont(getFont());
+                g3.setFont(Language.fontFor(getFont(), placeholder.toString()));
                 java.awt.Insets in = getInsets();
                 java.awt.FontMetrics fm = g3.getFontMetrics();
-                g3.drawString(placeholder, in.left, in.top + fm.getAscent());
+                g3.drawString(placeholder.toString(), in.left, in.top + fm.getAscent());
                 g3.dispose();
             }
         }
@@ -454,12 +514,12 @@ public final class DKit {
 
     /** A greyscale segmented control (seg_track 12px + seg_thumb 9px), like the phone. */
     public static final class Segmented extends JComponent {
-        private final String[] labels;
+        private final CharSequence[] labels;
         private int selected;
         private final Theme theme;
         private final java.util.function.IntConsumer onPick;
 
-        Segmented(String[] zLabels, int zSelected, Theme t, java.util.function.IntConsumer zOnPick) {
+        Segmented(CharSequence[] zLabels, int zSelected, Theme t, java.util.function.IntConsumer zOnPick) {
             labels = zLabels;
             selected = zSelected;
             theme = t;
@@ -498,12 +558,12 @@ public final class DKit {
             g2.fillRoundRect(tx, pad, segW, h - pad * 2, R_SEG_THUMB * 2, R_SEG_THUMB * 2);
             // labels
             for (int i = 0; i < n; i++) {
-                g2.setFont(i == selected ? theme.semibold(12.5f) : theme.medium(12.5f));
+                g2.setFont(Language.fontFor(i == selected ? theme.semibold(12.5f) : theme.medium(12.5f), labels[i].toString()));
                 g2.setColor(i == selected ? theme.text : theme.subtext);
                 java.awt.FontMetrics fm = g2.getFontMetrics();
-                int lx = pad + i * segW + (segW - fm.stringWidth(labels[i])) / 2;
+                int lx = pad + i * segW + (segW - fm.stringWidth(labels[i].toString())) / 2;
                 int ly = (h + fm.getAscent()) / 2 - 2;
-                g2.drawString(labels[i], lx, ly);
+                g2.drawString(labels[i].toString(), lx, ly);
             }
             g2.dispose();
         }
@@ -569,7 +629,7 @@ public final class DKit {
             g2.fillOval(0, 0, size, size);
             g2.setColor(Color.WHITE);
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.92f));
-            g2.setFont(theme.bold(size * 0.42f));
+            g2.setFont(Language.fontFor(theme.bold(size * 0.42f), initial));
             java.awt.FontMetrics fm = g2.getFontMetrics();
             int tw = fm.stringWidth(initial);
             int th = fm.getAscent();

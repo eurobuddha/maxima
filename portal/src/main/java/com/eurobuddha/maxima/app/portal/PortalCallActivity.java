@@ -1,6 +1,8 @@
 package com.eurobuddha.maxima.app.portal;
 
 import android.app.Activity;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -114,35 +116,37 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         mIncomingRow = new LinearLayout(this);
         mIncomingRow.setOrientation(LinearLayout.HORIZONTAL);
         mIncomingRow.setGravity(Gravity.CENTER);
-        mIncomingRow.addView(roundButton("Decline", 0xFFE0524D,
+        mIncomingRow.addView(roundButton(Language.msg(R.string.l10n_call_decline), 0xFFE0524D,
                 v -> PortalCallManager.get(this).decline(mCallId)));
         mIncomingRow.addView(gap());
-        mIncomingRow.addView(roundButton("Answer", 0xFF3E9B63, v -> {
+        mIncomingRow.addView(roundButton(Language.msg(R.string.l10n_call_answer), 0xFF3E9B63, v -> {
             mPendingAnswer = mCallId;
             runPendingCallAction();
         }));
-        root.addView(mIncomingRow);
+        root.addView(mIncomingRow, new LinearLayout.LayoutParams(-1, -2));
 
         mLiveRow = new LinearLayout(this);
         mLiveRow.setOrientation(LinearLayout.HORIZONTAL);
         mLiveRow.setGravity(Gravity.CENTER);
-        mMuteBtn = roundButton("Mute", 0xFF3A3D42, v -> {
+        mMuteBtn = roundButton(Language.msg(R.string.l10n_native_call_mute), 0xFF3A3D42, v -> {
             PortalCallManager cm = PortalCallManager.get(this);
             cm.setMuted(!cm.muted());
-            mMuteBtn.setText(cm.muted() ? "Unmute" : "Mute");
+            Language.setText(mMuteBtn, cm.muted() ? Language.msg(R.string.l10n_native_call_unmute) : Language.msg(R.string.l10n_native_call_mute));
+            Language.description(mMuteBtn, Language.msg(cm.muted() ? R.string.l10n_call_unmute : R.string.l10n_call_mute));
         });
+        Language.description(mMuteBtn, Language.msg(R.string.l10n_call_mute));
         mLiveRow.addView(mMuteBtn);
         mLiveRow.addView(gap());
-        mLiveRow.addView(roundButton("End", 0xFFE0524D,
+        mLiveRow.addView(roundButton(Language.msg(R.string.l10n_native_call_end), 0xFFE0524D,
                 v -> PortalCallManager.get(this).hangup()));
         mLiveRow.addView(gap());
-        mSpeakerBtn = roundButton("Speaker", 0xFF3A3D42, v -> {
+        mSpeakerBtn = roundButton(Language.msg(R.string.l10n_native_call_speaker), 0xFF3A3D42, v -> {
             PortalCallManager cm = PortalCallManager.get(this);
             cm.setSpeaker(!cm.speaker());
-            mSpeakerBtn.setText(cm.speaker() ? "Earpiece" : "Speaker");
+            Language.setText(mSpeakerBtn, cm.speaker() ? Language.msg(R.string.l10n_native_call_earpiece) : Language.msg(R.string.l10n_native_call_speaker));
         });
         mLiveRow.addView(mSpeakerBtn);
-        root.addView(mLiveRow);
+        root.addView(mLiveRow, new LinearLayout.LayoutParams(-1, -2));
 
         if (mVideoUi) {
             android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
@@ -163,12 +167,18 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
             pip.rightMargin = dp(16);
             frame.addView(mLocalView, pip);
             root.setBackgroundColor(0x00000000);
+            name.setTextColor(Color.WHITE);
+            mStatus.setTextColor(Color.WHITE);
+            name.setShadowLayer(dp(3), 0, dp(1), Color.BLACK);
+            mStatus.setShadowLayer(dp(3), 0, dp(1), Color.BLACK);
             frame.addView(root, new android.widget.FrameLayout.LayoutParams(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT));
             mLiveRow.addView(gap());
-            mLiveRow.addView(roundButton("Flip", 0xFF3A3D42,
-                    v -> PortalCallManager.get(this).switchCamera()));
+            TextView flip = roundButton(Language.msg(R.string.l10n_native_call_flip), 0xFF3A3D42,
+                    v -> PortalCallManager.get(this).switchCamera());
+            Language.description(flip, Language.msg(R.string.l10n_native_call_flip_help));
+            mLiveRow.addView(flip);
             setContentView(frame);
             PortalCallManager.get(this).attachVideoSinks(mLocalView, mRemoteView);
         } else {
@@ -248,8 +258,7 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         } else {
             mPendingAnswer = null;
             getIntent().removeExtra(EXTRA_ANSWER_CALL_ID);
-            android.widget.Toast.makeText(this, "Microphone" + (mVideoUi ? " and camera" : "")
-                    + " permission is needed for this call", android.widget.Toast.LENGTH_LONG).show();
+            android.widget.Toast.makeText(this, Language.text(this,mVideoUi ? R.string.l10n_native_call_video_permission : R.string.l10n_native_call_mic_permission), android.widget.Toast.LENGTH_LONG).show();
             if (mPendingOutgoing) {
                 mPendingOutgoing = false;
                 finish();
@@ -271,17 +280,17 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
         mTick.removeCallbacksAndMessages(null);
         switch (zState) {
             case INCOMING_RINGING:
-                mStatus.setText(mVideoUi ? "Incoming video call" : "Incoming Parlons call");
+                Language.setText(mStatus, mVideoUi ? Language.msg(R.string.l10n_call_incoming_video) : Language.msg(R.string.l10n_native_call_incoming));
                 mIncomingRow.setVisibility(View.VISIBLE);
                 break;
             case OUTGOING_RINGING:
-                mStatus.setText("Calling…");
+                Language.setText(mStatus, Language.msg(R.string.l10n_call_calling));
                 mLiveRow.setVisibility(View.VISIBLE);
                 mMuteBtn.setVisibility(View.GONE);
                 mSpeakerBtn.setVisibility(View.GONE);
                 break;
             case CONNECTING:
-                mStatus.setText("Connecting…");
+                Language.setText(mStatus, Language.msg(R.string.l10n_call_connecting));
                 mLiveRow.setVisibility(View.VISIBLE);
                 mMuteBtn.setVisibility(View.GONE);
                 mSpeakerBtn.setVisibility(View.GONE);
@@ -295,7 +304,7 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
             case ENDED:
             case IDLE:
                 PortalIncomingCall.dismiss(this);
-                mStatus.setText(zReason == null ? "Call ended" : "Call " + zReason);
+                Language.setText(mStatus, zReason == null ? Language.msg(R.string.l10n_call_ended) : SystemMessages.message("Call " + zReason));
                 mTick.postDelayed(this::finish, 1600);
                 break;
             default:
@@ -305,30 +314,33 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
 
     private void tickTimer() {
         int s = PortalCallManager.get(this).liveSeconds();
-        mStatus.setText(String.format(Locale.UK, "%d:%02d", s / 60, s % 60));
+        Language.setText(mStatus, String.format(Locale.UK, "%d:%02d", s / 60, s % 60));
         mTick.postDelayed(this::tickTimer, 1000);
     }
 
-    private TextView roundButton(String zLabel, int zColor, View.OnClickListener zClick) {
+    private TextView roundButton(CharSequence zLabel, int zColor, View.OnClickListener zClick) {
         TextView b = new TextView(this);
-        b.setText(zLabel);
+        Language.setText(b, zLabel);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(15);
+        b.setTextSize(13);
         b.setTypeface(null, Typeface.BOLD);
         b.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(zColor);
         bg.setCornerRadius(dp(44));
         b.setBackground(bg);
-        b.setMinWidth(dp(96));
-        b.setPadding(dp(18), dp(16), dp(18), dp(16));
+        b.setMinWidth(0);
+        b.setMinHeight(dp(64));
+        b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        b.setFocusable(true);
+        b.setPadding(dp(4), dp(12), dp(4), dp(12));
         b.setOnClickListener(zClick);
         return b;
     }
 
     private View gap() {
         View v = new View(this);
-        v.setLayoutParams(new LinearLayout.LayoutParams(dp(18), 1));
+        v.setLayoutParams(new LinearLayout.LayoutParams(dp(8), 1));
         return v;
     }
 
@@ -353,4 +365,10 @@ public final class PortalCallActivity extends Activity implements PortalCallMana
             }
         }
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
 }

@@ -1,5 +1,3 @@
 <resources>
-    <string name="app_name">Parlons Cloud</string>
-    <string name="brand_tagline">let\'s chat</string>
-    <string name="brand_backend_credit">Powered by Maxima</string>
+    <string name="app_name" translatable="false">Parlons Cloud</string>
 </resources>

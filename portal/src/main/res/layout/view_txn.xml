@@ -22,14 +22,16 @@
             android:textSize="14sp"
             android:textColor="@color/ide_text"
             android:textColorHint="@color/ide_dim"
-            android:hint="transaction id (e.g. mytxn)"
+            android:tag="l10n:hint=l10n_txn_workbench_id_hint"
+            android:hint="@string/l10n_txn_workbench_id_hint"
             android:inputType="text|textNoSuggestions" />
 
         <Button
             android:id="@+id/txn_create"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Create" />
+            android:tag="l10n:text=l10n_common_create"
+            android:text="@string/l10n_common_create" />
 
     </LinearLayout>
 
@@ -40,7 +42,8 @@
         android:textSize="11sp"
         android:textColor="@color/ide_dim"
         android:paddingBottom="4dp"
-        android:text="flow: create → inputs → outputs → state → SIGN → BASICS → POST" />
+        android:tag="l10n:text=l10n_txn_workbench_flow"
+        android:text="@string/l10n_txn_workbench_flow" />
 
     <HorizontalScrollView
         android:layout_width="match_parent"
@@ -53,19 +56,26 @@
             android:orientation="horizontal">
 
             <Button android:id="@+id/txn_addinput" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="+ Input" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_input"
+                android:text="@string/l10n_txn_workbench_input" />
             <Button android:id="@+id/txn_addoutput" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="+ Output" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_output"
+                android:text="@string/l10n_txn_workbench_output" />
             <Button android:id="@+id/txn_change" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="+ Change" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_change"
+                android:text="@string/l10n_txn_workbench_change" />
             <Button android:id="@+id/txn_setstate" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="State" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_state"
+                android:text="@string/l10n_txn_workbench_state" />
             <Button android:id="@+id/txn_sign" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Sign" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_sign"
+                android:text="@string/l10n_txn_workbench_sign" />
             <Button android:id="@+id/txn_basics" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Basics" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_basics"
+                android:text="@string/l10n_txn_workbench_basics" />
             <Button android:id="@+id/txn_post" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Post" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_post"
+                android:text="@string/l10n_txn_workbench_post" />
 
         </LinearLayout>
 
@@ -82,15 +92,20 @@
             android:orientation="horizontal">
 
             <Button android:id="@+id/txn_check" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Check" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_script_editor_check"
+                android:text="@string/l10n_script_editor_check" />
             <Button android:id="@+id/txn_export" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Export" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_terminal_export"
+                android:text="@string/l10n_terminal_export" />
             <Button android:id="@+id/txn_import" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Import" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_android_wallet_import"
+                android:text="@string/l10n_android_wallet_import" />
             <Button android:id="@+id/txn_list" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="List all" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_txn_workbench_list_all"
+                android:text="@string/l10n_txn_workbench_list_all" />
             <Button android:id="@+id/txn_delete" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="Delete" />
+                android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:tag="l10n:text=l10n_scripts_delete"
+                android:text="@string/l10n_scripts_delete" />
 
         </LinearLayout>
 
@@ -105,7 +120,8 @@
         android:textColor="@color/ide_text"
         android:padding="6dp"
         android:background="@color/ide_bg_light"
-        android:text="no transaction — set an id and Create" />
+        android:tag="l10n:text=l10n_txn_workbench_empty"
+        android:text="@string/l10n_txn_workbench_empty" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -121,7 +137,8 @@
             android:textSize="12sp"
             android:textIsSelectable="true"
             android:textColor="@color/ide_dim"
-            android:text="The workbench builds raw UTXO transactions with the node&#8217;s txn* commands.\n\nRules it enforces for you:\n• inputs must equal outputs — the difference BURNS\n• sign BEFORE basics, then post\n• status:true = accepted (async mining — istransaction:false is normal)\n• delete abandoned txns or their input coins stay locked" />
+            android:tag="l10n:text=l10n_txn_workbench_help"
+            android:text="@string/l10n_txn_workbench_help" />
 
     </ScrollView>
 

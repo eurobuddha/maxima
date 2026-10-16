@@ -21,12 +21,12 @@
             <TextView
                 android:id="@+id/modeQuickBtn"
                 android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:text="QUICK SEND" android:gravity="center" android:padding="9dp"
+                android:text="@string/l10n_node_send_quick" android:tag="l10n:text=l10n_node_send_quick" android:gravity="center" android:padding="9dp"
                 android:textSize="11sp" android:letterSpacing="0.1" android:textStyle="bold" />
             <TextView
                 android:id="@+id/modeCoinsBtn"
                 android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:text="COIN CONTROL" android:gravity="center" android:padding="9dp"
+                android:text="@string/l10n_node_send_coin_control" android:tag="l10n:text=l10n_node_send_coin_control" android:gravity="center" android:padding="9dp"
                 android:textSize="11sp" android:letterSpacing="0.1" android:textStyle="bold" />
         </LinearLayout>
 
@@ -38,27 +38,31 @@
             android:orientation="vertical">
             <TextView
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Token"
+                android:text="@string/l10n_wallet_token" android:tag="l10n:text=l10n_wallet_token"
                 android:textColor="@color/ux_subtext" android:textSize="13sp"
                 android:layout_marginBottom="5dp" />
             <LinearLayout
                 android:id="@+id/sendTokenRow"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="center_vertical"
+                android:orientation="vertical" android:gravity="center_vertical"
                 android:background="@color/ux_input" android:padding="12dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
                 <TextView
                     android:id="@+id/sendTokenLabel"
                     android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                     android:text="Minima" android:textColor="@color/ux_text"
                     android:textSize="14sp" android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/sendTokenBal"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="@color/ux_subtext" android:textSize="12sp"
-                    android:fontFamily="monospace" android:layout_marginEnd="8dp" />
+
                 <TextView
                     android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:text="▾" android:textColor="@color/ux_subtext" android:textSize="14sp" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/sendTokenBal"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/ux_subtext" android:textSize="12sp"
+                    android:fontFamily="monospace" android:gravity="end" android:layout_marginTop="4dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -70,7 +74,7 @@
             android:orientation="vertical">
             <TextView
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="FROM — SELECTED COINS"
+                android:text="@string/l10n_node_send_selected_coins" android:tag="l10n:text=l10n_node_send_selected_coins"
                 android:textColor="@color/ux_subtext" android:textSize="11sp"
                 android:letterSpacing="0.1" android:layout_marginBottom="6dp" />
 
@@ -90,18 +94,18 @@
             android:layout_marginTop="18dp" android:layout_marginBottom="5dp">
             <TextView
                 android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:text="Recipient address"
+                android:text="@string/l10n_node_send_recipient" android:tag="l10n:text=l10n_node_send_recipient"
                 android:textColor="@color/ux_subtext" android:textSize="13sp" />
             <TextView
                 android:id="@+id/scanBtn"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="⌗ SCAN" android:textColor="@color/ux_accent" android:textSize="11sp"
+                android:text="@string/l10n_node_send_scan" android:tag="l10n:text=l10n_node_send_scan" android:textColor="@color/ux_accent" android:textSize="11sp"
                 android:letterSpacing="0.1" android:padding="4dp" />
         </LinearLayout>
         <EditText
             android:id="@+id/sendAddress"
             android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:hint="Mx… or 0x…" android:textColorHint="@color/ux_subtext"
+            android:hint="@string/l10n_node_send_address_hint" android:tag="l10n:hint=l10n_node_send_address_hint" android:textColorHint="@color/ux_subtext"
             android:textColor="@color/ux_text" android:background="@color/ux_input"
             android:padding="12dp" android:inputType="text" android:maxLines="2"
             android:fontFamily="monospace" android:textSize="13sp" />
@@ -117,11 +121,11 @@
             android:layout_marginTop="14dp" android:layout_marginBottom="5dp">
             <TextView
                 android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:text="Amount" android:textColor="@color/ux_subtext" android:textSize="13sp" />
+                android:text="@string/l10n_wallet_amount" android:tag="l10n:text=l10n_wallet_amount" android:textColor="@color/ux_subtext" android:textSize="13sp" />
             <TextView
                 android:id="@+id/maxBtn"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="MAX" android:textColor="@color/ux_accent" android:textSize="11sp"
+                android:text="@string/l10n_node_send_max" android:tag="l10n:text=l10n_node_send_max" android:textColor="@color/ux_accent" android:textSize="11sp"
                 android:letterSpacing="0.1" android:padding="4dp" />
         </LinearLayout>
         <EditText
@@ -144,7 +148,7 @@
             android:orientation="vertical">
             <TextView
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Split into coins (1–20, optional)"
+                android:text="@string/l10n_node_send_split_hint" android:tag="l10n:text=l10n_node_send_split_hint"
                 android:textColor="@color/ux_subtext" android:textSize="13sp"
                 android:layout_marginTop="14dp" android:layout_marginBottom="5dp" />
             <EditText
@@ -172,11 +176,11 @@
                 android:layout_marginTop="14dp" android:layout_marginBottom="5dp">
                 <TextView
                     android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                    android:text="Change goes to" android:textColor="@color/ux_subtext" android:textSize="13sp" />
+                    android:text="@string/l10n_node_send_change_address" android:tag="l10n:text=l10n_node_send_change_address" android:textColor="@color/ux_subtext" android:textSize="13sp" />
                 <TextView
                     android:id="@+id/nextBtn"
                     android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="NEXT" android:textColor="@color/ux_accent" android:textSize="11sp"
+                    android:text="@string/l10n_node_send_next" android:tag="l10n:text=l10n_node_send_next" android:textColor="@color/ux_accent" android:textSize="11sp"
                     android:letterSpacing="0.1" android:padding="4dp" />
             </LinearLayout>
             <EditText
@@ -195,7 +199,7 @@
         <!-- Burn -->
         <TextView
             android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Burn (Minima only — optional)"
+            android:text="@string/l10n_node_send_burn_hint" android:tag="l10n:text=l10n_node_send_burn_hint"
             android:textColor="@color/ux_subtext" android:textSize="13sp"
             android:layout_marginTop="14dp" android:layout_marginBottom="5dp" />
         <EditText
@@ -213,7 +217,7 @@
         <Button
             android:id="@+id/previewBtn"
             android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="20dp" android:text="Preview →"
+            android:layout_marginTop="20dp" android:text="@string/l10n_node_send_preview" android:tag="l10n:text=l10n_node_send_preview"
             android:backgroundTint="@color/ux_accent" android:textColor="@color/black" />
 
         <TextView

@@ -1,9 +1,11 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import com.eurobuddha.maxima.app.R;
 
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -12,9 +14,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.common.BitMatrix;
-import com.google.zxing.qrcode.QRCodeWriter;
 
 import org.json.JSONObject;
 
@@ -60,7 +59,7 @@ public class ReceiveView extends BaseView {
     public void refresh() {
         String addr = shownAddr.isEmpty() ? act.defaultAddress() : shownAddr;
         if (addr == null || addr.isEmpty()) {
-            address.setText("Fetching address…");
+            Language.setText(address, msg(R.string.l10n_node_wallet_fetching_address));
             qr.setImageBitmap(null);
         } else if (!addr.equals(shownAddr) || qr.getDrawable() == null) {
             showAddress(addr);
@@ -99,7 +98,7 @@ public class ReceiveView extends BaseView {
     private void showAddress(String addr) {
         shownAddr = addr;
         String hex = hexFor(addr);
-        address.setText(hex.isEmpty() || hex.equals(addr) ? addr : addr + "\n" + hex);
+        Language.setText(address, hex.isEmpty() || hex.equals(addr) ? addr : addr + "\n" + hex);
         renderQr(addr);
         checkSafety(addr);
     }
@@ -114,10 +113,10 @@ public class ReceiveView extends BaseView {
                 if (r == null) return;
                 boolean mine = r.optBoolean("relevant", r.optBoolean("belongs", false));
                 boolean simple = r.optBoolean("simple", false);
-                StringBuilder s = new StringBuilder();
-                s.append(mine ? "✓ Belongs to this node" : "◦ Not recognised as this node's address");
-                if (simple) s.append("   ·   ✓ Safe to use");
-                safety.setText(s.toString());
+                Language.TextBuilder s = new Language.TextBuilder();
+                s.append(mine ? msg(R.string.l10n_node_wallet_belongs) : msg(R.string.l10n_node_wallet_not_recognised));
+                if (simple) s.append("   ·   ").append(msg(R.string.l10n_node_wallet_safe));
+                Language.setText(safety, s.build());
                 safety.setTextColor(mine ? Design.success() : Design.amber());
                 safety.setBackgroundColor(Design.surface());
                 safety.setVisibility(View.VISIBLE);
@@ -152,7 +151,7 @@ public class ReceiveView extends BaseView {
             // which is not enough to tell two of your own addresses apart, let alone verify one
             // against a counterparty. There is room for the whole thing, and where there isn't it
             // wraps rather than hiding characters.
-            t.setText(mini);
+            Language.setText(t, mini);
             t.setTextColor(active ? Design.accent() : Design.text());
             t.setTextSize(11f);
             t.setTypeface(android.graphics.Typeface.MONOSPACE);
@@ -162,14 +161,14 @@ public class ReceiveView extends BaseView {
             if (android.os.Build.VERSION.SDK_INT >= 23) {
                 // An address is one unbroken token; the default strategies try to keep it whole and
                 // then clip. SIMPLE + no hyphenation wraps it at a character boundary instead.
-                t.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);
+                t.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE);
                 t.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
             }
             r.addView(t, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
             if (active) {
                 TextView chip = new TextView(act);
-                chip.setText("SHOWING");
+                Language.setText(chip, msg(R.string.l10n_node_wallet_showing));
                 chip.setTextColor(Design.accent());
                 chip.setTextSize(9f);
                 chip.setLetterSpacing(0.1f);
@@ -183,7 +182,7 @@ public class ReceiveView extends BaseView {
                         act.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
                 if (cm != null) {
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("Minima address", mini));
-                    Toast.makeText(act, "Address copied", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(act, msg(R.string.l10n_native_contacts_address_copied), Toast.LENGTH_SHORT).show();
                 }
                 return true;
             });
@@ -201,20 +200,7 @@ public class ReceiveView extends BaseView {
     private void renderQr(final String text) {
         qr.setTag(text);   // remembers which address this bitmap is for
         new Thread(() -> {
-            Bitmap bmp = null;
-            try {
-                int size = 480;
-                BitMatrix m = new QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size);
-                bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565);
-                for (int x = 0; x < size; x++) {
-                    for (int y = 0; y < size; y++) {
-                        bmp.setPixel(x, y, m.get(x, y) ? Color.BLACK : Color.WHITE);
-                    }
-                }
-            } catch (Exception e) {
-                bmp = null;
-            }
-            final Bitmap result = bmp;
+            final Bitmap result = com.eurobuddha.maxima.app.ui.Qr.encode(text, 480);
             act.runOnUiThread(() -> {
                 // Only apply if the address hasn't changed since this encode started.
                 if (text.equals(qr.getTag())) qr.setImageBitmap(result);
@@ -226,7 +212,7 @@ public class ReceiveView extends BaseView {
     private void copyAddress() {
         String addr = shownAddr.isEmpty() ? act.defaultAddress() : shownAddr;
         if (addr == null || addr.isEmpty()) return;
-        CoinDetailDialog.copy(act, "Address", addr);
+        CoinDetailDialog.copy(act, msg(R.string.l10n_common_address), addr);
     }
 
     private int dp(int v) { return (int) (v * act.getResources().getDisplayMetrics().density); }

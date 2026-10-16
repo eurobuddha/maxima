@@ -5,6 +5,7 @@ import com.eurobuddha.maxima.app.R;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
@@ -27,9 +28,9 @@ public final class Notifier {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = c.getSystemService(NotificationManager.class);
             if (nm == null) return;
-            nm.createNotificationChannel(new NotificationChannel(CH_FG, "Minting in the background",
+            nm.createNotificationChannel(new NotificationChannel(CH_FG, Language.text(c,R.string.l10n_notification_minting),
                     NotificationManager.IMPORTANCE_LOW));
-            nm.createNotificationChannel(new NotificationChannel(CH_ALERT, "Mint updates",
+            nm.createNotificationChannel(new NotificationChannel(CH_ALERT, Language.text(c,R.string.l10n_notification_mint_updates),
                     NotificationManager.IMPORTANCE_DEFAULT));
         }
     }

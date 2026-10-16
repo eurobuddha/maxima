@@ -1,5 +1,9 @@
 package com.eurobuddha.maxima.app;
 
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
+
+import com.eurobuddha.maxima.app.i18n.Language;
+
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
@@ -41,6 +45,7 @@ import java.util.List;
  * NOT touched — this is a separate app (applicationId com.eurobuddha.parlons.cloud).
  */
 public final class MainActivity extends AppCompatActivity {
+    private com.eurobuddha.maxima.app.ui.TabScroll mTabScroll;
 
     private TextView mPill;
     private View mDot;
@@ -77,6 +82,7 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_main);
+        com.eurobuddha.maxima.app.ui.MainHeader.configure(this);
 
         // Keep this device LIVE on the account's push channel (instant messages, ringing calls).
         com.eurobuddha.maxima.app.portal.PortalService.start(this);
@@ -132,26 +138,25 @@ public final class MainActivity extends AppCompatActivity {
         findViewById(R.id.btn_main_theme).setOnClickListener(v -> cycleTheme());
         findViewById(R.id.btn_main_more).setOnClickListener(v -> {
             android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);
-            m.getMenu().add("Settings");
-            m.getMenu().add("Set account name");
-            m.getMenu().add("Copy account address");
-            m.getMenu().add("Node status");
-            m.getMenu().add("Unpair this device");
+            m.getMenu().add(0, 1, 1, Language.text(this, R.string.l10n_nav_settings));
+            m.getMenu().add(0, 2, 2, Language.text(this, R.string.l10n_account_set_name));
+            m.getMenu().add(0, 3, 3, Language.text(this, R.string.l10n_account_copy_address));
+            m.getMenu().add(0, 4, 4, Language.text(this, R.string.l10n_account_node_status));
+            m.getMenu().add(0, 5, 5, Language.text(this, R.string.l10n_account_unpair));
             m.setOnMenuItemClickListener(item -> {
-                CharSequence t = item.getTitle();
-                if ("Settings".contentEquals(t)) {
+                if (item.getItemId() == 1) {
                     startActivity(new Intent(this,
                             com.eurobuddha.maxima.app.portal.CloudSettingsActivity.class));
-                } else if ("Set account name".contentEquals(t)) {
+                } else if (item.getItemId() == 2) {
                     showTab(3);
                     if (mNode != null) {
                         mNode.promptSetName();
                     }
-                } else if ("Copy account address".contentEquals(t)) {
+                } else if (item.getItemId() == 3) {
                     copyAccount();
-                } else if ("Node status".contentEquals(t)) {
+                } else if (item.getItemId() == 4) {
                     showTab(3);
-                } else {
+                } else if (item.getItemId() == 5) {
                     confirmUnpair();
                 }
                 return true;
@@ -167,6 +172,7 @@ public final class MainActivity extends AppCompatActivity {
         mNode = new CloudNodePage(this, inf.inflate(R.layout.page_network, null));
         mPages.add(mNode);
 
+        for (com.eurobuddha.maxima.app.ui.Page page : mPages) Language.apply(page.view());
         mPager = findViewById(R.id.pager);
         mPager.setAdapter(new PagerAdapter() {
             public int getCount() { return mPages.size(); }
@@ -185,7 +191,10 @@ public final class MainActivity extends AppCompatActivity {
         });
         mPager.setOffscreenPageLimit(4);
         TabLayout tabs = findViewById(R.id.tabs);
+        com.eurobuddha.maxima.app.ui.TabScroll.configureShell(tabs);
         tabs.setupWithViewPager(mPager);
+        mTabScroll = com.eurobuddha.maxima.app.ui.TabScroll.attach(tabs, mPager,
+                findViewById(R.id.tabScrollLeft), findViewById(R.id.tabScrollRight));
         mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             public void onPageSelected(int position) {
                 renderCurrent();
@@ -256,23 +265,23 @@ public final class MainActivity extends AppCompatActivity {
             int hosts = mHosts;
             String text;
             if (unread > 0) {
-                text = unread + " new";   // most useful thing to surface when it's non-zero
+                text = Language.quantity(this, R.plurals.l10n_native_shell_unread, unread, unread);   // most useful thing to surface when it's non-zero
             } else if (hosts > 0) {
-                text = "online · " + hosts + (hosts == 1 ? " host" : " hosts");
+                text = Language.quantity(this, R.plurals.l10n_native_shell_online_hosts, hosts, hosts);
             } else {
-                text = "online";
+                text = Language.text(this, R.string.l10n_presence_online);
             }
-            mPill.setText(text);
+            Language.setText(mPill, text);
             mPill.setTextColor(getColor(R.color.ux_success));
             setDot(R.color.ux_success);
             startBreathing();
         } else if (reach == 0) {
-            mPill.setText("can't reach");
+            Language.setText(mPill, Language.msg(R.string.l10n_native_shell_unreachable));
             mPill.setTextColor(getColor(R.color.ux_error));
             setDot(R.color.ux_error);
             stopBreathing();
         } else {
-            mPill.setText("connecting…");
+            Language.setText(mPill, Language.msg(R.string.l10n_connection_connecting));
             mPill.setTextColor(getColor(R.color.ux_on_header));
             setDot(R.color.ux_subtext);
             stopBreathing();
@@ -357,8 +366,9 @@ public final class MainActivity extends AppCompatActivity {
                 : AppCompatDelegate.MODE_NIGHT_NO);
         CloudSession.prefs(this).edit().putInt("night", next).apply();
         AppCompatDelegate.setDefaultNightMode(next);
-        toast(next == AppCompatDelegate.MODE_NIGHT_NO ? "Theme: Light"
-                : next == AppCompatDelegate.MODE_NIGHT_YES ? "Theme: Dark" : "Theme: System");
+        toast(Language.text(this, R.string.l10n_native_shell_theme, Language.text(this,
+                next == AppCompatDelegate.MODE_NIGHT_NO ? R.string.l10n_theme_light_label
+                : next == AppCompatDelegate.MODE_NIGHT_YES ? R.string.l10n_theme_dark_label : R.string.l10n_theme_system_label)));
     }
 
     private void copyAccount() {
@@ -366,17 +376,15 @@ public final class MainActivity extends AppCompatActivity {
         android.content.ClipboardManager cm =
                 (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         cm.setPrimaryClip(android.content.ClipData.newPlainText("account", a));   // full, never truncated
-        toast("Account address copied");
+        toast(Language.text(this, R.string.l10n_native_shell_address_copied));
     }
 
     private void confirmUnpair() {
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Unpair this device?")
-                .setMessage("This phone will stop driving your cloud account. Your account and its "
-                        + "identity stay on the node — other devices keep working, and you can pair "
-                        + "this one again with a fresh code.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Unpair", (d, w) -> {
+        new LanguageDialog(this)
+                .setTitle(Language.msg(R.string.l10n_native_shell_unpair_title))
+                .setMessage(Language.msg(R.string.l10n_native_shell_unpair_help))
+                .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                .setPositiveButton(Language.msg(R.string.l10n_native_shell_unpair), (d, w) -> {
                     CloudSession.setPaired(this, false);
                     CloudSession.reset(this);
                     startActivity(new Intent(this, OnboardingActivity.class));
@@ -397,13 +405,13 @@ public final class MainActivity extends AppCompatActivity {
 
     /** Launch the QR scanner; deliver the result to the Contacts add-field. */
     public void scanIntoContacts() {
-        scan("Scan a contact's address QR", null);
+        scan(Language.text(this, R.string.l10n_native_shell_scan_contact), null);
     }
 
     /** Launch the QR scanner and deliver the scanned text to a one-shot sink (e.g. the wallet
      *  send-to-address field). A null sink routes to the Contacts add-field. */
     public void scanTo(java.util.function.Consumer<String> sink) {
-        scan("Scan an address QR", sink);
+        scan(Language.text(this, R.string.l10n_native_shell_scan_address), sink);
     }
 
     private java.util.function.Consumer<String> mScanSink;
@@ -447,4 +455,20 @@ public final class MainActivity extends AppCompatActivity {
             }
         });
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+        if (mPill != null) renderPill();
+        TabLayout tabs = findViewById(R.id.tabs);
+        if (tabs != null) for (int i = 0; i < mPages.size(); i++) {
+            TabLayout.Tab tab = tabs.getTabAt(i);
+            if (tab != null) tab.setText(mPages.get(i).title());
+            mPages.get(i).languageChanged();
+        }
+
+        if (mTabScroll != null) mTabScroll.keepSelectedVisible();
+
+    }
+
 }

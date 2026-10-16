@@ -4,6 +4,9 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.LanguageDialog;
 import android.graphics.Color;
 import android.text.Layout;
 import android.text.SpannableString;
@@ -33,11 +36,11 @@ public final class ChatLinkText {
             @Override public void onClick(View widget) {
                 try { super.onClick(widget); }
                 catch (ActivityNotFoundException | SecurityException e) {
-                    Toast.makeText(widget.getContext(), "No browser available to open this link", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(widget.getContext(), Language.text(widget.getContext(), R.string.l10n_link_no_browser), Toast.LENGTH_SHORT).show();
                 }
             }
         }, link.start, link.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        view.setText(value);
+        Language.setText(view, value);
         int ink = view.getCurrentTextColor();
         view.setLinkTextColor(Color.red(ink) + Color.green(ink) + Color.blue(ink) > 450
                 ? Color.rgb(135, 206, 255) : Color.rgb(0, 88, 166));
@@ -103,21 +106,21 @@ public final class ChatLinkText {
     }
 
     private static void showLinkMenu(TextView view, String url) {
-        new android.app.AlertDialog.Builder(view.getContext()).setTitle(url)
-                .setItems(new String[]{"Open link", "Copy link", "Share link"}, (dialog, which) -> {
+        new LanguageDialog(view.getContext()).setTitle(url)
+                .setItems(new CharSequence[]{Language.msg(R.string.l10n_link_open), Language.msg(R.string.l10n_link_copy), Language.msg(R.string.l10n_link_share)}, (dialog, which) -> {
                     try {
                         if (which == 0) new URLSpan(url).onClick(view);
                         else if (which == 1) {
                             ClipboardManager clipboard = view.getContext().getSystemService(ClipboardManager.class);
                             clipboard.setPrimaryClip(ClipData.newPlainText("link", url));
-                            Toast.makeText(view.getContext(), "Link copied", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(view.getContext(), Language.text(view.getContext(), R.string.l10n_link_copied), Toast.LENGTH_SHORT).show();
                         } else {
                             Intent share = new Intent(Intent.ACTION_SEND).setType("text/plain")
                                     .putExtra(Intent.EXTRA_TEXT, url);
-                            view.getContext().startActivity(Intent.createChooser(share, "Share link"));
+                            view.getContext().startActivity(Intent.createChooser(share, Language.text(view.getContext(), R.string.l10n_link_share)));
                         }
                     } catch (ActivityNotFoundException | SecurityException e) {
-                        Toast.makeText(view.getContext(), "No app available for this action", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(view.getContext(), Language.text(view.getContext(), R.string.l10n_link_no_app), Toast.LENGTH_SHORT).show();
                     }
                 }).show();
     }

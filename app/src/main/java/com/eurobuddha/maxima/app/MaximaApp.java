@@ -15,6 +15,13 @@ public final class MaximaApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        com.eurobuddha.maxima.app.i18n.Language.initialize(this);
         AppCompatDelegate.setDefaultNightMode(ChatPrefs.nightMode(this));
     }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+    }
+
 }

@@ -1,6 +1,9 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
 import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
 
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -34,6 +37,7 @@ import java.util.List;
  * Every path shows a confirmation card before posting and a result dialog after.
  */
 public class MintView extends BaseView {
+    private static final Language.Message NOT_SET = msg(R.string.l10n_node_mint_not_set);
 
     // Budgets live in ImageTools so this app and Atelier cannot drift apart.
     private static final int ARTIMAGE_BUDGET = ImageTools.ARTIMAGE_BUDGET;
@@ -121,11 +125,11 @@ public class MintView extends BaseView {
     // ===================== HUB =====================
 
     private void renderHub() {
-        container.addView(hubCard("Token",
-                "Fungible. Name, ticker, decimals, description, icon URL, web validation, custom metadata.",
+        container.addView(hubCard(msg(R.string.l10n_wallet_token),
+                msg(R.string.l10n_node_mint_token_help),
                 false, v -> { screen = Screen.TOKEN; refresh(); }));
         container.addView(hubCard("NFT",
-                "1-of-1 or edition, decimals 0. Embed an image on-chain or point at a URL / IPFS.",
+                msg(R.string.l10n_node_mint_nft_help),
                 false, v -> { screen = Screen.NFT; refresh(); }));
         // State-NFT collection MINTING is deliberately not offered in this wallet (it needs
         // atelier-level tooling); State NFTs are still viewed, sent and received in the Gallery.
@@ -133,7 +137,7 @@ public class MintView extends BaseView {
         org.json.JSONArray rows = LocalStore.load(act);
         if (rows.length() > 0) {
             TextView lbl = new TextView(act);
-            lbl.setText("COLLECTIONS");
+            Language.setText(lbl, Language.upper(msg(R.string.l10n_node_collection_collections)));
             lbl.setTextColor(Design.dim());
             lbl.setTextSize(11f);
             lbl.setLetterSpacing(0.1f);
@@ -148,7 +152,8 @@ public class MintView extends BaseView {
 
     private View collectionRow(final JSONObject row) {
         LinearLayout r = new LinearLayout(act);
-        r.setOrientation(LinearLayout.HORIZONTAL);
+        boolean stacked = act.getResources().getConfiguration().fontScale > 1.2f;
+        r.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
         r.setPadding(dp(12), dp(10), dp(12), dp(10));
         r.setBackgroundColor(Design.surface());
@@ -160,7 +165,7 @@ public class MintView extends BaseView {
         LinearLayout col = new LinearLayout(act);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView n = new TextView(act);
-        n.setText(row.optString("name", "Collection") + "  ·  " + row.optInt("size") + " items");
+        Language.setText(n, msg(R.string.l10n_node_collection_collection_size, MintMessages.name(row), row.optInt("size")));
         n.setTextColor(Design.text());
         n.setTextSize(13f);
         n.setTypeface(Design.typefaceBold());
@@ -168,18 +173,19 @@ public class MintView extends BaseView {
         String err = row.optString("error", "");
         if (!err.isEmpty()) {
             TextView e = new TextView(act);
-            e.setText(err);
+            Language.setText(e, MintMessages.status(err));
             e.setTextColor(Design.red());
             e.setTextSize(10f);
             e.setMaxLines(1);
             e.setEllipsize(android.text.TextUtils.TruncateAt.END);
             col.addView(e);
         }
-        r.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        r.addView(col, new LinearLayout.LayoutParams(stacked ? LinearLayout.LayoutParams.MATCH_PARENT : 0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, stacked ? 0f : 1f));
 
         String phase = row.optString("phase", "?");
         TextView p = new TextView(act);
-        p.setText(phase);
+        Language.setText(p, Language.upper(MintMessages.phase(phase)));
         p.setTextSize(10f);
         p.setLetterSpacing(0.08f);
         p.setTypeface(Design.typefaceBold());
@@ -191,7 +197,7 @@ public class MintView extends BaseView {
         return r;
     }
 
-    private View hubCard(String title, String blurb, boolean accent, View.OnClickListener click) {
+    private View hubCard(CharSequence title, CharSequence blurb, boolean accent, View.OnClickListener click) {
         LinearLayout card = new LinearLayout(act);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(14), dp(13), dp(14), dp(13));
@@ -208,7 +214,7 @@ public class MintView extends BaseView {
         LinearLayout top = new LinearLayout(act);
         top.setOrientation(LinearLayout.HORIZONTAL);
         TextView t = new TextView(act);
-        t.setText(title);
+        Language.setText(t, title);
         t.setTextColor(Design.heading());
         t.setTextSize(15f);
         t.setTypeface(Design.typefaceBold());
@@ -221,7 +227,7 @@ public class MintView extends BaseView {
         card.addView(top);
 
         TextView b = new TextView(act);
-        b.setText(blurb);
+        Language.setText(b, blurb);
         b.setTextColor(Design.dim());
         b.setTextSize(12f);
         b.setPadding(0, dp(4), 0, 0);
@@ -238,31 +244,31 @@ public class MintView extends BaseView {
         tokenForm = new LinearLayout(act);
         tokenForm.setOrientation(LinearLayout.VERTICAL);
 
-        tokenForm.addView(backRow("Mint token"));
-        tName = addField(tokenForm, "Name *", "My token", InputType.TYPE_CLASS_TEXT);
+        tokenForm.addView(backRow(msg(R.string.l10n_node_mint_mint_token)));
+        tName = addField(tokenForm, msg(R.string.l10n_node_mint_name_required), msg(R.string.l10n_node_mint_my_token), InputType.TYPE_CLASS_TEXT);
         LinearLayout triple = new LinearLayout(act);
         triple.setOrientation(LinearLayout.HORIZONTAL);
         tokenForm.addView(triple);
-        tAmount = addWeightedField(triple, "Amount *", "1000000", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL, 1.4f);
-        tDecimals = addWeightedField(triple, "Decimals", "8", InputType.TYPE_CLASS_NUMBER, 1f);
-        tTicker = addWeightedField(triple, "Ticker", "TOK", InputType.TYPE_CLASS_TEXT, 1f);
-        tDesc = addField(tokenForm, "Description", "Max 255 characters", InputType.TYPE_CLASS_TEXT);
-        tUrl = addField(tokenForm, "Icon / image URL", "https://…", InputType.TYPE_TEXT_VARIATION_URI);
-        tWebv = addField(tokenForm, "Web validation URL", "https://…/token.txt  (host the tokenid there after minting)", InputType.TYPE_TEXT_VARIATION_URI);
-        tBurn = addField(tokenForm, "Burn (optional)", "0.0", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        tAmount = addWeightedField(triple, msg(R.string.l10n_node_mint_amount_required), "1000000", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL, 1.4f);
+        tDecimals = addWeightedField(triple, msg(R.string.l10n_node_balance_decimals), "8", InputType.TYPE_CLASS_NUMBER, 1f);
+        tTicker = addWeightedField(triple, msg(R.string.l10n_node_balance_ticker), "TOK", InputType.TYPE_CLASS_TEXT, 1f);
+        tDesc = addField(tokenForm, msg(R.string.l10n_node_balance_description), msg(R.string.l10n_node_mint_max_description), InputType.TYPE_CLASS_TEXT);
+        tUrl = addField(tokenForm, msg(R.string.l10n_node_mint_icon_image_url), "https://…", InputType.TYPE_TEXT_VARIATION_URI);
+        tWebv = addField(tokenForm, msg(R.string.l10n_node_mint_web_url), msg(R.string.l10n_node_mint_web_hint), InputType.TYPE_TEXT_VARIATION_URI);
+        tBurn = addField(tokenForm, msg(R.string.l10n_node_mint_burn_optional), "0.0", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
         tMetaRows = new LinearLayout(act);
         tMetaRows.setOrientation(LinearLayout.VERTICAL);
         tokenForm.addView(tMetaRows);
         TextView addMeta = new TextView(act);
-        addMeta.setText("+ Add metadata (key / value)");
+        Language.setText(addMeta, msg(R.string.l10n_node_mint_add_metadata));
         addMeta.setTextColor(Design.accent());
         addMeta.setTextSize(13f);
         addMeta.setPadding(dp(2), dp(8), 0, dp(8));
         addMeta.setOnClickListener(v -> addMetaRow());
         tokenForm.addView(addMeta);
 
-        tokenForm.addView(primaryButton("Review & mint", v -> onReviewToken()));
+        tokenForm.addView(primaryButton(msg(R.string.l10n_node_mint_review_token), v -> onReviewToken()));
         tStatus = statusLine();
         tokenForm.addView(tStatus);
         return tokenForm;
@@ -271,8 +277,8 @@ public class MintView extends BaseView {
     private void addMetaRow() {
         LinearLayout row = new LinearLayout(act);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        EditText k = plainField("key", InputType.TYPE_CLASS_TEXT);
-        EditText v = plainField("value", InputType.TYPE_CLASS_TEXT);
+        EditText k = plainField(msg(R.string.l10n_node_mint_key), InputType.TYPE_CLASS_TEXT);
+        EditText v = plainField(msg(R.string.l10n_node_mint_value), InputType.TYPE_CLASS_TEXT);
         LinearLayout.LayoutParams klp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         klp.rightMargin = dp(6);
         row.addView(k, klp);
@@ -287,37 +293,37 @@ public class MintView extends BaseView {
     private void onReviewToken() {
         final String name = tName.getText().toString().trim();
         String err = badValue(name, true);
-        if (err != null) { status(tStatus, "Name: " + err, false); return; }
+        if (err != null) { status(tStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_common_name), SystemMessages.message(err)), false); return; }
 
         final String amountStr = tAmount.getText().toString().trim();
         final BigDecimal amount;
-        try { amount = new BigDecimal(amountStr); } catch (Exception e) { status(tStatus, "Enter a valid amount.", false); return; }
-        if (amount.signum() <= 0) { status(tStatus, "Amount must be greater than zero.", false); return; }
-        if (amount.compareTo(new BigDecimal("1000000000000")) > 0) { status(tStatus, "Amount is above the 1 trillion cap.", false); return; }
+        try { amount = new BigDecimal(amountStr); } catch (Exception e) { status(tStatus, msg(R.string.l10n_node_send_valid_amount), false); return; }
+        if (amount.signum() <= 0) { status(tStatus, msg(R.string.l10n_node_send_positive_amount), false); return; }
+        if (amount.compareTo(new BigDecimal("1000000000000")) > 0) { status(tStatus, msg(R.string.l10n_node_mint_supply_cap), false); return; }
 
         int decimals = 8;
         String decStr = tDecimals.getText().toString().trim();
         if (!decStr.isEmpty()) {
             try { decimals = Integer.parseInt(decStr); } catch (Exception e) { decimals = -1; }
-            if (decimals < 0 || decimals > 16) { status(tStatus, "Decimals must be 0–16.", false); return; }
+            if (decimals < 0 || decimals > 16) { status(tStatus, msg(R.string.l10n_node_mint_decimal_range), false); return; }
         }
-        if (Util.decimalPlaces(amount) > 0) { status(tStatus, "Total supply must be a whole number.", false); return; }
+        if (Util.decimalPlaces(amount) > 0) { status(tStatus, msg(R.string.l10n_node_mint_whole_supply), false); return; }
 
         final String ticker = tTicker.getText().toString().trim();
-        if (ticker.length() > 5) { status(tStatus, "Ticker is at most 5 characters.", false); return; }
-        if ((err = badValue(ticker, false)) != null) { status(tStatus, "Ticker: " + err, false); return; }
+        if (ticker.length() > 5) { status(tStatus, msg(R.string.l10n_node_mint_ticker_length), false); return; }
+        if ((err = badValue(ticker, false)) != null) { status(tStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_node_balance_ticker), SystemMessages.message(err)), false); return; }
 
         final String desc = tDesc.getText().toString().trim();
-        if (desc.length() > 255) { status(tStatus, "Description is at most 255 characters.", false); return; }
-        if ((err = badValue(desc, false)) != null) { status(tStatus, "Description: " + err, false); return; }
+        if (desc.length() > 255) { status(tStatus, msg(R.string.l10n_node_mint_description_length), false); return; }
+        if ((err = badValue(desc, false)) != null) { status(tStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_node_balance_description), SystemMessages.message(err)), false); return; }
 
         final String url = tUrl.getText().toString().trim();
-        if (!url.isEmpty() && badUrl(url)) { status(tStatus, "Icon URL must be a plain http(s) link.", false); return; }
+        if (!url.isEmpty() && badUrl(url)) { status(tStatus, msg(R.string.l10n_node_mint_icon_url_invalid), false); return; }
         final String webv = tWebv.getText().toString().trim();
-        if (!webv.isEmpty() && badUrl(webv)) { status(tStatus, "Web validation must be a plain https link.", false); return; }
+        if (!webv.isEmpty() && badUrl(webv)) { status(tStatus, msg(R.string.l10n_node_mint_web_url_invalid), false); return; }
 
         final String burn = tBurn.getText().toString().trim();
-        if (!burn.isEmpty() && badAmount(burn)) { status(tStatus, "Invalid burn amount.", false); return; }
+        if (!burn.isEmpty() && badAmount(burn)) { status(tStatus, msg(R.string.l10n_node_mint_burn_invalid), false); return; }
 
         // metadata pairs
         final List<String[]> meta = new ArrayList<>();
@@ -326,12 +332,12 @@ public class MintView extends BaseView {
             String k = ((EditText) row.getChildAt(0)).getText().toString().trim();
             String v = ((EditText) row.getChildAt(1)).getText().toString().trim();
             if (k.isEmpty() && v.isEmpty()) continue;
-            if (k.isEmpty()) { status(tStatus, "Metadata row " + (i + 1) + " has no key.", false); return; }
+            if (k.isEmpty()) { status(tStatus, msg(R.string.l10n_node_mint_metadata_key_missing, i + 1), false); return; }
             if (badValue(k, false) != null || badValue(v, false) != null) {
-                status(tStatus, "Metadata may not contain quotes, backslashes or semicolons.", false); return;
+                status(tStatus, msg(R.string.l10n_node_mint_metadata_invalid), false); return;
             }
-            if (RESERVED_META.contains(k.toLowerCase())) {
-                status(tStatus, "“" + k + "” is a reserved field — use the form inputs for it.", false); return;
+            if (RESERVED_META.contains(k.toLowerCase(java.util.Locale.ROOT))) {
+                status(tStatus, msg(R.string.l10n_node_mint_reserved_key, k), false); return;
             }
             meta.add(new String[]{k, v});
         }
@@ -355,33 +361,31 @@ public class MintView extends BaseView {
 
         // ALWAYS SIGNED: gate the record with the signature aboard
         if (json.toString().length() > StateNft.META_MAX) {
-            status(tStatus, "Record " + (json.toString().length() + StateNft.DEF_WRAPPER
-                    + StateNft.DEF_SIGN_WEIGHT) + "B signed is past the split bound — "
-                    + "smaller icon or shorter fields.", false);
+            status(tStatus, msg(R.string.l10n_node_mint_record_too_large, json.toString().length() + StateNft.DEF_WRAPPER + StateNft.DEF_SIGN_WEIGHT), false);
             return;
         }
 
         // Confirmation card, old-wallet style
         LinearLayout body = confirmBody();
-        addConfirmRow(body, "Name", name);
-        addConfirmRow(body, "Total supply", amount.toBigInteger().toString());
-        addConfirmRow(body, "Decimals", String.valueOf(decimals));
-        if (!ticker.isEmpty()) addConfirmRow(body, "Ticker", ticker.toUpperCase());
-        addConfirmRow(body, "Description", desc.isEmpty() ? "Not set" : desc);
-        if (!url.isEmpty()) addConfirmRow(body, "Icon URL", url);
-        addConfirmRow(body, "Web validation", webv.isEmpty() ? "Not set" : webv);
+        addConfirmRow(body, msg(R.string.l10n_common_name), name);
+        addConfirmRow(body, msg(R.string.l10n_wallet_supply), amount.toBigInteger().toString());
+        addConfirmRow(body, msg(R.string.l10n_node_balance_decimals), String.valueOf(decimals));
+        if (!ticker.isEmpty()) addConfirmRow(body, msg(R.string.l10n_node_balance_ticker), ticker.toUpperCase(java.util.Locale.ROOT));
+        addConfirmRow(body, msg(R.string.l10n_node_balance_description), desc.isEmpty() ? NOT_SET : desc);
+        if (!url.isEmpty()) addConfirmRow(body, msg(R.string.l10n_node_mint_icon_url), url);
+        addConfirmRow(body, msg(R.string.l10n_node_balance_web_validation), webv.isEmpty() ? NOT_SET : webv);
         for (String[] kv : meta) addConfirmRow(body, kv[0], kv[1]);
-        if (!burn.isEmpty() && positive(burn)) addConfirmRow(body, "Burn", burn + " MINIMA");
-        showConfirm("Mint this token?", body, "Mint →", () -> {
+        if (!burn.isEmpty() && positive(burn)) addConfirmRow(body, msg(R.string.l10n_node_mint_burn), burn + " MINIMA");
+        showConfirm(msg(R.string.l10n_node_mint_confirm_token), body, msg(R.string.l10n_node_mint_mint_action), () -> {
             // ALWAYS SIGNED — no key, no mint
             act.node().cmd("getaddress", new NodeApi.Cb() {
                 @Override public void onResult(JSONObject gres) {
                     JSONObject r = gres.optJSONObject("response");
                     String pk = r == null ? "" : r.optString("publickey", "");
-                    if (pk.isEmpty()) { status(tStatus, "Could not fetch the signing key — node offline?", false); return; }
+                    if (pk.isEmpty()) { status(tStatus, msg(R.string.l10n_node_mint_signing_key_missing), false); return; }
                     runMint(cmd.toString() + " signtoken:" + pk, tStatus, "Token");
                 }
-                @Override public void onError(String message) { status(tStatus, "Could not fetch the signing key: " + message, false); }
+                @Override public void onError(String message) { status(tStatus, msg(R.string.l10n_node_mint_signing_key_error, SystemMessages.message(message)), false); }
             });
         });
     }
@@ -393,7 +397,7 @@ public class MintView extends BaseView {
         nftForm = new LinearLayout(act);
         nftForm.setOrientation(LinearLayout.VERTICAL);
 
-        nftForm.addView(backRow("Mint NFT"));
+        nftForm.addView(backRow(msg(R.string.l10n_node_mint_mint_nft)));
 
         // image row: preview + mode toggle
         LinearLayout imgRow = new LinearLayout(act);
@@ -406,6 +410,7 @@ public class MintView extends BaseView {
         nPreview.setLayoutParams(plp);
         nPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
         nPreview.setBackgroundColor(Design.surface2());
+        Language.description(nPreview, msg(R.string.l10n_node_mint_image_description));
         nPreview.setOnClickListener(v -> pickNftImage());
         imgRow.addView(nPreview);
 
@@ -416,7 +421,7 @@ public class MintView extends BaseView {
 
         LinearLayout seg = new LinearLayout(act);
         seg.setOrientation(LinearLayout.HORIZONTAL);
-        nModeEmbed = segBtn("EMBED IMAGE", v -> setNftMode(true));
+        nModeEmbed = segBtn(msg(R.string.l10n_node_mint_embed_image), v -> setNftMode(true));
         nModeUrl = segBtn("URL / IPFS", v -> setNftMode(false));
         seg.addView(nModeEmbed, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         seg.addView(nModeUrl, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -431,43 +436,42 @@ public class MintView extends BaseView {
         nUrlBlock = new LinearLayout(act);
         nUrlBlock.setOrientation(LinearLayout.VERTICAL);
         nftForm.addView(nUrlBlock);
-        nUrl = addField(nUrlBlock, "Image URL (URL mode)", "https://…  or  ipfs://…", InputType.TYPE_TEXT_VARIATION_URI);
-        hostButton(nUrlBlock, "Upload the image to my node instead…", v -> act.pickImage(uri -> {
-            status(nStatus, "Uploading to your node…", true);
+        nUrl = addField(nUrlBlock, msg(R.string.l10n_node_mint_image_url_mode), msg(R.string.l10n_node_mint_image_url_hint), InputType.TYPE_TEXT_VARIATION_URI);
+        hostButton(nUrlBlock, msg(R.string.l10n_node_mint_host_image), v -> act.pickImage(uri -> {
+            status(nStatus, msg(R.string.l10n_node_mint_uploading), true);
             NodeHost.upload(act, uri, new NodeHost.Cb() {
                 @Override public void done(String url, String path, String sha256) {
                     if (url.isEmpty()) {
-                        status(nStatus, "Hosted on the node as " + path + " but the node has no public web address set "
-                                + "(-Dparlons.node.public) - ask the operator, then paste its URL here.", false);
+                        status(nStatus, msg(R.string.l10n_node_mint_host_no_public_url, path), false);
                         return;
                     }
                     nUrl.setText(url);
-                    status(nStatus, "Hosted on your node ✓ " + url + " (sha256 " + sha256 + ")", true);
+                    status(nStatus, msg(R.string.l10n_node_mint_hosted, url, sha256), true);
                 }
-                @Override public void fail(String why) { status(nStatus, "Hosting failed: " + why, false); }
-                @Override public void progress(String note) { status(nStatus, note, true); }
+                @Override public void fail(CharSequence why) { status(nStatus, msg(R.string.l10n_node_mint_hosting_failed, why), false); }
+                @Override public void progress(CharSequence note) { status(nStatus, note, true); }
             });
         }));
-        nName = addField(nftForm, "Name *", "My NFT", InputType.TYPE_CLASS_TEXT);
+        nName = addField(nftForm, msg(R.string.l10n_node_mint_name_required), msg(R.string.l10n_node_mint_my_nft), InputType.TYPE_CLASS_TEXT);
         LinearLayout duo = new LinearLayout(act);
         duo.setOrientation(LinearLayout.HORIZONTAL);
         nftForm.addView(duo);
-        nEditions = addWeightedField(duo, "Editions *", "1", InputType.TYPE_CLASS_NUMBER, 1f);
-        nCreator = addWeightedField(duo, "Creator", "your name", InputType.TYPE_CLASS_TEXT, 2f);
-        nDesc = addField(nftForm, "Description", "Tell collectors what this is", InputType.TYPE_CLASS_TEXT);
-        nExtUrl = addField(nftForm, "External URL", "https://…", InputType.TYPE_TEXT_VARIATION_URI);
-        nWebv = addField(nftForm, "Web validation URL", "https://…/nft.txt", InputType.TYPE_TEXT_VARIATION_URI);
-        nBurn = addField(nftForm, "Burn (optional)", "0.0", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        nEditions = addWeightedField(duo, msg(R.string.l10n_node_mint_editions_required), "1", InputType.TYPE_CLASS_NUMBER, 1f);
+        nCreator = addWeightedField(duo, msg(R.string.l10n_node_gallery_creator), msg(R.string.l10n_node_mint_your_name), InputType.TYPE_CLASS_TEXT, 2f);
+        nDesc = addField(nftForm, msg(R.string.l10n_node_balance_description), msg(R.string.l10n_node_mint_nft_description_hint), InputType.TYPE_CLASS_TEXT);
+        nExtUrl = addField(nftForm, msg(R.string.l10n_node_mint_external_url), "https://…", InputType.TYPE_TEXT_VARIATION_URI);
+        nWebv = addField(nftForm, msg(R.string.l10n_node_mint_web_url), "https://…/nft.txt", InputType.TYPE_TEXT_VARIATION_URI);
+        nBurn = addField(nftForm, msg(R.string.l10n_node_mint_burn_optional), "0.0", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
         nSign = new CheckBox(act);
-        nSign.setText("Signed as creator — always (the signature is your provenance)");
+        Language.setText(nSign, msg(R.string.l10n_node_mint_always_signed));
         nSign.setTextColor(Design.dim());
         nSign.setTextSize(12f);
         nSign.setChecked(true);
         nSign.setEnabled(false);   // ALWAYS SIGNED: not a choice any more
         nftForm.addView(nSign);
 
-        nftForm.addView(primaryButton("Review & mint NFT", v -> onReviewNft()));
+        nftForm.addView(primaryButton(msg(R.string.l10n_node_mint_review_nft), v -> onReviewNft()));
         nStatus = statusLine();
         nftForm.addView(nStatus);
 
@@ -477,9 +481,9 @@ public class MintView extends BaseView {
     }
 
     /** A quiet outlined action under a URL field: "host this on my node". */
-    private void hostButton(LinearLayout into, String label, View.OnClickListener click) {
+    private void hostButton(LinearLayout into, CharSequence label, View.OnClickListener click) {
         TextView t = new TextView(act);
-        t.setText(label);
+        Language.setText(t, label);
         t.setTextSize(12f);
         t.setTypeface(Design.typefaceBold());
         t.setTextColor(Design.accent());
@@ -498,9 +502,9 @@ public class MintView extends BaseView {
         into.addView(t);
     }
 
-    private TextView segBtn(String label, View.OnClickListener click) {
+    private TextView segBtn(CharSequence label, View.OnClickListener click) {
         TextView t = new TextView(act);
-        t.setText(label);
+        Language.setText(t, label);
         t.setTextSize(10f);
         t.setLetterSpacing(0.08f);
         t.setTypeface(Design.typefaceBold());
@@ -517,24 +521,24 @@ public class MintView extends BaseView {
         nModeUrl.setTextColor(!embed ? Design.onAccent() : Design.dim());
         nModeUrl.setBackgroundColor(!embed ? Design.accent() : Design.surface2());
         nUrlBlock.setVisibility(embed ? View.GONE : View.VISIBLE);
-        nImageNote.setText(embed
+        Language.setText(nImageNote, embed
                 ? (nftImageB64.isEmpty()
-                    ? "Tap the square to pick an image — compressed and stored on-chain (≤" + ARTIMAGE_BUDGET + " b64 chars)."
-                    : "Image ready — " + nftImageB64.length() + " base64 chars, stored on-chain.")
-                : "The NFT points at an external image URL (or ipfs://…).");
+                    ? msg(R.string.l10n_node_mint_pick_image_help, ARTIMAGE_BUDGET)
+                    : Language.count(R.plurals.l10n_node_mint_image_ready, nftImageB64.length()))
+                : msg(R.string.l10n_node_mint_external_image_help));
     }
 
     private void pickNftImage() {
         act.pickImage(uri -> {
             if (uri == null) return;
             nPreview.setImageURI(uri);
-            nImageNote.setText("Compressing…");
+            Language.setText(nImageNote, msg(R.string.l10n_node_mint_compressing));
             new Thread(() -> {
                 final String result = sealFrom(uri, ARTIMAGE_BUDGET);
                 act.runOnUiThread(() -> {
                     if (result.isEmpty()) {
                         nftImageB64 = "";
-                        nImageNote.setText("Could not read that image — try another, or a smaller one.");
+                        Language.setText(nImageNote, msg(R.string.l10n_node_mint_image_unreadable));
                     } else {
                         nftImageB64 = result;
                         setNftMode(true);   // picking an image implies embed mode
@@ -562,36 +566,36 @@ public class MintView extends BaseView {
     private void onReviewNft() {
         final String name = nName.getText().toString().trim();
         String err = badValue(name, true);
-        if (err != null) { status(nStatus, "Name: " + err, false); return; }
+        if (err != null) { status(nStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_common_name), SystemMessages.message(err)), false); return; }
 
         final String edStr = nEditions.getText().toString().trim();
         final int editions;
         try { editions = edStr.isEmpty() ? 1 : Integer.parseInt(edStr); }
-        catch (Exception e) { status(nStatus, "Editions must be a whole number.", false); return; }
-        if (editions < 1 || editions > 1000000) { status(nStatus, "Editions must be 1–1,000,000.", false); return; }
+        catch (Exception e) { status(nStatus, msg(R.string.l10n_node_mint_whole_editions), false); return; }
+        if (editions < 1 || editions > 1000000) { status(nStatus, msg(R.string.l10n_node_mint_editions_range), false); return; }
 
         final String desc = nDesc.getText().toString().trim();
-        if (desc.length() > 255) { status(nStatus, "Description is at most 255 characters.", false); return; }
-        if ((err = badValue(desc, false)) != null) { status(nStatus, "Description: " + err, false); return; }
+        if (desc.length() > 255) { status(nStatus, msg(R.string.l10n_node_mint_description_length), false); return; }
+        if ((err = badValue(desc, false)) != null) { status(nStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_node_balance_description), SystemMessages.message(err)), false); return; }
         final String creator = nCreator.getText().toString().trim();
-        if ((err = badValue(creator, false)) != null) { status(nStatus, "Creator: " + err, false); return; }
+        if ((err = badValue(creator, false)) != null) { status(nStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_node_gallery_creator), SystemMessages.message(err)), false); return; }
 
         final String extUrl = nExtUrl.getText().toString().trim();
-        if (!extUrl.isEmpty() && badUrl(extUrl)) { status(nStatus, "External URL must be a plain http(s) link.", false); return; }
+        if (!extUrl.isEmpty() && badUrl(extUrl)) { status(nStatus, msg(R.string.l10n_node_mint_external_url_invalid), false); return; }
         final String webv = nWebv.getText().toString().trim();
-        if (!webv.isEmpty() && badUrl(webv)) { status(nStatus, "Web validation must be a plain https link.", false); return; }
+        if (!webv.isEmpty() && badUrl(webv)) { status(nStatus, msg(R.string.l10n_node_mint_web_url_invalid), false); return; }
         final String burn = nBurn.getText().toString().trim();
-        if (!burn.isEmpty() && badAmount(burn)) { status(nStatus, "Invalid burn amount.", false); return; }
+        if (!burn.isEmpty() && badAmount(burn)) { status(nStatus, msg(R.string.l10n_node_mint_burn_invalid), false); return; }
 
         final String imageValue;
         if (nftEmbedMode) {
-            if (nftImageB64.isEmpty()) { status(nStatus, "Pick an image first (or switch to URL mode).", false); return; }
+            if (nftImageB64.isEmpty()) { status(nStatus, msg(R.string.l10n_node_mint_pick_image), false); return; }
             imageValue = "<artimage>" + nftImageB64 + "</artimage>";
         } else {
             String u = nUrl.getText().toString().trim();
             boolean okScheme = u.startsWith("https://") || u.startsWith("http://") || u.startsWith("ipfs://");
             if (u.isEmpty() || !okScheme || hasBreakers(u)) {
-                status(nStatus, "Enter a plain image URL (https or ipfs, no spaces or quotes).", false); return;
+                status(nStatus, msg(R.string.l10n_node_mint_image_url_invalid), false); return;
             }
             imageValue = u;
         }
@@ -624,15 +628,15 @@ public class MintView extends BaseView {
             ImageLoader.loadOver(act, ImageTools.dataUri(nftImageB64), iv, null);
             body.addView(iv, 0);
         }
-        addConfirmRow(body, "Name", name);
-        addConfirmRow(body, "Total to mint", String.valueOf(editions));
-        addConfirmRow(body, "Image", nftEmbedMode ? "embedded on-chain (" + nftImageB64.length() + " b64)" : imageValue);
-        addConfirmRow(body, "Description", desc.isEmpty() ? "Not set" : desc);
-        addConfirmRow(body, "Creator", creator.isEmpty() ? "Not set" : creator);
-        addConfirmRow(body, "External URL", extUrl.isEmpty() ? "None set" : extUrl);
-        addConfirmRow(body, "Web validation", webv.isEmpty() ? "None set" : webv);
-        addConfirmRow(body, "Creator signature", "yes — always (signtoken)");
-        if (!burn.isEmpty() && positive(burn)) addConfirmRow(body, "Burn", burn + " MINIMA");
+        addConfirmRow(body, msg(R.string.l10n_common_name), name);
+        addConfirmRow(body, msg(R.string.l10n_node_mint_total_to_mint), String.valueOf(editions));
+        addConfirmRow(body, msg(R.string.l10n_desktop_chat_image), nftEmbedMode ? msg(R.string.l10n_node_mint_embedded_image, nftImageB64.length()) : imageValue);
+        addConfirmRow(body, msg(R.string.l10n_node_balance_description), desc.isEmpty() ? NOT_SET : desc);
+        addConfirmRow(body, msg(R.string.l10n_node_gallery_creator), creator.isEmpty() ? NOT_SET : creator);
+        addConfirmRow(body, msg(R.string.l10n_node_mint_external_url), extUrl.isEmpty() ? NOT_SET : extUrl);
+        addConfirmRow(body, msg(R.string.l10n_node_balance_web_validation), webv.isEmpty() ? NOT_SET : webv);
+        addConfirmRow(body, msg(R.string.l10n_node_mint_creator_signature), msg(R.string.l10n_node_mint_signature_yes));
+        if (!burn.isEmpty() && positive(burn)) addConfirmRow(body, msg(R.string.l10n_node_mint_burn), burn + " MINIMA");
 
         // Multi-edition NFTs split like any token, and every split output carries the
         // full record — a signed 9K artimage record passes the eye but seals past the
@@ -645,24 +649,21 @@ public class MintView extends BaseView {
             int bound = editions > 1 ? StateNft.META_MAX
                     : (StateNft.TRANSFER_PAIR_BUDGET - StateNft.DEF_WRAPPER - StateNft.DEF_SIGN_WEIGHT);
             if (metaLen > bound) {
-                status(nStatus, "Signed, this record is " + (metaLen + StateNft.DEF_WRAPPER
-                        + StateNft.DEF_SIGN_WEIGHT) + "B — past the limit for "
-                        + (editions > 1 ? editions + " editions (must split)" : "a sendable record")
-                        + ". Use a smaller image or shorter text.", false);
+                status(nStatus, msg(R.string.l10n_node_mint_nft_record_too_large, metaLen + StateNft.DEF_WRAPPER + StateNft.DEF_SIGN_WEIGHT, editions > 1 ? Language.count(R.plurals.l10n_node_mint_edition_limit, editions) : msg(R.string.l10n_node_mint_sendable_limit)), false);
                 return;
             }
         }
-        showConfirm("Mint this NFT?", body, "Mint NFT →", () -> {
+        showConfirm(msg(R.string.l10n_node_mint_confirm_nft), body, msg(R.string.l10n_node_mint_mint_nft_action), () -> {
             // ALWAYS SIGNED — no key, no mint
             act.node().cmd("getaddress", new NodeApi.Cb() {
                 @Override public void onResult(JSONObject json) {
                     JSONObject r = json.optJSONObject("response");
                     String pk = r == null ? "" : r.optString("publickey", "");
-                    if (pk.isEmpty()) { status(nStatus, "Could not fetch the signing key — node offline?", false); return; }
+                    if (pk.isEmpty()) { status(nStatus, msg(R.string.l10n_node_mint_signing_key_missing), false); return; }
                     cmd.append(" signtoken:").append(pk);
                     runMint(cmd.toString(), nStatus, "NFT");
                 }
-                @Override public void onError(String message) { status(nStatus, "Could not fetch the signing key: " + message, false); }
+                @Override public void onError(String message) { status(nStatus, msg(R.string.l10n_node_mint_signing_key_error, SystemMessages.message(message)), false); }
             });
         });
     }
@@ -674,34 +675,33 @@ public class MintView extends BaseView {
         colForm = new LinearLayout(act);
         colForm.setOrientation(LinearLayout.VERTICAL);
 
-        colForm.addView(backRow("New State NFT collection"));
+        colForm.addView(backRow(msg(R.string.l10n_node_collection_new)));
 
         TextView intro = new TextView(act);
-        intro.setText("A locked edition: one tokenid, each coin carrying a sealed identity. Once an "
-                + "item is stamped, nobody — you included — can alter it.");
+        Language.setText(intro, msg(R.string.l10n_node_collection_intro));
         intro.setTextColor(Design.dim());
         intro.setTextSize(12f);
         colForm.addView(intro);
 
-        cName = addField(colForm, "Collection name *", "SolarPunks", InputType.TYPE_CLASS_TEXT);
+        cName = addField(colForm, msg(R.string.l10n_node_collection_name_required), "SolarPunks", InputType.TYPE_CLASS_TEXT);
         LinearLayout duo = new LinearLayout(act);
         duo.setOrientation(LinearLayout.HORIZONTAL);
         colForm.addView(duo);
-        cSize = addWeightedField(duo, "Items (2–20) *", "5", InputType.TYPE_CLASS_NUMBER, 1f);
-        cExt = addWeightedField(duo, "Extension (url mode)", ".png", InputType.TYPE_CLASS_TEXT, 1.4f);
-        cDesc = addField(colForm, "Description", "What is this collection?", InputType.TYPE_CLASS_TEXT);
+        cSize = addWeightedField(duo, msg(R.string.l10n_node_collection_items_required), "5", InputType.TYPE_CLASS_NUMBER, 1f);
+        cExt = addWeightedField(duo, msg(R.string.l10n_node_collection_extension), ".png", InputType.TYPE_CLASS_TEXT, 1.4f);
+        cDesc = addField(colForm, msg(R.string.l10n_node_balance_description), msg(R.string.l10n_node_collection_description_hint), InputType.TYPE_CLASS_TEXT);
 
         // mode segment
         TextView modeLbl = new TextView(act);
-        modeLbl.setText("Item images");
+        Language.setText(modeLbl, msg(R.string.l10n_node_collection_item_images));
         modeLbl.setTextColor(Design.dim());
         modeLbl.setTextSize(12f);
         modeLbl.setPadding(0, dp(10), 0, dp(4));
         colForm.addView(modeLbl);
         LinearLayout seg = new LinearLayout(act);
         seg.setOrientation(LinearLayout.HORIZONTAL);
-        cModeEmbed = segBtn("EMBED ON-CHAIN", v -> setColMode(true));
-        cModeUrl = segBtn("URL BASE + INDEX", v -> setColMode(false));
+        cModeEmbed = segBtn(msg(R.string.l10n_node_collection_embed), v -> setColMode(true));
+        cModeUrl = segBtn(msg(R.string.l10n_node_collection_url_mode), v -> setColMode(false));
         seg.addView(cModeEmbed, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         seg.addView(cModeUrl, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         colForm.addView(seg);
@@ -709,7 +709,7 @@ public class MintView extends BaseView {
         cUrlBlock = new LinearLayout(act);
         cUrlBlock.setOrientation(LinearLayout.VERTICAL);
         colForm.addView(cUrlBlock);
-        cBase = addField(cUrlBlock, "Image base URL (item = base + index + ext)", "https://mysite.com/nft/", InputType.TYPE_TEXT_VARIATION_URI);
+        cBase = addField(cUrlBlock, msg(R.string.l10n_node_collection_base_url), "https://mysite.com/nft/", InputType.TYPE_TEXT_VARIATION_URI);
 
         cImagesBlock = new LinearLayout(act);
         cImagesBlock.setOrientation(LinearLayout.VERTICAL);
@@ -718,18 +718,17 @@ public class MintView extends BaseView {
         cImagesNote.setTextColor(Design.dim());
         cImagesNote.setTextSize(11f);
         cImagesNote.setPadding(0, dp(8), 0, dp(4));
-        cImagesNote.setText("Each item's image is compressed to ≤" + STATE_IMG_BUDGET
-                + " base64 chars and sealed into its coin. Set the item count, then pick each image.");
+        Language.setText(cImagesNote, msg(R.string.l10n_node_collection_image_budget, STATE_IMG_BUDGET));
         cImagesBlock.addView(cImagesNote);
         TextView pickAll = new TextView(act);
-        pickAll.setText("＋ Pick images for the empty slots");
+        Language.setText(pickAll, msg(R.string.l10n_node_collection_pick_empty));
         pickAll.setTextColor(Design.accent());
         pickAll.setTextSize(13f);
         pickAll.setTypeface(Design.typefaceBold());
         pickAll.setPadding(0, dp(6), 0, dp(8));
         pickAll.setOnClickListener(v -> {
             int size = parsedSize();
-            if (size < 2 || size > 20) { status(cStatus, "Set the item count (2–20) first.", false); return; }
+            if (size < 2 || size > 20) { status(cStatus, msg(R.string.l10n_node_collection_set_count), false); return; }
             if (cImageSlots.getChildCount() == 0) buildImageSlots();
             int first = 1;
             for (int i = 1; i <= size; i++) if (!colImages.containsKey(i)) { first = i; break; }
@@ -741,7 +740,7 @@ public class MintView extends BaseView {
         cImageSlots.setOrientation(LinearLayout.VERTICAL);
         cImagesBlock.addView(cImageSlots);
         TextView buildSlots = new TextView(act);
-        buildSlots.setText("⟳ Build image slots from the item count");
+        Language.setText(buildSlots, msg(R.string.l10n_node_collection_build_slots));
         buildSlots.setTextColor(Design.accent());
         buildSlots.setTextSize(12f);
         buildSlots.setPadding(0, dp(4), 0, dp(4));
@@ -750,7 +749,7 @@ public class MintView extends BaseView {
 
         // ---- collection icon (what the regular wallet shows for this token) ----
         TextView iconLbl = new TextView(act);
-        iconLbl.setText("Collection icon");
+        Language.setText(iconLbl, msg(R.string.l10n_node_collection_icon));
         iconLbl.setTextColor(Design.dim());
         iconLbl.setTextSize(12f);
         iconLbl.setPadding(0, dp(14), 0, dp(4));
@@ -766,6 +765,7 @@ public class MintView extends BaseView {
         cIconPreview.setLayoutParams(iplp);
         cIconPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
         cIconPreview.setBackgroundColor(Design.surface2());
+        Language.description(cIconPreview, msg(R.string.l10n_node_collection_collection_icon_description));
         cIconPreview.setOnClickListener(v -> { if (colIconEmbed) pickCollectionIcon(); });
         iconRow.addView(cIconPreview);
 
@@ -775,7 +775,7 @@ public class MintView extends BaseView {
 
         LinearLayout iconSeg = new LinearLayout(act);
         iconSeg.setOrientation(LinearLayout.HORIZONTAL);
-        cIconModeEmbed = segBtn("EMBED", v -> setIconMode(true));
+        cIconModeEmbed = segBtn(msg(R.string.l10n_node_collection_embed_icon), v -> setIconMode(true));
         cIconModeUrl = segBtn("URL", v -> setIconMode(false));
         iconSeg.addView(cIconModeEmbed, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         iconSeg.addView(cIconModeUrl, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -790,11 +790,11 @@ public class MintView extends BaseView {
         cIconUrlBlock = new LinearLayout(act);
         cIconUrlBlock.setOrientation(LinearLayout.VERTICAL);
         colForm.addView(cIconUrlBlock);
-        cIconUrl = addField(cIconUrlBlock, "Icon URL", "https://…", InputType.TYPE_TEXT_VARIATION_URI);
-        cExtUrl = addField(colForm, "External URL (optional)", "https://…", InputType.TYPE_TEXT_VARIATION_URI);
-        cWebv = addField(colForm, "Web validation URL (optional)", "https://…/collection.txt", InputType.TYPE_TEXT_VARIATION_URI);
+        cIconUrl = addField(cIconUrlBlock, msg(R.string.l10n_node_mint_icon_url), "https://…", InputType.TYPE_TEXT_VARIATION_URI);
+        cExtUrl = addField(colForm, msg(R.string.l10n_node_collection_external_optional), "https://…", InputType.TYPE_TEXT_VARIATION_URI);
+        cWebv = addField(colForm, msg(R.string.l10n_node_collection_web_optional), "https://…/collection.txt", InputType.TYPE_TEXT_VARIATION_URI);
 
-        colForm.addView(primaryButton("Review & start mint", v -> onReviewCollection()));
+        colForm.addView(primaryButton(msg(R.string.l10n_node_collection_review), v -> onReviewCollection()));
         cStatus = statusLine();
         colForm.addView(cStatus);
 
@@ -847,11 +847,11 @@ public class MintView extends BaseView {
 
     private void pickCollectionIcon() {
         act.pickImage(uri -> {
-            cIconNote.setText("Compressing…");
+            Language.setText(cIconNote, msg(R.string.l10n_node_mint_compressing));
             new Thread(() -> {
                 final String result = sealFrom(uri, ICON_BUDGET);
                 act.runOnUiThread(() -> {
-                    if (result.isEmpty()) { cIconNote.setText("Could not read that image — try another, or a smaller one."); return; }
+                    if (result.isEmpty()) { Language.setText(cIconNote, msg(R.string.l10n_node_mint_image_unreadable)); return; }
                     colIconB64 = result;
                     refreshIconPreview();
                 });
@@ -863,12 +863,12 @@ public class MintView extends BaseView {
     private void refreshIconPreview() {
         if (!colIconEmbed) {
             cIconPreview.setImageBitmap(null);
-            cIconNote.setText("The wallet loads the icon from this URL.");
+            Language.setText(cIconNote, msg(R.string.l10n_node_collection_icon_from_url));
             return;
         }
         if (!colIconB64.isEmpty()) {
             ImageLoader.loadOver(act, ImageTools.dataUri(colIconB64), cIconPreview, null);
-            cIconNote.setText("Embedded on-chain · " + colIconB64.length() + " b64 · tap to change");
+            Language.setText(cIconNote, msg(R.string.l10n_node_collection_icon_ready, colIconB64.length()));
             return;
         }
         String first = colImages.get(1);
@@ -877,13 +877,12 @@ public class MintView extends BaseView {
             // Preview the SHRUNK bytes once they exist, so what you see is what gets sealed.
             String show = colIconDefault.isEmpty() ? first : colIconDefault;
             ImageLoader.loadOver(act, ImageTools.dataUri(show), cIconPreview, null);
-            cIconNote.setText(colIconDefault.isEmpty()
-                    ? "Using item #1 by default · preparing a small copy for the token record…"
-                    : "Using item #1, shrunk to " + colIconDefault.length()
-                      + " b64 for the token record · tap to choose a different icon");
+            Language.setText(cIconNote, colIconDefault.isEmpty()
+                    ? msg(R.string.l10n_node_collection_preparing_icon)
+                    : msg(R.string.l10n_node_collection_icon_default_ready, colIconDefault.length()));
         } else {
             cIconPreview.setImageBitmap(null);
-            cIconNote.setText("Defaults to item #1's image · tap to choose a different one");
+            Language.setText(cIconNote, msg(R.string.l10n_node_collection_default_icon));
         }
     }
 
@@ -906,7 +905,7 @@ public class MintView extends BaseView {
         int size = parsedSize();
         cImageSlots.removeAllViews();
         if (size < 2 || size > 20) {
-            status(cStatus, "Items must be 2–20 before building slots.", false);
+            status(cStatus, msg(R.string.l10n_node_collection_slots_range), false);
             return;
         }
         cStatus.setVisibility(View.GONE);
@@ -935,12 +934,12 @@ public class MintView extends BaseView {
             r.addView(thumb);
 
             TextView n = new TextView(act);
-            n.setText("Item #" + idx);
+            Language.setText(n, msg(R.string.l10n_node_collection_item, idx));
             n.setTextColor(Design.text());
             n.setTextSize(13f);
             r.addView(n, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             final TextView state = new TextView(act);
-            state.setText(have ? "✓ " + colImages.get(idx).length() + " b64" : "PICK IMAGE");
+            Language.setText(state, have ? msg(R.string.l10n_node_collection_image_bytes, colImages.get(idx).length()) : msg(R.string.l10n_node_collection_pick_image));
             state.setTextColor(have ? Design.success() : Design.accent());
             state.setTextSize(11f);
             state.setLetterSpacing(0.05f);
@@ -957,10 +956,9 @@ public class MintView extends BaseView {
         int size = parsedSize();
         int filled = 0;
         for (int i = 1; i <= size; i++) if (colImages.containsKey(i)) filled++;
-        cImagesNote.setText(filled == size
-                ? "All " + size + " images ready."
-                : filled + " of " + size + " images ready — tap any slot (or “Pick images”) and "
-                  + "select as many as you like; they fill the empty slots in order.");
+        Language.setText(cImagesNote, filled == size
+                ? msg(R.string.l10n_node_collection_images_ready, size)
+                : msg(R.string.l10n_node_collection_images_partial, filled, size));
     }
 
     /**
@@ -972,10 +970,10 @@ public class MintView extends BaseView {
     private void pickCollectionImages(final int startIdx) {
         act.pickImages(uris -> {
             int size = parsedSize();
-            if (size < 2 || size > 20) { status(cStatus, "Items must be 2–20.", false); return; }
+            if (size < 2 || size > 20) { status(cStatus, msg(R.string.l10n_node_collection_items_range), false); return; }
             java.util.List<Integer> targets = fillOrder(startIdx, size, uris.size(), colImages.keySet());
             compressInto(uris, targets, (idx, b64) -> colImages.put(idx, b64),
-                    msg -> cImagesNote.setText(msg),
+                    msg -> Language.setText(cImagesNote, msg),
                     () -> { buildImageSlots(); reportFill(targets.size(), uris.size(), size); });
         });
     }
@@ -999,11 +997,11 @@ public class MintView extends BaseView {
     private void compressInto(final java.util.List<android.net.Uri> uris,
                               final java.util.List<Integer> targets,
                               final java.util.function.BiConsumer<Integer, String> assign,
-                              final java.util.function.Consumer<String> progress,
+                              final java.util.function.Consumer<CharSequence> progress,
                               final Runnable onDone) {
         final int n = Math.min(uris.size(), targets.size());
         if (n == 0) { onDone.run(); return; }
-        progress.accept("Compressing 1 / " + n + "…");
+        progress.accept(msg(R.string.l10n_node_collection_compressing, 1, n));
         new Thread(() -> {
             for (int i = 0; i < n; i++) {
                 final String result = sealFrom(uris.get(i), STATE_IMG_BUDGET);
@@ -1012,7 +1010,7 @@ public class MintView extends BaseView {
                 // Assign on the UI thread so the image map stays single-threaded.
                 act.runOnUiThread(() -> {
                     if (!result.isEmpty()) assign.accept(slot, result);
-                    if (shown < n) progress.accept("Compressing " + (shown + 1) + " / " + n + "…");
+                    if (shown < n) progress.accept(msg(R.string.l10n_node_collection_compressing, shown + 1, n));
                 });
             }
             act.runOnUiThread(onDone);
@@ -1040,37 +1038,34 @@ public class MintView extends BaseView {
         int filled = 0;
         for (int i = 1; i <= size; i++) if (colImages.containsKey(i)) filled++;
         if (picked > targetCount) {
-            Toast.makeText(act, "Filled " + targetCount + " slot(s) — " + (picked - targetCount)
-                    + " image(s) left over, there were no empty slots for them.", Toast.LENGTH_LONG).show();
+            Toast.makeText(act, msg(R.string.l10n_node_collection_fill_extra, targetCount, picked - targetCount), Toast.LENGTH_LONG).show();
         } else if (filled < size) {
-            Toast.makeText(act, filled + " of " + size + " slots filled — pick "
-                    + (size - filled) + " more.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(act, msg(R.string.l10n_node_collection_fill_missing, filled, size, size - filled), Toast.LENGTH_SHORT).show();
         } else {
-            Toast.makeText(act, "All " + size + " images ready.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(act, msg(R.string.l10n_node_collection_images_ready, size), Toast.LENGTH_SHORT).show();
         }
     }
 
     private void onReviewCollection() {
         final String name = cName.getText().toString().trim();
         String err = badValue(name, true);
-        if (err != null) { status(cStatus, "Name: " + err, false); return; }
+        if (err != null) { status(cStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_common_name), MintMessages.status(err)), false); return; }
 
         final int size = parsedSize();
-        if (size < 2 || size > 20) { status(cStatus, "Items must be between 2 and 20.", false); return; }
+        if (size < 2 || size > 20) { status(cStatus, msg(R.string.l10n_node_collection_review_range), false); return; }
 
         final String desc = cDesc.getText().toString().trim();
-        if ((err = badValue(desc, false)) != null) { status(cStatus, "Description: " + err, false); return; }
+        if ((err = badValue(desc, false)) != null) { status(cStatus, msg(R.string.l10n_node_mint_field_error, msg(R.string.l10n_node_balance_description), MintMessages.status(err)), false); return; }
 
         final String base = cBase.getText().toString().trim();
         final String ext = cExt.getText().toString().trim().isEmpty() ? ".png" : cExt.getText().toString().trim();
         if (!colEmbedMode) {
-            if (base.isEmpty() || badUrl(base)) { status(cStatus, "URL mode needs a plain https base URL.", false); return; }
-            if (badValue(ext, false) != null || ext.contains(" ")) { status(cStatus, "Bad extension.", false); return; }
+            if (base.isEmpty() || badUrl(base)) { status(cStatus, msg(R.string.l10n_node_collection_base_invalid), false); return; }
+            if (badValue(ext, false) != null || ext.contains(" ")) { status(cStatus, msg(R.string.l10n_node_collection_extension_invalid), false); return; }
         } else {
             for (int i = 1; i <= size; i++) {
                 if (!colImages.containsKey(i)) {
-                    status(cStatus, "Item #" + i + " has no image yet — build slots and pick all "
-                            + size + " images first.", false);
+                    status(cStatus, msg(R.string.l10n_node_collection_missing_image, i, size), false);
                     return;
                 }
             }
@@ -1078,14 +1073,14 @@ public class MintView extends BaseView {
         // Resolve the icon NOW: tokencreate bakes it in permanently.
         final String iconUrl = cIconUrl.getText().toString().trim();
         final String icon;
-        final String iconDesc;
+        final CharSequence iconDesc;
         if (colIconEmbed) {
             if (!colIconB64.isEmpty()) {
                 icon = colIconB64;
-                iconDesc = "embedded on-chain (" + colIconB64.length() + " b64)";
+                iconDesc = msg(R.string.l10n_node_mint_embedded_image, colIconB64.length());
             } else if (colIconDefault != null && !colIconDefault.isEmpty()) {
                 icon = colIconDefault;                      // already shrunk, off the UI thread
-                iconDesc = "item #1's image, shrunk to " + icon.length() + " b64 for the token record";
+                iconDesc = msg(R.string.l10n_node_collection_icon_small, icon.length());
             } else if (colImages.containsKey(1)) {
                 // Mirror item #1 — but SHRUNK to the icon budget first.
                 //
@@ -1095,37 +1090,35 @@ public class MintView extends BaseView {
                 // metadata is immutable the whole collection was bricked on creation.
                 icon = ImageTools.recompressBase64(colImages.get(1), ICON_BUDGET);
                 iconDesc = icon.isEmpty()
-                        ? "None — item #1 could not be shrunk to fit the icon budget"
-                        : "item #1's image, shrunk to " + icon.length() + " b64 for the token record";
+                        ? msg(R.string.l10n_node_collection_icon_failed)
+                        : msg(R.string.l10n_node_collection_icon_small, icon.length());
             } else if (!colEmbedMode && !base.isEmpty()) {
                 icon = base + 1 + ext;                          // url-mode collections: item #1's URL
                 iconDesc = icon;
             } else {
                 icon = "";
-                iconDesc = "None — the wallet will show a generated identicon";
+                iconDesc = msg(R.string.l10n_node_collection_identicon);
             }
         } else {
-            if (!iconUrl.isEmpty() && badUrl(iconUrl)) { status(cStatus, "Icon URL must be a plain http(s) link.", false); return; }
+            if (!iconUrl.isEmpty() && badUrl(iconUrl)) { status(cStatus, msg(R.string.l10n_node_mint_icon_url_invalid), false); return; }
             icon = iconUrl;
-            iconDesc = iconUrl.isEmpty() ? "None — the wallet will show a generated identicon" : iconUrl;
+            iconDesc = iconUrl.isEmpty() ? msg(R.string.l10n_node_collection_identicon) : iconUrl;
         }
         // Last line of defence: an oversized icon bricks the collection permanently, so refuse to
         // start rather than seal one. Only embedded icons can be oversized; URLs are tiny.
         if (colIconEmbed && !icon.isEmpty() && icon.length() > ICON_BUDGET) {
-            status(cStatus, "That icon is too large (" + icon.length() + " of " + ICON_BUDGET
-                    + " chars). The token record travels with every transaction, so a big icon "
-                    + "would make the collection unusable. Pick a simpler icon.", false);
+            status(cStatus, msg(R.string.l10n_node_collection_icon_large, icon.length(), ICON_BUDGET), false);
             return;
         }
         final String extUrl = cExtUrl.getText().toString().trim();
-        if (!extUrl.isEmpty() && badUrl(extUrl)) { status(cStatus, "External URL must be a plain http(s) link.", false); return; }
+        if (!extUrl.isEmpty() && badUrl(extUrl)) { status(cStatus, msg(R.string.l10n_node_mint_external_url_invalid), false); return; }
         // Whole-definition guard, EXACT (the Atelier joint model): the record the engine
         // will seal plus the largest picked image must clear the transfer budget, and the
         // engine may still have to drop the creator signature. Slim the icon first; refuse
         // rather than seal an unsplittable token. The engine re-checks with the true
         // weights before tokencreate regardless — this is the friendly early warning.
         String iconGuarded = icon;
-        String iconDescGuarded = iconDesc;
+        CharSequence iconDescGuarded = iconDesc;
         {
             int maxImg = 0;
             for (String img : colImages.values()) maxImg = Math.max(maxImg, img.length());
@@ -1137,40 +1130,39 @@ public class MintView extends BaseView {
                 if (!slim.isEmpty()
                         && "sign".equals(StateNft.jointGate(colDefMetaLen(name, desc, extUrl, slim), maxImg))) {
                     iconGuarded = slim;
-                    iconDescGuarded = "embedded (slimmed so every item signs and travels)";
+                    iconDescGuarded = msg(R.string.l10n_node_collection_slim_icon);
                     g = "sign";
                 } else if ("sign".equals(StateNft.jointGate(colDefMetaLen(name, desc, extUrl, ""), maxImg))) {
                     iconGuarded = "";
-                    iconDescGuarded = "none — dropped so every item signs (wallet shows the identicon)";
+                    iconDescGuarded = msg(R.string.l10n_node_collection_dropped_icon);
                     g = "sign";
                 }
             }
-            if (!"sign".equals(g)) { status(cStatus, g, false); return; }
+            if (!"sign".equals(g)) { status(cStatus, MintMessages.status(g), false); return; }
         }
         final String iconF = iconGuarded;
-        final String iconDescF = iconDescGuarded;
+        final CharSequence iconDescF = iconDescGuarded;
         final String webv = cWebv.getText().toString().trim();
-        if (!webv.isEmpty() && badUrl(webv)) { status(cStatus, "Web validation must be a plain https link.", false); return; }
+        if (!webv.isEmpty() && badUrl(webv)) { status(cStatus, msg(R.string.l10n_node_mint_web_url_invalid), false); return; }
         cStatus.setVisibility(View.GONE);
 
         LinearLayout body = confirmBody();
-        addConfirmRow(body, "Collection", name);
-        addConfirmRow(body, "Items", String.valueOf(size));
-        addConfirmRow(body, "Mode", colEmbedMode ? "embedded on-chain images" : "URL base + index");
-        if (!colEmbedMode) addConfirmRow(body, "Images at", base + "<i>" + ext);
-        addConfirmRow(body, "Description", desc.isEmpty() ? "Not set" : desc);
-        addConfirmRow(body, "Web validation", webv.isEmpty() ? "None set" : webv);
-        addConfirmRow(body, "Wallet icon", iconDescF);
-        addConfirmRow(body, "Contract", "SAMESTATE locked edition — immutable once stamped");
+        addConfirmRow(body, msg(R.string.l10n_node_gallery_collection), name);
+        addConfirmRow(body, msg(R.string.l10n_node_collection_items), String.valueOf(size));
+        addConfirmRow(body, msg(R.string.l10n_node_collection_mode), colEmbedMode ? msg(R.string.l10n_node_collection_embedded_images) : msg(R.string.l10n_node_collection_url_images));
+        if (!colEmbedMode) addConfirmRow(body, msg(R.string.l10n_node_collection_images_at), base + "<i>" + ext);
+        addConfirmRow(body, msg(R.string.l10n_node_balance_description), desc.isEmpty() ? NOT_SET : desc);
+        addConfirmRow(body, msg(R.string.l10n_node_balance_web_validation), webv.isEmpty() ? NOT_SET : webv);
+        addConfirmRow(body, msg(R.string.l10n_node_collection_wallet_icon), iconDescF);
+        addConfirmRow(body, msg(R.string.l10n_node_collection_contract), msg(R.string.l10n_node_collection_locked_contract));
         TextView pipeline = new TextView(act);
-        pipeline.setText("The mint runs in phases (CREATE → MOVE → SPLIT → STAMP), one transaction "
-                + "per step, driven by new blocks. It is resumable — you can close the app.");
+        Language.setText(pipeline, msg(R.string.l10n_node_collection_pipeline));
         pipeline.setTextColor(Design.dim());
         pipeline.setTextSize(11f);
         pipeline.setPadding(0, dp(8), 0, 0);
         body.addView(pipeline);
 
-        showConfirm("Start minting this collection?", body, "Start mint →", () ->
+        showConfirm(msg(R.string.l10n_node_collection_confirm), body, msg(R.string.l10n_node_collection_start), () ->
                 startCollection(name, size, desc, base, ext, iconF, extUrl, webv));
     }
 
@@ -1189,14 +1181,14 @@ public class MintView extends BaseView {
     private void startCollection(final String name, final int size, final String desc,
                                  final String base, final String ext, final String iconUrl,
                                  final String extUrl, final String webv) {
-        status(cStatus, "Fetching creator identity…", true);
+        status(cStatus, msg(R.string.l10n_node_collection_fetch_creator), true);
         act.node().cmd("getaddress", new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 JSONObject r = json.optJSONObject("response");
                 String pk = r == null ? "" : r.optString("publickey", "");
                 String addr = r == null ? "" : r.optString("address", "");
                 if (pk.isEmpty() || addr.isEmpty()) {
-                    status(cStatus, "Could not get a creator key from the node.", false);
+                    status(cStatus, msg(R.string.l10n_node_collection_creator_missing), false);
                     return;
                 }
                 StateNft.Meta m = new StateNft.Meta();
@@ -1239,7 +1231,7 @@ public class MintView extends BaseView {
             }
             @Override public void onError(String message) {
                 if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
-                status(cStatus, "Failed: " + message, false);
+                status(cStatus, msg(R.string.l10n_node_send_failed, MintMessages.status(message)), false);
             }
         });
     }
@@ -1251,7 +1243,7 @@ public class MintView extends BaseView {
         if (row == null) { screen = Screen.HUB; renderHub(); return; }
 
         TextView back = new TextView(act);
-        back.setText("‹  " + row.optString("name", "Collection"));
+        Language.setText(back, Language.join("‹  ", MintMessages.name(row)));
         back.setTextColor(Design.heading());
         back.setTextSize(16f);
         back.setTypeface(Design.typefaceBold());
@@ -1262,12 +1254,21 @@ public class MintView extends BaseView {
         // phase chips
         String phase = row.optString("phase", "?");
         LinearLayout chips = new LinearLayout(act);
-        chips.setOrientation(LinearLayout.HORIZONTAL);
+        chips.setOrientation(LinearLayout.VERTICAL);
         String[] phases = {"CREATE", "MOVE", "SPLIT", "STAMP", "DONE"};
         int cur = java.util.Arrays.asList(phases).indexOf(phase);
+        LinearLayout phaseRow = null;
         for (int i = 0; i < phases.length; i++) {
+            if (i % 2 == 0) {
+                phaseRow = new LinearLayout(act);
+                phaseRow.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                rowParams.bottomMargin = dp(4);
+                chips.addView(phaseRow, rowParams);
+            }
             TextView c = new TextView(act);
-            c.setText(phases[i]);
+            Language.setText(c, Language.upper(MintMessages.phase(phases[i])));
             c.setTextSize(9f);
             c.setLetterSpacing(0.06f);
             c.setTypeface(Design.typefaceBold());
@@ -1277,17 +1278,24 @@ public class MintView extends BaseView {
             c.setTextColor(active ? Design.onAccent() : done ? Design.success() : Design.dim());
             c.setBackgroundColor(active ? Design.accent() : Design.surface());
             LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            if (i > 0) clp.leftMargin = dp(4);
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            if (i % 2 == 1) clp.leftMargin = dp(4);
             c.setLayoutParams(clp);
-            chips.addView(c);
+            phaseRow.addView(c);
         }
         container.addView(chips);
+        if (cur < 0) {
+            TextView currentPhase = new TextView(act);
+            Language.setText(currentPhase, MintMessages.phase(phase));
+            currentPhase.setTextColor(Design.dim());
+            currentPhase.setTextSize(12f);
+            currentPhase.setPadding(0, dp(6), 0, 0);
+            container.addView(currentPhase);
+        }
 
         if ("NEEDIMAGES".equals(phase)) {
             TextView warn = new TextView(act);
-            warn.setText("Stamping paused — an item is missing its image. Pick it below; stamping is "
-                    + "irreversible, so the engine refuses to stamp an imageless item.");
+            Language.setText(warn, msg(R.string.l10n_node_collection_paused_images));
             warn.setTextColor(Design.amber());
             warn.setTextSize(12f);
             warn.setPadding(0, dp(8), 0, 0);
@@ -1295,10 +1303,7 @@ public class MintView extends BaseView {
         }
         if (MintDriver.isStuck(row)) {
             TextView stuck = new TextView(act);
-            stuck.setText("This collection cannot be completed.\n\nIts transactions exceed the "
-                    + "64KB chain limit, and the token record that causes it was fixed when the "
-                    + "token was created — it cannot be edited or shrunk. Nothing further will be "
-                    + "attempted.\n\nBury it below to clear it, or leave it: the coins are inert.");
+            Language.setText(stuck, msg(R.string.l10n_node_collection_stuck));
             stuck.setTextColor(Design.red());
             stuck.setTextSize(12f);
             stuck.setPadding(0, dp(10), 0, dp(4));
@@ -1307,7 +1312,7 @@ public class MintView extends BaseView {
         String err = row.optString("error", "");
         if (!err.isEmpty() && !"NEEDIMAGES".equals(phase)) {
             TextView e = new TextView(act);
-            e.setText(err);
+            Language.setText(e, MintMessages.status(err));
             e.setTextColor(Design.red());
             e.setTextSize(11f);
             e.setPadding(0, dp(6), 0, 0);
@@ -1316,7 +1321,7 @@ public class MintView extends BaseView {
         String engineMsg = act.mintStatus();
         if (!engineMsg.isEmpty()) {
             TextView s = new TextView(act);
-            s.setText("engine: " + engineMsg);
+            Language.setText(s, msg(R.string.l10n_node_collection_engine, MintMessages.status(engineMsg)));
             s.setTextColor(Design.dim());
             s.setTextSize(10f);
             s.setPadding(0, dp(4), 0, 0);
@@ -1327,19 +1332,19 @@ public class MintView extends BaseView {
         String tokenid = row.optString("tokenid", "");
         if (!tokenid.isEmpty()) {
             TextView tid = new TextView(act);
-            tid.setText(Util.shorten(tokenid) + "  ·  tap to copy");
+            Language.setText(tid, msg(R.string.l10n_node_collection_copy_id, Util.shorten(tokenid)));
             tid.setTextColor(Design.dim());
             tid.setTextSize(11f);
             tid.setTypeface(android.graphics.Typeface.MONOSPACE);
             tid.setPadding(0, dp(6), 0, 0);
-            tid.setOnClickListener(v -> CoinDetailDialog.copy(act, "Token ID", tokenid));
+            tid.setOnClickListener(v -> CoinDetailDialog.copy(act, msg(R.string.l10n_wallet_token_id).toString(), tokenid));
             container.addView(tid);
         }
 
         // item rows
         org.json.JSONArray items = MintEngine.localItems(row);
         TextView lbl = new TextView(act);
-        lbl.setText("ITEMS");
+        Language.setText(lbl, Language.upper(msg(R.string.l10n_node_collection_items)));
         lbl.setTextColor(Design.dim());
         lbl.setTextSize(11f);
         lbl.setLetterSpacing(0.1f);
@@ -1360,14 +1365,14 @@ public class MintView extends BaseView {
             r.setLayoutParams(lp);
             TextView n = new TextView(act);
             String coinid = it.optString("coinid", "");
-            n.setText("#" + idx + (coinid.isEmpty() ? "" : "  ·  " + Util.shorten(coinid)));
+            Language.setText(n, "#" + idx + (coinid.isEmpty() ? "" : "  ·  " + Util.shorten(coinid)));
             n.setTextColor(Design.text());
             n.setTextSize(12f);
             n.setTypeface(android.graphics.Typeface.MONOSPACE);
             r.addView(n, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             final TextView st = new TextView(act);
             boolean needImage = "embed".equals(row.optString("mode")) && it.optString("image", "").isEmpty();
-            st.setText(!coinid.isEmpty() ? "✓ STAMPED" : needImage ? "PICK IMAGE" : "queued");
+            Language.setText(st, !coinid.isEmpty() ? msg(R.string.l10n_node_collection_stamped) : needImage ? msg(R.string.l10n_node_collection_pick_image) : msg(R.string.l10n_node_collection_queued));
             st.setTextSize(10f);
             st.setLetterSpacing(0.06f);
             st.setTextColor(!coinid.isEmpty() ? Design.success() : needImage ? Design.accent() : Design.dim());
@@ -1382,17 +1387,15 @@ public class MintView extends BaseView {
         // means a second identical collection that can never be merged away.
         if (row.optInt("createstuck", 0) == 1) {
             TextView repost = new TextView(act);
-            repost.setText("↻  Re-post the create transaction");
+            Language.setText(repost, msg(R.string.l10n_node_collection_repost_link));
             repost.setTextColor(Design.amber());
             repost.setTextSize(13f);
             repost.setTypeface(Design.typefaceBold());
             repost.setPadding(0, dp(14), 0, dp(4));
-            repost.setOnClickListener(v -> Sheet.create(act, "Re-post the create?")
-                .subtitle("Only do this if the first create was definitely lost. If it later "
-                            + "confirms too, you end up with TWO identical collections and no way to "
-                            + "merge them — you would have to bury one.")
-                .action("Wait longer", Sheet.Style.SECONDARY, null)
-                .action("Re-post", Sheet.Style.PRIMARY, () -> {
+            repost.setOnClickListener(v -> Sheet.create(act, msg(R.string.l10n_node_collection_repost_title)).stackActions()
+                .subtitle(msg(R.string.l10n_node_collection_repost_warning))
+                .action(msg(R.string.l10n_node_collection_wait_longer), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_collection_repost), Sheet.Style.PRIMARY, () -> {
                         JSONObject fresh = LocalStore.findById(act, progressRowId);
                         if (fresh != null) {
                             try { fresh.put("posted", 0); fresh.put("createstuck", 0); fresh.put("error", ""); }
@@ -1409,7 +1412,7 @@ public class MintView extends BaseView {
         // phase — a mint that went wrong (bad image, wrong index) is exactly when it's needed.
         if (!tokenid.isEmpty()) {
             TextView buryAll = new TextView(act);
-            buryAll.setText("✝  Bury this entire collection");
+            Language.setText(buryAll, msg(R.string.l10n_node_collection_bury_all));
             buryAll.setTextColor(Design.red());
             buryAll.setTextSize(13f);
             buryAll.setTypeface(Design.typefaceBold());
@@ -1428,10 +1431,10 @@ public class MintView extends BaseView {
             container.addView(buryAll);
         }
 
-        if (!"DONE".equals(phase) && !MintDriver.isStuck(row)) {
-            container.addView(primaryButton("Resume now", v -> {
+        if (!"DONE".equals(phase) && !"BURIED".equals(phase) && !MintDriver.isStuck(row)) {
+            container.addView(primaryButton(msg(R.string.l10n_node_collection_resume), v -> {
                 MintDriver.Result r = act.mintEngineTick();
-                Toast.makeText(act, MintDriver.explain(r), Toast.LENGTH_SHORT).show();
+                Toast.makeText(act, MintMessages.status(MintDriver.explain(r)), Toast.LENGTH_SHORT).show();
                 if (r == MintDriver.Result.NEEDS_IMAGES) {
                     // Don't pretend to nudge: it's waiting on the user, so take them to the picker.
                     int first = 1;
@@ -1443,9 +1446,9 @@ public class MintView extends BaseView {
                     pickProgressImages(row, first);
                 }
             }));
-        } else {
+        } else if ("DONE".equals(phase)) {
             TextView doneNote = new TextView(act);
-            doneNote.setText("✓ Collection fully minted. The items live in your Gallery and Balances.");
+            Language.setText(doneNote, msg(R.string.l10n_node_collection_done));
             doneNote.setTextColor(Design.success());
             doneNote.setTextSize(13f);
             doneNote.setPadding(0, dp(14), 0, 0);
@@ -1475,7 +1478,7 @@ public class MintView extends BaseView {
                     msg -> Toast.makeText(act, msg, Toast.LENGTH_SHORT).show(),
                     () -> {
                         refresh();
-                        Toast.makeText(act, "Images saved — stamping resumes on the next block.",
+                        Toast.makeText(act, msg(R.string.l10n_node_collection_images_saved),
                                 Toast.LENGTH_SHORT).show();
                         act.mintEngineTick();
                     });
@@ -1507,32 +1510,32 @@ public class MintView extends BaseView {
 
     /** Posts the tokencreate and shows the result dialog. */
     private void runMint(String cmd, final TextView statusView, final String what) {
-        status(statusView, "Minting — building and mining the transaction…", true);
+        status(statusView, msg(R.string.l10n_node_mint_minting), true);
         act.node().cmd(cmd, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 if (json.optBoolean("status", false)) {
-                    status(statusView, "✓ " + what + " minted — it appears in Balances once confirmed.", true);
-                    resultDialog(what + " minted",
-                            "The mint transaction is posted. Your new " + what.toLowerCase()
-                                    + " appears in Balances (unconfirmed first) within a couple of blocks.");
+                    boolean nft = "NFT".equals(what);
+                    status(statusView, msg(nft ? R.string.l10n_node_mint_nft_minted_status : R.string.l10n_node_mint_token_minted_status), true);
+                    resultDialog(msg(nft ? R.string.l10n_node_mint_nft_minted : R.string.l10n_node_mint_token_minted),
+                            msg(nft ? R.string.l10n_node_mint_nft_minted_help : R.string.l10n_node_mint_token_minted_help));
                     act.reload();
                 } else {
                     String err = json.optString("error", json.optString("message", "Mint failed."));
-                    status(statusView, "Failed: " + err, false);
+                    status(statusView, msg(R.string.l10n_node_send_failed, SystemMessages.message(err)), false);
                 }
             }
             @Override public void onError(String message) {
                 if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
-                status(statusView, "Failed: " + message, false);
+                status(statusView, msg(R.string.l10n_node_send_failed, SystemMessages.message(message)), false);
             }
         });
     }
 
-    private void resultDialog(String title, String message) {
-        Sheet.create(act, title)
+    private void resultDialog(CharSequence title, CharSequence message) {
+        Sheet.create(act, title).stackActions()
                 .subtitle(message)
-                .action("Close", Sheet.Style.SECONDARY, null)
-                .action("View balances", Sheet.Style.PRIMARY, () -> act.goToTab(WalletActivity.TAB_BALANCES))
+                .action(msg(R.string.l10n_language_close), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_mint_view_balances), Sheet.Style.PRIMARY, () -> act.goToTab(WalletActivity.TAB_BALANCES))
                 .show();
     }
 
@@ -1544,46 +1547,44 @@ public class MintView extends BaseView {
         return body;
     }
 
-    private void addConfirmRow(LinearLayout body, String label, String value) {
+    private void addConfirmRow(LinearLayout body, CharSequence label, CharSequence value) {
         LinearLayout r = new LinearLayout(act);
-        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setOrientation(LinearLayout.VERTICAL);
         r.setPadding(0, dp(3), 0, dp(3));
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(12f);
-        r.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        r.addView(l, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         TextView v = new TextView(act);
-        v.setText(value);
-        v.setTextColor("Not set".equals(value) || "None set".equals(value) ? Design.dim() : Design.text());
-        if ("Not set".equals(value) || "None set".equals(value)) v.setTypeface(null, Typeface.ITALIC);
+        Language.setText(v, value);
+        v.setTextColor(value == NOT_SET ? Design.dim() : Design.text());
+        if (value == NOT_SET) v.setTypeface(null, Typeface.ITALIC);
         v.setTextSize(12f);
-        v.setGravity(Gravity.END);
-        v.setMaxLines(2);
-        v.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-        r.addView(v, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.6f));
+        v.setGravity(Gravity.START);
+        r.addView(v, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         body.addView(r);
     }
 
-    private void showConfirm(String title, LinearLayout body, String action, Runnable go) {
+    private void showConfirm(CharSequence title, LinearLayout body, CharSequence action, Runnable go) {
         TextView warn = new TextView(act);
-        warn.setText("Minting consumes a small fraction of Minima and cannot be undone.");
+        Language.setText(warn, msg(R.string.l10n_node_mint_warning));
         warn.setTextColor(Design.dim());
         warn.setTextSize(11f);
         warn.setPadding(0, dp(10), 0, 0);
         body.addView(warn);
-        Sheet.create(act, title)
+        Sheet.create(act, title).stackActions()
                 .body(body)
-                .action("Back", Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_common_back), Sheet.Style.SECONDARY, null)
                 .action(action, Sheet.Style.PRIMARY, go::run)
                 .show();
     }
 
     // ---- field + validation helpers ----
 
-    private TextView backRow(String title) {
+    private TextView backRow(CharSequence title) {
         TextView t = new TextView(act);
-        t.setText("‹  " + title);
+        Language.setText(t, Language.join("‹  ", title));
         t.setTextColor(Design.heading());
         t.setTextSize(16f);
         t.setTypeface(Design.typefaceBold());
@@ -1592,9 +1593,9 @@ public class MintView extends BaseView {
         return t;
     }
 
-    private EditText addField(LinearLayout into, String label, String hint, int inputType) {
+    private EditText addField(LinearLayout into, CharSequence label, CharSequence hint, int inputType) {
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(12f);
         l.setPadding(0, dp(10), 0, dp(4));
@@ -1604,14 +1605,17 @@ public class MintView extends BaseView {
         return e;
     }
 
-    private EditText addWeightedField(LinearLayout row, String label, String hint, int inputType, float weight) {
+    private EditText addWeightedField(LinearLayout row, CharSequence label, CharSequence hint, int inputType, float weight) {
         LinearLayout col = new LinearLayout(act);
         col.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight);
-        if (row.getChildCount() > 0) clp.leftMargin = dp(8);
+        boolean stacked = act.getResources().getConfiguration().fontScale > 1.2f;
+        if (stacked) row.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                stacked ? LinearLayout.LayoutParams.MATCH_PARENT : 0, LinearLayout.LayoutParams.WRAP_CONTENT, stacked ? 0f : weight);
+        if (!stacked && row.getChildCount() > 0) clp.leftMargin = dp(8);
         col.setLayoutParams(clp);
         TextView l = new TextView(act);
-        l.setText(label);
+        Language.setText(l, label);
         l.setTextColor(Design.dim());
         l.setTextSize(12f);
         l.setPadding(0, dp(10), 0, dp(4));
@@ -1622,9 +1626,9 @@ public class MintView extends BaseView {
         return e;
     }
 
-    private EditText plainField(String hint, int inputType) {
+    private EditText plainField(CharSequence hint, int inputType) {
         EditText e = new EditText(act);
-        e.setHint(hint);
+        Language.hint(e, hint);
         e.setHintTextColor(Design.dim2());
         e.setTextColor(Design.text());
         e.setTextSize(13f);
@@ -1636,12 +1640,19 @@ public class MintView extends BaseView {
         return e;
     }
 
-    private android.widget.Button primaryButton(String label, View.OnClickListener click) {
+    private android.widget.Button primaryButton(CharSequence label, View.OnClickListener click) {
         android.widget.Button b = new android.widget.Button(act);
-        b.setText(label);
+        Language.setText(b, label);
         b.setAllCaps(false);
-        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Design.accent()));
+        // Reuse Sheet's explicit filled shape: this activity's framework Button style is transparent.
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setCornerRadius(dp(Math.max(10, (int) Design.radiusDp() * 2)));
+        shape.setColor(Design.accent());
+        b.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf((Design.onAccent() & 0x00FFFFFF) | 0x40000000), shape, null));
         b.setTextColor(Design.onAccent());
+        b.setTypeface(Design.typefaceBold());
+        b.setPadding(dp(14), dp(12), dp(14), dp(12));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(16);
@@ -1659,9 +1670,9 @@ public class MintView extends BaseView {
         return t;
     }
 
-    private void status(TextView view, String msg, boolean ok) {
+    private void status(TextView view, CharSequence msg, boolean ok) {
         view.setVisibility(View.VISIBLE);
-        view.setText(msg);
+        Language.setText(view, msg);
         view.setTextColor(ok ? Design.success() : Design.red());
     }
 

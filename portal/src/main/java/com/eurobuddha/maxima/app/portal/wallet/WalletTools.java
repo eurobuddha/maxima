@@ -1,10 +1,16 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.R;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import android.app.AlertDialog;
 import android.text.InputType;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import org.json.JSONObject;
 
@@ -22,7 +28,7 @@ public class WalletTools {
 
     /** Callback for surfacing a one-line status message to the user (ok = success vs. error styling). */
     public interface Status {
-        void show(String message, boolean ok);
+        void show(CharSequence message, boolean ok);
     }
 
     private static final int SPLIT_SCALE = 11;
@@ -38,14 +44,25 @@ public class WalletTools {
     // ---- shared helpers ----
 
     /** Build a numeric EditText (decimal toggles the decimal-point flag) for the dialog forms. */
-    private EditText input(String hint, String preset, boolean decimal) {
+    private EditText input(CharSequence hint, String preset, boolean decimal) {
         EditText e = new EditText(act);
-        e.setHint(hint);
+        Language.hint(e, hint);
         e.setText(preset);
         e.setInputType(decimal
                 ? (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL)
                 : InputType.TYPE_CLASS_NUMBER);
         return e;
+    }
+
+    /** Persistent field label, using the same presentation as MintView.addField. */
+    private TextView label(CharSequence text) {
+        TextView label = new TextView(act);
+        Language.setText(label, text);
+        label.setTextColor(Design.dim());
+        label.setTextSize(12f);
+        float density = act.getResources().getDisplayMetrics().density;
+        label.setPadding(0, (int) (10 * density), 0, (int) (4 * density));
+        return label;
     }
 
     /** Wrap dialog children in a padded vertical layout. */
@@ -77,21 +94,21 @@ public class WalletTools {
 
     /** Post a custom transaction via {@link TxnBuilder} and reflect the outcome on the history row. */
     private void runBuilder(List<Coin> inputs, List<TxnBuilder.Out> outs, String tokenid,
-                            String internalid, String okLabel) {
-        status.show("Posting…", true);
+                            String internalid, CharSequence okLabel) {
+        status.show(msg(R.string.l10n_node_tools_posting), true);
         new TxnBuilder(act, inputs, outs, tokenid, new TxnBuilder.Done() {
             @Override public void onPosted(String txpowid, List<TxnBuilder.OutCoin> outputs) {
                 // Don't store the txnsign-response txpowid (not the on-chain id) — the resolver fills
                 // the real txpowid via the stored input coinids and marks it confirmed.
                 act.history().update(internalid, HistoryDb.STATUS_POSTED, null, "");
-                status.show(okLabel + " — sent!", true);
+                status.show(msg(R.string.l10n_node_tools_sent, okLabel), true);
                 act.clearSelection();
                 act.reload();
             }
             @Override public void onFailed(String message) {
                 if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
                 act.history().update(internalid, HistoryDb.STATUS_ERROR, null, message);
-                status.show("Failed: " + message, false);
+                status.show(msg(R.string.l10n_node_send_failed, SystemMessages.message(message)), false);
             }
         }).run();
     }
@@ -101,34 +118,35 @@ public class WalletTools {
     /** Prompt for a coin count, then split the selected coins into that many equal coins. */
     public void showSplit() {
         final List<Coin> sel = act.selectedCoins();
-        if (sel.isEmpty()) { status.show("Select coins in the list first, then Split.", false); return; }
-        final EditText count = input("Number of coins (2–15)", "4", false);
-        Sheet.create(act, "Split selected coins")
-                .body(box(count))
-                .action("Cancel", Sheet.Style.SECONDARY, null)
-                .action("Split", Sheet.Style.PRIMARY, () -> doSplit(sel, count.getText().toString()))
+        if (sel.isEmpty()) { status.show(msg(R.string.l10n_node_tools_select_split), false); return; }
+        final EditText count = input(msg(R.string.l10n_node_tools_split_count), "4", false);
+        Sheet.create(act, msg(R.string.l10n_node_tools_split_title))
+                .stackActions()
+                .body(box(label(msg(R.string.l10n_node_tools_split_count)), count))
+                .action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_send_split), Sheet.Style.PRIMARY, () -> doSplit(sel, count.getText().toString()))
                 .show();
     }
 
     /** Validate the count, compute equal slices, fetch one address per coin, then post the split. */
     private void doSplit(List<Coin> sel, String cStr) {
         int n;
-        try { n = Integer.parseInt(cStr.trim()); } catch (Exception e) { status.show("Enter a valid number.", false); return; }
-        if (n < 2 || n > 15) { status.show("Choose between 2 and 15 coins.", false); return; }
+        try { n = Integer.parseInt(cStr.trim()); } catch (Exception e) { status.show(msg(R.string.l10n_node_tools_valid_number), false); return; }
+        if (n < 2 || n > 15) { status.show(msg(R.string.l10n_node_tools_split_range), false); return; }
 
         final String tokenid = act.selectedTokenid();
         int dec = act.tokenDecimals(tokenid);
         int scale = dec >= 0 ? dec : SPLIT_SCALE;
         BigDecimal total = sum(sel);
         BigDecimal each = total.divide(new BigDecimal(n), scale, RoundingMode.DOWN);
-        if (each.signum() <= 0) { status.show("Amount too small to split into " + n + ".", false); return; }
+        if (each.signum() <= 0) { status.show(msg(R.string.l10n_node_tools_too_small, n), false); return; }
         // Rounding goes DOWN, so the last coin absorbs the remainder to keep inputs == outputs (no burn).
         final BigDecimal last = total.subtract(each.multiply(new BigDecimal(n - 1)));
         final BigDecimal eachF = each;
         final int fn = n;
         final String tokenName = sel.get(0).tokenName;
 
-        status.show("Fetching addresses…", true);
+        status.show(msg(R.string.l10n_node_tools_fetching_addresses), true);
         TxnUtil.fetchAddresses(act, n, new TxnUtil.AddrList() {
             @Override public void onAddresses(List<String> addrs) {
                 List<TxnBuilder.Out> outs = new ArrayList<>();
@@ -138,9 +156,9 @@ public class WalletTools {
                 }
                 String internalid = TxnUtil.recordPosting(act, "Split → " + fn + " coins",
                         Util.tidyAmount(sum(sel).toPlainString()), tokenid, tokenName, sel, outs, null, null);
-                runBuilder(sel, outs, tokenid, internalid, "Split into " + fn + " coins");
+                runBuilder(sel, outs, tokenid, internalid, msg(R.string.l10n_node_tools_split_done, fn));
             }
-            @Override public void onError(String message) { status.show("Failed: " + message, false); }
+            @Override public void onError(String message) { status.show(msg(R.string.l10n_node_send_failed, SystemMessages.message(message)), false); }
         });
     }
 
@@ -152,22 +170,22 @@ public class WalletTools {
     public void showConsolidate() {
         final List<Coin> sel = act.selectedCoins();
         if (sel.isEmpty()) {
-            Sheet.create(act, "Consolidate Minima")
-                    .subtitle("Merge your Minima coins together automatically (consolidate tokenid:0x00)?")
-                    .action("Cancel", Sheet.Style.SECONDARY, null)
-                    .action("Consolidate", Sheet.Style.PRIMARY, () -> autoConsolidate(Util.MINIMA_TOKENID))
+            Sheet.create(act, msg(R.string.l10n_node_tools_consolidate_title))
+                    .subtitle(msg(R.string.l10n_node_tools_consolidate_help))
+                    .action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null)
+                    .action(msg(R.string.l10n_node_wallet_consolidate), Sheet.Style.PRIMARY, () -> autoConsolidate(Util.MINIMA_TOKENID))
                     .show();
             return;
         }
         if (sel.size() < 2) {
-            status.show("Select 2+ coins to merge them, or clear the selection to auto-consolidate Minima.", false);
+            status.show(msg(R.string.l10n_node_tools_select_merge), false);
             return;
         }
         final String tokenName = sel.get(0).tokenName;
-        Sheet.create(act, "Consolidate selected")
-                    .subtitle("Merge the " + sel.size() + " selected " + tokenName + " coins into one?")
-                    .action("Cancel", Sheet.Style.SECONDARY, null)
-                    .action("Merge", Sheet.Style.PRIMARY, () -> mergeSelected(sel))
+        Sheet.create(act, msg(R.string.l10n_node_tools_merge_title))
+                    .subtitle(msg(R.string.l10n_node_tools_merge_help, tokenName, sel.size()))
+                    .action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null)
+                    .action(msg(R.string.l10n_node_tools_merge), Sheet.Style.PRIMARY, () -> mergeSelected(sel))
                     .show();
     }
 
@@ -175,7 +193,7 @@ public class WalletTools {
     private void autoConsolidate(String tokenid) {
         final String internalid = TxnUtil.recordPosting(act, "Consolidate " + tokenNameFor(tokenid),
                 "—", tokenid, tokenNameFor(tokenid));
-        status.show("Consolidating…", true);
+        status.show(msg(R.string.l10n_node_tools_consolidating), true);
         act.node().cmd("consolidate tokenid:" + tokenid, new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 boolean ok = json.optBoolean("status", true);
@@ -183,13 +201,13 @@ public class WalletTools {
                 // input match — store null rather than the unreliable response id.
                 act.history().update(internalid,
                         ok ? HistoryDb.STATUS_POSTED : HistoryDb.STATUS_ERROR, null, "");
-                status.show(ok ? "Consolidate submitted." : "Nothing to consolidate.", ok);
+                status.show(ok ? msg(R.string.l10n_node_tools_consolidate_submitted) : msg(R.string.l10n_node_tools_nothing_consolidate), ok);
                 act.reload();
             }
             @Override public void onError(String message) {
                 if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
                 act.history().update(internalid, HistoryDb.STATUS_ERROR, null, message);
-                status.show("Failed: " + message, false);
+                status.show(msg(R.string.l10n_node_send_failed, SystemMessages.message(message)), false);
             }
         });
     }
@@ -199,19 +217,19 @@ public class WalletTools {
         final String tokenid = act.selectedTokenid();
         final String tokenName = sel.get(0).tokenName;
         final BigDecimal total = sum(sel);
-        status.show("Fetching address…", true);
+        status.show(msg(R.string.l10n_node_wallet_fetching_address), true);
         act.node().cmd("getaddress", new NodeApi.Cb() {
             @Override public void onResult(JSONObject json) {
                 JSONObject r = json.optJSONObject("response");
                 String addr = r == null ? "" : r.optString("miniaddress", r.optString("address", ""));
-                if (addr.isEmpty()) { status.show("Could not get an address.", false); return; }
+                if (addr.isEmpty()) { status.show(msg(R.string.l10n_node_tools_no_address), false); return; }
                 List<TxnBuilder.Out> outs = new ArrayList<>();
                 outs.add(new TxnBuilder.Out(addr, total.stripTrailingZeros().toPlainString()));
                 String internalid = TxnUtil.recordPosting(act, "Consolidate → 1 coin",
                         Util.tidyAmount(total.toPlainString()), tokenid, tokenName, sel, outs, null, null);
-                runBuilder(sel, outs, tokenid, internalid, "Merged " + sel.size() + " coins");
+                runBuilder(sel, outs, tokenid, internalid, msg(R.string.l10n_node_tools_merged, sel.size()));
             }
-            @Override public void onError(String message) { status.show("Failed: " + message, false); }
+            @Override public void onError(String message) { status.show(msg(R.string.l10n_node_send_failed, SystemMessages.message(message)), false); }
         });
     }
 
@@ -220,16 +238,18 @@ public class WalletTools {
     /** Prompt for address count + per-address amount, then kick off the multi-batch DistributeManager. */
     public void showDistribute() {
         final List<Coin> sel = act.selectedCoins();
-        if (sel.isEmpty()) { status.show("Select coins in the list first, then Distribute.", false); return; }
+        if (sel.isEmpty()) { status.show(msg(R.string.l10n_node_tools_select_distribute), false); return; }
         if (act.distribute() != null && act.distribute().isBusy()) {
-            status.show("A distribute job is already running.", false); return;
+            status.show(msg(R.string.l10n_node_tools_distribute_busy), false); return;
         }
-        final EditText count = input("Number of addresses (2–56)", "20", false);
-        final EditText amount = input("Amount to each", "", true);
-        Sheet.create(act, "Distribute to my addresses")
-                .body(box(count, amount))
-                .action("Cancel", Sheet.Style.SECONDARY, null)
-                .action("Distribute", Sheet.Style.PRIMARY, () ->
+        final EditText count = input(msg(R.string.l10n_node_tools_address_count), "20", false);
+        final EditText amount = input(msg(R.string.l10n_node_tools_amount_each), "", true);
+        Sheet.create(act, msg(R.string.l10n_node_tools_distribute_title))
+                .stackActions()
+                .body(box(label(msg(R.string.l10n_node_tools_address_count)), count,
+                        label(msg(R.string.l10n_node_tools_amount_each)), amount))
+                .action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_tools_distribute), Sheet.Style.PRIMARY, () ->
                         doDistribute(sel, count.getText().toString(), amount.getText().toString()))
                 .show();
     }
@@ -237,41 +257,40 @@ public class WalletTools {
     /** Validate count/amount/decimals/funds, reserve the job slot, fetch addresses, then start. */
     private void doDistribute(final List<Coin> sel, String cStr, String aStr) {
         int n;
-        try { n = Integer.parseInt(cStr.trim()); } catch (Exception e) { status.show("Enter a valid number.", false); return; }
-        if (n < 2 || n > 56) { status.show("Choose 2–56 addresses (auto-chained in up to 4 transactions).", false); return; }
+        try { n = Integer.parseInt(cStr.trim()); } catch (Exception e) { status.show(msg(R.string.l10n_node_tools_valid_number), false); return; }
+        if (n < 2 || n > 56) { status.show(msg(R.string.l10n_node_tools_address_range), false); return; }
 
         final BigDecimal per;
-        try { per = new BigDecimal(aStr.trim()); } catch (Exception e) { status.show("Enter a valid amount.", false); return; }
-        if (per.signum() <= 0) { status.show("Amount must be greater than zero.", false); return; }
+        try { per = new BigDecimal(aStr.trim()); } catch (Exception e) { status.show(msg(R.string.l10n_node_send_valid_amount), false); return; }
+        if (per.signum() <= 0) { status.show(msg(R.string.l10n_node_send_positive_amount), false); return; }
 
         final String tokenid = act.selectedTokenid();
         int dec = act.tokenDecimals(tokenid);
         if (dec >= 0 && Util.decimalPlaces(per) > dec) {
-            status.show("This token supports at most " + dec + " decimal place" + (dec == 1 ? "" : "s") + ".", false);
+            status.show(Language.count(R.plurals.l10n_node_send_decimals, dec), false);
             return;
         }
 
         BigDecimal total = sum(sel);
         BigDecimal required = per.multiply(new BigDecimal(n));
         if (required.compareTo(total) > 0) {
-            status.show("Need " + Util.tidyAmount(required.toPlainString()) + " but only "
-                    + Util.tidyAmount(total.toPlainString()) + " selected.", false);
+            status.show(msg(R.string.l10n_node_tools_need_amount, Util.tidyAmount(required.toPlainString()), Util.tidyAmount(total.toPlainString())), false);
             return;
         }
         final String perStr = per.stripTrailingZeros().toPlainString();
         final String tokenName = sel.get(0).tokenName;
 
         // Reserve before the async address fetch so a second tap can't start a parallel job.
-        if (!act.distribute().reserve()) { status.show("A distribute job is already running.", false); return; }
-        status.show("Fetching " + n + " addresses…", true);
+        if (!act.distribute().reserve()) { status.show(msg(R.string.l10n_node_tools_distribute_busy), false); return; }
+        status.show(msg(R.string.l10n_node_tools_fetching_count, n), true);
         TxnUtil.fetchAddresses(act, n, new TxnUtil.AddrList() {
             @Override public void onAddresses(List<String> addrs) {
                 act.distribute().start(sel, addrs, perStr, tokenid, tokenName);
-                status.show("Distribute started.", true);
+                status.show(msg(R.string.l10n_node_tools_distribute_started), true);
             }
             @Override public void onError(String message) {
                 act.distribute().cancelReserve();
-                status.show("Failed: " + message, false);
+                status.show(msg(R.string.l10n_node_send_failed, SystemMessages.message(message)), false);
             }
         });
     }
@@ -281,11 +300,11 @@ public class WalletTools {
     /** Confirm, then stop tracking the selected coins (they stay on-chain, just hidden locally). */
     public void untrackSelected() {
         final List<Coin> sel = act.selectedCoins();
-        if (sel.isEmpty()) { status.show("Select coins in the list first, then Untrack.", false); return; }
-        Sheet.create(act, "Untrack " + sel.size() + " coin(s)?")
-                .subtitle("They'll disappear from the wallet view but remain on-chain. Re-add later by coinid.")
-                .action("Cancel", Sheet.Style.SECONDARY, null)
-                .action("Untrack", Sheet.Style.PRIMARY, () -> untrackNext(sel, 0))
+        if (sel.isEmpty()) { status.show(msg(R.string.l10n_node_tools_select_untrack), false); return; }
+        Sheet.create(act, msg(R.string.l10n_node_tools_untrack_title, sel.size()))
+                .subtitle(msg(R.string.l10n_node_tools_untrack_help))
+                .action(msg(R.string.l10n_common_cancel), Sheet.Style.SECONDARY, null)
+                .action(msg(R.string.l10n_node_tools_untrack), Sheet.Style.PRIMARY, () -> untrackNext(sel, 0))
                 .show();
     }
 
@@ -293,12 +312,12 @@ public class WalletTools {
     /** Sequentially `cointrack enable:false` each selected coin, recursing through the list. */
     private void untrackNext(final List<Coin> sel, final int i) {
         if (i >= sel.size()) {
-            status.show("Untracked " + sel.size() + " coin(s).", true);
+            status.show(msg(R.string.l10n_node_tools_untracked, sel.size()), true);
             act.clearSelection();
             act.reload();
             return;
         }
-        status.show("Untracking " + (i + 1) + "/" + sel.size() + "…", true);
+        status.show(msg(R.string.l10n_node_tools_untracking, i + 1, sel.size()), true);
         // Belt-and-braces: coins are already vetted at ingestion (Coin.isWellFormed), but this id
         // goes straight into a command, so never take that on trust.
         if (!Util.isValidHexId(sel.get(i).coinid)) { untrackNext(sel, i + 1); return; }
@@ -306,7 +325,7 @@ public class WalletTools {
             @Override public void onResult(JSONObject json) { untrackNext(sel, i + 1); }
             @Override public void onError(String message) {
                 if (NodeApi.ERR_NOT_ENABLED.equals(message)) message = "Enable this wallet in Minima Core → Apps first.";
-                status.show("Untrack failed: " + message, false);
+                status.show(msg(R.string.l10n_node_tools_untrack_failed, SystemMessages.message(message)), false);
             }
         });
     }

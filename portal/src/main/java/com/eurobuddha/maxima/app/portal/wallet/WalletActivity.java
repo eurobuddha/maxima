@@ -1,5 +1,8 @@
 package com.eurobuddha.maxima.app.portal.wallet;
 
+import com.eurobuddha.maxima.app.i18n.Language;
+import static com.eurobuddha.maxima.app.i18n.Language.msg;
+
 import com.eurobuddha.maxima.app.R;
 
 import android.content.Context;
@@ -34,6 +37,7 @@ import java.util.Set;
  * Talks to the account's Parlons Node over the paired control channel ({@link NodeApi}).
  */
 public class WalletActivity extends AppCompatActivity {
+    private com.eurobuddha.maxima.app.ui.TabScroll mTabScroll;
 
     /** The wallet screens read the chain tip from here (also used by the tip poll). */
 
@@ -97,10 +101,13 @@ public class WalletActivity extends AppCompatActivity {
         Design.load(this);                 // must precede view construction (views read Design)
         Format.load(this);                 // ditto — every list renders amounts through Format
         setContentView(R.layout.activity_wallet);
+        Language.apply(findViewById(R.id.main));
 
         // Edge-to-edge is forced on targetSdk 35 — pad the root by the status/nav bar insets so the
         // top bar isn't drawn under the status bar.
         View root = findViewById(R.id.main);
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(), root)
+                .setAppearanceLightStatusBars(!Design.isDark());
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             androidx.core.graphics.Insets bars =
                     insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
@@ -170,8 +177,11 @@ public class WalletActivity extends AppCompatActivity {
                 new WalletView(this),
                 new HistoryView(this)
         };
-        pager = new MainPager(views, new String[]{
-                "Balances", "Gallery", "Mint", "Send", "Receive", "Coins", "History"});
+        pager = new MainPager(views, new CharSequence[]{
+                msg(R.string.l10n_node_wallet_balances), msg(R.string.l10n_node_wallet_gallery),
+                msg(R.string.l10n_node_wallet_mint), msg(R.string.l10n_chat_send),
+                msg(R.string.l10n_wallet_receive), msg(R.string.l10n_wallet_coins),
+                msg(R.string.l10n_wallet_history)});
 
         viewPager = findViewById(R.id.pager);
         viewPager.setOffscreenPageLimit(6);
@@ -223,7 +233,7 @@ public class WalletActivity extends AppCompatActivity {
         brandSub.setTextColor(Design.dim());
         String ver;
         try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { ver = "?"; }
-        brandSub.setText("YOUR NODE'S WALLET  ·  TOKENS · NFTS  ·  v" + ver);
+        Language.setText(brandSub, msg(R.string.l10n_node_wallet_subtitle, ver));
         blockNo.setTextColor(Design.dim());
         designToggle.setTextColor(Design.heading());
         pairingBanner.setBackgroundColor(Design.accentSoft());
@@ -413,7 +423,7 @@ public class WalletActivity extends AppCompatActivity {
             coins.add(coin);
         }
         if (dropped > 0) {
-            Toast.makeText(this, dropped + " malformed coin(s) ignored — a token's metadata looks hostile.",
+            Toast.makeText(this, Language.count(R.plurals.l10n_node_wallet_malformed_coins, dropped),
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -444,7 +454,7 @@ public class WalletActivity extends AppCompatActivity {
             if (tb.isWellFormed()) balances.add(tb); else dropped++;
         }
         if (dropped > 0) {
-            Toast.makeText(this, dropped + " malformed balance row(s) ignored — a token's metadata looks hostile.",
+            Toast.makeText(this, Language.count(R.plurals.l10n_node_wallet_malformed_balances, dropped),
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -542,7 +552,7 @@ public class WalletActivity extends AppCompatActivity {
         if (NodeApi.ERR_NOT_ENABLED.equals(message)) {
             setPaired(false);
         } else if (NodeApi.ERR_TOO_LONG.equals(message)) {
-            Toast.makeText(this, "The node reply was too large — showing what's loaded.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, msg(R.string.l10n_node_wallet_large_reply), Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
         }
@@ -627,13 +637,13 @@ public class WalletActivity extends AppCompatActivity {
         scanConsumer = consumer;
         com.journeyapps.barcodescanner.ScanOptions opts = new com.journeyapps.barcodescanner.ScanOptions();
         opts.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
-        opts.setPrompt("Scan a Minima address QR");
+        opts.setPrompt(msg(R.string.l10n_node_wallet_scan_address).toString());
         opts.setBeepEnabled(false);
         opts.setOrientationLocked(true);
         try { scanLauncher.launch(opts); }
         catch (Exception e) {
             scanConsumer = null;
-            Toast.makeText(this, "Could not open the camera.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, msg(R.string.l10n_node_wallet_camera_failed), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -652,7 +662,7 @@ public class WalletActivity extends AppCompatActivity {
         try { imagesLauncher.launch("image/*"); }
         catch (Exception e) {
             imagesConsumer = null;
-            Toast.makeText(this, "Could not open the image picker.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, msg(R.string.l10n_node_wallet_picker_failed), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -662,7 +672,7 @@ public class WalletActivity extends AppCompatActivity {
         try { imageLauncher.launch("image/*"); }
         catch (Exception e) {
             imageConsumer = null;
-            Toast.makeText(this, "Could not open the image picker.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, msg(R.string.l10n_node_wallet_picker_failed), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -685,61 +695,11 @@ public class WalletActivity extends AppCompatActivity {
      * that actually has something left to reveal, and scroll by most of a screen on tap.
      */
     private void wireTabScrollArrows(final TabLayout tabs) {
-        final TextView left = findViewById(R.id.tabScrollLeft);
-        final TextView right = findViewById(R.id.tabScrollRight);
+        TextView left = findViewById(R.id.tabScrollLeft);
+        TextView right = findViewById(R.id.tabScrollRight);
         left.setTextColor(Design.accent());
         right.setTextColor(Design.accent());
-
-        View.OnClickListener scroll = v -> {
-            int by = Math.max(1, (int) (tabs.getWidth() * 0.7f));
-            tabs.smoothScrollBy(v == left ? -by : by, 0);
-            // Re-check once the fling settles; TabLayout gives us no scroll-end callback.
-            tabs.postDelayed(() -> updateTabArrows(tabs, left, right), 350);
-        };
-        left.setOnClickListener(scroll);
-        right.setOnClickListener(scroll);
-
-        tabs.getViewTreeObserver().addOnScrollChangedListener(() -> updateTabArrows(tabs, left, right));
-        tabs.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or2, ob) -> updateTabArrows(tabs, left, right));
-        // Selecting a tab scrolls the strip, which changes what's still off-screen.
-        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
-            @Override public void onPageSelected(int position) {
-                tabs.postDelayed(() -> updateTabArrows(tabs, left, right), 250);
-            }
-        });
-        // The strip's inner width isn't known until it has been measured AND populated, and the
-        // exact frame that happens on varies by device — so re-check a few times as it settles.
-        for (int delay : new int[]{0, 150, 500, 1200}) {
-            tabs.postDelayed(() -> updateTabArrows(tabs, left, right), delay);
-        }
-    }
-
-    /**
-     * Measure the overflow directly rather than asking {@code canScrollHorizontally}, which answers
-     * from a scroll range that isn't populated until the strip has been laid out — so it reported
-     * "nothing to scroll" and the chevrons never appeared at all.
-     */
-    private int lastLeftVis = -1, lastRightVis = -1;
-
-    private void updateTabArrows(TabLayout tabs, View left, View right) {
-        if (tabs == null || left == null || right == null) return;
-        View strip = tabs.getChildCount() > 0 ? tabs.getChildAt(0) : null;
-        if (strip == null) return;
-        int slack = (int) (2 * getResources().getDisplayMetrics().density);
-        int overflow = strip.getWidth() - tabs.getWidth();
-        int x = tabs.getScrollX();
-        final int wantLeft = x > slack ? View.VISIBLE : View.GONE;
-        final int wantRight = overflow > slack && x < overflow - slack ? View.VISIBLE : View.GONE;
-        if (wantLeft == lastLeftVis && wantRight == lastRightVis) return;
-        lastLeftVis = wantLeft;
-        lastRightVis = wantRight;
-        left.setVisibility(wantLeft);
-        right.setVisibility(wantRight);
-        // These flips happen from a layout-change listener, i.e. DURING a layout pass, where
-        // requestLayout() is swallowed — the chevrons went VISIBLE but were never measured, so they
-        // sat at 0x0 and looked like they had never appeared. Re-request outside the pass.
-        final View row = (View) right.getParent();
-        if (row != null) row.post(row::requestLayout);
+        mTabScroll = com.eurobuddha.maxima.app.ui.TabScroll.attach(tabs, viewPager, left, right);
     }
 
     // ===== StateNFT mint engine driver =====
@@ -780,4 +740,18 @@ public class WalletActivity extends AppCompatActivity {
         }
         return -1;
     }
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        com.eurobuddha.maxima.app.i18n.Language.configurationChanged(this);
+        TabLayout tabs = findViewById(R.id.tabs);
+        if (tabs != null && pager != null) for (int i = 0; i < tabs.getTabCount(); i++) {
+            TabLayout.Tab tab = tabs.getTabAt(i);
+            if (tab != null) tab.setText(pager.getPageTitle(i));
+        }
+        // Label widths change with language. Keep the selected tab visible without
+        // selecting it again (which would rebuild its page and invoke onShown()).
+        if (mTabScroll != null) mTabScroll.keepSelectedVisible();
+    }
+
 }

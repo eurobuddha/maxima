@@ -5,6 +5,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
+import com.eurobuddha.maxima.app.i18n.Language;
+import com.eurobuddha.maxima.app.i18n.ChatPreview;
+import com.eurobuddha.maxima.app.i18n.SystemMessages;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
@@ -53,9 +56,9 @@ public final class PortalNotifier {
     private static final class Line {
         final String senderKey;
         final String senderName;
-        final String text;
+        final CharSequence text;
         final long time;
-        Line(String k, String n, String t, long ms) { senderKey = k; senderName = n; text = t; time = ms; }
+        Line(String k, String n, CharSequence t, long ms) { senderKey = k; senderName = n; text = t; time = ms; }
     }
 
     /** Per-conversation recent-line stacks (Android keeps none; the portal has no engine).
@@ -93,9 +96,9 @@ public final class PortalNotifier {
                 && nm.getNotificationChannel(CHANNEL_ID_MUTED) != null)) {
             return;
         }
-        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Messages",
+        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, Language.text(c,R.string.l10n_notification_messages),
                 NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Messages arriving on your cloud account");
+        ch.setDescription(Language.text(c,R.string.l10n_notification_cloud_messages));
         ch.enableVibration(true);
         ch.setShowBadge(true);
         // Name-based URI (raw/pssst): a numeric resource id is only stable within one build and the
@@ -106,9 +109,9 @@ public final class PortalNotifier {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build());
         nm.createNotificationChannel(ch);
-        NotificationChannel muted = new NotificationChannel(CHANNEL_ID_MUTED, "Messages (muted)",
+        NotificationChannel muted = new NotificationChannel(CHANNEL_ID_MUTED, Language.text(c,R.string.l10n_notification_messages_muted),
                 NotificationManager.IMPORTANCE_HIGH);
-        muted.setDescription("Messages arriving on your cloud account, sound off");
+        muted.setDescription(Language.text(c,R.string.l10n_notification_cloud_muted));
         muted.enableVibration(true);
         muted.setShowBadge(true);
         muted.setSound(null, null);
@@ -137,8 +140,7 @@ public final class PortalNotifier {
         String senderKey = group ? firstNonEmpty(str(ev, "sender"), peer) : peer;
         String senderName = group ? firstNonEmpty(str(ev, "sname"), senderKey) : convName;
         String body = str(ev, "body");
-        String line = ChatPay.isPayment(body) ? ChatPay.preview(body)
-                : ChatMedia.isMedia(body) ? ChatMedia.preview(body) : body;
+        CharSequence line = ChatPreview.message(body);
         long when = lng(ev, "time");
         if (when <= 0) {
             when = System.currentTimeMillis();
@@ -158,7 +160,7 @@ public final class PortalNotifier {
             }
         }
 
-        Person me = new Person.Builder().setName("You").build();
+        Person me = new Person.Builder().setName(Language.text(c,R.string.l10n_notification_you)).build();
         NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(me);
         if (group) {
             style.setConversationTitle(convName);
@@ -177,7 +179,7 @@ public final class PortalNotifier {
                             .build();
                     people.put(ln.senderKey, p);
                 }
-                style.addMessage(ln.text, ln.time, p);
+                style.addMessage(ln.text.toString(), ln.time, p);
             }
         }
 
@@ -217,10 +219,10 @@ public final class PortalNotifier {
         ensureChannels(c);
         boolean okEv = "walletsent".equals(String.valueOf(ev.get("type")));
         String to = str(ev, "to");
-        String title = okEv ? "Sent " + str(ev, "amount") + " MINIMA" : "Wallet send failed";
+        String title = okEv ? Language.text(c,R.string.l10n_notification_wallet_sent,str(ev,"amount")) : Language.text(c,R.string.l10n_notification_wallet_failed);
         String line = okEv
-                ? "To " + to + "  ·  txid " + str(ev, "txid")     // full values, never truncated
-                : str(ev, "error");
+                ? Language.text(c,R.string.l10n_notification_wallet_details,to,str(ev,"txid"))     // full values, never truncated
+                : SystemMessages.text(c,str(ev,"error"));
         Notification n = new NotificationCompat.Builder(c, CHANNEL_ID_MUTED)
                 .setSmallIcon(R.drawable.ic_send)
                 .setContentTitle(title)

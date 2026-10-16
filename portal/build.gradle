@@ -21,8 +21,8 @@ android {
         applicationId "com.eurobuddha.parlons.cloud"
         minSdk 28
         targetSdk 35
-        versionCode 284
-        versionName "0.2.84"
+        versionCode 286
+        versionName "0.2.86"
     }
 
     signingConfigs {
@@ -67,7 +67,12 @@ android {
     // GatewayNode/SeedStore + com.eurobuddha.wallet) from the shared source, so the cloud
     // front-end wallet is literal parity — build+sign locally, broadcast via minimaCore.
     sourceSets {
-        main { java.srcDirs += ['../walletshared', '../chatshared'] }
+        debug { java.srcDirs += ['../localization/android/preview'] }
+        test { java.srcDirs += ['../localization/android/test'] }
+        main {
+            java.srcDirs += ['../walletshared', '../chatshared']
+            res.srcDirs += ['../localization/android/res']
+        }
     }
 }
 

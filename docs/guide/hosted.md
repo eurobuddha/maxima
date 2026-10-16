@@ -13,7 +13,7 @@ Not everyone has a machine that stays on. Anyone who does can run a **Parlons ho
 
 - **Cannot** read your messages in transit or anyone else's: everything between devices is sealed end to end.
 - **Can** read what is stored on that machine: your account keeps your chat history and its keys there, so the operator has the same access to them that you would have on your own machine. Choose a host you trust the way you would trust someone holding your mailbox.
-- Seeds on a host are encrypted at rest under a passphrase the operator holds, which protects against a stolen disk, not against the operator.
+- The standalone tenant service can encrypt seeds at rest under an operator passphrase. Desktop-managed accounts use private files in the owner's data folder; use the computer's disk encryption to protect a stolen disk. The admin invitation password does not encrypt guest accounts.
 
 ## Leaving
 
@@ -22,6 +22,37 @@ At any time: Settings, **Back up account** (iPhone) or the Node tab (Android) wr
 ---
 
 ## Hosting accounts for others
+
+### In minimaCore Desktop or minimaDesk
+
+With Parlons Node **0.2.126** or newer, the embedded Parlons page manages hosting directly.
+Standalone Parlons Cloud **0.11.117** also includes these controls in its local web panel.
+
+1. Open **Parlons → Devices → Set admin password**. Enter a password of at least ten
+   characters twice, then save. To change it later, supply the current password.
+2. Under **Hosted accounts**, choose **Enable hosting**. Refresh after a few seconds.
+3. Choose an account name and **Create account**. Refresh until its state is **running**.
+4. Choose **Show invitation** and privately share that tenant's QR or **Copy tenant invite**.
+   The guest scans it in Parlons Cloud to pair immediately. Their code does not pair into your account.
+
+These accounts have **chat, calls and files only**. They have separate identities, contacts,
+paired devices and storage, with wallet, node terminal, NFT hosting and host-management
+commands disabled. They use the existing MAX# relay transport; they do not share the
+owner's Keets identity or inbox consumer. The computer must remain running.
+
+**Pair your own device** creates an owner-account invitation and requires the admin
+password. Use the Hosted accounts section for guests. Password setup is available only
+in the host's authenticated local panel; it is not exposed as a remote password-reset RPC.
+
+Pause/Resume keeps an account's identity and chats. **Stop hosting** stops all guests in
+the background and retains their data. Hosting enabled/disabled state survives app restarts.
+Accounts live under `<owner-data>/hosted-chat/`, with a ten-account limit including paused
+accounts. Existing separately configured tenant services retain their existing settings
+and wallet capabilities.
+
+From Android Cloud Portal **0.2.85**, an already-paired owner can also use **Node → Manage
+hosted accounts → Hosting options** to enable or stop hosting, then create accounts and
+show their invitations. Set the password on the host app first.
 
 ### From a Parlons Node owner account
 
