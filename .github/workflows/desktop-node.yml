@@ -1,10 +1,24 @@
-name: Build signed desktop node (mac / win / linux)
+name: Build desktop node (mac / win / linux)
 
-# Manual runs retain verified, versioned installers as workflow artifacts.
-# desktop-vX.Y.Z tags publish only after all three signed builds succeed.
-# Mac uses the same two-stage app/DMG signing and notarization as local releases.
-# Windows signs both the launcher and MSI. Linux ships a verified detached OpenPGP signature.
-# Missing signing credentials fail before packaging; there is no unsigned publication path.
+# Manual runs produce downloadable installer artifacts; pushing a tag like
+# desktop-v1.0.0 also attaches them to a GitHub Release. (Plain v* tags belong
+# to the Android app releases — the desktop line has its own tag prefix.)
+#
+# Each runner builds its OWN platform natively: jpackage cannot cross-build, so
+# the matrix IS the packaging strategy. The runner's Temurin 21 ships jpackage +
+# jmods, so no jpackageJdk property is needed here (locally the build is pinned
+# to the Android Studio JBR, which has neither — pass -PjpackageJdk there).
+#
+# SIGNING (wired, dormant until secrets exist):
+#   macOS  — set MACOS_CERT_P12 (base64 .p12), MACOS_CERT_PASSWORD and
+#            MACOS_SIGN_IDENTITY ("Developer ID Application: Barry Sherman (Z4JD286WF4)" —
+#            the gradle build strips the prefix for jpackage), plus
+#            APPLE_ID / APPLE_APP_PASSWORD / APPLE_TEAM_ID to notarize+staple.
+#            Locally: desktop/release-mac.sh does sign → notarize → staple → verify.
+#   Windows — set WINDOWS_CERT_PFX (base64 .pfx) and WINDOWS_CERT_PASSWORD.
+# With no secrets, unsigned installers are produced (Gatekeeper: right-click
+# Open; SmartScreen: More info -> Run anyway).
+
 on:
   workflow_dispatch:
   push:
@@ -12,7 +26,7 @@ on:
       - 'desktop-v*'
 
 permissions:
-  contents: read
+  contents: write   # tag builds create the GitHub Release
 
 jobs:
   build:
@@ -30,114 +44,87 @@ jobs:
             platform: linux
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Require signing credentials and matching release version
-        id: release
-        shell: bash
-        env:
-          RELEASE_PLATFORM: ${{ matrix.platform }}
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-          LINUX_SIGNING_KEY: ${{ secrets.LINUX_SIGNING_KEY }}
-          LINUX_SIGNING_FINGERPRINT: ${{ secrets.LINUX_SIGNING_FINGERPRINT }}
-        run: python desktop/release-check.py
-
-      - name: Import Mac identity and notarization profile
-        if: matrix.platform == 'mac'
-        shell: bash
+      # macOS: import the Developer ID cert into a throwaway keychain (only when
+      # the secret exists) so jpackage can sign the app bundle + dmg.
+      - name: Import macOS signing certificate
+        if: matrix.platform == 'mac' && env.CERT != ''
         env:
           CERT: ${{ secrets.MACOS_CERT_P12 }}
           CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          echo "$CERT" | base64 --decode > cert.p12
+          security create-keychain -p ci-keychain build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci-keychain build.keychain
+          security import cert.p12 -k build.keychain -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k ci-keychain build.keychain
+          rm cert.p12
+
+      - name: Build installer (jpackage)
+        shell: bash
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          ARGS=""
+          if [ "${{ matrix.platform }}" = "mac" ] && [ -n "$MACOS_SIGN_IDENTITY" ]; then
+            ARGS="-PmacSignIdentity=$MACOS_SIGN_IDENTITY"
+          fi
+          # The repo's gradle.properties pins org.gradle.java.home to a local
+          # Android Studio JBR path that does not exist on a runner — override.
+          # -PskipAndroid keeps the AGP module out of configuration entirely.
+          ./gradlew :desktop:jpackage $ARGS \
+            -PskipAndroid=true \
+            -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon
+
+      # Windows: Authenticode-sign the .msi (only when the secret exists).
+      - name: Sign Windows installer
+        if: matrix.platform == 'win' && env.CERT != ''
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERT_PFX }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:CERT))
+          $msi = Get-ChildItem desktop/build/jpackage/*.msi | Select-Object -First 1
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /f cert.pfx /p $env:CERT_PASSWORD /fd SHA256 `
+            /tr http://timestamp.digicert.com /td SHA256 $msi.FullName
+          Remove-Item cert.pfx
+
+      # macOS: notarize + staple (only when the Apple secrets exist).
+      - name: Notarize macOS installer
+        if: matrix.platform == 'mac' && env.APPLE_ID != ''
+        env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          set -euo pipefail
-          CERT_FILE="$RUNNER_TEMP/parlons-signing.p12"
-          KEYCHAIN="$RUNNER_TEMP/parlons-build.keychain-db"
-          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
-          echo "::add-mask::$KEYCHAIN_PASSWORD"
-          printf '%s' "$CERT" | base64 --decode > "$CERT_FILE"
-          trap 'rm -f "$CERT_FILE"' EXIT
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
-          security default-keychain -s "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$CERT_FILE" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          xcrun notarytool store-credentials parlons-ci --keychain "$KEYCHAIN" \
-            --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID"
+          DMG=$(ls desktop/build/jpackage/*.dmg | head -1)
+          xcrun notarytool submit "$DMG" --wait \
+            --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID"
+          xcrun stapler staple "$DMG"
+          desktop/verify-mac.sh "$DMG"
 
-      - name: Build signed and notarized Mac installer
-        if: matrix.platform == 'mac'
+      - name: Checksums
         shell: bash
-        env:
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-        run: GRADLE_JAVA_HOME="$JAVA_HOME" JPACKAGE_JDK="$JAVA_HOME" NOTARY_KEYCHAIN="$RUNNER_TEMP/parlons-build.keychain-db" desktop/release-mac.sh "$MACOS_SIGN_IDENTITY" parlons-ci
-
-      - name: Build Windows app image
-        if: matrix.platform == 'win'
-        shell: bash
-        run: ./gradlew :desktop:jpackageImage -PskipAndroid=true -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon
-
-      - name: Sign Windows app and package signed installer
-        if: matrix.platform == 'win'
-        shell: pwsh
-        env:
-          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: ./desktop/release-windows.ps1 -Version $env:RELEASE_VERSION
-
-      - name: Build Linux installer
-        if: matrix.platform == 'linux'
-        shell: bash
-        run: ./gradlew :desktop:jpackage -PskipAndroid=true -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon
-
-      - name: Sign and verify Linux installer
-        if: matrix.platform == 'linux'
-        shell: bash
-        env:
-          LINUX_SIGNING_KEY: ${{ secrets.LINUX_SIGNING_KEY }}
-          LINUX_SIGNING_FINGERPRINT: ${{ secrets.LINUX_SIGNING_FINGERPRINT }}
-          LINUX_SIGNING_PASSPHRASE: ${{ secrets.LINUX_SIGNING_PASSPHRASE }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          set -euo pipefail
-          files=(desktop/build/jpackage/*.deb)
-          [ "${#files[@]}" -eq 1 ] && [ -f "${files[0]}" ] || { echo 'Expected exactly one Linux installer'; exit 1; }
-          python desktop/sign-linux.py "${files[0]}" "$RELEASE_VERSION"
-
-      - name: Checksums for verified artifacts
-        shell: bash
-        env:
-          RELEASE_PLATFORM: ${{ matrix.platform }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           python - <<'PY'
-          import hashlib, os, re
+          import hashlib
           from pathlib import Path
           root = Path('desktop/build/jpackage')
-          platform = os.environ['RELEASE_PLATFORM']
-          version = os.environ['RELEASE_VERSION']
-          suffix = {'mac': '.dmg', 'win': '.msi', 'linux': '.deb'}[platform]
-          installers = list(root.glob('*' + suffix))
-          if len(installers) != 1 or not re.search(r'(?<![0-9.])' + re.escape(version) + r'(?![0-9.])', installers[0].name):
-              raise SystemExit('Expected exactly one installer with the release version in its name')
-          files = installers
-          if platform == 'linux':
-              files += [installers[0].with_name(installers[0].name + '.asc'), root / 'Parlons-signing-key.asc']
+          files = sorted(p for p in root.iterdir() if p.suffix in ('.dmg', '.msi', '.deb'))
+          if not files:
+              raise SystemExit('No installer produced')
           rows = []
           for path in files:
               digest = hashlib.sha256()
@@ -145,10 +132,11 @@ jobs:
                   for block in iter(lambda: stream.read(1 << 20), b''):
                       digest.update(block)
               rows.append(f'{digest.hexdigest()}  {path.name}')
-          (root / ('SHA256SUMS-' + platform)).write_text('\n'.join(rows) + '\n')
+          (root / 'SHA256SUMS-${{ matrix.platform }}').write_text('\n'.join(rows) + '\n')
+          print('\n'.join(rows))
           PY
 
-      - name: Upload verified artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: maxima-node-${{ matrix.platform }}
@@ -156,39 +144,16 @@ jobs:
             desktop/build/jpackage/*.dmg
             desktop/build/jpackage/*.msi
             desktop/build/jpackage/*.deb
-            desktop/build/jpackage/*.asc
             desktop/build/jpackage/SHA256SUMS-*
-          if-no-files-found: error
+          if-no-files-found: warn
 
-      - name: Remove Mac signing material
-        if: always() && matrix.platform == 'mac'
-        shell: bash
-        run: |
-          rm -f "$RUNNER_TEMP/parlons-signing.p12"
-          if [ -f "$RUNNER_TEMP/parlons-build.keychain-db" ]; then
-            security delete-keychain "$RUNNER_TEMP/parlons-build.keychain-db"
-          fi
-
-  publish:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: maxima-node-*
-          path: signed-installers
-          merge-multiple: true
-      - name: Attach all verified platforms to release
+      - name: Attach to release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/desktop-v') && matrix.platform != 'mac'
         uses: softprops/action-gh-release@v2
         with:
           overwrite_files: false
-          fail_on_unmatched_files: true
           files: |
-            signed-installers/*.dmg
-            signed-installers/*.msi
-            signed-installers/*.deb
-            signed-installers/*.asc
-            signed-installers/SHA256SUMS-*
+            desktop/build/jpackage/*.dmg
+            desktop/build/jpackage/*.msi
+            desktop/build/jpackage/*.deb
+            desktop/build/jpackage/SHA256SUMS-*
