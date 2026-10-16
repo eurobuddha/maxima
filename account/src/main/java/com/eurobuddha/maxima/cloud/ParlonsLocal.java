@@ -70,6 +70,7 @@ public final class ParlonsLocal {
     static final long TICKET_TTL_MS = 60_000L;
     static final long SESSION_IDLE_MS = 7L * 24 * 3600_000L;
     static final int MAX_BODY = 2 * 1024 * 1024;
+    private static final int MAX_STATIC_ASSET = 16 * 1024 * 1024;
     private static final int SSE_QUEUE = 256;
     private static final long SSE_PING_MS = 20_000L;
 
@@ -622,7 +623,7 @@ public final class ParlonsLocal {
         }
         byte[] bytes;
         try (InputStream i = in) {
-            bytes = readAll(i);
+            bytes = readAll(i, MAX_STATIC_ASSET);
         }
         ex.getResponseHeaders().set("Content-Type", contentType(rel));
         ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
@@ -646,6 +647,7 @@ public final class ParlonsLocal {
         if (r.endsWith(".png"))  return "image/png";
         if (r.endsWith(".ico"))  return "image/x-icon";
         if (r.endsWith(".woff2")) return "font/woff2";
+        if (r.endsWith(".otf")) return "font/otf";
         if (r.endsWith(".mp3"))  return "audio/mpeg";
         if (r.endsWith(".json")) return "application/json";
         return "application/octet-stream";
@@ -671,12 +673,16 @@ public final class ParlonsLocal {
     }
 
     private static byte[] readAll(InputStream is) throws IOException {
+        return readAll(is, MAX_BODY);
+    }
+
+    private static byte[] readAll(InputStream is, int limit) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int n, total = 0;
         while ((n = is.read(buf)) != -1) {
             total += n;
-            if (total > MAX_BODY) {
+            if (total > limit) {
                 throw new IOException("request body too large");
             }
             bos.write(buf, 0, n);

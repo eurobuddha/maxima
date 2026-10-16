@@ -58,6 +58,17 @@ const server = http.createServer((req, res) => {
     assert.equal(await page.evaluate(()=>window.ParlonsI18n.getLanguage()),'en');
     await page.getByRole('button',{name:'简体中文',exact:true}).click();
     assert.equal(await page.locator('[data-route="chats"]').textContent(),'聊天');
+    // Ask Chromium which physical font renders the Chinese tab, not just which
+    // CSS family is declared. This must work even without OS Chinese fonts.
+    await page.evaluate(() => document.fonts.load('14px "Parlons CJK"', '聊天'));
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
+    const documentNode = await cdp.send('DOM.getDocument');
+    const chineseNode = await cdp.send('DOM.querySelector', {nodeId:documentNode.root.nodeId, selector:'[data-route="chats"]'});
+    const usedFonts = await cdp.send('CSS.getPlatformFontsForNode', {nodeId:chineseNode.nodeId});
+    assert.ok(usedFonts.fonts.some(font => font.isCustomFont && font.familyName.includes('Noto Sans SC') && font.glyphCount >= 2), JSON.stringify(usedFonts));
+    await cdp.detach();
+
     await page.waitForFunction(()=>document.querySelectorAll('.conv').length===3);
     assert.equal(await page.locator('.conv .prev').nth(0).textContent(),'📷 照片  中文 <img>');
     assert.equal(await page.locator('.conv .prev').nth(1).textContent(),'📷 Photo');

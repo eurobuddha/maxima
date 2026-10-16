@@ -1,0 +1,15 @@
+Noto Sans SC Regular, Noto Sans CJK release Sans2.004.
+Unmodified font from notofonts/noto-cjk:
+https://github.com/notofonts/noto-cjk/blob/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf
+SHA-256: faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9
+Copyright 2014-2021 Adobe (http://www.adobe.com/).
+Licensed under the SIL Open Font License 1.1; see NotoSansSC-LICENSE.txt.
+
+Provides Chinese glyphs when the installed desktop fonts lack them. Loaded through
+Theme's existing registered-font loader; StyleContext supplies Swing's platform
+fallback for characters outside this face on Windows/Linux. Existing system font
+fallback is preferred when it already covers all the text.
+
+The web panel reuses this identical font through CSS for CJK glyphs, including
+when the browser runs without installed Chinese fonts. Latin and Cyrillic text
+retain the existing Manrope/system/monospace font choices.

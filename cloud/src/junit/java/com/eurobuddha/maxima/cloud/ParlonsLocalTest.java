@@ -175,6 +175,30 @@ public class ParlonsLocalTest {
     }
 
     @Test
+    public void bundledChineseFontIsServedWithoutIncreasingTheApiBodyLimit() throws Exception {
+        String cookie = signIn();
+        HttpURLConnection c = (HttpURLConnection) new URL(base() + "/fonts/NotoSansSC-Regular.otf").openConnection();
+        c.setRequestProperty("Cookie", ParlonsLocal.COOKIE + "=" + cookie);
+        try {
+            assertEquals(200, c.getResponseCode());
+            assertEquals("font/otf", c.getHeaderField("Content-Type"));
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            int total = 0;
+            try (InputStream in = c.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int n;
+                while ((n = in.read(buffer)) != -1) { digest.update(buffer, 0, n); total += n; }
+            }
+            assertEquals(8331336, total);
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest.digest()) hex.append(String.format("%02x", b & 255));
+            assertEquals("faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9", hex.toString());
+        } finally { c.disconnect(); }
+        assertEquals(500, call("POST", "/api/ping", cookie, null, "x".repeat(2 * 1024 * 1024 + 1), null).code);
+        assertEquals("oversized input must not reach the account", null, seen.get());
+    }
+
+    @Test
     public void noCookieNoApi() throws Exception {
         assertEquals(401, call("POST", "/api/ping", null, null, "{}", null).code);
         assertEquals(401, call("POST", "/api/ping", "bogus", null, "{}", null).code);

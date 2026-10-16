@@ -6,6 +6,9 @@
 @font-face { font-family: "Manrope"; font-display: swap; font-weight: 700; src: url(fonts/manrope-bold.ttf) format("truetype"); }
 @font-face { font-family: "Manrope"; font-display: swap; font-weight: 800; src: url(fonts/manrope-extrabold.ttf) format("truetype"); }
 
+/* The same unmodified OFL font as desktop; no installed Chinese fonts required. */
+@font-face { font-family: "Parlons CJK"; font-display: swap; src: url(fonts/NotoSansSC-Regular.otf) format("opentype"); unicode-range: U+2E80-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF, U+20000-323AF; }
+
 :root {
   --bg: #F5F4F1; --chatbg: #F5F4F1; --card: #FFFFFF; --card2: #EFEEEB; --input: #EFEEEB; --divider: #EBE9E6;
   --press: rgba(0,0,0,.08); --scrim: rgba(0,0,0,.4);
@@ -15,7 +18,7 @@
   --success: #4F9B72; --error: #C0503C; --pending: #B98A3C;
   --bin: #FFFFFF; --bintext: #23262B; --bout: #31353C; --bouttext: #FFFFFF; --boutsub: #B6B9C1; --tickread: #6B6F76;
   --chatlink: #0058a6;
-  --mono: "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  --mono: "SF Mono", Menlo, Consolas, "Roboto Mono", "Parlons CJK", monospace;
 }
 :root[data-theme="dark"] {
   --bg: #16181B; --chatbg: #16181B; --card: #1E2126; --card2: #23272C; --input: #23272C; --divider: #2A2E34;
@@ -40,7 +43,7 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: "Manrope", system-ui, sans-serif; font-size: 14px; line-height: 1.35; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: "Manrope", "Parlons CJK", system-ui, sans-serif; font-size: 14px; line-height: 1.35; -webkit-font-smoothing: antialiased; }
 button, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; border: 0; background: transparent; padding: 0; }
 input, textarea { outline: none; border: 0; }
