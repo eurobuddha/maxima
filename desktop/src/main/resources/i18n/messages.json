@@ -3844,7 +3844,14 @@
     "serverError.deleteFailure": "Could not delete: {error}",
     "serverError.counterAboveCurrent": "The counter must be above the current value of {current}.",
     "serverError.counterAboveMaximum": "The counter exceeds the key’s maximum of {maximum}.",
-    "serverError.groupLimit": "A group can have at most {maximum} members ({requested} requested)."
+    "serverError.groupLimit": "A group can have at most {maximum} members ({requested} requested).",
+    "iosFiles.sharingNotice": "Encrypted file sharing with this conversation. Active transfers can also upload encrypted pieces from your account.",
+    "iosFiles.ready": "Ready to download",
+    "iosFiles.saveShare": "Save or share file",
+    "iosFiles.removeConfirm": "Remove this transfer from your account and stop sharing it? Saved copies are kept.",
+    "iosFiles.incomplete": "Incomplete file",
+    "iosFiles.sizeChanged": "File size changed during export",
+    "iosFiles.invalidName": "Invalid filename"
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -7647,7 +7654,14 @@
     "serverError.deleteFailure": "无法删除：{error}",
     "serverError.counterAboveCurrent": "计数必须大于当前值 {current}。",
     "serverError.counterAboveMaximum": "计数超过了此密钥的最大值 {maximum}。",
-    "serverError.groupLimit": "群组最多可有 {maximum} 名成员（请求添加 {requested} 名）。"
+    "serverError.groupLimit": "群组最多可有 {maximum} 名成员（请求添加 {requested} 名）。",
+    "iosFiles.sharingNotice": "与此对话进行加密文件共享。传输进行时，也可能从您的账户上传加密数据块。",
+    "iosFiles.ready": "可以下载",
+    "iosFiles.saveShare": "保存或分享文件",
+    "iosFiles.removeConfirm": "从您的账户移除此传输并停止共享？已保存的副本将保留。",
+    "iosFiles.incomplete": "文件不完整",
+    "iosFiles.sizeChanged": "导出过程中，文件大小发生变化",
+    "iosFiles.invalidName": "文件名无效"
   },
   "ru": {
     "language.title": "Язык",
@@ -11582,6 +11596,13 @@
     "serverError.deleteFailure": "Не удалось удалить: {error}",
     "serverError.counterAboveCurrent": "Значение счётчика должно быть больше текущего: {current}.",
     "serverError.counterAboveMaximum": "Значение счётчика превышает максимум для этого ключа: {maximum}.",
-    "serverError.groupLimit": "В группе может быть не более {maximum} участников (запрошено: {requested})."
+    "serverError.groupLimit": "В группе может быть не более {maximum} участников (запрошено: {requested}).",
+    "iosFiles.sharingNotice": "Зашифрованный обмен файлами в этом чате. Активные передачи также могут отправлять зашифрованные части файлов из вашего аккаунта.",
+    "iosFiles.ready": "Готово к скачиванию",
+    "iosFiles.saveShare": "Сохранить файл или поделиться",
+    "iosFiles.removeConfirm": "Удалить эту передачу из вашего аккаунта и прекратить раздачу? Сохранённые копии останутся.",
+    "iosFiles.incomplete": "Файл получен не полностью",
+    "iosFiles.sizeChanged": "Размер файла изменился во время экспорта",
+    "iosFiles.invalidName": "Недопустимое имя файла"
   }
 }

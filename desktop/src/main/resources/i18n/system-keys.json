@@ -3209,5 +3209,12 @@
   "account closed": "serverError.accountClosed",
   "This account has chat, calls and files only; wallet and host controls are disabled": "serverError.chatOnly",
   "counter update was not persisted": "serverError.counterNotSaved",
-  "counter update failed": "serverError.counterFailed"
+  "counter update failed": "serverError.counterFailed",
+  "Encrypted file sharing with this conversation. Active transfers can also upload encrypted pieces from your account.": "iosFiles.sharingNotice",
+  "Ready to download": "iosFiles.ready",
+  "Save or share file": "iosFiles.saveShare",
+  "Remove this transfer from your account and stop sharing it? Saved copies are kept.": "iosFiles.removeConfirm",
+  "Incomplete file": "iosFiles.incomplete",
+  "File size changed during export": "iosFiles.sizeChanged",
+  "Invalid filename": "iosFiles.invalidName"
 }

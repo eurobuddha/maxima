@@ -3296,6 +3296,13 @@ public final class SystemMessages {
             case "This account has chat, calls and files only; wallet and host controls are disabled": return R.string.l10n_server_error_chat_only;
             case "counter update was not persisted": return R.string.l10n_server_error_counter_not_saved;
             case "counter update failed": return R.string.l10n_server_error_counter_failed;
+            case "Encrypted file sharing with this conversation. Active transfers can also upload encrypted pieces from your account.": return R.string.l10n_ios_files_sharing_notice;
+            case "Ready to download": return R.string.l10n_ios_files_ready;
+            case "Save or share file": return R.string.l10n_ios_files_save_share;
+            case "Remove this transfer from your account and stop sharing it? Saved copies are kept.": return R.string.l10n_ios_files_remove_confirm;
+            case "Incomplete file": return R.string.l10n_ios_files_incomplete;
+            case "File size changed during export": return R.string.l10n_ios_files_size_changed;
+            case "Invalid filename": return R.string.l10n_ios_files_invalid_name;
             default: return 0;
         }
     }

@@ -4388,4 +4388,11 @@
     <string name="l10n_server_error_counter_above_maximum">"Значение счётчика превышает максимум для этого ключа: %1$s."</string>
     <!-- Arguments: maximum, requested -->
     <string name="l10n_server_error_group_limit">"В группе может быть не более %1$s участников (запрошено: %2$s)."</string>
+    <string name="l10n_ios_files_sharing_notice" formatted="false">"Зашифрованный обмен файлами в этом чате. Активные передачи также могут отправлять зашифрованные части файлов из вашего аккаунта."</string>
+    <string name="l10n_ios_files_ready" formatted="false">"Готово к скачиванию"</string>
+    <string name="l10n_ios_files_save_share" formatted="false">"Сохранить файл или поделиться"</string>
+    <string name="l10n_ios_files_remove_confirm" formatted="false">"Удалить эту передачу из вашего аккаунта и прекратить раздачу? Сохранённые копии останутся."</string>
+    <string name="l10n_ios_files_incomplete" formatted="false">"Файл получен не полностью"</string>
+    <string name="l10n_ios_files_size_changed" formatted="false">"Размер файла изменился во время экспорта"</string>
+    <string name="l10n_ios_files_invalid_name" formatted="false">"Недопустимое имя файла"</string>
 </resources>

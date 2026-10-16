@@ -4300,4 +4300,11 @@
     <string name="l10n_server_error_counter_above_maximum">"The counter exceeds the key’s maximum of %1$s."</string>
     <!-- Arguments: maximum, requested -->
     <string name="l10n_server_error_group_limit">"A group can have at most %1$s members (%2$s requested)."</string>
+    <string name="l10n_ios_files_sharing_notice" formatted="false">"Encrypted file sharing with this conversation. Active transfers can also upload encrypted pieces from your account."</string>
+    <string name="l10n_ios_files_ready" formatted="false">"Ready to download"</string>
+    <string name="l10n_ios_files_save_share" formatted="false">"Save or share file"</string>
+    <string name="l10n_ios_files_remove_confirm" formatted="false">"Remove this transfer from your account and stop sharing it? Saved copies are kept."</string>
+    <string name="l10n_ios_files_incomplete" formatted="false">"Incomplete file"</string>
+    <string name="l10n_ios_files_size_changed" formatted="false">"File size changed during export"</string>
+    <string name="l10n_ios_files_invalid_name" formatted="false">"Invalid filename"</string>
 </resources>
