@@ -206,21 +206,29 @@ public final class Tenants {
         return null;
     }
 
+    /** Hosts supply their own wallet policy; the lifecycle and folder protocol stay shared. */
+    public interface AccountFactory {
+        ParlonsCore create(MaximaIdentity identity, Path dir, ParlonsCore.Config config, String phrase) throws Exception;
+    }
+
     /** One running multi-account host: starts every folder, then keeps polling for more. */
     static final class Host {
         final Path dir;
         final ParlonsCore.Config base;
         final char[] unlock;
+        final AccountFactory factory;
         final java.util.Map<Path, ParlonsCore> cores = new java.util.LinkedHashMap<>();
         final java.util.Map<Path, Long> failedAt = new java.util.HashMap<>();
         RelayRuntime shared;
         int nextPanelSlot = 0;
+        boolean closed;
 
-        Host(Path zDir, ParlonsCore.Config zBase, char[] zUnlock) {
-            dir = zDir; base = zBase; unlock = zUnlock;
+        Host(Path zDir, ParlonsCore.Config zBase, char[] zUnlock, AccountFactory factory) {
+            dir = zDir; base = zBase; unlock = zUnlock; this.factory = factory;
         }
 
-        void start(Path zTenant) throws Exception {
+        synchronized void start(Path zTenant) throws Exception {
+            if (closed) return;
             final String phrase = phraseFor(zTenant, unlock);
             MaximaIdentity id = MaximaIdentity.fromNodeSecret(phrase);
             ParlonsCore.Config cfg = copy(base);
@@ -235,14 +243,7 @@ public final class Tenants {
             // order (0 = no panels). The operator opens a tenant's panel through an ssh tunnel with
             // the one-time link in that tenant's panel-ticket.txt.
             cfg.panelPort = base.panelPort <= 0 ? 0 : base.panelPort + nextPanelSlot++;
-            AccountWallet wallet = new CloudAccountWallet(id, zTenant);
-            AccountBackup.Source backup = new AccountBackup.Source() {
-                public String phrase() { return phrase; }
-                public java.util.Map<String, Integer> keyUses() {
-                    return CloudKeyUses.exportAll(new File(zTenant.toFile(), "wallet"));
-                }
-            };
-            ParlonsCore core = new ParlonsCore(id, zTenant, cfg, wallet, backup);
+            ParlonsCore core = factory.create(id, zTenant, cfg, phrase);
             if (!first && shared != null) {
                 core.useExternalRelay(shared);
             }
@@ -257,7 +258,8 @@ public final class Tenants {
         }
 
         /** One pass: stop marked tenants, start new folders, refresh account/invite files. */
-        void poll() {
+        synchronized void poll() {
+            if (closed) return;
             publish();
             long now = System.currentTimeMillis();
             for (java.util.Iterator<java.util.Map.Entry<Path, ParlonsCore>> it = cores.entrySet().iterator(); it.hasNext();) {
@@ -297,7 +299,8 @@ public final class Tenants {
             }
         }
 
-        void publish() {
+        synchronized void publish() {
+            if (closed) return;
             try {
                 List<String> running = new ArrayList<>(), failed = new ArrayList<>();
                 for (Path p : cores.keySet()) running.add(p.getFileName().toString());
@@ -306,7 +309,8 @@ public final class Tenants {
             } catch (Exception e) { System.err.println("Could not update hosting status"); }
         }
 
-        void shutdownAll() {
+        synchronized void shutdownAll() {
+            closed = true;
             try { Files.deleteIfExists(dir.resolve(HostedAccounts.STATUS_FILE)); } catch (Exception ignored) { }
             for (ParlonsCore c : cores.values()) {
                 try { c.shutdown(); } catch (Exception ignored) { }
@@ -315,13 +319,13 @@ public final class Tenants {
     }
 
     /** Run every tenant in this process, keep watching the folder for more; blocks forever. */
-    public static void run(Path zTenantsDir, ParlonsCore.Config zBase, char[] zUnlock) throws Exception {
+    public static void run(Path zTenantsDir, ParlonsCore.Config zBase, char[] zUnlock, AccountFactory factory) throws Exception {
         Files.createDirectories(zTenantsDir);
         List<Path> dirs = list(zTenantsDir);
-        System.out.println("Parlons Cloud " + Main.VERSION + " multi-account host: " + dirs.size()
+        System.out.println("Parlons Cloud " + zBase.version + " multi-account host: " + dirs.size()
                 + " tenant(s) under " + zTenantsDir + (dirs.isEmpty()
                 ? " - none yet; make <dir>/<name>/ (or `--tenant-new`) and it starts within 5 s" : ""));
-        Host host = new Host(zTenantsDir, zBase, zUnlock);
+        Host host = new Host(zTenantsDir, zBase, zUnlock, factory);
         host.publish();
         Runtime.getRuntime().addShutdownHook(new Thread(host::shutdownAll, "parlons-tenants-shutdown"));
         for (Path dir : dirs) {

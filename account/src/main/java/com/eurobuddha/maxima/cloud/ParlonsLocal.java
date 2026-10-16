@@ -75,7 +75,7 @@ public final class ParlonsLocal {
 
     /** Methods the panel may call ({@code parlons.} prefix implied). Allow-list, not deny-list. */
     static final Set<String> ALLOWED = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "ping", "pair.list", "pair.approve", "pair.revoke", "pair.newcode",
+            "ping", "pair.list", "pair.approve", "pair.revoke", "pair.newcode", "hosted.accounts",
             "node.status", "node.log", "node.figures", "node.hosts", "node.mls",
             "identity.setname", "settings.get", "settings.set", "call.signal",
             "contacts.list", "contacts.add", "contacts.rename", "contacts.resolve",
@@ -98,6 +98,8 @@ public final class ParlonsLocal {
 
     private com.eurobuddha.maxima.desktoplinks.MinimaDocsLink mDocs;
     public void setDocsLink(com.eurobuddha.maxima.desktoplinks.MinimaDocsLink docs) { mDocs = docs; }
+    private AdminPairingPassword mAdminPassword;
+    public void setAdminPairingPassword(AdminPairingPassword guard) { mAdminPassword = guard; }
     private HttpServer mServer;
     private ExecutorService mExec;
     /** The ticket currently in {@code panel-ticket.txt} (unused). */
@@ -336,12 +338,58 @@ public final class ParlonsLocal {
         return s;
     }
 
+    /** Password setup is local-only: never registered on the remotely callable RPC registry. */
+    private void adminPassword(HttpExchange ex, String method) throws IOException {
+        if (!mPairing.isAuthorized(mLocalKey)) { fail(ex, 403, "Local device revoked"); return; }
+        if ("GET".equals(method)) {
+            JSONObject out = new JSONObject(); out.put("ok", true);
+            out.put("available", mAdminPassword != null);
+            out.put("configured", mAdminPassword != null && mAdminPassword.configured());
+            json(ex, 200, out); return;
+        }
+        if (!"POST".equals(method)) { fail(ex, 405, "POST only"); return; }
+        if (mAdminPassword == null) { fail(ex, 403, "This account does not manage a host admin password"); return; }
+        String ct = ex.getRequestHeaders().getFirst("Content-Type");
+        if (ct == null || !ct.matches("(?i)application/json(?:\\s*;.*)?")) { fail(ex, 415, "JSON required"); return; }
+        byte[] body = ex.getRequestBody().readNBytes(16385);
+        if (body.length > 16384) { Arrays.fill(body, (byte)0); fail(ex, 413, "Request too large"); return; }
+        char[] current = null, password = null, confirmation = null;
+        try {
+            JSONObject in = (JSONObject)new org.minima.utils.json.parser.JSONParser().parse(new String(body, StandardCharsets.UTF_8));
+            current = passwordField(in, "currentPassword");
+            password = passwordField(in, "newPassword");
+            confirmation = passwordField(in, "confirmation");
+            mAdminPassword.change(current, password, confirmation);
+            JSONObject out = new JSONObject(); out.put("ok", true); out.put("configured", true);
+            json(ex, 200, out);
+        } catch (SecurityException e) { fail(ex, 403, "Current admin password is incorrect"); }
+        catch (IllegalArgumentException | IllegalStateException e) { fail(ex, 400, e.getMessage()); }
+        catch (Exception e) { fail(ex, 400, "Could not save the admin password"); }
+        finally {
+            Arrays.fill(body, (byte)0);
+            if (current != null) Arrays.fill(current, '\0');
+            if (password != null) Arrays.fill(password, '\0');
+            if (confirmation != null) Arrays.fill(confirmation, '\0');
+        }
+    }
+
+    private static char[] passwordField(JSONObject input, String key) {
+        Object value = input.getOrDefault(key, "");
+        if (!(value instanceof String) || ((String)value).length() > 1024)
+            throw new IllegalArgumentException("Invalid password field");
+        return ((String)value).toCharArray();
+    }
+
     private void api(HttpExchange ex, String zName) throws IOException {
         String session = session(ex);
         if (session == null) {
             return;
         }
         String method = ex.getRequestMethod();
+        if ("admin-password".equals(zName)) {
+            adminPassword(ex, method);
+            return;
+        }
         if (zName.startsWith("minimadocs/")) {
             if (!mPairing.isAuthorized(mLocalKey)) { fail(ex, 403, "Local device revoked"); return; }
             if (!"POST".equals(method)) { fail(ex, 405, "POST only"); return; }

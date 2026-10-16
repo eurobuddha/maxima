@@ -386,8 +386,15 @@ public final class ParlonsControl implements AutoCloseable {
 
     private volatile AdminPairingPassword mAdminPairingPassword;
     public void setAdminPairingPassword(AdminPairingPassword guard) { mAdminPairingPassword = guard; }
+    AdminPairingPassword adminPairingPassword() { return mAdminPairingPassword; }
 
     private volatile HostedAccounts mHostedAccounts;
+    private volatile ManagedHosting mManagedHosting;
+    public void setManagedHosting(ManagedHosting hosting) { mManagedHosting = hosting; }
+    private String mHostingError = "";
+    void setHostingError(String error) { mHostingError = error; }
+    private boolean mChatOnly;
+    public void setChatOnly(boolean chatOnly) { mChatOnly = chatOnly; }
 
     /** Installed only on the server owner account, never on a hosted friend account. */
     public void setHostedAccounts(HostedAccounts hosted) { mHostedAccounts = hosted; }
@@ -617,7 +624,7 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("name", safe(mNode.name()));
             out.put("permanent", safe(permanent()));
             out.put("primary", safe(mNode.primaryAddress()));
-            String kpk = mChat.keetsPubkey();
+            String kpk = mChat == null ? null : mChat.keetsPubkey();
             if (kpk != null) {
                 out.put("keets", kpk);   // what a KeetChat user adds as a contact - always FULL
             }
@@ -631,7 +638,7 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("name", safe(mNode.name()));
             out.put("permanent", safe(permanent()));
             out.put("primary", safe(mNode.primaryAddress()));
-            String kpk = mChat.keetsPubkey();
+            String kpk = mChat == null ? null : mChat.keetsPubkey();
             if (kpk != null) {
                 out.put("keets", kpk);   // what a KeetChat user adds as a contact - always FULL
             }
@@ -647,7 +654,9 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("identityImport", mIdentityImport != null);
             out.put("nodeConsole", mConsole != null);
             out.put("adminPairingPassword", mAdminPairingPassword != null);
-            out.put("hostedAccounts", mHostedAccounts != null);
+            out.put("hostedAccounts", mHostedAccounts != null || mManagedHosting != null);
+            out.put("hostingError", mHostingError);
+            out.put("chatOnly", mChatOnly);
             return bytes(out);
         });
 
@@ -1016,62 +1025,34 @@ public final class ParlonsControl implements AutoCloseable {
             int offset = intOf(in, "offset", 0);
             int limit = Math.max(1, Math.min(PAGE_SUMMARIES, intOf(in, "limit", PAGE_SUMMARIES)));
             java.util.List<ChatEngine.Summary> allSums = mChat.summaries();
-            int sEnd = Math.min(allSums.size(), offset + limit);
-            JSONArray arr = new JSONArray();
-            for (ChatEngine.Summary s : allSums.subList(Math.min(offset, allSums.size()), sEnd)) {
-                JSONObject o = new JSONObject();
-                o.put("peer", safe(s.conversation));
-                boolean isGrp = mChat.group(s.conversation) != null;
-                o.put("name", safe(nameFor(s.conversation)));
-                o.put("group", isGrp);
-                // In a group, the preview names who spoke ("Alice: hi") — the app's convention.
-                if (isGrp && !s.lastMine && s.lastSender != null && !s.lastSender.isEmpty()) {
-                    o.put("lastName", nameFor(s.lastSender));
-                }
-                // Bounded reply: a full media body is a multi-KB manifest, and the WHOLE reply
-                // must fit one 256K wire message or it silently black-holes. Previews only.
-                String last = safe(s.lastBody);
-                if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(last)) {
-                    last = com.eurobuddha.maxima.core.chat.ChatMedia.preview(last);
-                } else if (com.eurobuddha.maxima.core.chat.ChatContact.isCard(last)) {
-                    last = com.eurobuddha.maxima.core.chat.ChatContact.preview(last);
-                } else if (last.length() > 200) {
-                    last = last.substring(0, 200);
-                }
-                o.put("last", last);
-                o.put("lastSender", safe(s.lastSender));
-                o.put("lastMine", s.lastMine);
-                o.put("time", s.lastTime);
-                o.put("unread", s.unread);
-                arr.add(o);
-            }
-            // Groups with no messages yet still belong in the list — the app shows groups()
-            // alongside summaries; without this a freshly created group was invisible.
             java.util.Set<String> seen = new java.util.HashSet<>();
-            for (Object o : arr) {
-                seen.add(String.valueOf(((JSONObject) o).get("peer")));
+            for (ChatEngine.Summary summary : allSums) seen.add(summary.conversation);
+            java.util.List<com.eurobuddha.maxima.core.chat.Group> emptyGroups = new java.util.ArrayList<>();
+            for (com.eurobuddha.maxima.core.chat.Group group : mChat.groups()) {
+                if (!seen.contains(group.id)) emptyGroups.add(group);
             }
-            for (com.eurobuddha.maxima.core.chat.Group g : (offset == 0 ? mChat.groups()
-                    : java.util.Collections.<com.eurobuddha.maxima.core.chat.Group>emptyList())) {
-                if (seen.contains(g.id)) {   // empty groups ride the first page only
-                    continue;
+            return bytes(summaryPage(allSums.size() + emptyGroups.size(), offset, limit, index -> {
+                JSONObject row = new JSONObject();
+                if (index < allSums.size()) {
+                    ChatEngine.Summary summary = allSums.get(index);
+                    boolean group = mChat.group(summary.conversation) != null;
+                    row.put("peer", safe(summary.conversation));
+                    row.put("name", safe(nameFor(summary.conversation)));
+                    row.put("group", group);
+                    if (group && !summary.lastMine && summary.lastSender != null && !summary.lastSender.isEmpty())
+                        row.put("lastName", nameFor(summary.lastSender));
+                    putSummaryPreview(row, summary.lastBody);
+                    row.put("lastSender", safe(summary.lastSender));
+                    row.put("lastMine", summary.lastMine);
+                    row.put("time", summary.lastTime);
+                    row.put("unread", summary.unread);
+                } else {
+                    com.eurobuddha.maxima.core.chat.Group group = emptyGroups.get(index - allSums.size());
+                    row.put("peer", safe(group.id)); row.put("name", safe(group.name)); row.put("group", true);
+                    row.put("last", ""); row.put("lastMine", false); row.put("time", group.lastActivity); row.put("unread", 0);
                 }
-                JSONObject o = new JSONObject();
-                o.put("peer", safe(g.id));
-                o.put("name", safe(g.name));
-                o.put("group", true);
-                o.put("last", "");
-                o.put("lastMine", false);
-                o.put("time", g.lastActivity);
-                o.put("unread", 0);
-                arr.add(o);
-            }
-            JSONObject out = ok();
-            out.put("summaries", arr);
-            out.put("total", allSums.size());
-            out.put("more", sEnd < allSums.size());
-            out.put("next", sEnd);
-            return bytes(out);
+                return row;
+            }));
         });
         zReg.register(M_CONVERSATION, req -> {
             requireAuth(req);
@@ -2061,8 +2042,9 @@ public final class ParlonsControl implements AutoCloseable {
         zReg.register(M_HOSTED_ACCOUNTS, req -> {
             requireAuth(req);
             HostedAccounts hosted = mHostedAccounts;
-            if (hosted == null) return bytes(err("Hosting management is available only on the server owner account"));
-            try { return bytes(hosted.handle(parse(req))); }
+            ManagedHosting managed = mManagedHosting;
+            if (hosted == null && managed == null) return bytes(err("Hosting management is available only on the server owner account"));
+            try { return bytes(managed != null ? managed.handle(parse(req)) : hosted.handle(parse(req))); }
             catch (IllegalArgumentException | IllegalStateException e) { return bytes(err(e.getMessage())); }
             catch (Exception e) { return bytes(err("Could not update hosted accounts. Check the host service and directory permissions.")); }
         });
@@ -2298,6 +2280,11 @@ public final class ParlonsControl implements AutoCloseable {
         if (!mPairing.isAuthorized(req.fromPublicKey)) {
             // Thrown → dispatch turns it into an ERROR envelope for the caller.
             throw new SecurityException("unpaired device — not authorized for this account");
+        }
+        if (mChatOnly && (req.method.startsWith("parlons.wallet.") || M_PAY.equals(req.method)
+                || M_NODE_CMD.equals(req.method) || M_HOSTED_ACCOUNTS.equals(req.method)
+                || req.method.startsWith("parlons.nft.") || M_IDENTITY_IMPORT.equals(req.method))) {
+            throw new SecurityException("This account has chat, calls and files only; wallet and host controls are disabled");
         }
         // Every authorized round-trip refreshes this device's live record for the push channel.
         if (req.replyTo != null && !req.replyTo.isEmpty()) {
@@ -2562,6 +2549,56 @@ public final class ParlonsControl implements AutoCloseable {
         int end = Math.min(zText.length(), at + zQueryLower.length() + 120);
         return (start > 0 ? "…" : "") + zText.substring(start, end)
                 + (end < zText.length() ? "…" : "");
+    }
+
+    /** Same offset/next contract as contacts, bounded by encoded bytes as well as row count. */
+    static JSONObject summaryPage(int total, int offset, int limit, java.util.function.IntFunction<JSONObject> rowAt) {
+        int next = Math.max(0, Math.min(offset, total));
+        int count = Math.max(1, Math.min(limit, PAGE_SUMMARIES));
+        JSONArray rows = new JSONArray();
+        int used = 1024; // JSON envelope and pagination fields; transport overhead is reserved by ServiceRegistry.
+        while (next < total && rows.size() < count) {
+            JSONObject row = rowAt.apply(next);
+            int size = bytes(row).length + 1;
+            if (used + size > ServiceRegistry.MAX_REPLY_BYTES) {
+                if (rows.isEmpty()) throw new IllegalArgumentException("summary row too large");
+                break;
+            }
+            rows.add(row); used += size; next++;
+        }
+        JSONObject out = ok();
+        out.put("summaries", rows); out.put("total", total); out.put("more", next < total); out.put("next", next);
+        return out;
+    }
+
+    /** Display metadata only: never send media references, keys, waveforms or contact addresses.
+     * Keep the legacy English field for clients predating explicit language selection. */
+    static void putSummaryPreview(JSONObject out, String body) {
+        String raw = safe(body), legacy = raw, kind = null, text = "";
+        String[] media = com.eurobuddha.maxima.core.chat.ChatMedia.parse(raw);
+        String[] contact = com.eurobuddha.maxima.core.chat.ChatContact.parse(raw);
+        if (media != null) {
+            legacy = com.eurobuddha.maxima.core.chat.ChatMedia.preview(raw);
+            kind = media[1].startsWith(com.eurobuddha.maxima.core.chat.ChatFile.PREFIX) ? "file"
+                    : media[0].startsWith("video") ? "video" : media[0].startsWith("audio") ? "voice" : "photo";
+            text = media[2];
+            if ("voice".equals(kind) && text.indexOf('|') >= 0) text = text.substring(0, text.indexOf('|'));
+        } else if (contact != null) {
+            legacy = com.eurobuddha.maxima.core.chat.ChatContact.preview(raw);
+            kind = "contact"; text = contact[1];
+        } else if (com.eurobuddha.maxima.core.chat.ChatPay.parse(raw) != null) {
+            kind = "payment"; text = com.eurobuddha.maxima.core.chat.ChatPay.preview(raw);
+        }
+        out.put("last", previewLimit(legacy));
+        if (kind != null) {
+            JSONObject preview = new JSONObject();
+            preview.put("kind", kind); preview.put("text", previewLimit(text));
+            out.put("lastPreview", preview);
+        }
+    }
+    private static String previewLimit(String value) {
+        return value.codePointCount(0, value.length()) <= 200 ? value
+                : value.substring(0, value.offsetByCodePoints(0, 200));
     }
 
     /** A message body reduced to searchable text: media → its caption, payment → its preview,

@@ -15,16 +15,29 @@ public final class AdminPairingPassword {
 
     public AdminPairingPassword(Path data) { file = data.resolve(FILE); }
 
-    public void set(char[] password) throws Exception {
+    public synchronized void set(char[] password) throws Exception {
         if (password.length < 10 || password.length > 1024)
             throw new IllegalArgumentException("Use an admin password of 10–1024 characters");
         AccountFiles.writePrivate(file, BackupCrypto.encrypt(PURPOSE, password));
     }
 
+    /** An invalid existing file must not turn a password change into first-time setup. */
+    public boolean configured() { return Files.exists(file, LinkOption.NOFOLLOW_LINKS); }
+
+    /** Local app setup/change. The CLI remains the operator's recovery path. */
+    public synchronized void change(char[] current, char[] password, char[] confirmation) throws Exception {
+        if (password.length < 10 || password.length > 1024)
+            throw new IllegalArgumentException("Use an admin password of 10–1024 characters");
+        if (!Arrays.equals(password, confirmation)) throw new IllegalArgumentException("Passwords do not match");
+        if (configured() && !verify(current)) throw new SecurityException("Current admin password is incorrect");
+        set(password);
+        nextAttempt = 0;
+    }
+
     public synchronized boolean verify(char[] password) throws Exception {
         if (password.length == 0 || password.length > 1024) return false;
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
-            throw new IllegalStateException("Set the admin pairing password on the server with: sudo parlons-pair --set-admin-password");
+            throw new IllegalStateException("Set the admin password in the host app’s Parlons Devices page. For a command-line server, use: sudo parlons-pair --set-admin-password");
         if (Files.size(file) > 1024) throw new IllegalStateException("Admin pairing configuration is invalid");
         long now = System.nanoTime();
         if (now < nextAttempt) throw new IllegalStateException("Wait a few seconds before trying the admin password again");

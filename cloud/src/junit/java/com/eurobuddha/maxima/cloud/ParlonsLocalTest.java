@@ -122,6 +122,39 @@ public class ParlonsLocalTest {
         return r.cookie;
     }
 
+    @Test public void passwordSetupRequiresLocalSessionAndRevocationIsEnforced() throws Exception {
+        AdminPairingPassword guard = new AdminPairingPassword(dir);
+        local.setAdminPairingPassword(guard);
+        String payload = "{\"newPassword\":\"synthetic password\",\"confirmation\":\"synthetic password\"}";
+        assertEquals(401, call("POST", "/api/admin-password", null, null, payload, null).code);
+        assertFalse(guard.configured());
+        String cookie = signIn();
+        assertTrue(call("GET", "/api/admin-password", cookie, null, null, null).body.contains("\"configured\":false"));
+        assertEquals(400, call("POST", "/api/admin-password", cookie, null, "[]", null).code);
+        assertEquals(413, call("POST", "/api/admin-password", cookie, null, "x".repeat(16385), null).code);
+        Resp saved = call("POST", "/api/admin-password", cookie, null, payload, null);
+        assertEquals(200, saved.code); assertFalse(saved.body.contains("synthetic password"));
+        assertTrue(new AdminPairingPassword(dir).verify("synthetic password".toCharArray()));
+        byte[] original = Files.readAllBytes(dir.resolve(AdminPairingPassword.FILE));
+        assertEquals(403, call("POST", "/api/admin-password", cookie, null, payload, null).code);
+        assertTrue(pairing.revoke(key, new com.eurobuddha.maxima.core.codec.MiniData(key).to0xString()));
+        assertEquals(403, call("GET", "/api/admin-password", cookie, null, null, null).code);
+        assertEquals(403, call("POST", "/api/admin-password", cookie, null, payload, null).code);
+        org.junit.Assert.assertArrayEquals(original, Files.readAllBytes(dir.resolve(AdminPairingPassword.FILE)));
+    }
+
+    @Test public void passwordSetupRejectsForeignOriginsFormsAndAccountsWithoutGuard() throws Exception {
+        String cookie = signIn(), me = "127.0.0.1:" + local.port();
+        assertEquals(403, call("POST", "/api/admin-password", cookie, null, "{}", null).code);
+        AdminPairingPassword guard = new AdminPairingPassword(dir); local.setAdminPairingPassword(guard);
+        String post = "POST /api/admin-password HTTP/1.1\r\nCookie: " + ParlonsLocal.COOKIE + "=" + cookie
+                + "\r\nContent-Length: 2\r\nConnection: close\r\nHost: " + me + "\r\n";
+        assertTrue(raw(post + "Origin: https://evil.example\r\nContent-Type: application/json\r\n\r\n{}").contains(" 403 "));
+        assertTrue(raw(post + "Content-Type: application/x-www-form-urlencoded\r\n\r\n{}").contains(" 415 "));
+        assertFalse(guard.configured());
+        assertFalse(ParlonsLocal.ALLOWED.contains("admin-password")); // only the local HTTP route
+    }
+
     @Test
     public void theFileTicketSignsInOnceAndIsReplacedAtOnce() throws Exception {
         String t1 = fileTicket();

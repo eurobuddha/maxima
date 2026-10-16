@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.125";
+    public static final String  NODE_VERSION = "0.2.126";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -563,7 +563,7 @@ public final class ParlonsNodeMain {
         if (hostedDir != null && !hostedDir.trim().isEmpty()) {
             core.control().setHostedAccounts(new com.eurobuddha.maxima.cloud.HostedAccounts(
                     java.nio.file.Paths.get(hostedDir.trim()), Integer.getInteger("parlons.hosted.limit", 10)));
-        }
+        } else core.enableManagedHosting();
         core.control().setIdentityImport(new NodeIdentityImport(zDataFolder.toPath(),
                 zIdentity.publicKeyHex(), core.pairing(), core.node()::poolMlsAddresses, () -> System.exit(3)));
         // NFT hosting from the wallet on a paired device (upload over the paired channel).

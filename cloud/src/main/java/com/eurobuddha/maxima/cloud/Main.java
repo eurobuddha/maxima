@@ -23,7 +23,7 @@ import java.util.List;
 public final class Main {
 
     /** Build version. Independent of the relay's server VERSION. */
-    public static final String VERSION = "0.11.116";
+    public static final String VERSION = "0.11.117";
 
     private static final int DEFAULT_RELAY_PORT = 9501;
     private static final int DEFAULT_DIRECT_PORT = 9536;
@@ -159,7 +159,15 @@ public final class Main {
                     Tenants.encryptSeeds(Paths.get(tenantsArg), unlock);
                     return;
                 }
-                Tenants.run(Paths.get(tenantsArg), cfg, unlock);
+                Tenants.run(Paths.get(tenantsArg), cfg, unlock, (identity, tenant, config, phrase) -> {
+                    AccountBackup.Source backup = new AccountBackup.Source() {
+                        public String phrase() { return phrase; }
+                        public java.util.Map<String, Integer> keyUses() {
+                            return CloudKeyUses.exportAll(tenant.resolve("wallet").toFile());
+                        }
+                    };
+                    return new ParlonsCore(identity, tenant, config, new CloudAccountWallet(identity, tenant), backup);
+                });
                 return;
             }
             run(Paths.get(data), cfg, walletSpec);
@@ -338,6 +346,8 @@ public final class Main {
             }
         };
         ParlonsCore core = new ParlonsCore(id, dir, cfg, wallet, backup);
+        core.control().setAdminPairingPassword(new AdminPairingPassword(dir));
+        core.enableManagedHosting();
 
         Runtime.getRuntime().addShutdownHook(new Thread(core::shutdown, "parlons-cloud-shutdown"));
         core.start();

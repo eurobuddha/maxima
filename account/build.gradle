@@ -31,6 +31,8 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation project(':minima-common')
     implementation project(':files')
     api project(':core')
     api project(':server')                       // RelayRuntime (the in-process pool relay + Stats)

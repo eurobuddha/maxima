@@ -168,6 +168,7 @@ public final class ParlonsCore {
         // (MaximaNode routes RpcEnvelope.APPLICATION first), so control never hits chat.
         mPairing = new DevicePairing(zDataDir);
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
+        mControl.setChatOnly(mWallet == null);
         mControl.setFileCommands(mFileCommands);
         mControl.setStatusSource(new ParlonsControl.StatusSource() {
             public long uptimeMillis() { return mStartedAt == 0 ? 0 : System.currentTimeMillis() - mStartedAt; }
@@ -363,6 +364,21 @@ public final class ParlonsCore {
     public MaximaNode node() { return mNode; }
     /** The control channel (hosts plug in node-only capabilities such as the Terminal console). */
     public ParlonsControl control() { return mControl; }
+    private ManagedHosting mManagedHosting;
+    /** Attach the optional chat host before start; it is stopped with this owner account. */
+    public void enableManagedHosting() {
+        if (mManagedHosting != null) return;
+        AdminPairingPassword password = mControl.adminPairingPassword();
+        if (password == null) throw new IllegalStateException("Owner password service required");
+        try {
+            mManagedHosting = new ManagedHosting(mDataDir, mCfg, password);
+            mControl.setManagedHosting(mManagedHosting);
+        } catch (Exception e) {
+            // Optional guest hosting must never take down the owner's account or wallet.
+            mControl.setHostingError("Guest hosting is unavailable. Check the data folder permissions and that another host is not using it.");
+            log("guest hosting unavailable: " + e.getClass().getSimpleName());
+        }
+    }
     public ChatEngine chat() { return mChat; }
     public MediaService media() { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
@@ -636,6 +652,7 @@ public final class ParlonsCore {
                     () -> mNode.permanentAddress(), mPairing, mMedia, this::log);
             local.setPrivateFiles(mPrivateFiles);
             local.setDocsLink(mDocs);
+            local.setAdminPairingPassword(mControl.adminPairingPassword());
             local.start();
             mLocal = local;
             mControl.setLocalSink(local.sink());
@@ -778,6 +795,7 @@ public final class ParlonsCore {
      * exactly as the app does when a chat opens.
      */
     private void openAccountWallet() {
+        if (mWallet == null) return; // chat-only tenant: no signing keys or wallet background work
         mWalletExec.execute(() -> {
             if (!mRunning) return;
             try {
@@ -977,6 +995,7 @@ public final class ParlonsCore {
     public synchronized void shutdown() {
         if (mStopped) return;
         mStopped = true;
+        if (mManagedHosting != null) mManagedHosting.close();
         mDocs.close();
         mRunning = false;
         mOwnRelayGeneration.incrementAndGet();
