@@ -79,3 +79,7 @@ tasks.register('fatJar', Jar) {
     from sourceSets.main.output
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 }
+
+// Artifact and boot metadata have one release version, matching :node.
+version = "0.11.118"
+tasks.named("fatJar") { archiveVersion = project.version }
