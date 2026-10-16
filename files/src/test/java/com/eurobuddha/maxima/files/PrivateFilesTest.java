@@ -202,6 +202,70 @@ public class PrivateFilesTest {
             }
         }
     }
+    private static java.util.concurrent.ThreadPoolExecutor fillVerificationQueue(Fixture f, java.util.concurrent.CountDownLatch release) throws Exception {
+        java.lang.reflect.Field field=PrivateFiles.class.getDeclaredField("jobs");field.setAccessible(true);
+        java.util.concurrent.ThreadPoolExecutor jobs=(java.util.concurrent.ThreadPoolExecutor)field.get(f.files);
+        java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1);
+        Runnable blocker=()->{entered.countDown();try{release.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}};
+        jobs.execute(blocker);assertTrue(entered.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        for(int i=0;i<8;i++)jobs.execute(blocker);
+        return jobs;
+    }
+    @Test(timeout=30000) public void rejectedVerificationReportsFailureWithoutBlockingTorrentWorker()throws Exception {
+        java.util.concurrent.CountDownLatch release=new java.util.concurrent.CountDownLatch(1);
+        try(Fixture f=new Fixture()){
+            fillVerificationQueue(f,release);
+            String id=f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"busy.txt","text/plain",f.peer.publicKeyHex(),false);
+            long until=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(4);
+            while(!"Failed".equals(f.files.status(id).get("status")) && System.nanoTime()<until)Thread.sleep(10);
+            assertEquals("Failed",f.files.status(id).get("status"));
+            assertEquals("Busy; tap Resume",f.files.status(id).get("error"));
+        }finally{release.countDown();}
+    }
+    @Test(timeout=30000) public void closeDoesNotWaitForRejectedCompletionCallback()throws Exception {
+        java.util.concurrent.CountDownLatch queued=new java.util.concurrent.CountDownLatch(1), release=new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch rejectEntered=new java.util.concurrent.CountDownLatch(1);
+        Thread closing=null;
+        try(Fixture f=new Fixture()){
+            java.util.concurrent.ThreadPoolExecutor jobs=fillVerificationQueue(f,queued);
+            jobs.setRejectedExecutionHandler((task,executor)->{
+                rejectEntered.countDown();boolean interrupted=false;
+                while(release.getCount()!=0)try{release.await();}catch(InterruptedException e){interrupted=true;}
+                if(interrupted)Thread.currentThread().interrupt();
+                throw new java.util.concurrent.RejectedExecutionException("synthetic full queue");
+            });
+            f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"closing.txt","text/plain",f.peer.publicKeyHex(),false);
+            assertTrue(rejectEntered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            java.util.concurrent.atomic.AtomicReference<Throwable> error=new java.util.concurrent.atomic.AtomicReference<>();
+            closing=new Thread(()->{try{f.files.close();}catch(Throwable e){error.set(e);}},"test-private-file-close");closing.start();
+            java.lang.reflect.Field closed=PrivateFiles.class.getDeclaredField("closed");closed.setAccessible(true);
+            long until=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+            while(!closed.getBoolean(f.files) && System.nanoTime()<until)Thread.sleep(10);
+            assertTrue("close owns the account monitor before the callback continues",closed.getBoolean(f.files));
+            release.countDown();closing.join(3000);
+            assertFalse("shutdown must not wait on its own torrent callback",closing.isAlive());
+            assertNull(error.get());
+        }finally{release.countDown();queued.countDown();if(closing!=null)closing.join(12000);}
+    }
+    @Test(timeout=30000) public void closeCleansAllTransfersAfterOneStopFails()throws Exception {
+        try(Fixture f=new Fixture()){
+            String a=f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"first.txt","text/plain",f.peer.publicKeyHex(),false);
+            String b=f.files.send(new ByteArrayInputStream(new byte[]{2}),1,"second.txt","text/plain",f.peer.publicKeyHex(),false);
+            java.lang.reflect.Field engineField=PrivateFiles.class.getDeclaredField("engine");engineField.setAccessible(true);
+            PrivateTorrent engine=(PrivateTorrent)engineField.get(f.files);
+            try {
+                PrivateTorrentTest.failAfterClientStop(engine,a);PrivateTorrentTest.failAfterClientStop(engine,b);
+                Throwable error=null;try{f.files.close();}catch(Throwable e){error=e;}
+                assertFalse("account close must reach runtime cleanup",PrivateTorrentTest.runtime(engine).isRunning());
+                assertNull("recovered stop failure must not abort host shutdown",error);
+                java.lang.reflect.Field transfers=PrivateFiles.class.getDeclaredField("transfers");transfers.setAccessible(true);
+                for(Object transfer:((Map<?,?>)transfers.get(f.files)).values()){
+                    java.lang.reflect.Field tunnel=transfer.getClass().getDeclaredField("tunnel");tunnel.setAccessible(true);
+                    assertNull("all gateways must close even after another stop fails",tunnel.get(transfer));
+                }
+            }finally{PrivateTorrentTest.runtime(engine).shutdown();}
+        }
+    }
     @Test(timeout=30000) public void legacyStateStaysPausedUntilExplicitResume()throws Exception {
         try(Fixture f=new Fixture()){
             String id=f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"legacy.txt","text/plain",f.peer.publicKeyHex(),false);

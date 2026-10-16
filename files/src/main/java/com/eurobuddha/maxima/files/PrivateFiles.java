@@ -18,6 +18,7 @@ import java.util.function.Supplier;
  * Offers reuse ChatMedia and ChatEngine's sealed send path. Only small, authenticated peer
  * introductions use Maxima RPC; bulk ciphertext uses the already forwarded endpoint directly. */
 public final class PrivateFiles implements AutoCloseable {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PrivateFiles.class);
     public static final String PEERS="parlons.files.peers";
     public static final int BLOCK=48*1024;
     public static final long STORAGE_LIMIT=2L*1024*1024*1024;
@@ -164,7 +165,12 @@ public final class PrivateFiles implements AutoCloseable {
                         if(t.generation==generation){t.ready=true;t.done=t.file.size;t.status="Ready · sharing";}
                     }
                 }catch(Exception e){failed(t,generation,message(e));}
-            });}catch(RejectedExecutionException e){failed(t,generation,"Busy; tap Resume");}
+            });}catch(RejectedExecutionException e){
+                // This callback runs on Bt's processing thread. failed() pauses that
+                // same worker, so dispatch it through the existing account executor.
+                try{discovery.execute(()->failed(t,generation,"Busy; tap Resume"));}
+                catch(RejectedExecutionException closing){/* close already invalidates this generation. */}
+            }
         },error->failed(t,generation,error));
         save(t);
         }catch(Exception e){failed(t,generation,message(e));throw e;}
@@ -279,5 +285,13 @@ public final class PrivateFiles implements AutoCloseable {
     private static byte[] bytes(String s){return s.getBytes(StandardCharsets.UTF_8);}
     private static String message(Exception e){return e.getMessage()==null?"File transfer failed":e.getMessage();}
     @Override public synchronized void close(){if(closed)return;closed=true;node.services().unregister(PEERS);discovery.shutdownNow();peerJobs.shutdownNow();jobs.shutdownNow();
-        for(Transfer t:transfers.values()){t.paused=true;pauseEngine(t);}if(engine!=null){engine.close();engine=null;}}
+        try {
+            for(Transfer t:transfers.values()) {
+                t.paused=true;
+                try{pauseEngine(t);}catch(RuntimeException e){LOG.warn("Transfer stop failed; continuing account cleanup",e);}
+            }
+        } finally {
+            if(engine!=null)try{engine.close();}finally{engine=null;}
+        }
+    }
 }

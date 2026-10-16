@@ -125,6 +125,32 @@ public class PrivateTorrentTest {
             assertArrayEquals(plain,Files.readAllBytes(download.resolve("out")));
         } finally { endpoint.stop(); }
     }
+    @SuppressWarnings("unchecked")
+    static void failAfterClientStop(PrivateTorrent torrent, String id) throws Exception {
+        java.lang.reflect.Field clients=PrivateTorrent.class.getDeclaredField("clients");clients.setAccessible(true);
+        Map<String,bt.runtime.BtClient> map=(Map<String,bt.runtime.BtClient>)clients.get(torrent);
+        bt.runtime.BtClient original=map.get(id);assertNotNull(original);
+        map.put(id,(bt.runtime.BtClient)java.lang.reflect.Proxy.newProxyInstance(bt.runtime.BtClient.class.getClassLoader(),
+                new Class<?>[]{bt.runtime.BtClient.class},(proxy,method,args)->{
+                    if(method.getName().equals("stop")){original.stop();throw new IllegalStateException("synthetic stop failure");}
+                    return method.invoke(original,args);
+                }));
+    }
+    static bt.runtime.BtRuntime runtime(PrivateTorrent torrent) throws Exception {
+        java.lang.reflect.Field field=PrivateTorrent.class.getDeclaredField("runtime");field.setAccessible(true);
+        return (bt.runtime.BtRuntime)field.get(torrent);
+    }
+    @Test(timeout=30000) public void closeShutsRuntimeDownAfterClientStopFailure() throws Exception {
+        Path seed=Files.createTempDirectory("private-stop-failure-");ChatFile file=prepare(seed,new byte[]{1});
+        PrivateTorrent torrent=new PrivateTorrent(port(),true);
+        try {
+            torrent.start(file,seed,(x,y)->{},()->{},message->{});
+            failAfterClientStop(torrent,file.id);
+            Throwable error=null;try{torrent.close();}catch(Throwable e){error=e;}
+            assertFalse("runtime must be shut down after a per-client stop failure",runtime(torrent).isRunning());
+            assertNull("recovered stop failure must not abort host shutdown",error);
+        }finally{torrent.close();}
+    }
     @Test public void gatewayRejectsExtensionsAndOversizeRequests() throws Exception {
         TorrentTunnel.validatePacket(new byte[]{0},1);
         for(byte[] packet:new byte[][]{new byte[]{20,0},new byte[]{9,0,0},new byte[]{6,0,0,0,0,0,0,0,0,0,1,0,0}}){

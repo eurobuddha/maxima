@@ -23,6 +23,7 @@ import java.util.function.BiConsumer;
  * Metadata and explicit peer candidates arrive exclusively through sealed Parlons messages.
  * The random ciphertext infohash is a capability; payload confidentiality is independent of it. */
 public final class PrivateTorrent implements AutoCloseable {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PrivateTorrent.class);
     private final BtRuntime runtime;
     private final Map<String, BtClient> clients = new ConcurrentHashMap<>();
     private final Map<String, Torrent> torrents = new ConcurrentHashMap<>();
@@ -158,7 +159,10 @@ public final class PrivateTorrent implements AutoCloseable {
         }
     }
     @Override public synchronized void close() {
-        for(String id:new ArrayList<>(clients.keySet()))pause(id);
-        runtime.shutdown();
+        try {
+            for(String id:new ArrayList<>(clients.keySet())) {
+                try{pause(id);}catch(RuntimeException e){LOG.warn("Transfer stop failed; continuing runtime shutdown",e);}
+            }
+        } finally { runtime.shutdown(); }
     }
 }
