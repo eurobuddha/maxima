@@ -95,6 +95,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     private int mPollN;                   // every Nth poll is a full reconcile, rest are deltas
     private long mNewestServerTime;       // newest SERVER entry time — the delta cursor
+    private long mPushRevision;           // UI-thread guard against a pre-push full snapshot
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Runnable mTick = new Runnable() {
@@ -303,7 +304,9 @@ public final class CloudChatActivity extends AppCompatActivity {
     /** Cloud push → apply the event DIRECTLY. The push already carries the message body and the
      *  state change; fetching the whole page again on every event was a wasted round-trip and
      *  the visible "waiting for the chat to re-print". */
-    private final PortalHub.Listener mPush = ev -> {
+    private final PortalHub.Listener mPush = this::onPush;
+
+    private void onPush(JSONObject ev) {
         String type = String.valueOf(ev.get("type"));
         if ("payfail".equals(type)
                 && mPeer != null && mPeer.equalsIgnoreCase(String.valueOf(ev.get("peer")))) {
@@ -328,29 +331,23 @@ public final class CloudChatActivity extends AppCompatActivity {
                 return;
             }
             if ("message".equals(type)) {
-                String id = str(ev, "id");
-                if (id.isEmpty() || hasMsg(id)) {
+                Msg m = mergePushedMessage(mMsgs, ev);
+                if (m == null) {
                     return;
                 }
-                Msg m = new Msg();
-                m.id = id;
-                m.sender = str(ev, "sender");
-                m.sname = str(ev, "sname");   // group sender name (blank for 1:1)
-                m.body = str(ev, "body");
-                m.mine = false;              // the node only pushes INBOUND message events
-                m.time = lng(ev, "time");
-                m.state = "delivered";
-                mMsgs.add(m);
+                mPushRevision++;
                 if (m.time > mNewestServerTime) {
                     mNewestServerTime = m.time;
                 }
-                mAdapter.notifyItemInserted(mMsgs.size() - 1);
+                // An own-message push may also retire one optimistic bubble.
+                if (m.mine) saveEchoes();
+                mAdapter.notifyDataSetChanged();
                 mList.scrollToPosition(mMsgs.size() - 1);
                 View empty = findViewById(R.id.chat_empty);
                 if (empty != null) {
                     empty.setVisibility(View.GONE);
                 }
-                if (m.time > mReadMark) {
+                if (!m.mine && m.time > mReadMark) {
                     final long prev = mReadMark;
                     mReadMark = m.time;
                     CloudSession.connect(this, new CloudSession.Cb() {   // background lane
@@ -380,7 +377,32 @@ public final class CloudChatActivity extends AppCompatActivity {
                 load();
             }
         });
-    };
+    }
+
+    /** Apply the account's message event without Android UI or transport side effects. */
+    private static Msg mergePushedMessage(List<Msg> messages, JSONObject ev) {
+        String id = str(ev, "id");
+        if (id.isEmpty()) return null;
+        for (Msg existing : messages) {
+            if (existing.id.equals(id)) return null;
+        }
+        Msg m = parseMsg(ev);
+        // Older accounts omitted direction/state because they pushed only inbound messages.
+        if (!m.mine && m.state.isEmpty()) m.state = "delivered";
+        if (m.mine) {
+            List<Msg> echoes = new ArrayList<>();
+            for (Msg existing : messages) {
+                if (existing.id.startsWith("local:")) echoes.add(existing);
+            }
+            // Reuse the poll reconciler's nearest, one-for-one matching. Never collapse
+            // repeated identical sends or let a replay consume another pending send.
+            consumeEchoes(echoes, java.util.Collections.singletonList(m), messages);
+            messages.removeIf(existing -> existing.id.startsWith("local:") && !echoes.contains(existing));
+        }
+        messages.add(m);
+        messages.sort((a, b) -> Long.compare(a.time, b.time));
+        return m;
+    }
 
     private boolean hasMsg(String zId) {
         for (Msg m : mMsgs) {
@@ -449,23 +471,27 @@ public final class CloudChatActivity extends AppCompatActivity {
         JSONArray arr = (JSONArray) res.get("messages");
         if (arr != null) {
             for (Object o : arr) {
-                JSONObject m = (JSONObject) o;
-                Msg x = new Msg();
-                x.id = str(m, "id");
-                x.sender = str(m, "sender");
-                x.sname = str(m, "sname");
-                x.body = str(m, "body");
-                x.mine = bool(m, "mine");
-                x.time = lng(m, "time");
-                x.arrived = lng(m, "arrived");
-                x.delivered = (int) lng(m, "delivered");
-                x.state = str(m, "state");
-                got.add(x);
+                got.add(parseMsg((JSONObject) o));
             }
         }
         // Store order isn't time order — a resent message would render above older ones.
         got.sort((a, b1) -> Long.compare(a.time, b1.time));
         return got;
+    }
+
+    /** Push and history use the same account message schema, including outgoing direction. */
+    private static Msg parseMsg(JSONObject m) {
+        Msg x = new Msg();
+        x.id = str(m, "id");
+        x.sender = str(m, "sender");
+        x.sname = str(m, "sname");
+        x.body = str(m, "body");
+        x.mine = bool(m, "mine");
+        x.time = lng(m, "time");
+        x.arrived = lng(m, "arrived");
+        x.delivered = (int) lng(m, "delivered");
+        x.state = str(m, "state");
+        return x;
     }
 
     private void load() {
@@ -478,6 +504,7 @@ public final class CloudChatActivity extends AppCompatActivity {
         final boolean full = mMsgs.isEmpty() || mNewestServerTime == 0 || (mPollN % 6 == 0);
         mPollN++;
         final long cursor = mNewestServerTime;
+        final long pushRevision = mPushRevision;
         CloudSession.connectInteractive(this, new CloudSession.Cb() {
             public void ok(ParlonsRemote r) {
                 List<Msg> parsed = null;
@@ -510,6 +537,12 @@ public final class CloudChatActivity extends AppCompatActivity {
                     if (got == null || isFinishing() || isDestroyed()) {
                         return;                     // fetch failed / screen gone — keep as-is
                     }
+                    if (full && pushRevision != mPushRevision) {
+                        // This snapshot may predate a push that already replaced its echo.
+                        // Keep the live rows and ask for a fresh full page on the next tick.
+                        mPollN = 0;
+                        return;
+                    }
                     String prevNewest = mMsgs.isEmpty() ? "" : mMsgs.get(mMsgs.size() - 1).id;
                     // Preserve unconfirmed local echoes: a send records ASYNC on the node, so a
                     // fetch can race it — the bubble must not blink out. One-to-one consumption:
@@ -521,7 +554,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                             echoes.add(m);
                         }
                     }
-                    consumeEchoes(echoes, got);
+                    consumeEchoes(echoes, got, mMsgs);
                     if (full) {
                         mMsgs.clear();
                         mMsgs.addAll(got);
@@ -570,11 +603,18 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     /** One-to-one echo consumption: each SERVER entry retires at most ONE matching echo (the
      *  nearest in time within 2 min). Survivors stay in the list. */
-    private static void consumeEchoes(List<Msg> zEchoes, List<Msg> zServer) {
+    private static void consumeEchoes(List<Msg> zEchoes, List<Msg> zServer, List<Msg> zKnown) {
         for (Msg s : zServer) {
             if (!s.mine) {
                 continue;
             }
+            // A push or earlier poll already reconciled this server id. Seeing it again
+            // must not consume the next pending send with identical text.
+            boolean confirmed = false;
+            for (Msg known : zKnown) {
+                if (known.mine && known.id.equals(s.id)) { confirmed = true; break; }
+            }
+            if (confirmed) continue;
             Msg best = null;
             long bestD = 120_000L;
             for (Msg m : zEchoes) {

@@ -124,6 +124,8 @@ public final class PortalNotifier {
 
     /** Post (or update) the notification for one conversation from a pushed message event. */
     public static void onPushedMessage(Context c, JSONObject ev) {
+        // Account sync includes our own sends; only a peer's message is a notification.
+        if (Boolean.TRUE.equals(ev.get("mine"))) return;
         String peer = str(ev, "peer");
         if (peer.isEmpty() || PortalHub.isForeground(peer)) {
             return;         // that thread is on screen — no notification
