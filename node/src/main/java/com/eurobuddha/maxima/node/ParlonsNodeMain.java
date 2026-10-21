@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.130";
+    public static final String  NODE_VERSION = "0.2.131";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -81,6 +81,8 @@ public final class ParlonsNodeMain {
         out.println("                                    Minima P2P port (ONE public port, as classic Maxima); -Dparlons.relay.peers=h:p,… mesh");
         out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
         out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
+        out.println("  -Dparlons.dex.port=0             the Decks DEX relay cape (signed order book, GET /dex/health); 0 = off;");
+        out.println("                                    -Dparlons.dex.bind=0.0.0.0 the interface it listens on");
         out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
         out.println("  -Dparlons.account=true           run the Parlons account layer;  -Dparlons.account.name=<name>");
         out.println("  -Dparlons.panel.port=9587        the account's web panel + API on 127.0.0.1 (0 = off); open it with");
@@ -254,6 +256,19 @@ public final class ParlonsNodeMain {
             }
             System.out.println("[parlons-node] admin rpc up on 127.0.0.1:" + admin.port()
                     + " (loopback only; every node command; never proxy this)");
+        }
+
+        // --- the Decks DEX relay cape (mds/decks/SPEC.md §4): untrusted signed-envelope fan-out, nothing
+        // persisted, no chain dependency, so it is up before the node syncs. -Dparlons.dex.port=<n> turns it on. ---
+        final com.eurobuddha.maxima.dexrelay.DexRelay dex;
+        int dexPort = Integer.getInteger("parlons.dex.port", 0);
+        if (dexPort > 0) {
+            dex = new com.eurobuddha.maxima.dexrelay.DexRelay();
+            dex.start(System.getProperty("parlons.dex.bind", "0.0.0.0").trim(), dexPort);
+            System.out.println("[parlons-node] dex relay " + com.eurobuddha.maxima.dexrelay.DexRelay.VERSION
+                    + " up on " + System.getProperty("parlons.dex.bind", "0.0.0.0").trim() + ":" + dex.port() + " (GET /dex/health)");
+        } else {
+            dex = null;
         }
 
         // --- the phone-facing wallet gateway (M3): hardened read+relay /cmd proxy over the node ---
@@ -444,6 +459,7 @@ public final class ParlonsNodeMain {
             try { if (acct != null) acct.shutdown(); } catch (Throwable ignored) {}   // leaves the cape alone
             try { if (gw != null) gw.stop(); } catch (Throwable ignored) {}
             try { if (rl != null) rl.stop(); } catch (Throwable ignored) {}
+            try { if (dex != null) dex.stop(); } catch (Throwable ignored) {}
             try { main.shutdown(); } catch (Throwable ignored) {}
         }));
 

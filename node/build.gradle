@@ -35,6 +35,7 @@ dependencies {
     // The Parlons ACCOUNT layer (M5): pairing, control RPC, chat, push — shared with :cloud. Its
     // org.minima needs are compileOnly there and satisfied HERE by the node jar (identical API).
     implementation project(':account')
+    implementation project(':dexrelay')      // the Decks DEX relay cape (-Dparlons.dex.port); Java 11, no deps
 
     implementation 'org.json:json:20231013'
 
@@ -77,5 +78,5 @@ tasks.register('fatJar', Jar) {
 }
 
 // Artifact and boot metadata have one release version.
-version = "0.2.130"
+version = "0.2.131"
 tasks.named("fatJar") { archiveVersion = project.version }
