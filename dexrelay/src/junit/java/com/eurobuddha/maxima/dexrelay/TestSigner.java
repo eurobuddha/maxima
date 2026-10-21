@@ -40,7 +40,7 @@ final class TestSigner {
         m.put("price", "0.01234567"); m.put("amount", amount);
         m.put("coins", java.util.Arrays.asList("0xF19FE115E66277A5785D69CA53BDA431B0D7CDB5B7DB1C4AE8C3CA01558C045F"));
         m.put("address", "0x0CDCD61692F186EB0BBCFA289F438043F586FF7B3F6864193358E29166E8454A");
-        m.put("orderId", orderId); m.put("seq", seq); m.put("expiry", now + 3600); m.put("signPk", signPk);
+        m.put("orderId", orderId); m.put("seq", seq); m.put("expiry", now + 3600); m.put("pubId", publicId); m.put("signPk", signPk);
         return Envelope.parse(sign(m), now);
     }
 

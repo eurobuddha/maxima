@@ -14,7 +14,7 @@ import org.junit.Test;
 public class Ed25519Test {
 
     static final byte[] PK  = Hex.decode("782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850");
-    static final byte[] SIG = Hex.decode("3d1017b44fb5711919061660a64a22660cace0690b8040b501882a96ef3116fe36e640dd9c2b93ac5a1f1ee7809d2e2b4d12447a440e62348cc12f978ea06300");
+    static final byte[] SIG = Hex.decode("a5ee8230578b0e5c2f6c9c0fdf52b9f0e8f2141278fad1a67d31145e0a14688fa98109f885838ccfe9d7bb4e2885b1364a74863666fd478d11a074cc3a744c0d");
     static final byte[] MSG = JsonTest.VECTOR_CANONICAL.getBytes(StandardCharsets.UTF_8);
 
     @Test public void acceptsTheSpikeVector() {

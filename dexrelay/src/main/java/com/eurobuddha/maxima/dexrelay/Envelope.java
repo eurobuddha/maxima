@@ -28,7 +28,7 @@ final class Envelope {
     static final int MAX_COINS = 32;
 
     private static final Set<String> ORDER_KEYS = new HashSet<>(Arrays.asList(
-            "v", "t", "market", "side", "price", "amount", "coins", "address", "orderId", "seq", "expiry", "signPk", "sig"));
+            "v", "t", "market", "side", "price", "amount", "coins", "address", "orderId", "seq", "expiry", "pubId", "signPk", "sig"));
     private static final Set<String> MSG_KEYS = new HashSet<>(Arrays.asList("v", "t", "to", "from", "blob", "expiry", "sig"));
     private static final Pattern DECIMAL = Pattern.compile("^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,8})?$");
     private static final Pattern MARKET = Pattern.compile("^[A-Za-z0-9/_-]{1,32}$");
@@ -37,7 +37,7 @@ final class Envelope {
     final String raw;
     final long seq, expiry;
     // order
-    final String market, side, price, amount, address, orderId, signPk;
+    final String market, side, price, amount, address, orderId, signPk, pubId;
     final List<String> coins;
     // msg
     final String to, from, blob;
@@ -48,13 +48,13 @@ final class Envelope {
         if (kind == Kind.ORDER) {
             market = (String) m.get("market"); side = (String) m.get("side"); price = (String) m.get("price");
             amount = (String) m.get("amount"); address = (String) m.get("address"); orderId = (String) m.get("orderId");
-            signPk = (String) m.get("signPk"); seq = (Long) m.get("seq");
+            signPk = (String) m.get("signPk"); pubId = (String) m.get("pubId"); seq = (Long) m.get("seq");
             @SuppressWarnings("unchecked") List<String> c = (List<String>) (List<?>) m.get("coins");
             coins = Collections.unmodifiableList(c);
             to = null; from = null; blob = null;
         } else {
             to = (String) m.get("to"); from = (String) m.get("from"); blob = (String) m.get("blob");
-            seq = 0; market = null; side = null; price = null; amount = null; address = null; orderId = null; signPk = null; coins = null;
+            seq = 0; market = null; side = null; price = null; amount = null; address = null; orderId = null; signPk = null; pubId = null; coins = null;
         }
     }
 
@@ -114,6 +114,9 @@ final class Envelope {
             if (!(seqO instanceof Long) || (Long) seqO < 0) throw new Invalid("seq must be a non-negative integer");
             String signPk = str(m, "signPk");
             if (!Hex.is0x(signPk, 32)) throw new Invalid("bad signPk");
+            String pubId = str(m, "pubId");
+            if (!Hex.is0x(pubId, 64)) throw new Invalid("bad pubId (publicId = 0x + 64 bytes)");
+            if (!pubId.substring(2 + 64).equalsIgnoreCase(signPk.substring(2))) throw new Invalid("pubId must end with signPk");
             pk = Hex.decode(signPk.substring(2));
         } else {
             String to = str(m, "to"), from = str(m, "from"), blob = str(m, "blob");

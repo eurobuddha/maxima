@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   GET  /dex/health                       {ok,version,orders,cursor,uptime}
  */
 public final class DexRelay {
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = "0.1.1";
     static final int MAX_HOLD_SECONDS = 25;
     static final int MAX_CONCURRENT_HOLDS = 512;
     static final long SWEEP_MS = 30_000;
