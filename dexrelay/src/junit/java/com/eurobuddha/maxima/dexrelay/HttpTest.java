@@ -50,6 +50,22 @@ public class HttpTest {
         assertTrue(forged.body, forged.body.contains("bad signature"));
     }
 
+    @Test public void relaysListsItselfThenWhatTheHostWires() throws Exception {
+        Resp r = get("/dex/relays");
+        assertEquals(200, r.code);
+        assertEquals("{\"ok\":true,\"relays\":[{\"url\":\"" + base + "\",\"seen\":" + NOW + "}]}", r.body);
+        java.util.Map<String, Long> known = new java.util.LinkedHashMap<>();
+        known.put("https://dex.example.com", 1760000000L);
+        known.put("http://203.0.113.7:19798", 1760000100L);
+        known.put("http://evil\"}", 1L);                      // a quote can never break the JSON
+        relay.setRelays(() -> known);
+        r = get("/dex/relays");
+        assertEquals(200, r.code);
+        assertEquals("{\"ok\":true,\"relays\":[{\"url\":\"https://dex.example.com\",\"seen\":1760000000},"
+                + "{\"url\":\"http://203.0.113.7:19798\",\"seen\":1760000100},{\"url\":\"http://evil}\",\"seen\":1}]}", r.body);
+        assertEquals(405, post("/dex/relays", "{}").code);
+    }
+
     @Test public void longPollWakesOnPublish() throws Exception {
         AtomicLong ms = new AtomicLong(-1);
         Thread t = new Thread(() -> {

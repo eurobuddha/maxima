@@ -28,9 +28,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   POST /dex/msg                          one msg envelope → 200 {ok} | 400 | 503
  *   GET  /dex/inbox?pk=&since=&hold=       long-poll ≤ 25 s → {cursor,messages:[…]}
  *   GET  /dex/health                       {ok,version,orders,cursor,uptime}
+ *   GET  /dex/relays                       {ok,relays:[{url,seen}]}  every DEX relay this host knows (itself included)
  */
 public final class DexRelay {
-    public static final String VERSION = "0.1.2";
+    public static final String VERSION = "0.1.3";
     static final int MAX_HOLD_SECONDS = 25;
     static final int MAX_CONCURRENT_HOLDS = 512;
     static final long SWEEP_MS = 30_000;
@@ -43,6 +44,10 @@ public final class DexRelay {
     private final Store store = new Store();
     private final Semaphore holds = new Semaphore(MAX_CONCURRENT_HOLDS);
     private final long startedAt;
+    /** Discovery: base URL -> last seen (epoch seconds) of every DEX relay this host knows. The hosts wire it to
+     *  the relay mesh ({@code RelayServer.dexRelays()}); the default is just ourselves on the bound address. */
+    private volatile java.util.function.Supplier<Map<String, Long>> relays;
+    private String bindHost = "";
     private HttpServer server;
     private ExecutorService exec;
     private Thread sweeper;
@@ -55,12 +60,17 @@ public final class DexRelay {
         this.startedAt = clock.nowSeconds();
     }
 
+    /** Wire the relay list {@code GET /dex/relays} serves (null restores the default: just this host). */
+    public void setRelays(java.util.function.Supplier<Map<String, Long>> known) { relays = known; }
+
     public synchronized void start(String bindHost, int port) throws IOException {
+        this.bindHost = bindHost;
         server = HttpServer.create(new InetSocketAddress(bindHost, port), 64);
         AtomicInteger n = new AtomicInteger();
         exec = Executors.newCachedThreadPool(r -> { Thread t = new Thread(r, "dexrelay-" + n.incrementAndGet()); t.setDaemon(true); return t; });
         server.setExecutor(exec);
         server.createContext("/dex/health", ex -> handle(ex, this::health));
+        server.createContext("/dex/relays", ex -> handle(ex, this::relays));
         server.createContext("/dex/publish", ex -> handle(ex, this::publish));
         server.createContext("/dex/book", ex -> handle(ex, this::book));
         server.createContext("/dex/msg", ex -> handle(ex, this::msg));
@@ -110,6 +120,22 @@ public final class DexRelay {
         if (!"GET".equals(ex.getRequestMethod())) { send(ex, 405, "{\"ok\":false,\"error\":\"GET only\"}"); return; }
         send(ex, 200, "{\"ok\":true,\"version\":\"" + VERSION + "\",\"orders\":" + store.liveOrders() + ",\"cursor\":" + store.cursor()
                 + ",\"uptime\":" + (clock.nowSeconds() - startedAt) + "}");
+    }
+
+    private void relays(HttpExchange ex) throws IOException {
+        if (!"GET".equals(ex.getRequestMethod())) { send(ex, 405, "{\"ok\":false,\"error\":\"GET only\"}"); return; }
+        java.util.function.Supplier<Map<String, Long>> hook = relays;
+        Map<String, Long> known = hook == null ? java.util.Collections.singletonMap("http://" + bindHost + ":" + port(), clock.nowSeconds()) : hook.get();
+        StringBuilder b = new StringBuilder(256).append("{\"ok\":true,\"relays\":[");
+        boolean first = true;
+        for (Map.Entry<String, Long> e : known.entrySet()) {
+            if (!first) b.append(',');
+            first = false;
+            b.append("{\"url\":\"");
+            for (int i = 0; i < e.getKey().length(); i++) { char c = e.getKey().charAt(i); if (c > 0x20 && c <= 0x7E && c != '"' && c != '\\') b.append(c); }
+            b.append("\",\"seen\":").append(e.getValue() == null ? 0 : e.getValue()).append('}');
+        }
+        send(ex, 200, b.append("]}").toString());
     }
 
     private void publish(HttpExchange ex) throws IOException {
