@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.103";
+    public static final String VERSION = "0.4.104";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -40,6 +40,7 @@ public final class Main {
         // The Decks DEX relay cape (mds/decks/SPEC.md §4): off unless --dex-port is given.
         int dexPort = 0;
         String dexBind = "0.0.0.0";
+        String dexPublic = "";
 
         // --- parse first, do nothing else, so informational flags are pure ---
         for (int i = 0; i < args.length; i++) {
@@ -124,6 +125,9 @@ public final class Main {
                 case "--dex-bind":
                     dexBind = strArg(args, ++i, "--dex-bind");
                     break;
+                case "--dex-public":
+                    dexPublic = strArg(args, ++i, "--dex-public");
+                    break;
                 default:
                     // Silently ignoring this is how you end up on the wrong port.
                     System.err.println("Unknown option: " + a);
@@ -151,7 +155,7 @@ public final class Main {
         }
 
         try {
-            run(port, data, rate, protocol, host, blobBytes, peers, dexPort, dexBind);
+            run(port, data, rate, protocol, host, blobBytes, peers, dexPort, dexBind, dexPublic);
         } catch (BindException be) {
             System.err.println();
             System.err.println("ERROR: port " + port + " is already in use.");
@@ -170,7 +174,7 @@ public final class Main {
     }
 
     private static void run(int port, String data, int rate, String protocol, String host, long blobBytes,
-                            java.util.List<String> peers, int dexPort, String dexBind)
+                            java.util.List<String> peers, int dexPort, String dexBind, String dexPublic)
             throws Exception {
         Path dir = Paths.get(data);
 
@@ -246,6 +250,15 @@ public final class Main {
             Runtime.getRuntime().addShutdownHook(new Thread(dex::stop));
             System.out.println("  dex relay: " + com.eurobuddha.maxima.dexrelay.DexRelay.VERSION
                     + " listening on " + dexBind + ":" + dex.port() + "  (GET /dex/health)");
+            // The dex-relay discovery record (Dexicon SPEC §4) rides this relay's greeting into the mesh;
+            // GET /dex/relays serves every record the mesh has shown us, ourselves included.
+            RelayServer mesh = runtime.server();
+            mesh.setDex(dexPort, dexPublic);
+            dex.setRelays(mesh::dexRelays);
+            String announced = mesh.dexUrl();
+            System.out.println(announced.isEmpty()
+                    ? "             NOT announced in the mesh: no public host (pass --host <ip> or --dex-public <url>)"
+                    : "             announced in the mesh as " + announced + "  (GET /dex/relays)");
             System.out.println();
         }
 
@@ -280,6 +293,9 @@ public final class Main {
         out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");
         out.println("  --dex-port <n>   also serve the Decks DEX relay (signed order book) on this port (0 = off)");
         out.println("  --dex-bind <ip>  interface for the DEX relay (default 0.0.0.0; it must be public to be useful)");
+        out.println("  --dex-public <u> the DEX relay's public base URL when it sits behind a TLS front, e.g.");
+        out.println("                   https://relay.example.com/dex-relay (default http://<--host>:<--dex-port>);");
+        out.println("                   announced to the relay mesh so clients find it via any relay's GET /dex/relays");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");
         out.println("  -v, --version    print the version and exit");
         out.println("  -h, --help       print this and exit");

@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.131";
+    public static final String  NODE_VERSION = "0.2.132";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -82,7 +82,9 @@ public final class ParlonsNodeMain {
         out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
         out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
         out.println("  -Dparlons.dex.port=0             the Decks DEX relay cape (signed order book, GET /dex/health); 0 = off;");
-        out.println("                                    -Dparlons.dex.bind=0.0.0.0 the interface it listens on");
+        out.println("                                    -Dparlons.dex.bind=0.0.0.0 the interface it listens on;");
+        out.println("                                    -Dparlons.dex.public=<url> its public base URL when behind a TLS front");
+        out.println("                                    (else http://<public host>:<port>); announced in the relay mesh (GET /dex/relays)");
         out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
         out.println("  -Dparlons.account=true           run the Parlons account layer;  -Dparlons.account.name=<name>");
         out.println("  -Dparlons.panel.port=9587        the account's web panel + API on 127.0.0.1 (0 = off); open it with");
@@ -345,6 +347,18 @@ public final class ParlonsNodeMain {
                 System.out.println("[parlons-node] Maxima cape up on port " + RELAY_PORT
                         + " — identity " + identity.mxIdentity()
                         + " (derived from the node seed; one seed drives both)");
+                if (dex != null) {
+                    // The dex-relay discovery record (Dexicon SPEC §4) rides the cape's greeting; the URL
+                    // follows the cape's public host, so a host learned later is announced without a restart.
+                    final com.eurobuddha.maxima.server.RelayServer mesh = relay.server();
+                    mesh.setDex(dexPort, System.getProperty("parlons.dex.public", ""));
+                    dex.setRelays(mesh::dexRelays);
+                    String announced = mesh.dexUrl();
+                    System.out.println(announced.isEmpty()
+                            ? "[parlons-node] dex relay: no public host known yet - NOT announced in the mesh until one is"
+                              + " learned from peers (or set -Dparlons.relay.host / -Dparlons.dex.public=<url>)"
+                            : "[parlons-node] dex relay announced in the mesh as " + announced + " (GET /dex/relays)");
+                }
                 } else {
                     // A desktop that is not contributing: no public relay, the account attaches to
                     // the fleet like parlons-cloud does. -Dparlons.relay.port=<n> turns the cape on.
@@ -429,7 +443,9 @@ public final class ParlonsNodeMain {
                             try { if (capeRef.server() != null) capeRef.server().setPublicHost(det); } catch (Throwable ignored) { }
                             com.eurobuddha.maxima.cloud.ParlonsCore account = accountHolder.get();
                             System.out.println("[parlons-node] public address learned from peers: " + det
-                                    + " - the cape now names itself " + own + (account == null ? "" : "; the account adopts it"));
+                                    + " - the cape now names itself " + own + (account == null ? "" : "; the account adopts it")
+                                    + (dex == null || capeRef.server() == null || capeRef.server().dexUrl().isEmpty() ? ""
+                                       : "; dex relay announced as " + capeRef.server().dexUrl()));
                             if (account != null) {
                                 if (RELAY_SHARED) {
                                     // In-process relay: reach it over loopback (no hairpin needed); the world
