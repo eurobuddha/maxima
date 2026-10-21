@@ -14,6 +14,8 @@
 #   ops/deploy-parlons-node.sh <ssh-target> [--jar FILE] [--heap 2g]
 #       [--relay-port N] [--gateway-port N] [--rootnode host:port]
 #       [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps] [--memmax 2560M]
+#       [--dex PORT] [--dex-public https://host/dex-relay]   (the Decks DEX relay cape; with
+#         --dex-public the cape binds loopback for a TLS front, else PORT is opened directly)
 #       [--p2p-port 9001] [--rpc] [--megammr-seed https://eurobuddha.com/mega.mmr]
 #       [--peers h:p,h:p] [--blobstore 1024] [--replace-relay]
 #       [--seed-from /path/on/vps/seed.txt --archive 65.109.31.226:8001]
@@ -67,7 +69,7 @@
 set -euo pipefail
 
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--public https://host/parlons-node] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--peers h:p,..] [--blobstore MB] [--replace-relay] [--gateway-public] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
+[ -z "$TARGET" ] && { echo "usage: $0 <ssh-target> [--jar F] [--heap 2g] [--memmax 2560M] [--p2p-port 9001] [--relay-port N] [--gateway-port N] [--public https://host/parlons-node] [--rootnode h:p] [--rpc] [--megammr-seed URL] [--peers h:p,..] [--blobstore MB] [--replace-relay] [--gateway-public] [--dex PORT] [--dex-public URL] [--no-megammr] [--passphrase-file /path/on/vps]" >&2; exit 2; }
 shift
 
 JAR=""
@@ -90,6 +92,8 @@ SEED_FROM=""
 ARCHIVE="65.109.31.226:8001"
 NODE_ARGS=""
 KEETS="false"
+DEX_PORT=0          # the Decks DEX relay cape (-Dparlons.dex.port); 0 = off
+DEX_PUBLIC=""       # its public base URL behind a TLS front (-Dparlons.dex.public); else http://<host>:<DEX_PORT>
 while [ $# -gt 0 ]; do
     case "$1" in
         --jar)            JAR="$2"; shift 2 ;;
@@ -113,6 +117,8 @@ while [ $# -gt 0 ]; do
         --public)         PUBLIC_BASE="$2"; shift 2 ;;
         --rootnode)       ROOTNODE="$2"; shift 2 ;;
         --gateway-public) GW_BIND="0.0.0.0"; shift ;;
+        --dex)            DEX_PORT="$2"; shift 2 ;;
+        --dex-public)     DEX_PUBLIC="$2"; shift 2 ;;
         --no-megammr)     MEGAMMR="false"; shift ;;
         # Path (ON THE VPS) to a mode-600 file holding the node passphrase — only for a
         # password-locked node, so the cape/wallet/gateway can unlock and start. See NODE-SETUP.md.
@@ -146,7 +152,7 @@ fi
 
 echo "Deploying Parlons Node $VER -> $TARGET"
 echo "  jar     $JAR"
-echo "  heap    $HEAP (MemoryMax $MEMMAX)   p2p :$P2P_PORT   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   megammr=$MEGAMMR   rpc=$RPC$([ "$RPC" = true ] && echo " (loopback :$((P2P_PORT+4)), not opened in the firewall)")"
+echo "  heap    $HEAP (MemoryMax $MEMMAX)   p2p :$P2P_PORT   relay :$RELAY_PORT   gateway ${GW_BIND}:$GW_PORT   dex $([ "$DEX_PORT" -gt 0 ] && echo ":$DEX_PORT${DEX_PUBLIC:+ ($DEX_PUBLIC)}" || echo off)   megammr=$MEGAMMR   rpc=$RPC$([ "$RPC" = true ] && echo " (loopback :$((P2P_PORT+4)), not opened in the firewall)")"
 [ -n "$ROOTNODE" ] && echo "  peer    $ROOTNODE" || echo "  peer    (none set — node won't sync; pass --rootnode host:port)"
 [ -n "$PEERS" ] && echo "  mesh    $PEERS"
 [ "$BLOB_MB" -gt 0 ] && echo "  blobs   $BLOB_MB MB shelf"
@@ -176,6 +182,8 @@ KEETS_AF=""
 
 ARGS_OPT="\"-Dparlons.node.args=$NODE_ARGS\""
 PUBLIC_OPT=""; [ -n "$PUBLIC_BASE" ] && PUBLIC_OPT="-Dparlons.node.public=$PUBLIC_BASE"
+case "$DEX_PORT" in ''|*[!0-9]*) echo "--dex must be a port number, got '$DEX_PORT'" >&2; exit 2 ;; esac
+DEX_OPT=""; [ "$DEX_PORT" -gt 0 ] && DEX_OPT="-Dparlons.dex.port=$DEX_PORT${DEX_PUBLIC:+ -Dparlons.dex.bind=127.0.0.1 -Dparlons.dex.public=$DEX_PUBLIC}"
 
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes $TARGET"
 
@@ -289,7 +297,8 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.relay.blob=$BLOB_MB \\
     -Dparlons.gateway.port=$GW_PORT \\
     -Dparlons.gateway.bind=$GW_BIND \\
-    $PUBLIC_OPT \\
+    $PUBLIC_OPT \\${DEX_OPT:+
+    $DEX_OPT \\}
     -Dparlons.node.megammr=$MEGAMMR${ROOTNODE:+ \\
     -Dparlons.node.rootnode=$ROOTNODE}${PASSFILE:+ \\
     -Dparlons.node.passphrase.file=$PASSFILE}${NODE_ARGS:+ \\
@@ -371,6 +380,9 @@ open_port $P2P_PORT       # Minima P2P (layer-1 peers)
 open_port $RELAY_PORT     # Maxima relay (phones attach here)
 if [ "$GW_BIND" = "0.0.0.0" ]; then
     open_port $GW_PORT    # wallet gateway exposed directly (prefer a TLS front instead)
+fi
+if [ "$DEX_PORT" -gt 0 ] && [ -z "$DEX_PUBLIC" ]; then
+    open_port $DEX_PORT   # DEX relay cape served directly (with --dex-public a TLS front reaches it on loopback)
 fi
 if [ "\$opened" = no ]; then
     echo "      no host firewall active - nothing to open"
