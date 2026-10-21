@@ -19,6 +19,7 @@ tasks.withType(JavaCompile).configureEach {
 
 dependencies {
     implementation project(':core')
+    implementation project(':dexrelay')   // the Decks DEX relay cape (--dex-port); Java 11, no deps
     testImplementation 'junit:junit:4.13.2'
 }
 

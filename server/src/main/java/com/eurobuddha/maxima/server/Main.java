@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 public final class Main {
 
     /** Build version. Keep in step with dist/ and the app's versionName. */
-    public static final String VERSION = "0.4.101";
+    public static final String VERSION = "0.4.102";
 
     private static final int DEFAULT_PORT = 9001;
     private static final String DEFAULT_PROTOCOL = "1.0.48";
@@ -37,6 +37,9 @@ public final class Main {
         boolean selftest = false;
         long blobBytes = DEFAULT_BLOB_BYTES;
         java.util.List<String> peers = new java.util.ArrayList<>();
+        // The Decks DEX relay cape (mds/decks/SPEC.md §4): off unless --dex-port is given.
+        int dexPort = 0;
+        String dexBind = "0.0.0.0";
 
         // --- parse first, do nothing else, so informational flags are pure ---
         for (int i = 0; i < args.length; i++) {
@@ -112,6 +115,15 @@ public final class Main {
                         }
                     }
                     break;
+                case "--dex-port":
+                    dexPort = intArg(args, ++i, "--dex-port");
+                    if (dexPort < 0 || dexPort > 65535) {
+                        fail("--dex-port must be 0-65535, got " + dexPort);
+                    }
+                    break;
+                case "--dex-bind":
+                    dexBind = strArg(args, ++i, "--dex-bind");
+                    break;
                 default:
                     // Silently ignoring this is how you end up on the wrong port.
                     System.err.println("Unknown option: " + a);
@@ -139,7 +151,7 @@ public final class Main {
         }
 
         try {
-            run(port, data, rate, protocol, host, blobBytes, peers);
+            run(port, data, rate, protocol, host, blobBytes, peers, dexPort, dexBind);
         } catch (BindException be) {
             System.err.println();
             System.err.println("ERROR: port " + port + " is already in use.");
@@ -158,7 +170,7 @@ public final class Main {
     }
 
     private static void run(int port, String data, int rate, String protocol, String host, long blobBytes,
-                            java.util.List<String> peers)
+                            java.util.List<String> peers, int dexPort, String dexBind)
             throws Exception {
         Path dir = Paths.get(data);
 
@@ -226,6 +238,17 @@ public final class Main {
         // Flush write-behind mail on shutdown so a clean stop loses nothing.
         Runtime.getRuntime().addShutdownHook(new Thread(runtime::stop));
 
+        // The Decks DEX relay cape: signed order envelopes + sealed trade messages over HTTP long-poll,
+        // its own listener (public), nothing persisted. Same binary, so every fleet box can serve it.
+        if (dexPort > 0) {
+            com.eurobuddha.maxima.dexrelay.DexRelay dex = new com.eurobuddha.maxima.dexrelay.DexRelay();
+            dex.start(dexBind, dexPort);
+            Runtime.getRuntime().addShutdownHook(new Thread(dex::stop));
+            System.out.println("  dex relay: " + com.eurobuddha.maxima.dexrelay.DexRelay.VERSION
+                    + " listening on " + dexBind + ":" + dex.port() + "  (GET /dex/health)");
+            System.out.println();
+        }
+
         // Block forever; the maintain loop runs on RelayRuntime's own thread.
         Thread.currentThread().join();
     }
@@ -255,6 +278,8 @@ public final class Main {
         out.println("  --replicate <n>  pool peers that get a copy of each accepted directory entry (default 3; 0 = off)");
         out.println("  --maxpersource N concurrent connections per source IP (default 32)");
         out.println("                   misses to (Phase-B MLS mesh; or env MAXIMA_PEERS)");
+        out.println("  --dex-port <n>   also serve the Decks DEX relay (signed order book) on this port (0 = off)");
+        out.println("  --dex-bind <ip>  interface for the DEX relay (default 0.0.0.0; it must be public to be useful)");
         out.println("  --selftest       run an on-box test and exit (no firewall involved)");
         out.println("  -v, --version    print the version and exit");
         out.println("  -h, --help       print this and exit");
