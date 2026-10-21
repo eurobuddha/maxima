@@ -22,7 +22,7 @@ public class EnvelopeTest {
     }
 
     @Test public void rejectsBadSignatureExpiredFarFutureAndTooBig() {
-        String forged = JsonTest.VECTOR_WITH_SIG.replace("0xa5ee8230", "0xa5ee8231");
+        String forged = JsonTest.VECTOR_WITH_SIG.replace("0x744e68c5", "0x744e68c6");
         assertThrows(Envelope.Invalid.class, () -> Envelope.parse(forged, NOW));
         assertThrows(Envelope.Invalid.class, () -> Envelope.parse(JsonTest.VECTOR_WITH_SIG, 1800000000L + 1));      // expired
         assertThrows(Envelope.Invalid.class, () -> Envelope.parse(JsonTest.VECTOR_WITH_SIG, NOW - 2 * 86400));     // > 24 h ahead
@@ -36,14 +36,23 @@ public class EnvelopeTest {
         // Same canonical bytes cannot be produced for a different shape, so any field change invalidates the sig; but
         // shape checks must fire BEFORE signature work (cheap rejects first). Each of these fails for a shape reason.
         String[] bad = {
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"side\":\"sell\"", "\"side\":\"short\""),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"price\":\"0.01234567\"", "\"price\":\"0.123456789\""),   // 9 dp
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"price\":\"0.01234567\"", "\"price\":\"-1\""),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"orderId\":\"0x0102030405060708\"", "\"orderId\":\"0x01\""),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"v\":1", "\"v\":2"),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"t\":\"order\"", "\"t\":\"ordr\""),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"seq\":1", "\"seq\":-1"),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("\"market\":\"MINIMA/MxUSD\"", "\"market\":\"MINIMA/MxUSD\",\"extra\":1"),
+            JsonTest.VECTOR_WITH_SIG.replace("RETURN SIGNEDBY(0xF8DA8F32", "RETURN TRUE OR SIGNEDBY(0xF8DA8F32"),   // non-simple script
             JsonTest.VECTOR_WITH_SIG.replace("0xa0f29dae2697c9a8b619aea90c27868266a6d2a81b4c4e405bbc043daaf49462782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850", "0x" + "00".repeat(64)),   // pubId must end with signPk
         };
         for (String b : bad) {

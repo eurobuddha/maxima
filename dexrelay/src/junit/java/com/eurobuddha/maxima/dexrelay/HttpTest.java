@@ -45,7 +45,7 @@ public class HttpTest {
 
         Resp dup = post("/dex/publish", JsonTest.VECTOR_WITH_SIG);
         assertEquals(409, dup.code);                       // equal seq: stale
-        Resp forged = post("/dex/publish", JsonTest.VECTOR_WITH_SIG.replace("0xa5ee8230", "0xa5ee8231"));
+        Resp forged = post("/dex/publish", JsonTest.VECTOR_WITH_SIG.replace("0x744e68c5", "0x744e68c6"));
         assertEquals(400, forged.code);
         assertTrue(forged.body, forged.body.contains("bad signature"));
     }

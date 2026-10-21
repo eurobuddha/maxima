@@ -39,6 +39,7 @@ final class TestSigner {
         m.put("v", 1L); m.put("t", "order"); m.put("market", "MINIMA/MxUSD"); m.put("side", "sell");
         m.put("price", "0.01234567"); m.put("amount", amount);
         m.put("coins", java.util.Arrays.asList("0xF19FE115E66277A5785D69CA53BDA431B0D7CDB5B7DB1C4AE8C3CA01558C045F"));
+        m.put("scripts", java.util.Arrays.asList("RETURN SIGNEDBY(0xF8DA8F326784EC8D8C0B91AF59EC0D0A51AADC594B5E8EB101FD60CBEE2B0EBB)"));
         m.put("address", "0x0CDCD61692F186EB0BBCFA289F438043F586FF7B3F6864193358E29166E8454A");
         m.put("orderId", orderId); m.put("seq", seq); m.put("expiry", now + 3600); m.put("pubId", publicId); m.put("signPk", signPk);
         return Envelope.parse(sign(m), now);

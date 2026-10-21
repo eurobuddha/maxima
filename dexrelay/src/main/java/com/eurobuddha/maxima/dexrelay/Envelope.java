@@ -28,10 +28,12 @@ final class Envelope {
     static final int MAX_COINS = 32;
 
     private static final Set<String> ORDER_KEYS = new HashSet<>(Arrays.asList(
-            "v", "t", "market", "side", "price", "amount", "coins", "address", "orderId", "seq", "expiry", "pubId", "signPk", "sig"));
+            "v", "t", "market", "side", "price", "amount", "coins", "scripts", "address", "orderId", "seq", "expiry", "pubId", "signPk", "sig"));
     private static final Set<String> MSG_KEYS = new HashSet<>(Arrays.asList("v", "t", "to", "from", "blob", "expiry", "sig"));
     private static final Pattern DECIMAL = Pattern.compile("^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,8})?$");
     private static final Pattern MARKET = Pattern.compile("^[A-Za-z0-9/_-]{1,32}$");
+    /** v1 backs orders with simple-address coins only (the taker registers these with newscript; txnsign auto signs them). */
+    private static final Pattern SIMPLE_SCRIPT = Pattern.compile("^RETURN SIGNEDBY\\(0x[0-9A-Fa-f]{64}\\)$");
 
     final Kind kind;
     final String raw;
@@ -108,6 +110,9 @@ final class Envelope {
             List<?> coins = (List<?>) coinsO;
             if (coins.size() > MAX_COINS) throw new Invalid("too many coins");
             for (Object c : coins) if (!(c instanceof String) || !Hex.is0x((String) c, 32)) throw new Invalid("bad coinid");
+            Object scriptsO = m.get("scripts");
+            if (!(scriptsO instanceof List) || ((List<?>) scriptsO).size() > MAX_COINS) throw new Invalid("bad scripts");
+            for (Object sc : (List<?>) scriptsO) if (!(sc instanceof String) || !SIMPLE_SCRIPT.matcher((String) sc).matches()) throw new Invalid("bad script (simple RETURN SIGNEDBY only)");
             if (!Hex.is0x(str(m, "address"), 32)) throw new Invalid("bad address");
             if (!Hex.is0x(str(m, "orderId"), 8)) throw new Invalid("bad orderId");
             Object seqO = m.get("seq");

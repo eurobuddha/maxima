@@ -13,12 +13,12 @@ public class JsonTest {
     static final String VECTOR_CANONICAL =
             "{\"address\":\"0x0CDCD61692F186EB0BBCFA289F438043F586FF7B3F6864193358E29166E8454A\",\"amount\":\"100.5\","
           + "\"coins\":[\"0xF19FE115E66277A5785D69CA53BDA431B0D7CDB5B7DB1C4AE8C3CA01558C045F\"],\"expiry\":1800000000,"
-          + "\"market\":\"MINIMA/MxUSD\",\"orderId\":\"0x0102030405060708\",\"price\":\"0.01234567\",\"pubId\":\"0xa0f29dae2697c9a8b619aea90c27868266a6d2a81b4c4e405bbc043daaf49462782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850\",\"seq\":1,"
+          + "\"market\":\"MINIMA/MxUSD\",\"orderId\":\"0x0102030405060708\",\"price\":\"0.01234567\",\"pubId\":\"0xa0f29dae2697c9a8b619aea90c27868266a6d2a81b4c4e405bbc043daaf49462782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850\",\"scripts\":[\"RETURN SIGNEDBY(0xF8DA8F326784EC8D8C0B91AF59EC0D0A51AADC594B5E8EB101FD60CBEE2B0EBB)\"],\"seq\":1,"
           + "\"side\":\"sell\",\"signPk\":\"0x782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850\","
           + "\"t\":\"order\",\"v\":1}";
 
     static final String VECTOR_WITH_SIG = VECTOR_CANONICAL.substring(0, VECTOR_CANONICAL.length() - 1)
-            + ",\"sig\":\"0xa5ee8230578b0e5c2f6c9c0fdf52b9f0e8f2141278fad1a67d31145e0a14688fa98109f885838ccfe9d7bb4e2885b1364a74863666fd478d11a074cc3a744c0d\"}";
+            + ",\"sig\":\"0x744e68c5a3637b03a6733a544751e99313881de01b25d9ea273af4bc8422028f3fdbaeadd7b425e7595fdc2c7f48beea045c05ef94fc58493fc488c5e71e580e\"}";
 
     @Test public void parsesAndCanonicalisesTheVector() {
         Map<String, Object> m = Json.parseObject(VECTOR_WITH_SIG);
@@ -32,7 +32,7 @@ public class JsonTest {
     @Test public void unorderedInputCanonicalisesIdentically() {
         String shuffled = "{ \"v\" : 1 , \"t\":\"order\", \"sig\":\"0xAA\", \"side\":\"sell\",\"seq\":1,\"price\":\"0.01234567\","
                 + "\"orderId\":\"0x0102030405060708\",\"market\":\"MINIMA/MxUSD\",\"expiry\":1800000000,\"pubId\":\"0xa0f29dae2697c9a8b619aea90c27868266a6d2a81b4c4e405bbc043daaf49462782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850\","
-                + "\"coins\":[\"0xF19FE115E66277A5785D69CA53BDA431B0D7CDB5B7DB1C4AE8C3CA01558C045F\"],\"amount\":\"100.5\","
+                + "\"coins\":[\"0xF19FE115E66277A5785D69CA53BDA431B0D7CDB5B7DB1C4AE8C3CA01558C045F\"],\"scripts\":[\"RETURN SIGNEDBY(0xF8DA8F326784EC8D8C0B91AF59EC0D0A51AADC594B5E8EB101FD60CBEE2B0EBB)\"],\"amount\":\"100.5\","
                 + "\"address\":\"0x0CDCD61692F186EB0BBCFA289F438043F586FF7B3F6864193358E29166E8454A\","
                 + "\"signPk\":\"0x782e728cb923b3ce148059e2d063fa37756130c78df1478c817b6713f1a6c850\"}";
         assertEquals(VECTOR_CANONICAL, Json.canonicalWithout(Json.parseObject(shuffled), "sig"));
