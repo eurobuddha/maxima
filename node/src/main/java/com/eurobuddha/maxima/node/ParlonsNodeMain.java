@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.129";
+    public static final String  NODE_VERSION = "0.2.130";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -582,12 +582,19 @@ public final class ParlonsNodeMain {
         }
         int hosts = core.start();
         // KeetChat interop: when the embedded node runs keets, this account's chat
-        // engine gains the keets transport and the node's single inbox drainer.
+        // engine gains the keets transport and the node's single inbox drainer -
+        // unless the HOST app owns KeetChat (-Dparlons.node.keetschat=off: minimaCore
+        // Desktop 0.18.16+ drains the inbox into its own Chat tab; keets chats stay in
+        // KeetChat, Parlons chats stay in Parlons - one drainer per node, never two).
         if (org.minima.system.params.GeneralParams.KEETS_ENABLED) {
-            KeetsChatBridge keets = new KeetsChatBridge(core);
-            core.chat().setKeetsTransport(keets);
-            keets.start();
-            System.out.println("[parlons-node] keets chat bridge up (KeetChat interop)");
+            if (keetsChatBridgeEnabled()) {
+                KeetsChatBridge keets = new KeetsChatBridge(core);
+                core.chat().setKeetsTransport(keets);
+                keets.start();
+                System.out.println("[parlons-node] keets chat bridge up (KeetChat interop)");
+            } else {
+                System.out.println("[parlons-node] keets chat bridge OFF (host app owns the keets inbox)");
+            }
         }
         // account.txt + invite.txt beside the account's files: what a person reads to pair a device.
         com.eurobuddha.maxima.cloud.AccountFiles.startRefresher(core.pairing().codeFile().getParent(),
@@ -911,4 +918,10 @@ public final class ParlonsNodeMain {
     }
 
     private ParlonsNodeMain() {}
+
+    /** -Dparlons.node.keetschat=off hands the keets inbox to the host app (default on). */
+    static boolean keetsChatBridgeEnabled() {
+        String v = System.getProperty("parlons.node.keetschat", "on").trim().toLowerCase();
+        return !(v.equals("off") || v.equals("false") || v.equals("0") || v.equals("no"));
+    }
 }

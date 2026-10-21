@@ -77,5 +77,5 @@ tasks.register('fatJar', Jar) {
 }
 
 // Artifact and boot metadata have one release version.
-version = "0.2.129"
+version = "0.2.130"
 tasks.named("fatJar") { archiveVersion = project.version }
