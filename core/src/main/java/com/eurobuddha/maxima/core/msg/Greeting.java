@@ -151,6 +151,21 @@ public final class Greeting implements Streamable {
     public static Greeting commsOnly(String zVersion, String zHost, int zPort,
                                      List<String> zPeers, int zCapacity, boolean zPool,
                                      int zConns, String zGateway, String zGatewayKey) {
+        return commsOnly(zVersion, zHost, zPort, zPeers, zCapacity, zPool, zConns, zGateway, zGatewayKey, null);
+    }
+
+    /**
+     * As above, plus the DEX relay cape this host serves ({@code "dex"}: the PUBLIC base URL of
+     * its {@code /dex/*} surface, {@code scheme://host:port}, no trailing slash). The
+     * {@code dex-relay} capability record of the Dexicon SPEC §4: it rides the relay gossip
+     * exactly like {@code pool}/{@code gw}, so a client that reaches ANY one relay (or asks it
+     * {@code GET /dex/relays}) learns every DEX relay the mesh has verified - no compiled-in
+     * relay URL anywhere. Null / empty omits the key.
+     */
+    public static Greeting commsOnly(String zVersion, String zHost, int zPort,
+                                     List<String> zPeers, int zCapacity, boolean zPool,
+                                     int zConns, String zGateway, String zGatewayKey, String zDex) {
+        boolean dex = zDex != null && !zDex.isEmpty() && DEX_URL.matcher(zDex).matches();
         boolean gw = zGateway != null && !zGateway.isEmpty()
                 && zGatewayKey != null && !zGatewayKey.isEmpty()
                 && zGateway.indexOf('"') < 0 && zGatewayKey.indexOf('"') < 0;
@@ -174,6 +189,7 @@ public final class Greeting implements Streamable {
                 + (zPool ? ",\"pool\":\"true\"" : "")
                 + (zConns >= 0 ? ",\"conns\":\"" + zConns + "\"" : "")
                 + (gw ? ",\"gw\":\"" + zGateway + "\",\"gwkey\":\"" + zGatewayKey + "\"" : "")
+                + (dex ? ",\"dex\":\"" + zDex + "\"" : "")
                 + ",\"peers\":" + peers + "}";
         return new Greeting(zVersion, json, -1);
     }
@@ -248,6 +264,18 @@ public final class Greeting implements Streamable {
      *  greeting a hostile relay controls into the wallet's HTTP client. */
     private static final java.util.regex.Pattern GATEWAY_URL = java.util.regex.Pattern.compile(
             "https://[A-Za-z0-9.\\-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~\\-/%]*)?");
+
+    /** The DEX relay base URL a relay advertises ({@code "dex"}), or "" if none / malformed. http
+     *  is allowed (a bare VPS port) as well as https (a Caddy front); the shape is as strict as
+     *  the gateway's, so nothing a hostile relay controls reaches a DEX client's HTTP layer. */
+    public static String dexOf(String zExtraDataJson) {
+        String u = flatValue(zExtraDataJson, "dex");
+        return u.length() <= 256 && DEX_URL.matcher(u).matches() ? u : "";
+    }
+
+    /** http or https, a host name or IPv4, an optional port, an optional plain path, no trailing slash. */
+    private static final java.util.regex.Pattern DEX_URL = java.util.regex.Pattern.compile(
+            "https?://[A-Za-z0-9.\\-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~\\-%]+)*");
 
     /** The advertised gateway's bearer ({@code "gwkey"}), or "" if none. */
     public static String gatewayKeyOf(String zExtraDataJson) {

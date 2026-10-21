@@ -49,6 +49,10 @@ public final class RelayPeers {
      *  only to pool peers (a non-pool relay would answer "unknown" anyway). */
     private final Map<String, Boolean> mPool = new ConcurrentHashMap<>();
 
+    /** verified "ip:port" -> the DEX relay base URL it advertised ({@code "dex"}), captured at the
+     *  verification dial like the pool bit. Only peers that advertise one have an entry. */
+    private final Map<String, String> mDex = new ConcurrentHashMap<>();
+
     /** claims waiting for a dial-back check. */
     private final LinkedBlockingQueue<String> mPending = new LinkedBlockingQueue<>(64);
 
@@ -167,11 +171,25 @@ public final class RelayPeers {
         return out;
     }
 
+    /** The DEX relays among our verified peers: base URL -> when that peer was last verified or
+     *  re-claimed (epoch ms). The {@code dex-relay} records this host knows from the mesh. */
+    public Map<String, Long> dexRelays() {
+        Map<String, Long> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> e : mDex.entrySet()) {
+            Long seen = mVerified.get(e.getKey());
+            if (seen != null) {
+                out.merge(e.getValue(), seen, Math::max);
+            }
+        }
+        return out;
+    }
+
     /** Drop verified peers that have not re-claimed within the TTL. */
     public void expire() {
         long now = System.currentTimeMillis();
         mVerified.entrySet().removeIf(e -> now - e.getValue() > TTL_MS);
         mPool.keySet().retainAll(mVerified.keySet());
+        mDex.keySet().retainAll(mVerified.keySet());
     }
 
     public void stop() {
@@ -213,6 +231,12 @@ public final class RelayPeers {
             if (g != null) {
                 mVerified.put(hp, System.currentTimeMillis());
                 mPool.put(hp, com.eurobuddha.maxima.core.msg.Greeting.poolOf(g.getExtraData()));
+                String dex = com.eurobuddha.maxima.core.msg.Greeting.dexOf(g.getExtraData());
+                if (dex.isEmpty()) {
+                    mDex.remove(hp);
+                } else {
+                    mDex.put(hp, dex);
+                }
                 // Its greeting lists the peers IT verified: the fleet learns itself.
                 for (String peer : com.eurobuddha.maxima.core.msg.Greeting.peersOf(g.getExtraData())) {
                     consider(peer, mSelfHostPort);

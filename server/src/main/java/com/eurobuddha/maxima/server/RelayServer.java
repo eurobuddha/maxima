@@ -191,6 +191,48 @@ public final class RelayServer {
         mGatewayUrl = zUrl == null ? "" : zUrl.trim();
         mGatewayKey = zKey == null ? "" : zKey.trim();
     }
+
+    /** The DEX relay cape this host serves: its port, and an operator override of the public base
+     *  URL (a TLS front). 0 = none. The announced URL follows {@link #setPublicHost} so a node that
+     *  learns its address minutes after boot starts announcing without a restart. */
+    private volatile int mDexPort;
+    private volatile String mDexPublic = "";
+
+    public void setDex(int zPort, String zPublicUrl) {
+        mDexPort = Math.max(0, zPort);
+        String u = zPublicUrl == null ? "" : zPublicUrl.trim();
+        while (u.endsWith("/")) {
+            u = u.substring(0, u.length() - 1);
+        }
+        mDexPublic = u;
+    }
+
+    /** The {@code dex-relay} record we announce: the override, else {@code http://<public host>:<dex port>},
+     *  else "" (no public host known yet - nothing is announced until one is). */
+    public String dexUrl() {
+        if (mDexPort <= 0) {
+            return "";
+        }
+        if (!mDexPublic.isEmpty()) {
+            return mDexPublic;
+        }
+        return mPublicHost.isEmpty() ? "" : "http://" + mPublicHost + ":" + mDexPort;
+    }
+
+    /** Every DEX relay base URL this host knows: ourselves (when announced) plus the verified mesh
+     *  peers that advertised one, each with when it was last seen (epoch SECONDS) - what the cape's
+     *  {@code GET /dex/relays} serves so a client can bootstrap from any one relay. */
+    public java.util.Map<String, Long> dexRelays() {
+        java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+        String self = dexUrl();
+        if (!self.isEmpty()) {
+            out.put(self, System.currentTimeMillis() / 1000L);
+        }
+        for (java.util.Map.Entry<String, Long> e : mPeers.dexRelays().entrySet()) {
+            out.merge(e.getKey(), e.getValue() / 1000L, Math::max);
+        }
+        return out;
+    }
     private final MlsService mMls = new MlsService(mDirectory);
     private final Mailbox mMailbox = new Mailbox();
 
@@ -619,7 +661,7 @@ public final class RelayServer {
             }
         }
         return Greeting.commsOnly(mVersion, mPublicHost, mPort, peers, mMaxConnections, mPool,
-                mRoutes.size(), mGatewayUrl, mGatewayKey);
+                mRoutes.size(), mGatewayUrl, mGatewayKey, dexUrl());
     }
 
     /**
