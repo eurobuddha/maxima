@@ -63,3 +63,6 @@ include ':wakeproxy'
 
 // Isolated synthetic smoke app: never included in production releases.
 if (providers.gradleProperty('privateFilesCheck').isPresent()) include ':filescheck'
+
+// The Decks DEX relay cape (signed order book fan-out). Java 11, no deps. Mounted by :node and :server.
+include ':dexrelay'

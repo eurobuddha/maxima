@@ -1,0 +1,24 @@
+plugins {
+    id 'java'
+}
+
+// The Decks DEX relay "cape": an untrusted, interchangeable store-and-fan-out for Ed25519-signed order
+// envelopes and sealed trade messages (SPEC: mds/decks/SPEC.md §3-§4). Pure Java 11, ZERO dependencies,
+// its own JDK HttpServer on a public port. Rides inside parlons-node.jar and maxima-server.jar.
+// Ed25519 is verified in pure Java because two fleet boxes run JDK 11, which has no EdDSA provider.
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+tasks.withType(JavaCompile).configureEach {
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+sourceSets {
+    test { java.srcDirs = ['src/junit/java'] }
+}
