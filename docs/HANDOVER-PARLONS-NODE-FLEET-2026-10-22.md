@@ -87,9 +87,11 @@ still expires. Test: `DexDiscoveryTest.verifiedPeersAreReDialledWithoutAReClaim`
   now pass `--panel-port 9597`, so tenant panels take 9597, 9598 and so on, on loopback. Unit backups:
   `parlons-tenants.service.before-panel-port-9597`. On sally both 9587 (node) and 9597 (tenant) answer
   HTTP 200. The Pi has 0 tenants.
-- **openproject's unit has `-Dparlons.node.public=https://store.eurobuddha.com/parlons-node`**, which is
-  sally's URL. It looks copy-pasted. It was left as found; check what that flag drives before
-  correcting it.
+- **openproject had `-Dparlons.node.public=https://store.eurobuddha.com/parlons-node`** (sally's URL, copy-pasted).
+  The flag only sets the NFT-hosting base (and the advertised wallet gateway, on MegaMMR nodes; openproject is
+  not one). openproject has no `/parlons-node` front and hosted 0 NFT files, so the flag was REMOVED on
+  2026-10-22 (backup `parlons-node.service.before-node-public-fix`). If openproject ever needs NFT hosting,
+  add a TLS route to 127.0.0.1:9585 first, then set the flag to that URL.
 - openproject runs two relays: the node's on **8001**, which carries the DEX cape, and maxima-server on
   **9501**, which has no `--dex-*` flags. Peers' bootstrap lists name `78.141.237.9:9501`.
 - The Pi and vigilance logged `Invalid SyncBlock as NO PARENT` right after a restart, during catch-up.
