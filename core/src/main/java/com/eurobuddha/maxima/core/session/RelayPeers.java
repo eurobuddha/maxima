@@ -21,8 +21,9 @@ import java.util.concurrent.LinkedBlockingQueue;
  * {@link Probe#dial} (a greeting must come back, proving a live Maxima
  * endpoint), run on one background thread so the accept path never blocks.
  *
- * Verified peers expire unless re-claimed — a relay that goes away stops being
- * shared within {@link #TTL_MS}, keeping the gossip pool self-cleaning.
+ * Verified peers are re-dialled every {@link #REDIAL_MS} by this relay itself; a
+ * successful re-dial (or a re-claim) keeps them, and a relay that goes away stops
+ * being shared within {@link #TTL_MS}, keeping the gossip pool self-cleaning.
  */
 public final class RelayPeers {
 
@@ -35,8 +36,10 @@ public final class RelayPeers {
     /** A verified peer must re-claim within this window or it expires. */
     public static final long TTL_MS = 2 * 60 * 60 * 1000;
 
-    /** A verified peer that keeps re-claiming is re-dialled at most this often, so what its greeting
-     *  ADVERTISES (pool bit, dex URL) stays current. Before this, the details were captured once at the
+    /** Every verified peer is re-dialled this often - by the check thread on its own, and on a re-claim - so
+     *  what its greeting ADVERTISES (pool bit, dex URL) stays current. Re-dialling only on a re-claim left
+     *  discovery hostage to which peers happened to dial in (live 2026-10-22: eurobuddha.com listed 3 of 7 DEX
+     *  relays while maxlite listed all 7). Before this, the details were captured once at the
      *  first verification and a re-claim only refreshed the TTL: a peer that turned its DEX relay on later
      *  was never listed (seen live 2026-10-22: eurobuddha.com never learned sally's or megammr's dex URL). */
     public static final long REDIAL_MS = 10 * 60 * 1000;
@@ -216,13 +219,27 @@ public final class RelayPeers {
         mRunning = false;
     }
 
+    private void queueStale() {
+        long now = System.currentTimeMillis();
+        for (String hp : mVerified.keySet()) {
+            Long dialed = mDialed.get(hp);
+            if ((dialed == null || now - dialed >= mRedialMs) && !mPending.contains(hp)) {
+                mPending.offer(hp);
+            }
+        }
+    }
+
     private void checkLoop() {
         while (mRunning) {
             String hp;
             try {
-                hp = mPending.take();
+                hp = mPending.poll(Math.max(250, Math.min(mRedialMs, 30_000)), java.util.concurrent.TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 return;
+            }
+            if (hp == null) {
+                queueStale();   // idle: re-read every verified peer not dialled within REDIAL_MS
+                continue;
             }
             boolean known = mVerified.containsKey(hp);
             Long dialed = mDialed.get(hp);

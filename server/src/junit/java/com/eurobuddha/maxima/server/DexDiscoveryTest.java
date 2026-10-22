@@ -78,6 +78,34 @@ public class DexDiscoveryTest {
         }
     }
 
+    /** Without any re-claim from the peer, A re-dials its verified peers by itself every REDIAL_MS: discovery
+     *  must not depend on which peers happen to dial in (live 2026-10-22: eurobuddha.com stuck at 3 of 7). */
+    @Test
+    public void verifiedPeersAreReDialledWithoutAReClaim() throws Exception {
+        int pa = RelaySelfAnnounceTest.freePort();
+        int pb = RelaySelfAnnounceTest.freePort();
+        RelayServer a = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), pa, RelaySelfAnnounceTest.PROTO);
+        RelayServer b = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), pb, RelaySelfAnnounceTest.PROTO);
+        a.setPublicHost("127.0.0.1");
+        b.setPublicHost("127.0.0.1");
+        a.peers().setAllowAllIp(true);
+        b.peers().setAllowAllIp(true);
+        a.peers().setRedialMs(500);   // set before the check thread's idle wait starts
+        try {
+            b.start();
+            a.start();
+            a.setPeers(Collections.singletonList("127.0.0.1:" + pb));
+            assertTrue("A verified B (no dex yet)",
+                    RelaySelfAnnounceTest.waitFor(() -> a.peers().share().contains("127.0.0.1:" + pb), 15));
+            b.setDex(19796, "https://dex-b2.example.com");     // B turns its relay on later and never greets A again
+            assertTrue("A re-dialled B on its own and found its dex URL",
+                    RelaySelfAnnounceTest.waitFor(() -> a.dexRelays().containsKey("https://dex-b2.example.com"), 15));
+        } finally {
+            a.stop();
+            b.stop();
+        }
+    }
+
     @Test
     public void noPublicHostMeansNoRecord() throws Exception {
         RelayServer r = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), 9501, RelaySelfAnnounceTest.PROTO);
