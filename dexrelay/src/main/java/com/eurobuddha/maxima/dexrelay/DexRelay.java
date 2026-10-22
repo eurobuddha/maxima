@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   GET  /dex/relays                       {ok,relays:[{url,seen}]}  every DEX relay this host knows (itself included)
  */
 public final class DexRelay {
-    public static final String VERSION = "0.1.3";
+    public static final String VERSION = "0.1.4";
     static final int MAX_HOLD_SECONDS = 25;
     static final int MAX_CONCURRENT_HOLDS = 512;
     static final long SWEEP_MS = 30_000;
@@ -129,6 +129,7 @@ public final class DexRelay {
         StringBuilder b = new StringBuilder(256).append("{\"ok\":true,\"relays\":[");
         boolean first = true;
         for (Map.Entry<String, Long> e : known.entrySet()) {
+            if (wildcard(e.getKey())) continue;   // http://0.0.0.0:9602 is where we LISTEN, never where anyone can reach us
             if (!first) b.append(',');
             first = false;
             b.append("{\"url\":\"");
@@ -136,6 +137,14 @@ public final class DexRelay {
             b.append("\",\"seen\":").append(e.getValue() == null ? 0 : e.getValue()).append('}');
         }
         send(ex, 200, b.append("]}").toString());
+    }
+
+    /** A wildcard bind address (0.0.0.0, ::) is not a reachable URL; seen live 2026-10-22 for the first second after boot. */
+    static boolean wildcard(String url) {
+        String u = url == null ? "" : url.toLowerCase(java.util.Locale.ROOT);
+        int s = u.indexOf("://");
+        String host = s < 0 ? u : u.substring(s + 3);
+        return host.startsWith("0.0.0.0") || host.startsWith("[::]") || host.startsWith("::") || host.isEmpty();
     }
 
     private void publish(HttpExchange ex) throws IOException {

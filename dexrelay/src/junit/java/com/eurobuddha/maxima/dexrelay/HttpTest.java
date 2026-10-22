@@ -58,12 +58,21 @@ public class HttpTest {
         known.put("https://dex.example.com", 1760000000L);
         known.put("http://203.0.113.7:19798", 1760000100L);
         known.put("http://evil\"}", 1L);                      // a quote can never break the JSON
+        known.put("http://0.0.0.0:9602", 2L);                  // a wildcard bind address is never advertised
+        known.put("http://[::]:9602", 3L);
         relay.setRelays(() -> known);
         r = get("/dex/relays");
         assertEquals(200, r.code);
         assertEquals("{\"ok\":true,\"relays\":[{\"url\":\"https://dex.example.com\",\"seen\":1760000000},"
                 + "{\"url\":\"http://203.0.113.7:19798\",\"seen\":1760000100},{\"url\":\"http://evil}\",\"seen\":1}]}", r.body);
         assertEquals(405, post("/dex/relays", "{}").code);
+    }
+
+    @Test public void wildcardBindIsNotAReachableUrl() {
+        assertTrue(DexRelay.wildcard("http://0.0.0.0:9602"));
+        assertTrue(DexRelay.wildcard("http://[::]:9602"));
+        assertFalse(DexRelay.wildcard("http://127.0.0.1:19702"));
+        assertFalse(DexRelay.wildcard("https://eurobuddha.com/dex-relay"));
     }
 
     @Test public void longPollWakesOnPublish() throws Exception {
