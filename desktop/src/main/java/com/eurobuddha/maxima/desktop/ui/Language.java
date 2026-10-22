@@ -45,7 +45,7 @@ public final class Language {
     }
 
     public static boolean supported(String code) {
-        return "en".equals(code) || "zh-Hans".equals(code) || "ru".equals(code);
+        return "en".equals(code) || "zh-Hans".equals(code) || "ru".equals(code) || "uk".equals(code);
     }
     private static String savedLanguage() {
         String code = preferences.get(KEY, "");
@@ -70,10 +70,10 @@ public final class Language {
 
     /** Returns false when the first-launch chooser is closed without making a choice. */
     public static boolean chooser(Component parent) {
-        String[] codes = {"en", "zh-Hans", "ru"};
-        String[] names = {"English", "简体中文", "Русский"};
+        String[] codes = {"en", "zh-Hans", "ru", "uk"};
+        String[] names = {"English", "简体中文", "Русский", "Українська"};
         int selected = java.util.Arrays.asList(codes).indexOf(code());
-        int choice = JOptionPane.showOptionDialog(parent, "Language · 语言 · Язык", "Parlons!",
+        int choice = JOptionPane.showOptionDialog(parent, "Language · 语言 · Язык · Мова", "Parlons!",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, names, names[selected]);
         if (choice < 0) return false;
         choose(codes[choice]);
@@ -173,7 +173,7 @@ public final class Language {
         return out.toString();
     }
 
-    // CLDR cardinal rules for the three supported languages (integer counts and decimal fallback).
+    // CLDR cardinal rules (integer counts and decimal fallback). Russian and Ukrainian share one rule set.
     static String plural(String code, double count) {
         double n = Math.abs(count);
         if ("zh-Hans".equals(code)) return "other";

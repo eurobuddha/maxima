@@ -511,7 +511,13 @@ public final class ParlonsRemote {
      *  Carries a client idempotency key: rpc() RETRIES on a lost reply, and without the key a
      *  retried M_PAY would queue a SECOND build — one tap, two payments. */
     public JSONObject pay(String zPeer, String zAmount, String zMemo) throws Exception {
+        return pay(zPeer, zAmount, zMemo, "0x00");
+    }
+
+    /** As {@link #pay(String, String, String)} in any token: "0x00" Minima, or a full token id (MxUSD). */
+    public JSONObject pay(String zPeer, String zAmount, String zMemo, String zTokenId) throws Exception {
         JSONObject p = new JSONObject();
+        p.put("tokenid", zTokenId == null ? "0x00" : zTokenId);
         p.put("peer", zPeer);
         p.put("amount", zAmount);
         p.put("memo", zMemo == null ? "" : zMemo);
@@ -559,7 +565,12 @@ public final class ParlonsRemote {
     /** Send from the ACCOUNT wallet to any Minima address (pid-idempotent). Result arrives
      *  as a walletsent/walletfail push carrying this pid. */
     public JSONObject walletSend(String zTo, String zAmount, String zPid) throws Exception {
+        return walletSend(zTo, zAmount, zPid, "0x00");
+    }
+
+    public JSONObject walletSend(String zTo, String zAmount, String zPid, String zTokenId) throws Exception {
         JSONObject p = new JSONObject();
+        p.put("tokenid", zTokenId == null ? "0x00" : zTokenId);
         p.put("to", zTo);
         p.put("amount", zAmount);
         p.put("pid", zPid);
@@ -571,7 +582,12 @@ public final class ParlonsRemote {
      *  push (matching this pid), for THIS device to broadcast via its own minimaCore (else
      *  gateway). Keeps signing single-source on the VPS; the relay rides the device's node. */
     public JSONObject buildSend(String zTo, String zAmount, String zPid) throws Exception {
+        return buildSend(zTo, zAmount, zPid, "0x00");
+    }
+
+    public JSONObject buildSend(String zTo, String zAmount, String zPid, String zTokenId) throws Exception {
         JSONObject p = new JSONObject();
+        p.put("tokenid", zTokenId == null ? "0x00" : zTokenId);
         p.put("to", zTo);
         p.put("amount", zAmount);
         p.put("pid", zPid);

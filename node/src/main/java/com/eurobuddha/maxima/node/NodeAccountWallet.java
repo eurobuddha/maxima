@@ -134,12 +134,12 @@ final class NodeAccountWallet implements AccountWallet {
     /** Build + sign + BROADCAST in one node command. A node-reported refusal (insufficient
      *  funds, bad address, locked wallet…) is a safe {@link Rejected}; anything else is
      *  outcome-unknown. */
-    @Override public Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+    @Override public Payment build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception {
         if (mAddress == null) {
             throw new Rejected("the node wallet is still opening");
         }
         try {
-            NodeWallet.SendResult r = NodeWallet.send(zToAddress, zAmount.toString());
+            NodeWallet.SendResult r = NodeWallet.send(zToAddress, zAmount.toString(), zTokenId);
             return new Payment(r.txid, "", "");
         } catch (NodeWallet.WalletException we) {
             throw new Rejected(we.getMessage());

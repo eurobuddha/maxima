@@ -86,6 +86,11 @@ public final class NodeWallet {
      * @throws WalletException if the node rejects the send (insufficient funds, bad address, …)
      */
     public static SendResult send(String zToAddress, String zAmount) throws Exception {
+        return send(zToAddress, zAmount, "0x00");
+    }
+
+    /** As {@link #send(String, String)} for any token: "0x00" is Minima, else a full token id (MxUSD...). */
+    public static SendResult send(String zToAddress, String zAmount, String zTokenId) throws Exception {
         // Interpolating into a command string: reject anything that isn't a bare address / decimal so
         // a caller can never smuggle a second ';'-separated command (the node splits on ';' and runs
         // each) — same command-injection class the gateway guards against.
@@ -95,7 +100,11 @@ public final class NodeWallet {
         if (zAmount == null || !zAmount.matches("[0-9]+(\\.[0-9]+)?")) {
             throw new WalletException("refusing to send a malformed amount: " + zAmount);
         }
-        String cmd = "send address:" + zToAddress + " amount:" + zAmount;
+        if (!(zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId) || zTokenId.matches("0x[0-9A-Fa-f]{64}"))) {
+            throw new WalletException("refusing to send a malformed token id: " + zTokenId);
+        }
+        String cmd = "send address:" + zToAddress + " amount:" + zAmount
+                + (zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId) ? "" : " tokenid:" + zTokenId);
         Object r = run(cmd);
         JSONObject top = (r instanceof JSONObject) ? (JSONObject) r : new JSONObject();
         boolean status = Boolean.TRUE.equals(top.get("status"));

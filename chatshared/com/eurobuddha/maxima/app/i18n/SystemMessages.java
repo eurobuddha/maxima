@@ -1397,6 +1397,7 @@ public final class SystemMessages {
             case "⚠ unconfirmed — check the balance before paying again": return R.string.l10n_android_chat_unconfirmed;
             case "What do the ticks mean?": return R.string.l10n_android_chat_ticks_help;
             case "No shared group key — removing someone really removes them.": return R.string.l10n_android_chat_no_group_key;
+            case "Amount (MxUSD)": return R.string.l10n_android_chat_amount_mxusd;
             case "Add this contact?": return R.string.l10n_android_chat_add_unnamed;
             case "Opening your account wallet…": return R.string.l10n_cloud_wallet_opening;
             case "Chat-only account": return R.string.l10n_cloud_wallet_chat_only;
@@ -1585,12 +1586,12 @@ public final class SystemMessages {
             case "Time": return R.string.l10n_node_history_time;
             case "TxPoW ID": return R.string.l10n_node_history_txpow_id;
             case "Per-token effect": return R.string.l10n_node_history_effect;
-            case "Inputs": return R.string.l10n_node_history_inputs;
             default: return 0;
         }
     }
     private static int resource6(String value) {
         switch (value) {
+            case "Inputs": return R.string.l10n_node_history_inputs;
             case "Outputs": return R.string.l10n_node_history_outputs;
             case "YOURS": return R.string.l10n_node_history_yours;
             case "NOT YOURS": return R.string.l10n_node_history_not_yours;
@@ -1846,12 +1847,12 @@ public final class SystemMessages {
             case "Start mint →": return R.string.l10n_node_collection_start;
             case "Fetching creator identity…": return R.string.l10n_node_collection_fetch_creator;
             case "Could not get a creator key from the node.": return R.string.l10n_node_collection_creator_missing;
-            case "Stamping paused — an item is missing its image. Pick it below; stamping is irreversible, so the engine refuses to stamp an imageless item.": return R.string.l10n_node_collection_paused_images;
             default: return 0;
         }
     }
     private static int resource7(String value) {
         switch (value) {
+            case "Stamping paused — an item is missing its image. Pick it below; stamping is irreversible, so the engine refuses to stamp an imageless item.": return R.string.l10n_node_collection_paused_images;
             case "This collection cannot be completed.\n\nIts transactions exceed the 64KB chain limit, and the token record that causes it was fixed when the token was created — it cannot be edited or shrunk. Nothing further will be attempted.\n\nBury it below to clear it, or leave it: the coins are inert.": return R.string.l10n_node_collection_stuck;
             case "✓ STAMPED": return R.string.l10n_node_collection_stamped;
             case "↻  Re-post the create transaction": return R.string.l10n_node_collection_repost_link;
@@ -2107,12 +2108,12 @@ public final class SystemMessages {
             case "Show your rewards or specify your UserID for the Incentive Cash program": return R.string.l10n_command_help_incentivecash_brief;
             case "Check the speed of header hashing with JNI and JAVA calls. Defaults to 1000000 attempts": return R.string.l10n_command_help_jniminingtest_brief;
             case "Check the speed of header hashing with JNI calls. Defaults to 1000 hashes": return R.string.l10n_command_help_jnitest_brief;
-            case "Get a list of all your public keys or create a new key": return R.string.l10n_command_help_keys_brief;
             default: return 0;
         }
     }
     private static int resource8(String value) {
         switch (value) {
+            case "Get a list of all your public keys or create a new key": return R.string.l10n_command_help_keys_brief;
             case "Enable full logs for various parts of Minima": return R.string.l10n_command_help_logs_brief;
             case "Run maths with Minima precision MiniNumber": return R.string.l10n_command_help_maths_brief;
             case "Get Info on or Import / Export the MegaMMR data": return R.string.l10n_command_help_megammr_brief;
@@ -2368,12 +2369,12 @@ public final class SystemMessages {
             case "Validate the signature and webvalidate link in a token.": return R.string.l10n_command_help_detail164;
             case "The tokenid of the custom token/NFT to validate.": return R.string.l10n_command_help_detail165;
             case "Developer command. Currently a no-op in this node build: the enable: shown in older": return R.string.l10n_command_help_detail166;
-            case "summaries is disabled and is rejected as an invalid parameter.": return R.string.l10n_command_help_detail167;
             default: return 0;
         }
     }
     private static int resource9(String value) {
         switch (value) {
+            case "summaries is disabled and is rejected as an invalid parameter.": return R.string.l10n_command_help_detail167;
             case "Show the TxPoW in the mempool - the transactions and blocks the node holds that are not": return R.string.l10n_command_help_detail168;
             case "yet in the cascade - with counts of transactions and blocks.": return R.string.l10n_command_help_detail169;
             case "Generate a random hash value, defaults to 32 bytes.": return R.string.l10n_command_help_detail170;
@@ -2629,12 +2630,12 @@ public final class SystemMessages {
             case "Search for coins that are relevant to you or in the unpruned chain.": return R.string.l10n_command_help_detail351;
             case "true or false, true will only return coins you are tracking.": return R.string.l10n_command_help_detail352;
             case "false will search all coins in the unpruned chain.": return R.string.l10n_command_help_detail353;
-            case "Default is false unless no other parameters are provided.": return R.string.l10n_command_help_detail354;
             default: return 0;
         }
     }
     private static int resource10(String value) {
         switch (value) {
+            case "Default is false unless no other parameters are provided.": return R.string.l10n_command_help_detail354;
             case "true only, filter out coins that are not sendable, they might be locked in a contract.": return R.string.l10n_command_help_detail355;
             case "Default is to return sendable and unsendable coins.": return R.string.l10n_command_help_detail356;
             case "A coinid, to search for a single coin.": return R.string.l10n_command_help_detail357;
@@ -2890,12 +2891,12 @@ public final class SystemMessages {
             case "clearlogin : Clear MySQL login details.": return R.string.l10n_command_help_detail587;
             case "autobackup : Automatically save archive data to MySQL DB. Use with enable. Also stores all TxPoW the node sees.": return R.string.l10n_command_help_detail588;
             case "findtxpow : Search for an individual TxPoW (only works if autobackup is enabled).": return R.string.l10n_command_help_detail589;
-            case "resync : Perform a chain or seed re-sync from the specified MySQL db.": return R.string.l10n_command_help_detail590;
             default: return 0;
         }
     }
     private static int resource11(String value) {
         switch (value) {
+            case "resync : Perform a chain or seed re-sync from the specified MySQL db.": return R.string.l10n_command_help_detail590;
             case "Will shutdown the node so you must restart it once complete.": return R.string.l10n_command_help_detail591;
             case "wipe :  Be careful. Wipe the MySQL db.": return R.string.l10n_command_help_detail592;
             case "h2export : export the MySQL db to an archive gzip file which can be used to resync a node.": return R.string.l10n_command_help_detail593;
@@ -3151,12 +3152,12 @@ public final class SystemMessages {
             case "Too many requests are in progress. Try again shortly.": return R.string.l10n_ios_error_busy;
             case "Request cancelled.": return R.string.l10n_ios_error_cancelled;
             case "Network unavailable. Check your connection and try again.": return R.string.l10n_ios_error_network_unavailable;
-            case "No directory record.": return R.string.l10n_ios_error_no_record;
             default: return 0;
         }
     }
     private static int resource12(String value) {
         switch (value) {
+            case "No directory record.": return R.string.l10n_ios_error_no_record;
             case "The account directory is unavailable and no two relays agree on its address.": return R.string.l10n_ios_error_relay_consensus;
             case "The directory returned no address entry.": return R.string.l10n_ios_error_no_directory_entry;
             case "The directory reply failed verification. A possible redirect attack was rejected.": return R.string.l10n_ios_error_nonce_mismatch;
@@ -3266,6 +3267,7 @@ public final class SystemMessages {
             case "peer, mime and data required": return R.string.l10n_server_error_media_required;
             case "payments are one-to-one for now": return R.string.l10n_server_error_payments_direct;
             case "that amount doesn't look right": return R.string.l10n_server_error_amount_invalid;
+            case "that token id doesn't look right": return R.string.l10n_server_error_token_id_invalid;
             case "the amount must be more than zero": return R.string.l10n_server_error_amount_positive;
             case "no wallet address from them yet — ask them to open this chat": return R.string.l10n_server_error_recipient_wallet;
             case "Update the Parlons Node server to import an identity from the app.": return R.string.l10n_server_error_identity_update;
@@ -3359,6 +3361,7 @@ public final class SystemMessages {
             case "peer, mime and data required": return true;
             case "payments are one-to-one for now": return true;
             case "that amount doesn't look right": return true;
+            case "that token id doesn't look right": return true;
             case "the amount must be more than zero": return true;
             case "no wallet address from them yet — ask them to open this chat": return true;
             case "Update the Parlons Node server to import an identity from the app.": return true;

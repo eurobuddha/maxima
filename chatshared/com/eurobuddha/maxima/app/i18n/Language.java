@@ -28,8 +28,8 @@ import java.util.WeakHashMap;
  * stay literal. Locale changes never recreate an activity or its transfer/call workers. */
 public final class Language {
     private static final String PREFS = "parlons_language";
-    private static final String[] CODES = {"en", "zh-Hans", "ru"};
-    private static final String[] NAMES = {"English", "简体中文", "Русский"};
+    private static final String[] CODES = {"en", "zh-Hans", "ru", "uk"};
+    private static final String[] NAMES = {"English", "简体中文", "Русский", "Українська"};
     private static final Map<View, Map<String, Binding>> bindings = new WeakHashMap<>();
     private static Application application;
     private static volatile String current = "en";
@@ -272,7 +272,7 @@ public final class Language {
         if ((existing != null && existing.isShowing()) || activity.isFinishing() || activity.isDestroyed()) return;
         int selected = -1;
         if (hasChoice(activity)) for (int i = 0; i < CODES.length; i++) if (CODES[i].equals(current)) selected = i;
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle("Language · 语言 · Язык")
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle("Language · 语言 · Язык · Мова")
                 .setSingleChoiceItems(NAMES, selected, (dialog, which) -> { select(activity, CODES[which]); dialog.dismiss(); })
                 .setCancelable(!required);
         if (!required) builder.setNegativeButton(text(activity, R.string.l10n_language_close), null);

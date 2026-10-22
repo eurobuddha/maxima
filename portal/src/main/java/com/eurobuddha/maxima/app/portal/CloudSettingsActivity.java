@@ -213,7 +213,7 @@ public final class CloudSettingsActivity extends AppCompatActivity {
         com.eurobuddha.maxima.app.i18n.Language.setText(languageHelp,
                 com.eurobuddha.maxima.app.i18n.Language.msg(R.string.l10n_language_description));
         languageCard.addView(languageHelp);
-        TextView languageButton = PortalUi.ghost(c, "English · 简体中文 · Русский");
+        TextView languageButton = PortalUi.ghost(c, "English · 简体中文 · Русский · Українська");
         com.eurobuddha.maxima.app.i18n.Language.description(languageButton,
                 com.eurobuddha.maxima.app.i18n.Language.msg(R.string.l10n_language_change));
         languageButton.setOnClickListener(v -> com.eurobuddha.maxima.app.i18n.Language.choose(this, false));

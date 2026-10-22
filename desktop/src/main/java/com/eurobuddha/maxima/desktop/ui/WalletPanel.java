@@ -5,6 +5,7 @@ import com.eurobuddha.maxima.desktop.wallet.DesktopWallet;
 import com.eurobuddha.maxima.desktop.wallet.DesktopWalletLedger;
 import com.eurobuddha.maxima.desktop.wallet.DesktopWalletPublisher;
 import com.eurobuddha.wallet.CoinSelector;
+import com.eurobuddha.wallet.TokenInputs;
 import com.eurobuddha.wallet.TxnFactory;
 
 import org.minima.objects.base.MiniNumber;
@@ -477,6 +478,7 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
         to.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(to);
         body.add(k.vgap(8));
+        javax.swing.JRadioButton usd = currencyChoice(body);
         JTextField amt = k.field(Language.msg("wallet.amountHint"));
         amt.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         amt.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -490,7 +492,7 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
         body.add(r);
         body.add(k.vgap(6));
         body.add(status);
-        JDialog d = dialog(Language.msg("wallet.sendMinima"), body, 440);
+        JDialog d = dialog(Language.msg("chat.send"), body, 440);
         sign.onClick(() -> {
             String addr = to.getText().trim();
             String a = amt.getText().trim();
@@ -502,13 +504,33 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
             if (!amount.isMore(MiniNumber.ZERO)) { k.setSub(status, Language.msg("desktopChat.positiveAmount")); return; }
             sign.setButtonEnabled(false);
             k.setSub(status, Language.msg("wallet.selecting"));
-            new Thread(() -> doSend(w, addr, amount, status, sign, d), "wallet-send").start();
+            final String tokenId = usd.isSelected() ? TokenInputs.MXUSD_TOKENID : TokenInputs.MINIMA_TOKENID;
+            new Thread(() -> doSend(w, addr, amount, tokenId, status, sign, d), "wallet-send").start();
         });
     }
 
-    private void doSend(DesktopWallet w, String to, MiniNumber amount,
+    /** Minima / MxUSD radio pair added to {@code zBody}; returns the MxUSD button. */
+    static javax.swing.JRadioButton currencyChoice(JComponent zBody) {
+        javax.swing.JRadioButton minima = new javax.swing.JRadioButton("Minima", true);
+        javax.swing.JRadioButton usd = new javax.swing.JRadioButton(TokenInputs.MXUSD_NAME);
+        javax.swing.ButtonGroup g = new javax.swing.ButtonGroup();
+        g.add(minima);
+        g.add(usd);
+        JPanel row = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (javax.swing.JRadioButton b : new javax.swing.JRadioButton[]{minima, usd}) {
+            b.setOpaque(false);
+            row.add(b);
+        }
+        zBody.add(row);
+        zBody.add(Box.createVerticalStrut(6));
+        return usd;
+    }
+
+    private void doSend(DesktopWallet w, String to, MiniNumber amount, String tokenId,
                         JLabel status, DKit.HoverButton sign, JDialog d) {
-        signAndPublish(w, to, amount, new PayResult() {
+        signAndPublish(w, to, amount, tokenId, new PayResult() {
             public void onStatus(String s) { uiStatus(status, s); }
             public void onTxid(String txid) {
                 uiStatus(status, "Sent ⛏ (mining into a block)");
@@ -565,7 +587,7 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
      * owns it) so the one-time-signature key-use counter is never raced by two
      * instances — the WOTS key-reuse fund-loss hazard. Call OFF the EDT.
      */
-    private void signAndPublish(DesktopWallet w, String to, MiniNumber amount, PayResult cb) {
+    private void signAndPublish(DesktopWallet w, String to, MiniNumber amount, String tokenId, PayResult cb) {
         try {
             // 1. coins for our address (read, via gateway/node).
             final org.json.JSONObject[] resp = new org.json.JSONObject[1];
@@ -589,24 +611,27 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
             org.minima.utils.json.JSONObject full = (org.minima.utils.json.JSONObject)
                     new org.minima.utils.json.parser.JSONParser().parse(resp[0].toString());
             org.minima.utils.json.JSONArray coins = (org.minima.utils.json.JSONArray) full.get("response");
-            List<org.minima.utils.json.JSONObject> sel = CoinSelector.selectToCover(coins, "0x00", amount);
-            List<TxnFactory.InputCoin> inputs = new ArrayList<>();
-            for (org.minima.utils.json.JSONObject cn : sel) {
-                inputs.add(TxnFactory.fromCoinJson(cn, DesktopWallet.KEY_INDEX));
-            }
+            //    Token amounts are scaled to raw; token inputs come byte-exact via coinexport.
+            final boolean minima = TokenInputs.isMinima(tokenId);
+            final MiniNumber raw = TokenInputs.rawAmount(coins, tokenId, amount);
+            List<org.minima.utils.json.JSONObject> sel =
+                    CoinSelector.selectToCover(coins, minima ? "0x00" : tokenId, raw);
+            List<TxnFactory.InputCoin> inputs = TokenInputs.resolve(sel, DesktopWallet.KEY_INDEX,
+                    coinid -> coinExportHex(coinid));
 
             // 3. build + SIGN locally (this reserves a one-time key use).
             cb.onStatus("Signing on this device…");
             TxnFactory factory = new TxnFactory(w.core());
-            final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, amount,
-                    TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
+            final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, raw,
+                    TokenInputs.tokenData(tokenId), MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
 
             // 4. publish the SIGNED txn (relay only) via gateway/node.
             cb.onStatus("Publishing via " + mPub.backendName() + "…");
             mPub.publish(built.getTxnImportCommand(), built.getID(), built.getTxnPostCommand(),
                     new DesktopWalletPublisher.Cb() {
                 public void onResult(org.json.JSONObject r) {
-                    mLedger.add(true, amount.toString(), "MINIMA", to, built.getID(), "0x00");
+                    mLedger.add(true, amount.toString(), TokenInputs.nameOf(tokenId), to, built.getID(),
+                            minima ? "0x00" : tokenId);
                     mLastFetch = 0;
                     cb.onTxid(built.getID());
                 }
@@ -614,10 +639,38 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
             });
         } catch (CoinSelector.InsufficientFundsException ife) {
             cb.onError("Not enough confirmed funds.");
+        } catch (IllegalStateException ise) {
+            cb.onError(String.valueOf(ise.getMessage()));
         } catch (Exception e) {
             // Never hand a null message downstream — the UI does .toLowerCase() on it.
             cb.onError(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
+    }
+
+    /** {@code coinexport} through the same publisher (node or gateway), awaited. OFF the EDT. */
+    private String coinExportHex(String zCoinId) throws Exception {
+        final org.json.JSONObject[] resp = new org.json.JSONObject[1];
+        final String[] err = new String[1];
+        final Object lk = new Object();
+        mPub.coinExport(zCoinId, new DesktopWalletPublisher.Cb() {
+            public void onResult(org.json.JSONObject r) { synchronized (lk) { resp[0] = r; lk.notifyAll(); } }
+            public void onError(String m) { synchronized (lk) { err[0] = m; lk.notifyAll(); } }
+        });
+        synchronized (lk) {
+            long deadline = System.currentTimeMillis() + 45_000;
+            while (resp[0] == null && err[0] == null) {
+                long rem = deadline - System.currentTimeMillis();
+                if (rem <= 0) break;
+                lk.wait(rem);
+            }
+        }
+        if (resp[0] == null) throw new IllegalStateException(err[0] != null ? err[0] : "coinexport timeout");
+        Object r = resp[0].opt("response");
+        if (r instanceof org.json.JSONObject) {
+            org.json.JSONObject o = (org.json.JSONObject) r;
+            return o.optString("data", o.optString("coin", "")).trim();
+        }
+        return r == null ? null : String.valueOf(r).trim();
     }
 
     /** Open the single wallet instance if it isn't already (blocking; OFF the EDT). */
@@ -644,9 +697,14 @@ public final class WalletPanel extends JPanel implements MaximaWindow.Tab, Maxim
      * payment bubble.
      */
     public void requestPayment(String toAddr, MiniNumber amount, PayResult cb) {
+        requestPayment(toAddr, amount, TokenInputs.MINIMA_TOKENID, cb);
+    }
+
+    /** As {@link #requestPayment(String, MiniNumber, PayResult)} in Minima or a token (MxUSD). */
+    public void requestPayment(String toAddr, MiniNumber amount, String tokenId, PayResult cb) {
         try {
             DesktopWallet w = ensureWalletOpenBlocking();
-            signAndPublish(w, toAddr, amount, cb);
+            signAndPublish(w, toAddr, amount, tokenId, cb);
         } catch (Exception e) {
             cb.onError(e.getMessage() == null ? "wallet unavailable" : e.getMessage());
         }

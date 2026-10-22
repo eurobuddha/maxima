@@ -1551,7 +1551,7 @@
     <string name="l10n_wallet_transaction_id" formatted="false">"交易 ID"</string>
     <string name="l10n_wallet_transaction" formatted="false">"交易"</string>
     <!-- Arguments: backend -->
-    <string name="l10n_wallet_send_help">"发送 MINIMA。交易在此设备上构建并签名；仅通过%1$s转发已签名的交易。"</string>
+    <string name="l10n_wallet_send_help">"发送 MINIMA 或 MxUSD。交易在此设备上构建并签名；仅通过%1$s转发已签名的交易。"</string>
     <string name="l10n_wallet_connected_node" formatted="false">"已连接的节点"</string>
     <string name="l10n_wallet_gateway" formatted="false">"网关"</string>
     <string name="l10n_wallet_address_hint" formatted="false">"Mx… 地址"</string>
@@ -1812,7 +1812,8 @@
     <string name="l10n_android_chat_pay_name">"向 %1$s 付款"</string>
     <!-- Arguments: amount -->
     <string name="l10n_android_chat_send_amount">"发送 %1$s MINIMA？"</string>
-    <string name="l10n_android_chat_amount_mxusd">"金额（MxUSD）"</string>
+    <string name="l10n_android_chat_amount_mxusd" formatted="false">"金额（MxUSD）"</string>
+    <!-- Arguments: amount, token -->
     <string name="l10n_android_chat_send_amount_token">"发送 %1$s %2$s？"</string>
     <!-- Arguments: name -->
     <string name="l10n_android_chat_confirm_payment">"收款人：%1$s\n\n此操作将签署并广播真实交易，无法撤销。"</string>
@@ -4210,6 +4211,7 @@
     <string name="l10n_server_error_media_required" formatted="false">"需要接收方、MIME 类型和数据"</string>
     <string name="l10n_server_error_payments_direct" formatted="false">"付款目前仅支持一对一聊天"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"金额格式不正确"</string>
+    <string name="l10n_server_error_token_id_invalid" formatted="false">"该代币 ID 看起来不正确"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"金额必须大于零"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"尚未收到对方的钱包地址，请让对方打开此聊天"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"请更新 Parlons Node 服务器，以便从应用导入身份。"</string>

@@ -1589,6 +1589,10 @@ public final class ParlonsControl implements AutoCloseable {
             String memoRaw = str(in, "memo");
             final String memo = memoRaw.length() > 300 ? memoRaw.substring(0, 300) : memoRaw;
             String pid = str(in, "pid");
+            final String tokenid = tokenIdOf(in);
+            if (tokenid == null) {
+                return bytes(err("that token id doesn't look right"));
+            }
             final Contact c = mNode.contact(peer);
             if (c == null) {
                 return bytes(err("unknown contact " + peer));
@@ -1636,8 +1640,8 @@ public final class ParlonsControl implements AutoCloseable {
                 ChatEngine.Entry e = null;
                 boolean published = false;
                 try {
-                    AccountWallet.Payment built = mWallet.build(to, amt);
-                    e = mChat.beginPayment(c, amt.toString(), "Minima", memo, built.txid);
+                    AccountWallet.Payment built = mWallet.build(to, amt, tokenid);
+                    e = mChat.beginPayment(c, amt.toString(), tokenName(tokenid), memo, built.txid);
                     mWallet.publish(built);
                     published = true;
                     boolean told = mChat.completePayment(c, e);
@@ -1754,6 +1758,10 @@ public final class ParlonsControl implements AutoCloseable {
             String to = str(in, "to").trim();
             String amount = str(in, "amount").trim();
             String pid = str(in, "pid");
+            final String tokenid = tokenIdOf(in);
+            if (tokenid == null) {
+                return bytes(err("that token id doesn't look right"));
+            }
             // 0x must be a FULL address (64 hex) — a truncated paste would build+sign to a
             // 2-byte unspendable output and burn a key use. Mx is checksummed by the engine.
             if (!to.matches("Mx[0-9A-Z]+") && !to.matches("0x[0-9A-Fa-f]{64}")) {
@@ -1788,13 +1796,14 @@ public final class ParlonsControl implements AutoCloseable {
             final String fto = to;
             mSendExec.execute("wallet", () -> {
                 try {
-                    AccountWallet.Payment built = mWallet.build(fto, amt);
+                    AccountWallet.Payment built = mWallet.build(fto, amt, tokenid);
                     mWallet.publish(built);
                     mNode.log("wallet send " + amt + " → " + fto + " txid " + built.txid);
                     JSONObject ev = new JSONObject();
                     ev.put("type", "walletsent");
                     ev.put("to", fto);
                     ev.put("amount", amt.toString());
+                    ev.put("tokenid", tokenid);
                     ev.put("txid", built.txid);
                     ev.put("pid", fpid);   // the device gates its detach-watch flip on this
                     push(ev);
@@ -1832,6 +1841,10 @@ public final class ParlonsControl implements AutoCloseable {
             String to = str(in, "to").trim();
             String amount = str(in, "amount").trim();
             String pid = str(in, "pid");
+            final String tokenid = tokenIdOf(in);
+            if (tokenid == null) {
+                return bytes(err("that token id doesn't look right"));
+            }
             if (!to.matches("Mx[0-9A-Z]+") && !to.matches("0x[0-9A-Fa-f]{64}")) {
                 return bytes(err("that doesn't look like a full Minima address"));
             }
@@ -1867,12 +1880,13 @@ public final class ParlonsControl implements AutoCloseable {
             final String fto = to;
             mSendExec.execute("wallet", () -> {
                 try {
-                    AccountWallet.Payment built = mWallet.build(fto, amt);   // reserve+sign; NO publish
+                    AccountWallet.Payment built = mWallet.build(fto, amt, tokenid);   // reserve+sign; NO publish
                     mNode.log("wallet build " + amt + " → " + fto + " txid " + built.txid);
                     JSONObject ev = new JSONObject();
                     ev.put("type", "walletbuilt");
                     ev.put("to", fto);
                     ev.put("amount", amt.toString());
+                    ev.put("tokenid", tokenid);
                     ev.put("txid", built.txid);
                     ev.put("importcmd", built.importCmd);   // signed txnimport — the device broadcasts it
                     ev.put("postcmd", built.postCmd);
@@ -2712,4 +2726,21 @@ public final class ParlonsControl implements AutoCloseable {
     private static byte[] bytes(JSONObject o) {
         return o.toString().getBytes(StandardCharsets.UTF_8);
     }
+
+    /** MxUSD, the Minima dollar-pegged token. */
+    static final String MXUSD_TOKENID = "0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90";
+
+    /** The optional {@code tokenid} of a payment request: "0x00" when absent, null when malformed
+     *  (it is interpolated into node commands, so only Minima or a full 32-byte id passes). */
+    static String tokenIdOf(JSONObject zIn) {
+        String t = str(zIn, "tokenid").trim();
+        if (t.isEmpty() || "0x00".equalsIgnoreCase(t)) return "0x00";
+        return t.matches("0x[0-9A-Fa-f]{64}") ? t : null;
+    }
+
+    static String tokenName(String zTokenId) {
+        if ("0x00".equalsIgnoreCase(zTokenId)) return "Minima";
+        return MXUSD_TOKENID.equalsIgnoreCase(zTokenId) ? "MxUSD" : zTokenId;
+    }
+
 }

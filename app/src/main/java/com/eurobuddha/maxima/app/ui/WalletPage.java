@@ -617,7 +617,7 @@ public final class WalletPage implements Page {
         body.addView(btn, marginBottom(dp(6)));
         body.addView(status);
 
-        BottomSheetDialog d = sheet(m(R.string.l10n_wallet_send_minima), body);
+        BottomSheetDialog d = sheet(m(R.string.l10n_chat_send), body);
         btn.setOnClickListener(v -> sendPayment(w, to.getText().toString().trim(),
                 amt.getText().toString().trim(), status, d,
                 usdBtn.isChecked() ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_TOKENID : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_TOKENID,

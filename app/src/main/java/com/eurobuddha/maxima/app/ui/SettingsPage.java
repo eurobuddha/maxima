@@ -515,7 +515,7 @@ public final class SettingsPage implements Page {
         com.eurobuddha.maxima.app.i18n.Language.setText(languageTitle,
                 com.eurobuddha.maxima.app.i18n.Language.msg(R.string.l10n_language_description));
         languageCard.addView(languageTitle);
-        TextView languageButton = k.ghostButton("English · 简体中文 · Русский");
+        TextView languageButton = k.ghostButton("English · 简体中文 · Русский · Українська");
         languageButton.setOnClickListener(v -> com.eurobuddha.maxima.app.i18n.Language.choose(mAct, false));
         com.eurobuddha.maxima.app.i18n.Language.description(languageButton,
                 com.eurobuddha.maxima.app.i18n.Language.msg(R.string.l10n_language_change));

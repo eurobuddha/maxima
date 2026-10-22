@@ -63,13 +63,13 @@ public final class CloudAccountWallet implements AccountWallet {
     @Override public String watchAddress() { return mGateway.watchAddress(); }
     @Override public void setWatchAddress(String zAddress) throws Exception { mGateway.setWatchAddress(zAddress); }
 
-    @Override public Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+    @Override public Payment build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception {
         CloudPaymentSender s = mSender;
         if (s == null) {
             throw new Rejected("the account wallet is still opening");
         }
         try {
-            CloudPaymentSender.Built b = s.build(zToAddress, zAmount);
+            CloudPaymentSender.Built b = s.build(zToAddress, zAmount, zTokenId);
             return new Payment(b.txid, b.importCmd(), b.postCmd());
         } catch (Exception e) {
             throw classify(e);

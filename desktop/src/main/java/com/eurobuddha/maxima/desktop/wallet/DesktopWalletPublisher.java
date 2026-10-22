@@ -149,6 +149,11 @@ public final class DesktopWalletPublisher {
         cmd("coins megammr:true address:" + zAddress, zCb);
     }
 
+    /** One coin's binary CoinProof: the byte-exact source for a custom-token input. */
+    public void coinExport(String zCoinId, Cb zCb) {
+        cmd("coinexport coinid:" + zCoinId, zCb);
+    }
+
     public void trackScript(String zScript, Cb zCb) {
         cmd("newscript trackall:true script:\"" + zScript + "\"", zCb);
     }

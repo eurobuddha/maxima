@@ -4,7 +4,7 @@
   'use strict';
   const messages = root.ParlonsMessages;
   const languages = Object.freeze([
-    { code: 'en', name: 'English' }, { code: 'zh-Hans', name: '简体中文' }, { code: 'ru', name: 'Русский' }
+    { code: 'en', name: 'English' }, { code: 'zh-Hans', name: '简体中文' }, { code: 'ru', name: 'Русский' }, { code: 'uk', name: 'Українська' }
   ]);
   const storageKey = 'parlons.language';
   const valid = code => languages.some(language => language.code === code);
@@ -124,7 +124,7 @@
     if (existing) { existing.focus(); return; }
     const dialog = document.createElement('dialog'); dialog.id = 'languageDialog'; dialog.className = 'language-dialog';
     dialog.setAttribute('aria-labelledby', 'languageHeading');
-    const title = document.createElement('h2'); title.id = 'languageHeading'; title.textContent = 'Language · 语言 · Язык'; dialog.appendChild(title);
+    const title = document.createElement('h2'); title.id = 'languageHeading'; title.textContent = 'Language · 语言 · Язык · Мова'; dialog.appendChild(title);
     for (const option of languages) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'language-option';
       button.lang = option.code; button.textContent = option.name;

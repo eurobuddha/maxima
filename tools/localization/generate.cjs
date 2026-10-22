@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-const locales = ['en', 'zh-Hans', 'ru'];
+const locales = ['en', 'zh-Hans', 'ru', 'uk'];
 const source = JSON.parse(fs.readFileSync(path.join(root, 'localization/catalog.json'), 'utf8'));
 const messages = Object.fromEntries(locales.map(locale => [locale, {}]));
 const placeholders = text => [...text.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',');
@@ -77,7 +77,7 @@ for (const locale of locales) {
     }
   }
   lines.push('</resources>', '');
-  const folder = locale === 'en' ? 'values' : locale === 'zh-Hans' ? 'values-b+zh+Hans' : 'values-ru';
+  const folder = locale === 'en' ? 'values' : locale === 'zh-Hans' ? 'values-b+zh+Hans' : 'values-' + locale;
   outputs.set('localization/android/res/' + folder + '/parlons_strings.xml', lines.join('\n'));
 }
 // Fixed protocol status/error strings opt into the same compatibility lookup as panel I.system.

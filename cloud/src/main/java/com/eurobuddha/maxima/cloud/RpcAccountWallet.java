@@ -207,7 +207,7 @@ public final class RpcAccountWallet implements AccountWallet {
 
     /** Build + sign + BROADCAST in one node command. A node-reported refusal is a safe
      *  {@link Rejected}; a transport failure mid-command is outcome-unknown and is thrown as is. */
-    @Override public Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+    @Override public Payment build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception {
         if (!isOpen()) {
             throw new Rejected("the node wallet is still opening");
         }
@@ -220,7 +220,12 @@ public final class RpcAccountWallet implements AccountWallet {
         if (!amount.matches("[0-9]+(\\.[0-9]+)?")) {
             throw new Rejected("refusing to send a malformed amount: " + amount);
         }
-        JSONObject top = cmd("send address:" + zToAddress + " amount:" + amount);
+        if (!(zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId) || zTokenId.matches("0x[0-9A-Fa-f]{64}"))) {
+            throw new Rejected("refusing to send a malformed token id: " + zTokenId);
+        }
+        boolean minima = zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId);
+        JSONObject top = cmd("send address:" + zToAddress + " amount:" + amount
+                + (minima ? "" : " tokenid:" + zTokenId));
         if (!Boolean.TRUE.equals(top.get("status"))) {
             throw new Rejected(String.valueOf(top.getOrDefault("error", "the node refused the send")));
         }

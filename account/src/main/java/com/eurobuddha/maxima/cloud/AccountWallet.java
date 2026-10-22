@@ -66,7 +66,14 @@ public interface AccountWallet {
     void setWatchAddress(String zAddress) throws Exception;
 
     /** Build (and on the node: broadcast) a native-Minima send. Blocking — send lane only. */
-    Payment build(String zToAddress, MiniNumber zAmount) throws Exception;
+    /** Minima. */
+    default Payment build(String zToAddress, MiniNumber zAmount) throws Exception {
+        return build(zToAddress, zAmount, "0x00");
+    }
+
+    /** Build (and, for self-broadcasting wallets, send) {@code zAmount} display units of
+     *  {@code zTokenId}: "0x00" for Minima, or a full 32-byte token id such as MxUSD. */
+    Payment build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception;
     /** Broadcast a built payment (no-op where {@link #build} already did). */
     void publish(Payment zPayment) throws Exception;
     /** True if {@link #build} returns a signed-but-unpublished txn a device could broadcast. */

@@ -1574,7 +1574,7 @@
     <string name="l10n_wallet_transaction_id" formatted="false">"Transaction ID"</string>
     <string name="l10n_wallet_transaction" formatted="false">"Transaction"</string>
     <!-- Arguments: backend -->
-    <string name="l10n_wallet_send_help">"Send MINIMA. Built and signed on THIS device; only the signed transaction is relayed (via %1$s)."</string>
+    <string name="l10n_wallet_send_help">"Send MINIMA or MxUSD. Built and signed on THIS device; only the signed transaction is relayed (via %1$s)."</string>
     <string name="l10n_wallet_connected_node" formatted="false">"connected node"</string>
     <string name="l10n_wallet_gateway" formatted="false">"gateway"</string>
     <string name="l10n_wallet_address_hint" formatted="false">"Mx… address"</string>
@@ -1837,7 +1837,8 @@
     <string name="l10n_android_chat_pay_name">"Pay %1$s"</string>
     <!-- Arguments: amount -->
     <string name="l10n_android_chat_send_amount">"Send %1$s MINIMA?"</string>
-    <string name="l10n_android_chat_amount_mxusd">"Amount (MxUSD)"</string>
+    <string name="l10n_android_chat_amount_mxusd" formatted="false">"Amount (MxUSD)"</string>
+    <!-- Arguments: amount, token -->
     <string name="l10n_android_chat_send_amount_token">"Send %1$s %2$s?"</string>
     <!-- Arguments: name -->
     <string name="l10n_android_chat_confirm_payment">"To %1$s\n\nThis signs and broadcasts a real transaction and cannot be undone."</string>
@@ -4254,6 +4255,7 @@
     <string name="l10n_server_error_media_required" formatted="false">"peer, mime and data required"</string>
     <string name="l10n_server_error_payments_direct" formatted="false">"payments are one-to-one for now"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"that amount doesn\'t look right"</string>
+    <string name="l10n_server_error_token_id_invalid" formatted="false">"that token id doesn\'t look right"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"the amount must be more than zero"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"no wallet address from them yet — ask them to open this chat"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"Update the Parlons Node server to import an identity from the app."</string>

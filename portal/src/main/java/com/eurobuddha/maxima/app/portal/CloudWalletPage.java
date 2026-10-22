@@ -436,7 +436,7 @@ public final class CloudWalletPage implements Page {
             sendCard.addView(PortalUi.gap(c, 6));
             sendCard.addView(PortalUi.label(c, m(R.string.l10n_cloud_wallet_open_help)));
         } else {
-            TextView send = PortalUi.button(c, m(R.string.l10n_wallet_send_minima));
+            TextView send = PortalUi.button(c, m(R.string.l10n_chat_send));
             send.setOnClickListener(v -> sendSheet());
             sendCard.addView(send);
             sendCard.addView(PortalUi.gap(c, 8));
@@ -561,9 +561,7 @@ public final class CloudWalletPage implements Page {
 
     private static CharSequence shortWho(String s) {
         if (s == null || s.isEmpty()) return m(R.string.l10n_cloud_wallet_someone);
-        if (s.startsWith("Mx") || s.startsWith("0x") || s.startsWith("MAX#"))
-            return s.length() > 16 ? s.substring(0, 16) + "…" : s;
-        return s;
+        return s;   // addresses stay whole: a shortened one can't be copied or checked
     }
 
     /** Send from the ACCOUNT wallet to any Minima address — one confirm naming amount+address
@@ -584,30 +582,48 @@ public final class CloudWalletPage implements Page {
             }
         }));
         box.addView(scan);
+        // Minima or MxUSD (the Minima dollar-pegged token); the account node signs either.
+        final android.widget.RadioGroup currency = new android.widget.RadioGroup(mAct);
+        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
+        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(mAct);
+        minimaBtn.setText("Minima");
+        minimaBtn.setChecked(true);
+        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(mAct);
+        usdBtn.setText(MXUSD_NAME);
+        currency.addView(minimaBtn);
+        currency.addView(usdBtn);
+        box.addView(currency);
         final EditText amt = new EditText(mAct);
         Language.hint(amt, m(R.string.l10n_android_chat_amount));
+        currency.setOnCheckedChangeListener((g, id) -> Language.hint(amt, m(
+                usdBtn.isChecked() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
         amt.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         box.addView(amt);
         new LanguageDialog(mAct)
-                .setTitle(m(R.string.l10n_wallet_send_minima))
+                .setTitle(m(R.string.l10n_chat_send))
                 .setMessage(m(R.string.l10n_cloud_wallet_sign_help))
                 .setView(box)
                 .setNegativeButton(m(R.string.l10n_common_cancel), null)
                 .setPositiveButton(m(R.string.l10n_common_continue), (d, w) -> confirmSend(
-                        addr.getText().toString().trim(), amt.getText().toString().trim()))
+                        addr.getText().toString().trim(), amt.getText().toString().trim(),
+                        usdBtn.isChecked() ? MXUSD_TOKENID : "0x00"))
                 .show();
     }
 
-    private void confirmSend(String zTo, String zAmount) {
+    private static final String MXUSD_TOKENID = "0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90";
+    private static final String MXUSD_NAME = "MxUSD";
+
+    private void confirmSend(String zTo, String zAmount, String zTokenId) {
         if (zTo.isEmpty() || zAmount.isEmpty()) {
             mAct.toast(tr(R.string.l10n_cloud_wallet_address_amount));
             return;
         }
         new LanguageDialog(mAct)
-                .setTitle(m(R.string.l10n_android_chat_send_amount , zAmount))
+                .setTitle(m(R.string.l10n_android_chat_send_amount_token, zAmount,
+                        MXUSD_TOKENID.equals(zTokenId) ? MXUSD_NAME : "MINIMA"))
                 .setMessage(m(R.string.l10n_cloud_wallet_confirm_send , zTo))
                 .setNegativeButton(m(R.string.l10n_common_cancel), null)
-                .setPositiveButton(m(R.string.l10n_desktop_chat_sign_send), (d, w) -> doWalletSend(zTo, zAmount, null))
+                .setPositiveButton(m(R.string.l10n_desktop_chat_sign_send), (d, w) -> doWalletSend(zTo, zAmount, null, zTokenId))
                 .show();
     }
 
@@ -617,6 +633,10 @@ public final class CloudWalletPage implements Page {
      *  it ONLY after the walletsent push for this send arrives (the detach sweep) — never
      *  unconditionally, so a failed sweep can't hide the account's real balance. */
     private void doWalletSend(String zTo, String zAmount, final String zWatchOnSuccess) {
+        doWalletSend(zTo, zAmount, zWatchOnSuccess, "0x00");
+    }
+
+    private void doWalletSend(String zTo, String zAmount, final String zWatchOnSuccess, final String zTokenId) {
         if (mSending) {
             mAct.toast(tr(R.string.l10n_cloud_wallet_send_in_progress));
             return;
@@ -661,7 +681,7 @@ public final class CloudWalletPage implements Page {
             public void ok(ParlonsRemote r) {
                 String error = null;
                 try {
-                    JSONObject res = r.buildSend(zTo, zAmount, pid);   // sally signs; blob via push
+                    JSONObject res = r.buildSend(zTo, zAmount, pid, zTokenId);   // sally signs; blob via push
                     Object okv = res.get("ok");
                     if (!(okv instanceof Boolean) || !((Boolean) okv)) {
                         error = String.valueOf(res.get("error"));

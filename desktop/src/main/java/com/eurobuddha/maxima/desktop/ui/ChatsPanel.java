@@ -1798,7 +1798,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         Language.font(to, t.semibold(13.5f), to.getText()); to.setForeground(t.text); to.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(to);
         body.add(Box.createVerticalStrut(10));
-        JTextField amt = k.field(Language.msg("desktopChat.amountHint"));
+        javax.swing.JRadioButton usd = WalletPanel.currencyChoice(body);
+        JTextField amt = k.field(Language.msg("wallet.amountHint"));
         amt.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); amt.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(amt); body.add(Box.createVerticalStrut(8));
         JTextField memo = k.field(Language.msg("desktopChat.noteHint"));
@@ -1831,9 +1832,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             WalletPanel wallet = mHost == null ? null : mHost.wallet();
             if (wallet == null) { Language.bind(status, Language.msg("desktopChat.walletUnavailable")); return; }
             final String memoText = memo.getText().trim();
+            final String tokenId = usd.isSelected() ? com.eurobuddha.wallet.TokenInputs.MXUSD_TOKENID : "0x00";
+            final String tokenName = usd.isSelected() ? com.eurobuddha.wallet.TokenInputs.MXUSD_NAME : "MINIMA";
             send.setButtonEnabled(false);
             Language.bind(status, Language.msg("nativeFiles.preparing"));
-            new Thread(() -> wallet.requestPayment(addr, amount, new WalletPanel.PayResult() {
+            new Thread(() -> wallet.requestPayment(addr, amount, tokenId, new WalletPanel.PayResult() {
                 public void onStatus(String s) {
                     javax.swing.SwingUtilities.invokeLater(() -> k.renderSub(status, () -> WalletPanel.systemText(s)));
                 }
@@ -1842,8 +1845,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     // so post the payment bubble — a Maxima NETWORK send — off the EDT,
                     // then marshal only the UI refresh back.
                     new Thread(() -> {
-                        try { node.chat().sendPayment(contact, amount.toString(), "0x00",
-                                "MINIMA", memoText, txid); } catch (Exception ignored) { }
+                        try { node.chat().sendPayment(contact, amount.toString(), tokenId,
+                                tokenName, memoText, txid); } catch (Exception ignored) { }
                         javax.swing.SwingUtilities.invokeLater(() -> {
                             mThreadSig = ""; refresh(); d.dispose();
                         });

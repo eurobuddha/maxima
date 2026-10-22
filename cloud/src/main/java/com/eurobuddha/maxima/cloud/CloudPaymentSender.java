@@ -1,6 +1,7 @@
 package com.eurobuddha.maxima.cloud;
 
 import com.eurobuddha.wallet.CoinSelector;
+import com.eurobuddha.wallet.TokenInputs;
 import com.eurobuddha.wallet.TxnFactory;
 
 import org.minima.objects.base.MiniNumber;
@@ -11,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Sends Minima from the cloud account — the SAME proven pipeline as the phone's PaymentSender
+ * Sends Minima or a token (MxUSD) from the cloud account — the SAME proven pipeline as the phone's PaymentSender
  * (coins → select → build → SIGN one guarded Winternitz use → publish via the gateway), run
  * synchronously on the caller's worker thread. The account seed never leaves this node; the
  * gateway only relays the pre-signed txnimport→txnbasics→txnpost chain.
@@ -49,6 +50,16 @@ public final class CloudPaymentSender {
      * BLOCKING (gateway read) — call on the send lane, never the pump.
      */
     public Built build(String zToAddress, MiniNumber zAmount) throws Exception {
+        return build(zToAddress, zAmount, TokenInputs.MINIMA_TOKENID);
+    }
+
+    /** As {@link #build(String, MiniNumber)} for any token. {@code zAmount} is in display units;
+     *  token inputs come byte-exact from the gateway's {@code coinexport} ({@link TokenInputs}). */
+    public Built build(String zToAddress, MiniNumber zAmount, String zTokenId) throws Exception {
+        if (!TokenInputs.validTokenId(zTokenId)) {
+            throw new Exception("that token id doesn't look right");
+        }
+        final boolean minima = TokenInputs.isMinima(zTokenId);
         // 1. Spendable coins at our address (gateway node tracks our script + holds proofs).
         JSONObject coinsResp = mGateway.coins(mWallet.hexAddress());
         JSONArray coins = (JSONArray) coinsResp.get("response");
@@ -56,17 +67,17 @@ public final class CloudPaymentSender {
             throw new Exception("could not read the account's coins from the gateway");
         }
 
-        // 2. Select enough native-Minima coins to cover the amount.
+        // 2. Select enough coins of the token to cover the (raw) amount.
+        MiniNumber raw;
         List<JSONObject> sel;
         try {
-            sel = CoinSelector.selectToCover(coins, "0x00", zAmount);
-        } catch (CoinSelector.InsufficientFundsException ife) {
-            throw new Exception("not enough confirmed funds in the account wallet");
+            raw = TokenInputs.rawAmount(coins, zTokenId, zAmount);
+            sel = CoinSelector.selectToCover(coins, minima ? "0x00" : zTokenId, raw);
+        } catch (CoinSelector.InsufficientFundsException | IllegalStateException ife) {
+            throw new Exception("not enough confirmed " + TokenInputs.nameOf(zTokenId) + " in the account wallet");
         }
-        List<TxnFactory.InputCoin> inputs = new ArrayList<>();
-        for (JSONObject cn : sel) {
-            inputs.add(TxnFactory.fromCoinJson(cn, CloudWallet.KEY_INDEX));
-        }
+        List<TxnFactory.InputCoin> inputs = TokenInputs.resolve(sel, CloudWallet.KEY_INDEX,
+                coinid -> TokenInputs.blobOf(mGateway.coinExport(coinid).get("response")));
 
         // 3. Build + sign locally (reserve-before-sign: the key-use counter is fsync'd to disk
         //    BEFORE the leaf signs — a crash wastes a leaf, never reuses one).
@@ -74,8 +85,8 @@ public final class CloudPaymentSender {
         // UUID txn row id: millis ids are guessable + collide on the SHARED gateway — a
         // predicted id could be txndelete'd (or pre-imported) by another token holder in the
         // import→post window.
-        TxnFactory.BuiltTxn built = factory.buildSend(inputs, zToAddress, zAmount,
-                TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
+        TxnFactory.BuiltTxn built = factory.buildSend(inputs, zToAddress, raw,
+                TokenInputs.tokenData(zTokenId), MiniNumber.ZERO,
                 "pcw" + java.util.UUID.randomUUID());
         return new Built(built.getID(), built.getTxnImportCommand(), built.getTxnPostCommand());
     }

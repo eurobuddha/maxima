@@ -1620,7 +1620,7 @@
     <string name="l10n_wallet_transaction_id" formatted="false">"ID транзакции"</string>
     <string name="l10n_wallet_transaction" formatted="false">"Транзакция"</string>
     <!-- Arguments: backend -->
-    <string name="l10n_wallet_send_help">"Отправка MINIMA. Транзакция создаётся и подписывается на этом устройстве; через %1$s передаётся только подписанная транзакция."</string>
+    <string name="l10n_wallet_send_help">"Отправка MINIMA или MxUSD. Транзакция создаётся и подписывается на этом устройстве; через %1$s передаётся только подписанная транзакция."</string>
     <string name="l10n_wallet_connected_node" formatted="false">"подключённый узел"</string>
     <string name="l10n_wallet_gateway" formatted="false">"шлюз"</string>
     <string name="l10n_wallet_address_hint" formatted="false">"Адрес Mx…"</string>
@@ -1887,7 +1887,8 @@
     <string name="l10n_android_chat_pay_name">"Оплатить: %1$s"</string>
     <!-- Arguments: amount -->
     <string name="l10n_android_chat_send_amount">"Отправить %1$s MINIMA?"</string>
-    <string name="l10n_android_chat_amount_mxusd">"Сумма (MxUSD)"</string>
+    <string name="l10n_android_chat_amount_mxusd" formatted="false">"Сумма (MxUSD)"</string>
+    <!-- Arguments: amount, token -->
     <string name="l10n_android_chat_send_amount_token">"Отправить %1$s %2$s?"</string>
     <!-- Arguments: name -->
     <string name="l10n_android_chat_confirm_payment">"Получатель: %1$s\n\nБудет подписана и отправлена в сеть настоящая транзакция. Отменить её нельзя."</string>
@@ -4342,6 +4343,7 @@
     <string name="l10n_server_error_media_required" formatted="false">"Укажите получателя, MIME-тип и данные"</string>
     <string name="l10n_server_error_payments_direct" formatted="false">"Пока платежи доступны только в личных чатах"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"Некорректная сумма"</string>
+    <string name="l10n_server_error_token_id_invalid" formatted="false">"Этот идентификатор токена выглядит неверно"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"Сумма должна быть больше нуля"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"Адрес кошелька ещё не получен — попросите собеседника открыть этот чат"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"Обновите сервер Parlons Node, чтобы импортировать личность из приложения."</string>
