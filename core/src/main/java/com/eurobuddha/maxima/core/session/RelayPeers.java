@@ -35,6 +35,12 @@ public final class RelayPeers {
     /** A verified peer must re-claim within this window or it expires. */
     public static final long TTL_MS = 2 * 60 * 60 * 1000;
 
+    /** A verified peer that keeps re-claiming is re-dialled at most this often, so what its greeting
+     *  ADVERTISES (pool bit, dex URL) stays current. Before this, the details were captured once at the
+     *  first verification and a re-claim only refreshed the TTL: a peer that turned its DEX relay on later
+     *  was never listed (seen live 2026-10-22: eurobuddha.com never learned sally's or megammr's dex URL). */
+    public static final long REDIAL_MS = 10 * 60 * 1000;
+
     /** Dial budget for a verification. */
     private static final int CONNECT_MS = 4000;
     private static final int READ_MS = 2000;
@@ -52,6 +58,15 @@ public final class RelayPeers {
     /** verified "ip:port" -> the DEX relay base URL it advertised ({@code "dex"}), captured at the
      *  verification dial like the pool bit. Only peers that advertise one have an entry. */
     private final Map<String, String> mDex = new ConcurrentHashMap<>();
+
+    /** "ip:port" -> when we last dialled it to read its greeting (verification or refresh). */
+    private final Map<String, Long> mDialed = new ConcurrentHashMap<>();
+    private volatile long mRedialMs = REDIAL_MS;
+
+    /** Tests shorten the refresh window. */
+    public void setRedialMs(long zMs) {
+        mRedialMs = zMs;
+    }
 
     /** claims waiting for a dial-back check. */
     private final LinkedBlockingQueue<String> mPending = new LinkedBlockingQueue<>(64);
@@ -103,7 +118,12 @@ public final class RelayPeers {
         }
         Long seen = mVerified.get(hp);
         if (seen != null) {
-            mVerified.put(hp, System.currentTimeMillis());   // re-claim = TTL refresh
+            long now = System.currentTimeMillis();
+            mVerified.put(hp, now);   // re-claim = TTL refresh
+            Long dialed = mDialed.get(hp);
+            if ((dialed == null || now - dialed >= mRedialMs) && !mPending.contains(hp)) {
+                mPending.offer(hp);   // and, at most every REDIAL_MS, re-read what it advertises
+            }
             return true;
         }
         if (mVerified.size() >= MAX_PEERS) {
@@ -204,7 +224,12 @@ public final class RelayPeers {
             } catch (InterruptedException e) {
                 return;
             }
-            if (mVerified.containsKey(hp) || mVerified.size() >= MAX_PEERS) {
+            boolean known = mVerified.containsKey(hp);
+            Long dialed = mDialed.get(hp);
+            if (known && dialed != null && System.currentTimeMillis() - dialed < mRedialMs) {
+                continue;   // verified and read recently
+            }
+            if (!known && mVerified.size() >= MAX_PEERS) {
                 continue;
             }
             int c = hp.lastIndexOf(':');
@@ -226,6 +251,7 @@ public final class RelayPeers {
                 } catch (NumberFormatException ignored) {
                 }
             }
+            mDialed.put(hp, System.currentTimeMillis());
             com.eurobuddha.maxima.core.msg.Greeting g =
                     Probe.dialGreeting(host, port, CONNECT_MS, READ_MS, mProtocol, selfHost, selfPort);
             if (g != null) {

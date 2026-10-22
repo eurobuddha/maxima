@@ -49,6 +49,35 @@ public class DexDiscoveryTest {
         }
     }
 
+    /** A peer verified BEFORE it turned its DEX relay on must still be listed once it does. */
+    @Test
+    public void aReClaimRefreshesWhatAPeerAdvertises() throws Exception {
+        int pa = RelaySelfAnnounceTest.freePort();
+        int pb = RelaySelfAnnounceTest.freePort();
+        RelayServer a = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), pa, RelaySelfAnnounceTest.PROTO);
+        RelayServer b = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), pb, RelaySelfAnnounceTest.PROTO);
+        a.setPublicHost("127.0.0.1");
+        b.setPublicHost("127.0.0.1");
+        a.peers().setAllowAllIp(true);
+        b.peers().setAllowAllIp(true);
+        try {
+            b.start();
+            a.start();
+            a.setPeers(Collections.singletonList("127.0.0.1:" + pb));
+            assertTrue("A verified B (no dex yet)",
+                    RelaySelfAnnounceTest.waitFor(() -> a.peers().share().contains("127.0.0.1:" + pb), 15));
+            assertTrue("nothing to list yet", a.dexRelays().isEmpty());
+            b.setDex(19797, "https://dex-b.example.com");      // B turns its relay on later
+            a.peers().setRedialMs(0);
+            a.peers().claim("127.0.0.1", "127.0.0.1", pb, "127.0.0.1:" + pa);   // B greets A again
+            assertTrue("the re-claim re-read B's greeting and found its dex URL",
+                    RelaySelfAnnounceTest.waitFor(() -> a.dexRelays().containsKey("https://dex-b.example.com"), 15));
+        } finally {
+            a.stop();
+            b.stop();
+        }
+    }
+
     @Test
     public void noPublicHostMeansNoRecord() throws Exception {
         RelayServer r = new RelayServer(MaximaIdentity.fromPhrase(Bip39.generate(24)), 9501, RelaySelfAnnounceTest.PROTO);
