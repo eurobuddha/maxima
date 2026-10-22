@@ -99,8 +99,11 @@ still expires. Test: `DexDiscoveryTest.verifiedPeersAreReDialledWithoutAReClaim`
 - vigilance has ufw **default-deny outbound**. A new outbound port or peer needs `ufw allow out …`.
   **Open item:** after the re-dial fix, 6 of 7 relays list all 7 DEX URLs (checked 2026-10-22 ~20:45 BST).
   vigilance lists 6 and is missing wake.eurobuddha.com, because ufw allows `78.141.237.9` on 9501 but not
-  8001 (openproject's node relay, which carries the DEX cape). Fix, pending owner approval:
-  `ufw allow out to 78.141.237.9 port 8001 proto tcp`.
+  8001 (openproject's node relay, which carries the DEX cape). **Fixed 2026-10-22:** that rule was added; vigilance now lists all 7.
+  The nginx edit tripped vigilance's file-integrity monitor (`/root/.fileintegrity/check.sh`, Telegram alerts
+  every 5 min). It was verified as ours (diff = the `/dex-relay/` block only, all logins from the owner's key)
+  and the owner re-baselined it. **Any future edit to the wallet.minima.global nginx file trips it again**:
+  tell the owner, and have them re-baseline with `rm /root/.fileintegrity/baseline.sha256 && /root/.fileintegrity/check.sh`.
 - The Pi is residential: only 8001 (and 443) are forwarded. ufw is active; leave it alone.
 - `ssh eurobuddha.com` fails; use the `hetzner` alias.
 - zsh does not word-split `$VAR`. Write ssh flags out literally, or use a function.
