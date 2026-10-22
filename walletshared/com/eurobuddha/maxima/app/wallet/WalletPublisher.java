@@ -229,6 +229,17 @@ public final class WalletPublisher {
         }
     }
 
+    /** The binary CoinProof of one coin ({@code coinexport}) — the byte-exact source for a
+     *  custom-token input. Node first when paired, gateway otherwise/on error. */
+    public void coinExport(String zCoinId, Cb zCb) {
+        if (useNode()) {
+            mNode.cmd("coinexport coinid:" + zCoinId,
+                    wrapNodeOrGateway("coinexport coinid:" + zCoinId, zCb));
+        } else {
+            gcmd("coinexport coinid:" + zCoinId, zCb);
+        }
+    }
+
     /** A node callback that, on node error, transparently retries the equivalent command on
      *  the gateway — so a flaky or vanished node never breaks a read. */
     private NodeLink.Cb wrapNodeOrGateway(final String zGatewayCmd, final Cb zCb) {
@@ -344,7 +355,7 @@ public final class WalletPublisher {
 
     /** Extract the coinexport blob (0x…) from a gateway response, tolerating a bare-string
      *  response and a nested {@code {response:{data:…}}} shape. */
-    private static String blobOf(JSONObject ex) {
+    static String blobOf(JSONObject ex) {
         Object resp = ex.opt("response");
         if (resp instanceof String) return ((String) resp).trim();
         JSONObject ro = ex.optJSONObject("response");

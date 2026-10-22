@@ -491,8 +491,20 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), 0);
+        // Currency: Minima or MxUSD (the Minima dollar-pegged token). The wire and every
+        // renderer always carried the token; the send path was the only Minima-only part.
+        final android.widget.RadioGroup currency = new android.widget.RadioGroup(this);
+        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
+        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(this);
+        minimaBtn.setText("Minima"); minimaBtn.setTextColor(getColor(R.color.ux_text)); minimaBtn.setChecked(true);
+        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(this);
+        usdBtn.setText(com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME); usdBtn.setTextColor(getColor(R.color.ux_text));
+        currency.addView(minimaBtn); currency.addView(usdBtn);
+        box.addView(currency);
         final EditText amt = new EditText(this);
         Language.hint(amt, Language.msg(R.string.l10n_android_chat_amount));
+        currency.setOnCheckedChangeListener((g, id) -> Language.hint(amt, Language.msg(
+                usdBtn.isChecked() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
         amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                 | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amt.setTextColor(getColor(R.color.ux_text));
@@ -524,21 +536,25 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         toast(tr(R.string.l10n_desktop_chat_positive_amount));
                         return;
                     }
-                    confirmPay(chat, contact, to, amount, note);
+                    final boolean usd = usdBtn.isChecked();
+                    confirmPay(chat, contact, to, amount, note,
+                            usd ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_TOKENID : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_TOKENID,
+                            usd ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_NAME);
                 })
                 .show();
     }
 
     private void confirmPay(final ChatEngine chat, final Contact contact, final String to,
-                            final org.minima.objects.base.MiniNumber amount, final String note) {
+                            final org.minima.objects.base.MiniNumber amount, final String note,
+                            final String tokenId, final String tokenName) {
         new LanguageDialog(this)
-                .setTitle(Language.msg(R.string.l10n_android_chat_send_amount, amount.toString()))
+                .setTitle(Language.msg(R.string.l10n_android_chat_send_amount_token, amount.toString(), tokenName))
                 .setMessage(Language.msg(R.string.l10n_android_chat_confirm_payment, contact.name))
                 .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
                 .setPositiveButton(Language.msg(R.string.l10n_android_chat_confirm), (d, w) -> {
                     toast(tr(R.string.l10n_android_chat_signing));
                     final ChatEngine.Entry[] pending = new ChatEngine.Entry[1];
-                    mSender.send(to, amount, new com.eurobuddha.maxima.app.wallet.PaymentSender.Cb() {
+                    mSender.send(to, amount, tokenId, tokenName, new com.eurobuddha.maxima.app.wallet.PaymentSender.Cb() {
                         @Override
                         public void onProgress(String zStep) {
                             runOnUiThread(() -> toast(zStep));
@@ -550,7 +566,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                             // before the broadcast round-trip. Not sent to the
                             // peer yet.
                             pending[0] = chat.beginPayment(contact, amount.toString(),
-                                    "MINIMA", note, zTxid);
+                                    tokenName, note, zTxid);
                             mLastSendWasMine = true;
                             // Signing just burned one key-use; surface it so the
                             // count is visible even from the chat.
@@ -571,8 +587,8 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                                 chat.completePayment(contact, pending[0]);
                             }
                             com.eurobuddha.maxima.app.wallet.WalletLedger.add(
-                                    ChatActivity.this, true, amount.toString(), "MINIMA",
-                                    contact.name, zTxid);
+                                    ChatActivity.this, true, amount.toString(), tokenName,
+                                    contact.name, zTxid, tokenId);
                             runOnUiThread(() -> {
                                 render();
                                 toast(tr(R.string.l10n_android_chat_payment_sent));

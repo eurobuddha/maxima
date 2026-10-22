@@ -1887,6 +1887,8 @@
     <string name="l10n_android_chat_pay_name">"Оплатить: %1$s"</string>
     <!-- Arguments: amount -->
     <string name="l10n_android_chat_send_amount">"Отправить %1$s MINIMA?"</string>
+    <string name="l10n_android_chat_amount_mxusd">"Сумма (MxUSD)"</string>
+    <string name="l10n_android_chat_send_amount_token">"Отправить %1$s %2$s?"</string>
     <!-- Arguments: name -->
     <string name="l10n_android_chat_confirm_payment">"Получатель: %1$s\n\nБудет подписана и отправлена в сеть настоящая транзакция. Отменить её нельзя."</string>
     <!-- Arguments: error -->

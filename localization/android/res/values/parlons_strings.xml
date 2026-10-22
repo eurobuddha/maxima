@@ -1837,6 +1837,8 @@
     <string name="l10n_android_chat_pay_name">"Pay %1$s"</string>
     <!-- Arguments: amount -->
     <string name="l10n_android_chat_send_amount">"Send %1$s MINIMA?"</string>
+    <string name="l10n_android_chat_amount_mxusd">"Amount (MxUSD)"</string>
+    <string name="l10n_android_chat_send_amount_token">"Send %1$s %2$s?"</string>
     <!-- Arguments: name -->
     <string name="l10n_android_chat_confirm_payment">"To %1$s\n\nThis signs and broadcasts a real transaction and cannot be undone."</string>
     <!-- Arguments: error -->

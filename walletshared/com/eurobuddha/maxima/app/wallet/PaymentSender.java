@@ -232,6 +232,16 @@ public final class PaymentSender {
      * Callbacks arrive on a worker thread; the caller must hop to the UI thread.
      */
     public void send(final String zTo, final MiniNumber zAmount, final Cb zCb) {
+        send(zTo, zAmount, TokenSend.MINIMA_TOKENID, TokenSend.MINIMA_NAME, zCb);
+    }
+
+    /**
+     * Build, sign and publish a send of {@code zAmount} (display units) of {@code zTokenId}
+     * to {@code zTo}. Minima or a custom token such as MxUSD: token inputs are sourced
+     * byte-exact via coinexport ({@link TokenSend}). Callbacks arrive on a worker thread.
+     */
+    public void send(final String zTo, final MiniNumber zAmount, final String zTokenId,
+                     final String zTokenName, final Cb zCb) {
         final MaximaWallet w = mWallet;
         if (w == null) {
             zCb.onError("Wallet still opening");
@@ -273,18 +283,18 @@ public final class PaymentSender {
                 org.minima.utils.json.JSONArray coins =
                         (org.minima.utils.json.JSONArray) full.get("response");
 
+                final boolean minima = TokenSend.isMinima(zTokenId);
+                final MiniNumber raw = TokenSend.rawAmount(coins, zTokenId, zAmount);
                 List<org.minima.utils.json.JSONObject> sel =
-                        CoinSelector.selectToCover(coins, "0x00", zAmount);
-                List<TxnFactory.InputCoin> inputs = new ArrayList<>();
-                for (org.minima.utils.json.JSONObject cn : sel) {
-                    inputs.add(TxnFactory.fromCoinJson(cn, MaximaWallet.KEY_INDEX));
-                }
+                        CoinSelector.selectToCover(coins, minima ? "0x00" : zTokenId, raw);
+                if (!minima) zCb.onProgress("Fetching token coins…");
+                List<TxnFactory.InputCoin> inputs = TokenSend.resolveInputs(mPub, sel, MaximaWallet.KEY_INDEX);
 
                 zCb.onProgress("Signing…");
                 TxnFactory factory = new TxnFactory(w.core());
-                final TxnFactory.BuiltTxn built = factory.buildSend(inputs, zTo, zAmount,
-                        TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
-                        "mxw" + System.currentTimeMillis());
+                final TxnFactory.BuiltTxn built = factory.buildSend(inputs, zTo, raw,
+                        minima ? TxnFactory.TOKEN_MINIMA : new org.minima.objects.base.MiniData(zTokenId),
+                        MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
                 // Signed: the txid is fixed now, so the sender can show a pending
                 // bubble immediately instead of waiting for the broadcast.
                 zCb.onBuilt(built.getID());

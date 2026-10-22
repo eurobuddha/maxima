@@ -591,6 +591,16 @@ public final class WalletPage implements Page {
         toRow.addView(scan, new LinearLayout.LayoutParams(dp(38), dp(38)));
         body.addView(toRow, marginBottom(dp(11)));
 
+        // Currency: Minima or MxUSD. Token inputs go byte-exact via coinexport (TokenSend).
+        final android.widget.RadioGroup currency = new android.widget.RadioGroup(mAct);
+        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
+        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(mAct);
+        minimaBtn.setText("Minima"); minimaBtn.setTextColor(col(R.color.ux_text)); minimaBtn.setChecked(true);
+        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(mAct);
+        usdBtn.setText(com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME); usdBtn.setTextColor(col(R.color.ux_text));
+        currency.addView(minimaBtn); currency.addView(usdBtn);
+        body.addView(currency, marginBottom(dp(6)));
+
         final EditText amt = new EditText(mAct);
         Language.hint(amt, m(R.string.l10n_wallet_amount));
         amt.setBackgroundResource(R.drawable.field_pill);
@@ -609,11 +619,14 @@ public final class WalletPage implements Page {
 
         BottomSheetDialog d = sheet(m(R.string.l10n_wallet_send_minima), body);
         btn.setOnClickListener(v -> sendPayment(w, to.getText().toString().trim(),
-                amt.getText().toString().trim(), status, d));
+                amt.getText().toString().trim(), status, d,
+                usdBtn.isChecked() ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_TOKENID : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_TOKENID,
+                usdBtn.isChecked() ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_NAME));
     }
 
     private void sendPayment(final MaximaWallet w, final String to, final String amtStr,
-                             final TextView status, final BottomSheetDialog sheet) {
+                             final TextView status, final BottomSheetDialog sheet,
+                             final String tokenId, final String tokenName) {
         if (to.isEmpty() || amtStr.isEmpty()) {
             Language.setText(status, m(R.string.l10n_cloud_wallet_address_amount));
             return;
@@ -668,26 +681,26 @@ public final class WalletPage implements Page {
                 org.minima.utils.json.JSONArray coins =
                         (org.minima.utils.json.JSONArray) full.get("response");
 
+                final boolean minima = com.eurobuddha.maxima.app.wallet.TokenSend.isMinima(tokenId);
+                final MiniNumber raw = com.eurobuddha.maxima.app.wallet.TokenSend.rawAmount(coins, tokenId, amount);
                 List<org.minima.utils.json.JSONObject> sel =
-                        CoinSelector.selectToCover(coins, "0x00", amount);
-                List<TxnFactory.InputCoin> inputs = new ArrayList<>();
-                for (org.minima.utils.json.JSONObject cn : sel) {
-                    inputs.add(TxnFactory.fromCoinJson(cn, MaximaWallet.KEY_INDEX));
-                }
+                        CoinSelector.selectToCover(coins, minima ? "0x00" : tokenId, raw);
+                List<TxnFactory.InputCoin> inputs =
+                        com.eurobuddha.maxima.app.wallet.TokenSend.resolveInputs(mPub, sel, MaximaWallet.KEY_INDEX);
 
                 post(() -> Language.setText(status, m(R.string.l10n_cloud_wallet_signing)));
                 TxnFactory factory = new TxnFactory(w.core());
-                final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, amount,
-                        TxnFactory.TOKEN_MINIMA, MiniNumber.ZERO,
-                        "mxw" + System.currentTimeMillis());
+                final TxnFactory.BuiltTxn built = factory.buildSend(inputs, to, raw,
+                        minima ? TxnFactory.TOKEN_MINIMA : new org.minima.objects.base.MiniData(tokenId),
+                        MiniNumber.ZERO, "mxw" + System.currentTimeMillis());
 
                 post(() -> Language.setText(status, m(R.string.l10n_wallet_publishing, SystemMessages.message(mPub.backendName()))));
                 mPub.publish(built.getTxnImportCommand(), built.getID(),
                         built.getTxnPostCommand(), new WalletPublisher.Cb() {
                             public void onResult(JSONObject r) {
                                 mSending = false;
-                                WalletLedger.add(mAct, true, amount.toString(), "MINIMA",
-                                        to, built.getID(), "0x00");
+                                WalletLedger.add(mAct, true, amount.toString(), tokenName,
+                                        to, built.getID(), tokenId);
                                 post(() -> {
                                     Language.setText(status, m(R.string.l10n_wallet_mining));
                                     toast(m(R.string.l10n_android_wallet_mining));
