@@ -423,6 +423,39 @@ public final class ParlonsRemote {
         return rpc(ParlonsControl.M_NODE_STATUS, new JSONObject());
     }
 
+    /** Refusal shown when an old host would silently send Minima instead of the chosen token. */
+    public static final String HOST_TOO_OLD_FOR_TOKENS =
+            "this account's host is too old to send MxUSD - update it (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)";
+
+    /**
+     * A host older than Parlons Node 0.2.135 / Parlons Cloud 0.11.121 ignores "tokenid" and pays
+     * the same amount in MINIMA. Never send a token payment to such a host: ask it first.
+     */
+    private void requireTokenHost(String zTokenId) throws Exception {
+        if (zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId)) return;
+        JSONObject st = nodeStatus();
+        if (!hostSendsTokens(st)) throw new Exception(HOST_TOO_OLD_FOR_TOKENS);
+    }
+
+    /** True when a node.status reply proves the host honours "tokenid": the explicit flag, or a
+     *  version at or above the first token-capable release of its kind (node 0.2.x / cloud 0.11.x). */
+    public static boolean hostSendsTokens(JSONObject zStatus) {
+        if (zStatus == null) return false;
+        if (Boolean.TRUE.equals(zStatus.get("tokenPayments"))) return true;
+        Object v = zStatus.get("version");
+        String[] p = v == null ? new String[0] : String.valueOf(v).trim().split("\\.");
+        if (p.length != 3) return false;
+        try {
+            int major = Integer.parseInt(p[0]), minor = Integer.parseInt(p[1]), patch = Integer.parseInt(p[2]);
+            if (major != 0) return major > 0;
+            if (minor == 2) return patch >= 135;    // parlons-node
+            if (minor == 11) return patch >= 121;   // parlons-cloud
+            return minor > 11;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     /** The node's recent event-log lines (newest first). {@code clear=true} clears the ring. */
     public JSONObject nodeLog(boolean zClear) throws Exception {
         JSONObject p = new JSONObject();
@@ -516,6 +549,7 @@ public final class ParlonsRemote {
 
     /** As {@link #pay(String, String, String)} in any token: "0x00" Minima, or a full token id (MxUSD). */
     public JSONObject pay(String zPeer, String zAmount, String zMemo, String zTokenId) throws Exception {
+        requireTokenHost(zTokenId);
         JSONObject p = new JSONObject();
         p.put("tokenid", zTokenId == null ? "0x00" : zTokenId);
         p.put("peer", zPeer);
@@ -569,6 +603,7 @@ public final class ParlonsRemote {
     }
 
     public JSONObject walletSend(String zTo, String zAmount, String zPid, String zTokenId) throws Exception {
+        requireTokenHost(zTokenId);
         JSONObject p = new JSONObject();
         p.put("tokenid", zTokenId == null ? "0x00" : zTokenId);
         p.put("to", zTo);
@@ -586,6 +621,7 @@ public final class ParlonsRemote {
     }
 
     public JSONObject buildSend(String zTo, String zAmount, String zPid, String zTokenId) throws Exception {
+        requireTokenHost(zTokenId);
         JSONObject p = new JSONObject();
         p.put("tokenid", zTokenId == null ? "0x00" : zTokenId);
         p.put("to", zTo);

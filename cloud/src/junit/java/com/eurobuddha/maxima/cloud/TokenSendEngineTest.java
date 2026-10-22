@@ -144,4 +144,24 @@ public class TokenSendEngineTest {
         assertEquals("Minima", ParlonsControl.tokenName("0x00"));
     }
 
+
+    /** An old host ignores "tokenid" and pays MINIMA: the client must refuse it beforehand
+     *  (2026-10-22: a Portal MxUSD send through Parlons Node 0.2.130 paid 0.05 MINIMA). */
+    @Test public void tokenSendsNeedATokenCapableHost() {
+        org.minima.utils.json.JSONObject st = new org.minima.utils.json.JSONObject();
+        st.put("version", "0.2.130");
+        assertFalse(ParlonsRemote.hostSendsTokens(st));
+        st.put("version", "0.2.135");
+        assertTrue(ParlonsRemote.hostSendsTokens(st));
+        st.put("version", "0.11.120");
+        assertFalse(ParlonsRemote.hostSendsTokens(st));
+        st.put("version", "0.11.121");
+        assertTrue(ParlonsRemote.hostSendsTokens(st));
+        st.put("version", "");
+        assertFalse(ParlonsRemote.hostSendsTokens(st));
+        st.put("tokenPayments", true);
+        assertTrue(ParlonsRemote.hostSendsTokens(st));
+        assertFalse(ParlonsRemote.hostSendsTokens(null));
+    }
+
 }

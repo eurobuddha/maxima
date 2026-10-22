@@ -4212,6 +4212,7 @@
     <string name="l10n_server_error_payments_direct" formatted="false">"付款目前仅支持一对一聊天"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"金额格式不正确"</string>
     <string name="l10n_server_error_token_id_invalid" formatted="false">"该代币 ID 看起来不正确"</string>
+    <string name="l10n_server_error_host_too_old_for_tokens" formatted="false">"此账户的主机版本过旧，无法发送 MxUSD — 请更新（Parlons Node 0.2.135+、Parlons Cloud 0.11.121+、minimaCore Desktop 0.18.21+）"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"金额必须大于零"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"尚未收到对方的钱包地址，请让对方打开此聊天"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"请更新 Parlons Node 服务器，以便从应用导入身份。"</string>

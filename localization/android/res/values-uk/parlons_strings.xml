@@ -4344,6 +4344,7 @@
     <string name="l10n_server_error_payments_direct" formatted="false">"поки що платежі лише між двома особами"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"схоже, сума неправильна"</string>
     <string name="l10n_server_error_token_id_invalid" formatted="false">"Цей ідентифікатор токена виглядає неправильно"</string>
+    <string name="l10n_server_error_host_too_old_for_tokens" formatted="false">"Хост цього облікового запису застарий для надсилання MxUSD — оновіть його (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"сума має бути більшою за нуль"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"від них ще немає адреси гаманця — попросіть їх відкрити цей чат"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"Оновіть сервер Parlons Node, щоб імпортувати ідентичність із застосунку."</string>

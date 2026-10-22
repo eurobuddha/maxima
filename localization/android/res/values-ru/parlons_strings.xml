@@ -4344,6 +4344,7 @@
     <string name="l10n_server_error_payments_direct" formatted="false">"Пока платежи доступны только в личных чатах"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"Некорректная сумма"</string>
     <string name="l10n_server_error_token_id_invalid" formatted="false">"Этот идентификатор токена выглядит неверно"</string>
+    <string name="l10n_server_error_host_too_old_for_tokens" formatted="false">"Хост этого аккаунта слишком старый для отправки MxUSD — обновите его (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"Сумма должна быть больше нуля"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"Адрес кошелька ещё не получен — попросите собеседника открыть этот чат"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"Обновите сервер Parlons Node, чтобы импортировать личность из приложения."</string>

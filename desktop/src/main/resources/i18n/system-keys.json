@@ -3182,6 +3182,7 @@
   "payments are one-to-one for now": "serverError.paymentsDirect",
   "that amount doesn't look right": "serverError.amountInvalid",
   "that token id doesn't look right": "serverError.tokenIdInvalid",
+  "this account's host is too old to send MxUSD - update it (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)": "serverError.hostTooOldForTokens",
   "the amount must be more than zero": "serverError.amountPositive",
   "no wallet address from them yet — ask them to open this chat": "serverError.recipientWallet",
   "Update the Parlons Node server to import an identity from the app.": "serverError.identityUpdate",

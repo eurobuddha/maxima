@@ -22721,6 +22721,12 @@
     "ru": "Этот идентификатор токена выглядит неверно",
     "uk": "Цей ідентифікатор токена виглядає неправильно"
   },
+  "serverError.hostTooOldForTokens": {
+    "en": "this account's host is too old to send MxUSD - update it (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)",
+    "zh-Hans": "此账户的主机版本过旧，无法发送 MxUSD — 请更新（Parlons Node 0.2.135+、Parlons Cloud 0.11.121+、minimaCore Desktop 0.18.21+）",
+    "ru": "Хост этого аккаунта слишком старый для отправки MxUSD — обновите его (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)",
+    "uk": "Хост цього облікового запису застарий для надсилання MxUSD — оновіть його (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)"
+  },
   "serverError.amountPositive": {
     "en": "the amount must be more than zero",
     "zh-Hans": "金额必须大于零",

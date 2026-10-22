@@ -3268,6 +3268,7 @@ public final class SystemMessages {
             case "payments are one-to-one for now": return R.string.l10n_server_error_payments_direct;
             case "that amount doesn't look right": return R.string.l10n_server_error_amount_invalid;
             case "that token id doesn't look right": return R.string.l10n_server_error_token_id_invalid;
+            case "this account's host is too old to send MxUSD - update it (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)": return R.string.l10n_server_error_host_too_old_for_tokens;
             case "the amount must be more than zero": return R.string.l10n_server_error_amount_positive;
             case "no wallet address from them yet — ask them to open this chat": return R.string.l10n_server_error_recipient_wallet;
             case "Update the Parlons Node server to import an identity from the app.": return R.string.l10n_server_error_identity_update;
@@ -3362,6 +3363,7 @@ public final class SystemMessages {
             case "payments are one-to-one for now": return true;
             case "that amount doesn't look right": return true;
             case "that token id doesn't look right": return true;
+            case "this account's host is too old to send MxUSD - update it (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)": return true;
             case "the amount must be more than zero": return true;
             case "no wallet address from them yet — ask them to open this chat": return true;
             case "Update the Parlons Node server to import an identity from the app.": return true;

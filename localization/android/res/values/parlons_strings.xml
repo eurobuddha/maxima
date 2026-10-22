@@ -4256,6 +4256,7 @@
     <string name="l10n_server_error_payments_direct" formatted="false">"payments are one-to-one for now"</string>
     <string name="l10n_server_error_amount_invalid" formatted="false">"that amount doesn\'t look right"</string>
     <string name="l10n_server_error_token_id_invalid" formatted="false">"that token id doesn\'t look right"</string>
+    <string name="l10n_server_error_host_too_old_for_tokens" formatted="false">"this account\'s host is too old to send MxUSD - update it (Parlons Node 0.2.135+, Parlons Cloud 0.11.121+, minimaCore Desktop 0.18.21+)"</string>
     <string name="l10n_server_error_amount_positive" formatted="false">"the amount must be more than zero"</string>
     <string name="l10n_server_error_recipient_wallet" formatted="false">"no wallet address from them yet — ask them to open this chat"</string>
     <string name="l10n_server_error_identity_update" formatted="false">"Update the Parlons Node server to import an identity from the app."</string>

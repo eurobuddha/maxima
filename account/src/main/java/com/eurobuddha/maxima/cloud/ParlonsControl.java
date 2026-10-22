@@ -657,6 +657,7 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("hostedAccounts", mHostedAccounts != null || mManagedHosting != null);
             out.put("hostingError", mHostingError);
             out.put("chatOnly", mChatOnly);
+            out.put("tokenPayments", true);   // honours "tokenid" in chat.pay / wallet.send / wallet.buildsend
             return bytes(out);
         });
 
