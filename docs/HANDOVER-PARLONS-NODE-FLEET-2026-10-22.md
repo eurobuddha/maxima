@@ -82,8 +82,11 @@ still expires. Test: `DexDiscoveryTest.verifiedPeersAreReDialledWithoutAReClaim`
 
 - **Cloud hosts are `parlons-tenants.service`**, not `parlons-cloud.service`
   (`java -Xmx512m -jar /opt/maxima/parlons-cloud.jar --tenants /var/lib/parlons-tenants --no-relay --no-direct …`).
-  sally has 1 tenant (`review-2026-09-06`). Its web panel cannot bind 127.0.0.1:9587 because parlons-node
-  holds it. The tenant itself runs; the panel is local-only. Unresolved.
+  sally has 1 tenant (`review-2026-09-06`). Its web panel used to fail on 127.0.0.1:9587 because
+  parlons-node holds that port. **Fixed 2026-10-22:** sally's unit and the Pi's (which had `--no-panel`)
+  now pass `--panel-port 9597`, so tenant panels take 9597, 9598 and so on, on loopback. Unit backups:
+  `parlons-tenants.service.before-panel-port-9597`. On sally both 9587 (node) and 9597 (tenant) answer
+  HTTP 200. The Pi has 0 tenants.
 - **openproject's unit has `-Dparlons.node.public=https://store.eurobuddha.com/parlons-node`**, which is
   sally's URL. It looks copy-pasted. It was left as found; check what that flag drives before
   correcting it.
