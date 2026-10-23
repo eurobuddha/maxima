@@ -1,118 +1,167 @@
 #!/usr/bin/env python3
-"""Render the user guide (docs/guide/*.md, the single source) into the website.
+"""Build the Parlons website from the Markdown in this repo (the single source).
 
-    python3 docs/guide/build.py                 # -> ~/Projects/web/parlons-site/guide/*.html
+    python3 docs/guide/build.py                    # -> ~/Projects/web/parlons-site/
     python3 docs/guide/build.py --out /some/dir
 
-No dependencies: a small Markdown subset (headings, paragraphs, bold, code, links, lists,
-fenced code, tables, > notes, ---) is all the guide uses. Download links live in LINKS below so
-a release bump is one edit here; every page refers to them as {{ANDROID_APK}} etc. The same
-placeholders are expanded into the Markdown copies committed in the repo (docs/guide/*.md are
-the source; GitHub renders the placeholders literally, so README links point at the website).
+Sources: docs/guide/index.md (Get started), docs/guide/privacy.md, the three manuals in
+docs/manuals/, and docs/guide/site/ (landing.html template, site.css, img/). No dependencies: the
+renderer below covers exactly the Markdown the manuals use (headings, paragraphs, bold, italic,
+code, links, autolinks, nested ordered/unordered lists with code inside, fenced code, tables,
+> notes, ---). Download links live in LINKS so a release bump is one edit here; pages refer to
+them as {{ANDROID_APK}} etc.
+
+Old guide URLs (android.html, mac.html …) are written as redirects into the manuals, resolved
+against the real heading anchors at build time, so a renamed heading fails the build instead of
+breaking a link.
 """
 import html
 import os
 import re
+import shutil
 import sys
 
 LINKS = {
-    "ANDROID_VERSION": "0.6.56",
-    "ANDROID_APK": "https://github.com/eurobuddha/maxima/releases/download/v0.6.56/parlons-0.6.56.apk",
-    "PORTAL_VERSION": "0.2.1",
-    "PORTAL_APK": "https://github.com/eurobuddha/maxima/releases/download/portal-v0.2.1/parlons-cloud-portal-0.2.1-release.apk",
-    "DESKTOP_VERSION": "1.5.36",
-    "DESKTOP_DMG": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.36/MaximaNode-1.5.36.dmg",
-    "DESKTOP_MSI": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.36/MaximaNode-1.5.36.msi",
-    "DESKTOP_DEB": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.36/maximanode_1.5.36_amd64.deb",
+    "ANDROID_VERSION": "0.6.145",
+    "ANDROID_APK": "https://github.com/eurobuddha/maxima/releases/download/v0.6.145/parlons-0.6.145.apk",
+    "PORTAL_VERSION": "0.2.90",
+    "PORTAL_APK": "https://github.com/eurobuddha/maxima/releases/download/portal-v0.2.90/parlons-cloud-portal-0.2.90-release.apk",
+    "DESKTOP_VERSION": "1.5.115",
+    "DESKTOP_DMG": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.115/MaximaNode-1.5.115-notarized.dmg",
+    "DESKTOP_MSI": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.115/MaximaNode-1.5.115.msi",
+    "DESKTOP_DEB": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.115/maximanode_1.5.115_amd64.deb",
+    "CLOUD_VERSION": "0.11.123",
+    "NODE_VERSION": "0.2.138",
+    "NODE_JAR": "https://github.com/eurobuddha/maxima/releases/download/node-v0.2.138/parlons-node-0.2.138.jar",
     "RELEASES": "https://github.com/eurobuddha/maxima/releases",
     "REPO": "https://github.com/eurobuddha/maxima",
     "ISSUES": "https://github.com/eurobuddha/maxima/issues",
     "INSTALL_SH": "https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.sh",
     "INSTALL_PS1": "https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.ps1",
     "PANDAAPPS": "https://github.com/eurobuddha/minima-core-android-pandaapps",
-    "CLOUD_VERSION": "0.11.40",
 }
 
-PAGES = [  # (file, nav title, page title)
-    ("index", "Get started", "Get started with Parlons"),
-    ("android", "Android", "Parlons on Android"),
-    ("iphone", "iPhone", "Parlons on iPhone"),
-    ("mac", "Mac", "Parlons on a Mac"),
-    ("windows", "Windows", "Parlons on Windows"),
-    ("linux", "Linux", "Parlons on Linux"),
-    ("your-account", "Your account", "Run your own Parlons account"),
-    ("hosted", "Hosted accounts", "Hosted accounts"),
-    ("node", "Parlons Node", "Run a Parlons Node"),
-    ("security", "Security", "Your seed, your keys, what Parlons protects"),
-    ("help", "Help", "Help and troubleshooting"),
-    ("privacy", "Privacy", "Privacy"),
+HERE = os.path.dirname(os.path.abspath(__file__))
+DOCS = os.path.dirname(HERE)
+
+# (output name, source, nav label, kind)
+PAGES = [
+    ("index", os.path.join(HERE, "index.md"), "Get started", "guide"),
+    ("parlons", os.path.join(DOCS, "manuals", "parlons.md"), "Parlons! manual", "manual"),
+    ("cloud", os.path.join(DOCS, "manuals", "parlons-cloud-portal.md"), "Cloud manual", "manual"),
+    ("node", os.path.join(DOCS, "manuals", "parlons-node.md"), "Node manual", "manual"),
+    ("privacy", os.path.join(HERE, "privacy.md"), "Privacy", "guide"),
 ]
-NAV = [("index", "Get started"), ("android", "Android"), ("iphone", "iPhone"), ("mac", "Computer"),
-       ("your-account", "Your account"), ("help", "Help")]
+MD_TO_PAGE = {"parlons.md": "parlons.html", "parlons-cloud-portal.md": "cloud.html", "parlons-node.md": "node.html",
+              "index.md": "index.html", "privacy.md": "privacy.html"}
+MD_TITLE = {"parlons.md": "Parlons! manual", "parlons-cloud-portal.md": "Parlons Cloud manual", "parlons-node.md": "Parlons Node manual"}
+BLURB = {
+    "parlons": "Every feature of the Android app and Parlons Desktop, step by step.",
+    "cloud": "Using an always-on account from your phone, and hosting accounts for yourself and others.",
+    "node": "Running a Parlons Node: a full Minima node, a relay and your account in one process.",
+}
 
-CSS = """
-  :root{--cream:#FBF6EE;--cream-2:#F4ECDF;--card:#FFFFFF;--ink:#1B1712;--ink-2:#5B5347;--faint:#9A9081;--line:#E7DECF;--orange:#EF4A1E;--orange-soft:#FFF1EA;--blue:#2E6BE6;--blue-soft:#EAF1FE;--shadow-sm:0 2px 10px rgba(60,40,20,.06);--maxw:860px}
-  *{box-sizing:border-box} html,body{max-width:100%;overflow-x:hidden} p,li,td,th,h1,h2,h3{overflow-wrap:break-word} td:first-child,th:first-child{white-space:nowrap} body{margin:0;background:var(--cream);color:var(--ink);font-family:"Manrope",system-ui,-apple-system,sans-serif;font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px} a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
-  header{position:sticky;top:0;z-index:5;background:rgba(251,246,238,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)} .nav{display:flex;align-items:center;gap:16px;height:60px;overflow-x:auto;white-space:nowrap}
-  .brand{font-weight:800;color:var(--ink);letter-spacing:-.02em;font-size:19px;flex:none} .sp{flex:1} .lk{color:var(--ink-2);font-weight:600;font-size:14px;flex:none} .lk.on{color:var(--ink);border-bottom:2px solid var(--orange)}
-  h1{font-size:clamp(32px,6vw,46px);letter-spacing:-.03em;line-height:1.06;margin:44px 0 12px;font-weight:800;text-wrap:balance}
-  h2{font-size:25px;letter-spacing:-.02em;margin:44px 0 10px;font-weight:800;line-height:1.15} h3{font-size:18px;margin:26px 0 6px;font-weight:700}
-  p{margin:0 0 14px} li{margin:5px 0} ul,ol{padding-left:24px;margin:0 0 14px}
-  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--cream-2);padding:1px 5px;border-radius:5px;word-break:break-all}
-  pre{max-width:100%;background:#1B1712;color:#F4ECDF;border-radius:12px;padding:14px 16px;overflow-x:auto;margin:0 0 16px;font-size:14px;line-height:1.5} pre code{background:none;padding:0;color:inherit;word-break:normal;font-size:inherit}
-  .note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--orange);border-radius:12px;padding:12px 16px;margin:0 0 16px;box-shadow:var(--shadow-sm)} .note p:last-child{margin:0}
-  .tablewrap{overflow-x:auto;margin:0 0 16px;border:1px solid var(--line);border-radius:12px;background:var(--card)} table{border-collapse:collapse;width:100%;font-size:15px} td,th{border-bottom:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top} th{color:var(--faint);font-size:12px;letter-spacing:.1em;text-transform:uppercase} tr:last-child td{border-bottom:0}
-  hr{border:0;border-top:1px solid var(--line);margin:34px 0}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:0 0 20px} .cards a{display:block;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;color:var(--ink);box-shadow:var(--shadow-sm)} .cards a:hover{border-color:var(--ink);text-decoration:none} .cards b{display:block;font-size:17px;margin-bottom:4px} .cards span{color:var(--ink-2);font-size:14px}
-  footer{margin:64px 0 40px;color:var(--faint);font-size:14px;border-top:1px solid var(--line);padding-top:20px} footer a{color:var(--ink-2);margin-right:14px}
-  @media (max-width:600px){ .wrap{padding:0 18px} h2{font-size:22px} }
-"""
+# old guide page -> (manual page, a phrase from the target heading); resolved against real anchors
+REDIRECTS = {
+    "android": ("parlons", "Install"), "mac": ("parlons", "Install"), "windows": ("parlons", "Install"),
+    "linux": ("parlons", "Install"), "iphone": ("cloud", "Install the app"),
+    "your-account": ("cloud", "One account on your own machine"), "hosted": ("cloud", "Many accounts"),
+    "node": None,   # node.html is the Node manual itself now
+    "security": ("parlons", "Security and privacy"), "help": ("parlons", "Troubleshooting"),
+}
 
-HEAD = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title} — Parlons!</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<style>{css}</style></head><body>
-<header><div class="wrap nav"><a class="brand" href="../index.html">Parlons!</a><span class="sp"></span>{nav}</div></header>
-<main class="wrap">
-"""
-FOOT = """</main>
-<footer class="wrap">{navlinks}<a href="{repo}" target="_blank" rel="noopener">Source</a><a href="privacy.html">Privacy</a><br><br>Parlons! — a conversation with no center, on Maxima &amp; the Minima blockchain. No account with us. No profits. No data leak.</footer>
-</body></html>
-"""
+MARK = ('<svg viewBox="0 0 256 256" aria-hidden="true"><rect x="18" y="18" width="220" height="220" rx="52" fill="#1B1D21"/>'
+        '<path d="M104 96h44c17 0 31 13 31 29s-14 29-31 29h-21l-23 19v-20c-16-3-27-15-27-28 0-16 13-29 27-29Z" fill="#1B1D21" '
+        'stroke="#F5F4F1" stroke-width="11" stroke-linejoin="round"/><g transform="translate(128 122) skewX(-12)">'
+        '<rect x="-4.2" y="-22" width="8.4" height="28" rx="4.2" fill="#F5F4F1"/><circle cx="0" cy="15" r="4.7" fill="#F5F4F1"/></g>'
+        '<circle cx="128" cy="49" r="12" fill="#FF7A2E"/><circle cx="207" cy="128" r="12" fill="#FF7A2E"/>'
+        '<circle cx="75" cy="181" r="12" fill="#4E86FF"/><circle cx="181" cy="181" r="12" fill="#4E86FF"/></svg>')
+FAVICON = "data:image/svg+xml," + MARK.replace('"', "'").replace("#", "%23").replace("<", "%3C").replace(">", "%3E")
+FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+         '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Manrope:wght@400;500;600;700;800&display=swap">')
 
-INLINE_CODE = re.compile(r"`([^`]+)`")
+
+# ---------------------------------------------------------------- inline Markdown
+
+CODE = re.compile(r"(`+)(.+?)\1")
+AUTOLINK = re.compile(r"&lt;(https?://[^\s&]+(?:&amp;[^\s&]+)*)&gt;")
+LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
-LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+ITALIC = re.compile(r"(?<![\w*])\*(?![\s*])([^*\n]+?)(?<![\s*])\*(?![\w*])")
+
+
+def href(url):
+    if url.startswith(("http://", "https://", "#", "mailto:")):
+        return url
+    base, _, frag = url.partition("#")
+    name = os.path.basename(base)
+    if name in MD_TO_PAGE:
+        return MD_TO_PAGE[name] + ("#" + frag if frag else "")
+    return url
 
 
 def inline(text):
-    """Escape, then bring back the few inline constructs."""
-    parts = []
-    pos = 0
-    for m in INLINE_CODE.finditer(text):
-        parts.append(_inline_no_code(text[pos:m.start()]))
-        parts.append("<code>" + html.escape(m.group(1)) + "</code>")
-        pos = m.end()
-    parts.append(_inline_no_code(text[pos:]))
-    return "".join(parts)
+    """Code spans are held as placeholders while the rest is formatted, so **bold `code`** works."""
+    spans = []
+
+    def hold(m):
+        spans.append("<code>" + html.escape(m.group(2).strip()) + "</code>")
+        return "\x00%d\x00" % (len(spans) - 1)
+    t = _inline_text(CODE.sub(hold, text))
+    return re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], t)
 
 
-def _inline_no_code(t):
+def _inline_text(t):
     t = html.escape(t, quote=False)
-    t = LINK.sub(lambda m: '<a href="%s"%s>%s</a>' % (
-        m.group(2), ' target="_blank" rel="noopener"' if m.group(2).startswith("http") else "", m.group(1)), t)
-    t = BOLD.sub(r"<b>\1</b>", t)
+    t = AUTOLINK.sub(lambda m: '<a href="%s" target="_blank" rel="noopener">%s</a>' % (m.group(1), m.group(1)), t)
+
+    def link(m):
+        u = href(html.unescape(m.group(2)))
+        ext = u.startswith("http")
+        label = MD_TITLE.get(m.group(1), m.group(1))     # a manual linked by file name shows its name
+        return '<a href="%s"%s>%s</a>' % (html.escape(u), ' target="_blank" rel="noopener"' if ext else "", label)
+    t = LINK.sub(link, t)
+    t = BOLD.sub(r"<strong>\1</strong>", t)
+    t = ITALIC.sub(r"<em>\1</em>", t)
     return t
 
 
-def render(md):
-    out = []
-    lines = md.split("\n")
-    i = 0
-    para = []
+def slug(text, used):
+    """GitHub-style anchor: lowercase, drop punctuation, spaces to hyphens; repeats get -1, -2."""
+    plain = re.sub(r"[`*]", "", re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)).strip().lower()
+    s = re.sub(r"[^\w\- ]", "", plain).replace(" ", "-")
+    base, n = s, 1
+    while s in used:
+        s = "%s-%d" % (base, n); n += 1
+    used.add(s)
+    return s
+
+
+# ---------------------------------------------------------------- block Markdown
+
+LIST_ITEM = re.compile(r"^( *)([-*+]|\d+\.) +(.*)$")
+FENCE = re.compile(r"^ *(```|~~~)")
+
+
+def indent_of(s):
+    return len(s) - len(s.lstrip(" "))
+
+
+def split_row(line):
+    s = line.strip()
+    s = s[1:] if s.startswith("|") else s
+    s = s[:-1] if s.endswith("|") and not s.endswith("\\|") else s
+    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", s)]
+
+
+class Doc:
+    def __init__(self):
+        self.used = set()
+        self.toc = []        # (level, id, text)
+
+
+def render(lines, doc, top=False):
+    out, i, para = [], 0, []
 
     def flush():
         if para:
@@ -122,94 +171,312 @@ def render(md):
     while i < len(lines):
         ln = lines[i]
         s = ln.strip()
-        if s.startswith("```"):
+        if not s:
+            flush(); i += 1; continue
+        if FENCE.match(ln):
             flush()
-            j = i + 1
-            code = []
-            while j < len(lines) and not lines[j].strip().startswith("```"):
-                code.append(lines[j])
+            ind, mark = indent_of(ln), FENCE.match(ln).group(1)
+            j, code = i + 1, []
+            while j < len(lines) and not lines[j].strip().startswith(mark):
+                code.append(lines[j][ind:] if lines[j][:ind].strip() == "" else lines[j].lstrip())
                 j += 1
             out.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
-            i = j + 1
-            continue
-        if s.startswith("<div"):
-            # raw HTML block: pass every line through until the closing tag
+            i = j + 1; continue
+        if s.startswith("<div") or s.startswith("<!--"):
             flush()
+            closing = "</div" if s.startswith("<div") else "-->"
             while i < len(lines):
                 out.append(lines[i].strip())
-                if lines[i].strip().startswith("</div"):
-                    i += 1
-                    break
+                if closing in lines[i]:
+                    i += 1; break
                 i += 1
             continue
-        if s.startswith("#"):
+        m = re.match(r"^(#{1,4}) +(.*?) *#*$", s)
+        if m and indent_of(ln) < 4:
             flush()
-            level = len(s) - len(s.lstrip("#"))
-            text = s[level:].strip()
-            slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-            out.append('<h%d id="%s">%s</h%d>' % (level, slug, inline(text), level))
+            level, text = len(m.group(1)), m.group(2)
+            hid = slug(text, doc.used)
+            if top and level <= 2:
+                doc.toc.append((level, hid, text))
+            num = re.match(r"^(\d+(?:\.\d+)*\.?)\s+(.*)$", text) if level == 2 else None
+            body = ('<span class="n">%s</span>%s' % (html.escape(num.group(1).rstrip(".")), inline(num.group(2)))) if num else inline(text)
+            out.append('<h%d id="%s">%s</h%d>' % (level, hid, body, level))
             i += 1; continue
-        if s == "---":
+        if re.fullmatch(r"(-{3,}|\*{3,}|_{3,})", s):
             flush(); out.append("<hr>"); i += 1; continue
         if s.startswith(">"):
             flush()
             block = []
             while i < len(lines) and lines[i].strip().startswith(">"):
-                block.append(lines[i].strip()[1:].strip()); i += 1
-            out.append('<div class="note">' + render("\n".join(block)) + "</div>")
+                block.append(re.sub(r"^\s*> ?", "", lines[i])); i += 1
+            first = block[0] if block else ""
+            cls = "note warn" if re.match(r"\*\*(Important|Warning|Never|Do not)", first) else "note"
+            out.append('<div class="%s">%s</div>' % (cls, render(block, doc)))
             continue
         if s.startswith("|"):
             flush()
             rows = []
             while i < len(lines) and lines[i].strip().startswith("|"):
-                rows.append([c.strip() for c in lines[i].strip().strip("|").split("|")]); i += 1
+                rows.append(split_row(lines[i])); i += 1
             body = [r for r in rows[1:] if not all(re.fullmatch(r":?-+:?", c or "-") for c in r)]
-            t = '<div class="tablewrap"><table><tr>' + "".join("<th>%s</th>" % inline(c) for c in rows[0]) + "</tr>"
+            t = '<div class="tablewrap"><table><thead><tr>' + "".join("<th>%s</th>" % inline(c) for c in rows[0]) + "</tr></thead><tbody>"
             for r in body:
                 t += "<tr>" + "".join("<td>%s</td>" % inline(c) for c in r) + "</tr>"
-            out.append(t + "</table></div>")
+            out.append(t + "</tbody></table></div>")
             continue
-        if re.match(r"^(-|\d+\.)\s", s):
+        lm = LIST_ITEM.match(ln)
+        if lm and indent_of(ln) < 4:
             flush()
-            ordered = s[0].isdigit()
-            items = []
-            while i < len(lines) and re.match(r"^\s*(-|\d+\.)\s", lines[i]):
-                item = re.sub(r"^\s*(-|\d+\.)\s", "", lines[i])
-                i += 1
-                while i < len(lines) and lines[i].startswith("  ") and lines[i].strip() and not re.match(r"^\s*(-|\d+\.)\s", lines[i]):
-                    item += " " + lines[i].strip(); i += 1
-                items.append(item)
-            tag = "ol" if ordered else "ul"
-            out.append("<%s>" % tag + "".join("<li>%s</li>" % inline(x) for x in items) + "</%s>" % tag)
-            continue
-        if s == "":
-            flush(); i += 1; continue
+            html_list, i = render_list(lines, i, doc)
+            out.append(html_list); continue
         para.append(ln); i += 1
     flush()
     return "\n".join(out)
 
 
+def render_list(lines, i, doc):
+    first = LIST_ITEM.match(lines[i])
+    base = indent_of(lines[i])
+    ordered = first.group(2)[0].isdigit()
+    start = int(first.group(2)[:-1]) if ordered else 1
+    items = []
+    while i < len(lines):
+        m = LIST_ITEM.match(lines[i])
+        if not m or indent_of(lines[i]) != base or m.group(2)[0].isdigit() != ordered:
+            break
+        width = len(m.group(1)) + len(m.group(2)) + 1
+        body = [m.group(3)]
+        i += 1
+        while i < len(lines):
+            nxt = lines[i]
+            if not nxt.strip():
+                # a blank line continues the item only if indented content follows
+                k = i
+                while k < len(lines) and not lines[k].strip():
+                    k += 1
+                if k < len(lines) and indent_of(lines[k]) > base:
+                    body.extend([""] * (k - i)); i = k; continue
+                break
+            if indent_of(nxt) > base:
+                body.append(nxt[min(width, indent_of(nxt)):]); i += 1; continue
+            if LIST_ITEM.match(nxt) or nxt.strip().startswith(("|", ">", "#", "```")):
+                break
+            body.append(nxt.strip()); i += 1     # lazy continuation of the item's paragraph
+        inner = render(body, doc)
+        if inner.startswith("<p>"):
+            inner = inner[3:].replace("</p>", "", 1)       # the item's first paragraph sits on the marker line
+        box = re.match(r"^\[([ xX])\] +", inner)
+        if box:      # a task-list item: - [ ] / - [x]
+            inner = '<span class="box%s" aria-hidden="true"></span>' % (" done" if box.group(1) != " " else "") + inner[box.end():]
+        items.append("<li%s>" % (' class="task"' if box else "") + inner + "</li>")
+        # skip blank lines between items of the same list
+        k = i
+        while k < len(lines) and not lines[k].strip():
+            k += 1
+        if k < len(lines) and LIST_ITEM.match(lines[k]) and indent_of(lines[k]) == base \
+                and LIST_ITEM.match(lines[k]).group(2)[0].isdigit() == ordered:
+            i = k
+    if ordered:
+        attr = ' style="counter-reset:step %d" start="%d"' % (start - 1, start) if start != 1 else ""
+        return "<ol%s>%s</ol>" % (attr, "".join(items)), i
+    return "<ul>%s</ul>" % "".join(items), i
+
+
+def drop_contents(lines):
+    """The manuals carry their own '## Contents' list; the site shows a contents rail instead."""
+    out, skip = [], False
+    for ln in lines:
+        if re.match(r"^## +(Contents|Table of contents)\s*$", ln.strip(), re.I):
+            skip = True; continue
+        if skip and re.match(r"^#{1,2} ", ln):
+            skip = False
+        if skip:
+            continue
+        out.append(ln)
+    return out
+
+
 def expand(text):
     for k, v in LINKS.items():
         text = text.replace("{{%s}}" % k, v)
+    left = re.findall(r"\{\{[A-Z_]+\}\}", text)
+    if left:
+        raise SystemExit("unknown placeholder(s): %s" % ", ".join(sorted(set(left))))
     return text
 
 
+# ---------------------------------------------------------------- page chrome
+
+def head(title, desc, root):
+    return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
+            "<title>%s</title><meta name=\"description\" content=\"%s\">"
+            "<meta property=\"og:title\" content=\"%s\"><meta property=\"og:description\" content=\"%s\">"
+            "<meta name=\"theme-color\" content=\"#2A2E33\"><link rel=\"icon\" href=\"%s\">%s"
+            "<link rel=\"stylesheet\" href=\"%sassets/site.css\"></head><body>\n"
+            % (html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), FAVICON, FONTS, root))
+
+
+def bar(root, current):
+    links = [("guide/index.html", "Get started", "index", ""), ("guide/parlons.html", "Parlons!", "parlons", ""),
+             ("guide/cloud.html", "Cloud", "cloud", ""), ("guide/node.html", "Node", "node", ""),
+             (LINKS["REPO"], "Source", "", "opt")]
+    nav = "".join('<a%s href="%s"%s>%s</a>' % (
+        (' class="%s"' % " ".join(c for c in (cls, "on" if key == current else "") if c)) if (cls or key == current) else "",
+        u if u.startswith("http") else root + u, ' target="_blank" rel="noopener"' if u.startswith("http") else "", t)
+        for u, t, key, cls in links)
+    return ('<header class="bar"><div class="wrap"><a class="brand" href="%sindex.html">%s<span>Parlons!<small>a conversation with no center</small></span></a>'
+            '<nav aria-label="Site">%s</nav></div></header>\n' % (root, MARK, nav))
+
+
+def foot(root):
+    return ('<footer class="foot"><div class="wrap"><nav aria-label="Footer"><a href="%sguide/index.html">Get started</a><a href="%sguide/parlons.html">Parlons! manual</a>'
+            '<a href="%sguide/cloud.html">Cloud manual</a><a href="%sguide/node.html">Node manual</a><a href="%sguide/privacy.html">Privacy</a>'
+            '<a href="%s" target="_blank" rel="noopener">Source</a><a href="%s" target="_blank" rel="noopener">Releases</a>'
+            '<a href="%s" target="_blank" rel="noopener">Report a problem</a></nav>'
+            '<p>Parlons! is private chat on Maxima and the Minima blockchain. Open source, community-run, no account with anyone. '
+            'The authors collect nothing.</p></div></footer>\n' % (root, root, root, root, root, LINKS["REPO"], LINKS["RELEASES"], LINKS["ISSUES"]))
+
+
+TOC_JS = """<script>
+(function(){var links=[].slice.call(document.querySelectorAll('.toc a[href^="#"]'));if(!links.length||!('IntersectionObserver' in window))return;
+var map={};links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a});var cur=null;
+var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){var a=map[e.target.id];if(a&&a!==cur){if(cur)cur.classList.remove('on');a.classList.add('on');cur=a;
+var t=a.closest('.toc');if(t){var r=a.getBoundingClientRect(),q=t.getBoundingClientRect();if(r.top<q.top||r.bottom>q.bottom)a.scrollIntoView({block:'nearest'})}}}})},{rootMargin:'-80px 0px -70% 0px'});
+Object.keys(map).forEach(function(id){var h=document.getElementById(id);if(h)io.observe(h)})})();
+</script>"""
+
+
+def manual_page(name, md):
+    lines = md.split("\n")
+    title_line = next(l for l in lines if l.startswith("# "))
+    title = title_line[2:].strip()
+    body_lines = lines[lines.index(title_line) + 1:]
+    doc = Doc()
+    body = render(drop_contents(body_lines), doc, top=True)
+    toc_items = []
+    for level, hid, text in doc.toc:
+        if level == 1:
+            toc_items.append('<li class="part">%s</li>' % inline(text))
+        else:
+            toc_items.append('<li><a href="#%s">%s</a></li>' % (hid, inline(text)))
+    toc = "".join(toc_items)
+    mobile = "".join(x for x in toc_items if 'class="part"' not in x)
+    order = [p[0] for p in PAGES if p[3] == "manual"]
+    idx = order.index(name)
+    titles = {p[0]: p[2] for p in PAGES}
+    prev_ = order[idx - 1] if idx > 0 else None
+    next_ = order[idx + 1] if idx + 1 < len(order) else None
+    pager = '<nav class="pager" aria-label="Manuals">%s%s</nav>' % (
+        '<a href="%s.html"><span>Previous manual</span>%s</a>' % (prev_, titles[prev_]) if prev_ else '<a href="index.html"><span>Back to</span>Get started</a>',
+        '<a class="next" href="%s.html"><span>Next manual</span>%s</a>' % (next_, titles[next_]) if next_ else '<a class="next" href="privacy.html"><span>Read</span>Privacy</a>')
+    page = (head(title + " · Parlons!", BLURB[name], "../") + bar("../", name) +
+            '<div class="wrap doc"><aside class="toc" aria-label="Contents"><span class="label">Contents</span><ol>%s</ol></aside>'
+            '<main class="prose" id="top"><div class="doc-head"><span class="label">Manual</span><h1>%s</h1><p class="lede">%s</p></div>'
+            '<details class="toc-m"><summary>Contents</summary><ol>%s</ol></details>%s%s</main></div>'
+            '<a class="top-link" href="#top">Top ↑</a>' % (toc, inline(title), BLURB[name], mobile, body, pager)
+            + foot("../") + TOC_JS + "</body></html>\n")
+    return page, doc
+
+
+def guide_page(name, md):
+    lines = md.split("\n")
+    title_line = next(l for l in lines if l.startswith("# "))
+    title = title_line[2:].strip()
+    doc = Doc()
+    body = render(lines[lines.index(title_line) + 1:], doc)
+    desc = ("Get Parlons on your phone or computer, or run your own always-on account." if name == "index"
+            else "What Parlons collects (nothing), and where your data lives.")
+    page = (head(title + " · Parlons!", desc, "../") + bar("../", name) +
+            '<div class="wrap"><main class="prose guide"><div class="doc-head"><h1>%s</h1></div>%s</main></div>'
+            % (inline(title), body) + foot("../") + "</body></html>\n")
+    return page, doc
+
+
+def redirect(target, title):
+    return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s · Parlons!</title>'
+            '<meta http-equiv="refresh" content="0; url=%s"><link rel="canonical" href="%s"></head>'
+            '<body><p>This page moved: <a href="%s">%s</a>.</p></body></html>\n' % (html.escape(title), target, target, target, target))
+
+
 def main():
-    here = os.path.dirname(os.path.abspath(__file__))
-    out_dir = os.path.expanduser("~/Projects/web/parlons-site/guide")
+    out_dir = os.path.expanduser("~/Projects/web/parlons-site")
     if "--out" in sys.argv:
         out_dir = sys.argv[sys.argv.index("--out") + 1]
-    os.makedirs(out_dir, exist_ok=True)
-    navlinks = "".join('<a href="%s.html">%s</a>' % (f, t) for f, t in NAV)
-    for fname, navtitle, title in PAGES:
-        src = os.path.join(here, fname + ".md")
+    gdir = os.path.join(out_dir, "guide")
+    os.makedirs(gdir, exist_ok=True)
+    adir = os.path.join(out_dir, "assets")
+    if os.path.isdir(adir):
+        shutil.rmtree(adir)
+    shutil.copytree(os.path.join(HERE, "site", "img"), os.path.join(adir, "img"))
+    shutil.copy(os.path.join(HERE, "site", "site.css"), os.path.join(adir, "site.css"))
+
+    anchors = {}
+    for name, src, navlabel, kind in PAGES:
         md = expand(open(src, encoding="utf-8").read())
-        nav = "".join('<a class="lk%s" href="%s.html">%s</a>' % (" on" if f == fname or (fname in ("windows", "linux") and f == "mac") else "", f, t) for f, t in NAV)
-        page = HEAD.format(title=html.escape(title), css=CSS, nav=nav) + render(md) + FOOT.format(navlinks=navlinks, repo=LINKS["REPO"])
-        with open(os.path.join(out_dir, fname + ".html"), "w", encoding="utf-8") as f:
+        page, doc = manual_page(name, md) if kind == "manual" else guide_page(name, md)
+        anchors[name] = doc.toc
+        with open(os.path.join(gdir, name + ".html"), "w", encoding="utf-8") as f:
             f.write(page)
-        print("wrote", os.path.join(out_dir, fname + ".html"))
+        print("wrote", os.path.join(gdir, name + ".html"))
+
+    for old, target in REDIRECTS.items():
+        if target is None:
+            continue
+        page, phrase = target
+        hit = next((hid for lvl, hid, text in anchors[page] if phrase.lower() in text.lower()), None)
+        if hit is None:
+            raise SystemExit("redirect %s.html: no heading containing %r in %s" % (old, phrase, page))
+        with open(os.path.join(gdir, old + ".html"), "w", encoding="utf-8") as f:
+            f.write(redirect("%s.html#%s" % (page, hit), old))
+    for old, target in (("ios", "guide/cloud.html"), ("privacy", "guide/privacy.html"), ("support", "guide/index.html")):
+        with open(os.path.join(out_dir, old + ".html"), "w", encoding="utf-8") as f:
+            f.write(redirect(target, old))
+
+    landing = open(os.path.join(HERE, "site", "landing.html"), encoding="utf-8").read()
+    landing = landing.replace("{{{MARK}}}", MARK).replace("{{{HEAD}}}", head(
+        "Parlons! · a conversation with no center",
+        "Private chat with no company in the middle. No sign-up, no phone number. Sealed on your device, carried by relays people like you run.", "")
+    ).replace("{{{BAR}}}", bar("", "home")).replace("{{{FOOT}}}", foot(""))
+    landing = expand(landing)
+    with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as f:
+        f.write(landing)
+    print("wrote", os.path.join(out_dir, "index.html"))
+    check_links(out_dir)
+    with open(os.path.join(out_dir, "404.html"), "w", encoding="utf-8") as f:
+        f.write(head("Not found · Parlons!", "This page does not exist.", "/") + bar("/", "") +
+                '<div class="wrap"><main class="prose guide"><div class="doc-head"><h1>That page is not here.</h1></div>'
+                '<p>Try <a href="/guide/index.html">Get started</a> or one of the manuals.</p></main></div>' + foot("/") + "</body></html>\n")
+
+
+def check_links(out_dir):
+    """Fail the build on any internal link to a missing page or a missing #anchor."""
+    ids, pages = {}, []
+    for dirpath, _, files in os.walk(out_dir):
+        for fn in files:
+            if fn.endswith(".html"):
+                path = os.path.join(dirpath, fn)
+                text = open(path, encoding="utf-8").read()
+                ids[os.path.normpath(path)] = set(re.findall(r'\sid="([^"]+)"', text))
+                pages.append((path, text))
+    bad = []
+    for path, text in pages:
+        if 'http-equiv="refresh"' in text:
+            targets = re.findall(r'url=([^"]+)"', text)
+        else:
+            targets = re.findall(r'href="([^"]+)"', text)
+        for t in targets:
+            if t.startswith(("http:", "https:", "mailto:", "data:", "/")):
+                continue
+            file_, _, frag = t.partition("#")
+            dest = os.path.normpath(os.path.join(os.path.dirname(path), file_)) if file_ else os.path.normpath(path)
+            if not os.path.exists(dest):
+                bad.append("%s -> %s (no such file)" % (os.path.relpath(path, out_dir), t))
+            elif frag and dest.endswith(".html") and frag not in ids.get(dest, set()):
+                bad.append("%s -> %s (no such anchor)" % (os.path.relpath(path, out_dir), t))
+    if bad:
+        raise SystemExit("broken links:\n  " + "\n  ".join(sorted(set(bad))))
+    print("links: all internal links and anchors resolve")
 
 
 if __name__ == "__main__":

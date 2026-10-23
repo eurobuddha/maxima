@@ -1,12 +1,24 @@
 # Parlons Node — Operator's Manual
 
-For `parlons-node.jar` **0.2.136** (release tag `node-v0.2.136`). Every flag, port, default and
-endpoint in this manual comes from the source in this repository (`node/`, `server/`, `core/`,
-`account/`, `dexrelay/`) and the deploy script `ops/deploy-parlons-node.sh`. If a value is
-not in the code, this manual says so and does not guess it.
+For `parlons-node.jar` **0.2.138** (release tag `node-v0.2.138`), which carries DEX relay
+**0.1.5**. Every flag, port, default and endpoint in this manual comes from the source in the
+`eurobuddha/maxima` repository (`node/`, `server/`, `core/`, `account/`, `dexrelay/`) and the
+deploy script `ops/deploy-parlons-node.sh`. If a value is not in the code, this manual says so
+and does not guess it.
 
 Host names in the examples (`node.example.com`, `peer1.example.net` and so on) are
 placeholders. Replace them with your own.
+
+Each task has a numbered **How to …** procedure with the exact commands. The commands assume a
+Debian or Ubuntu box, the deploy script's paths (`/opt/maxima`, `/var/lib/parlons-node`), the
+service user `maxima`, and the default ports. Change them if yours differ.
+
+Related manuals:
+
+- [Parlons! user manual](parlons.md): the apps, and the relays they use
+  ([the Network tab](parlons.md#19-the-network-tab-relays-and-helping-the-network)).
+- [Parlons Cloud Portal manual](parlons-cloud-portal.md): pairing a phone with the account on
+  this node, and the `parlons-tenants` service.
 
 ---
 
@@ -31,7 +43,7 @@ placeholders. Replace them with your own.
 17. [The account, pairing and the local panel](#17-the-account-pairing-and-the-local-panel)
 18. [The keets sidecar (KeetChat bridge)](#18-the-keets-sidecar-keetchat-bridge)
 19. [MDS (MiniHUB) on the node](#19-mds-minihub-on-the-node)
-20. [Seeds and identity](#20-seeds-and-identity)
+20. [Seeds, identity and backups](#20-seeds-identity-and-backups)
 21. [The admin RPC](#21-the-admin-rpc)
 22. [Upgrading and rolling back](#22-upgrading-and-rolling-back)
 23. [Verifying from outside](#23-verifying-from-outside)
@@ -65,7 +77,7 @@ A Parlons Node is one Java process that contains:
 
 **One seed drives the whole node.** On first boot, the identity of the Maxima relay and the account
 is derived from the node's wallet seed and then pinned in `identity.txt`
-(see [§20](#20-seeds-and-identity)).
+(see [§20](#20-seeds-identity-and-backups)).
 
 Who needs this? Most people do not. Parlons Cloud (`parlons-cloud.jar`) runs an always-on account
 in about 1 GB of RAM. Run a Parlons Node when you want to hold a full copy of the chain, serve the
@@ -94,8 +106,8 @@ relay network, and give phones a wallet gateway.
 │                                          │
 │  Wallet gateway + NFT  127.0.0.1:9585    │
 │  Account panel + API   127.0.0.1:9587    │
-│  DEX relay cape        127.0.0.1:9602    │  (opt-in; set the bind to 127.0.0.1;
-│                                          │   the default from 0.2.138 when public)
+│  DEX relay cape        127.0.0.1:9602    │  (opt-in; loopback by default when
+│                                          │   parlons.dex.public is set)
 │  Parlons account (pairing, chat, push)   │
 │  keets chat bridge (when -keets is on)   │──► keets sidecar (Node.js child)
 └──────────────────────────────────────────┘
@@ -109,7 +121,7 @@ relay network, and give phones a wallet gateway.
 | Relay cape | `server/.../RelayRuntime`, `RelayServer` | TCP `9501`, plus UDP STUN on the same port | on |
 | Wallet gateway and `/nft` | `node/.../NodeGateway.java`, `NftStore.java` | `127.0.0.1:9585` | on (it starts once the wallet is up) |
 | Account panel | `account/.../ParlonsLocal.java` | `127.0.0.1:9587` | on |
-| DEX relay cape | `dexrelay/.../DexRelay.java` | `0.0.0.0:<port>` unless you set the bind (0.2.138+: `127.0.0.1` when `parlons.dex.public` is set) | off (`parlons.dex.port=0`) |
+| DEX relay cape | `dexrelay/.../DexRelay.java` | `127.0.0.1:<port>` when `parlons.dex.public` is set, else `0.0.0.0:<port>`; an explicit `parlons.dex.bind` wins | off (`parlons.dex.port=0`) |
 | keets bridge | `node/.../KeetsChatBridge.java` | none (polls the node) | on only when the node runs with `-keets` |
 
 **Boot order** (from `ParlonsNodeMain.main`):
@@ -146,8 +158,7 @@ relay network, and give phones a wallet gateway.
 | Node with MegaMMR (the default; needed to be a wallet gateway) | 8 GB | 3 GB minimum |
 | Node without MegaMMR (`-Dparlons.node.megammr=false`) | 2 GB | 768 MB |
 
-These figures come from `docs/guide/node.md` and the fleet notes in `cloud/NODE-SETUP.md`. They
-were learned the hard way: MegaMMR nodes at 2 GB and 2.5 GB heap looped on out-of-memory errors,
+These figures come from the fleet notes in `cloud/NODE-SETUP.md`. They were learned the hard way: MegaMMR nodes at 2 GB and 2.5 GB heap looped on out-of-memory errors,
 and one at 3 GB crashed.
 
 - **Always set `-Xmx`.** An unbounded default heap is how you lose a small VPS.
@@ -170,6 +181,41 @@ Disk use grows with the chain. The code sets no fixed figure. Also budget for:
 - Outbound internet access, to reach Minima peers, mesh relays and the archive node.
 - A domain name with TLS if you want to serve the gateway, NFT files or the DEX cape publicly.
 
+### How to check a box before you install
+
+1. Check the Java version. It must be 11 or newer; 21 or newer is better:
+
+   ```bash
+   java -version
+   ```
+
+2. Check that the `jdk.httpserver` module is present. This must print one line:
+
+   ```bash
+   java --list-modules | grep jdk.httpserver
+   ```
+
+3. Check the RAM. You need 8 GB for a MegaMMR node, or 2 GB without MegaMMR:
+
+   ```bash
+   free -h
+   ```
+
+4. Check the free disk space where the data directory will live:
+
+   ```bash
+   df -h /var/lib
+   ```
+
+5. Check that nothing already holds the ports the node needs:
+
+   ```bash
+   ss -ltnp | grep -E ':(9001|9005|9501|9585|9587|9602) '
+   ```
+
+   This should print nothing. If a stock Minima node holds 9001, plan to move the node's P2P port
+   ([§9](#9-ports)). If `maxima-relay.service` holds 9501, plan to replace it ([§5](#5-two-ways-to-install)).
+
 ---
 
 ## 4. Download and verify the jar
@@ -181,47 +227,66 @@ pick a node release by its tag.
 1. Download the jar and the checksum file:
 
    ```bash
-   VER=0.2.136
+   VER=0.2.138
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
-2. Check the SHA-256 hash. The hash of `parlons-node-0.2.136.jar` is:
+2. Check the SHA-256 hash. The hash of `parlons-node-0.2.138.jar` is:
 
    ```
-   e354bdf4906ab216863c6dc4b0eb6fbe93c9427140fe2e931eb3bf305b59369c
+   597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af
    ```
 
    ```bash
-   echo "e354bdf4906ab216863c6dc4b0eb6fbe93c9427140fe2e931eb3bf305b59369c  parlons-node-0.2.136.jar" | sha256sum -c -
+   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   It must print `parlons-node-0.2.136.jar: OK`. If it does not, delete the file and do not run it.
+   It must print `parlons-node-0.2.138.jar: OK`. If it does not, delete the file and do not run it.
 
 3. Confirm the version. This does not start a node:
 
    ```bash
-   java -jar parlons-node-0.2.136.jar --version
-   # parlons-node 0.2.136
+   java -jar parlons-node-0.2.138.jar --version
+   # parlons-node 0.2.138
    ```
 
 4. Print the built-in help, which lists the main properties. This does not start a node either:
 
    ```bash
-   java -jar parlons-node-0.2.136.jar --help
+   java -jar parlons-node-0.2.138.jar --help
    ```
 
-**Building from source instead:**
+### How to build the jar from source instead
 
-```bash
-./gradlew :node:fatJar
-# -> node/build/libs/parlons-node-<version>.jar
-```
+1. Clone the repository and build the fat jar:
 
-Before you ship a jar you built yourself, check that it contains your change. A stale `core.jar`
-has shipped under a new version number before:
-`unzip -p <jar> <class path> | grep -ac <symbol>`.
+   ```bash
+   git clone https://github.com/eurobuddha/maxima.git
+   cd maxima
+   ./gradlew :node:fatJar
+   ```
+
+2. Find the jar. It is `node/build/libs/parlons-node-<version>.jar`:
+
+   ```bash
+   ls node/build/libs/
+   ```
+
+3. Check that the jar contains your change before you ship it. A stale `core.jar` has shipped
+   under a new version number before. Count a symbol you added in a class you changed; the count
+   must be 1 or more:
+
+   ```bash
+   unzip -p node/build/libs/parlons-node-<version>.jar <class path> | grep -ac <symbol>
+   ```
+
+4. Note its checksum, so you can check it again on the box before you run it:
+
+   ```bash
+   sha256sum node/build/libs/parlons-node-<version>.jar
+   ```
 
 > The jar takes **no command-line options**. The only arguments it accepts are `--version`/`-v`
 > and `--help`/`-h`/`help`. Any other argument prints the help text to stderr and exits with code 2.
@@ -233,25 +298,64 @@ has shipped under a new version number before:
 
 ### A. The deploy script (supported)
 
-Run it from a checkout of this repository on your own computer, against a fresh Linux box that
-you can reach over SSH as root:
+Run it from a checkout of the repository on your own computer, against a fresh Linux box that
+you can reach over SSH as root. Running it again updates the node; install and update are the
+same operation.
 
-```bash
-ops/deploy-parlons-node.sh root@node.example.com \
-    --jar dist/parlons-node-0.2.136.jar \
-    --heap 3g \
-    --rootnode seed-peer.example.net:9001 \
-    --rpc \
-    --megammr-seed https://eurobuddha.com/mega.mmr \
-    --public https://node.example.com/parlons-node \
-    --dex 9602 --dex-public https://node.example.com/dex-relay \
-    --peers "peer1.example.net:9501,peer2.example.net:9501"
-```
+#### How to install with the deploy script
 
-The script runs these steps in order. Running it again updates the node; install and update are
-the same operation.
+1. On your computer, clone the repository. It holds `ops/deploy-parlons-node.sh` and
+   `ops/parlons-pair`:
 
-1. Installs a headless JRE if `java` is missing.
+   ```bash
+   git clone https://github.com/eurobuddha/maxima.git
+   cd maxima
+   ```
+
+2. Put the verified jar in `dist/` ([§4](#4-download-and-verify-the-jar)). Without `--jar`, the
+   script takes the newest `dist/parlons-node-*.jar`:
+
+   ```bash
+   mkdir -p dist
+   mv ~/Downloads/parlons-node-0.2.138.jar dist/
+   ```
+
+3. Check that key-based SSH as root works. The script uses `BatchMode=yes`, so it cannot answer a
+   password prompt:
+
+   ```bash
+   ssh -o BatchMode=yes root@node.example.com true && echo ssh-ok
+   ```
+
+4. If the box already runs `maxima-relay.service` on 9501, add `--replace-relay` to the next
+   command.
+5. Run the script. This is a typical MegaMMR node with a TLS front; the table below lists every flag:
+
+   ```bash
+   ops/deploy-parlons-node.sh root@node.example.com \
+       --jar dist/parlons-node-0.2.138.jar \
+       --heap 3g \
+       --rootnode seed-peer.example.net:9001 \
+       --rpc \
+       --megammr-seed https://eurobuddha.com/mega.mmr \
+       --public https://node.example.com/parlons-node \
+       --dex 9602 --dex-public https://node.example.com/dex-relay \
+       --peers "peer1.example.net:9501,peer2.example.net:9501"
+   ```
+
+6. Read the summary at the end. It prints the account wallet address, the Maxima identity
+   (`Mx…`) and the gateway bearer token. Keep the token private
+   ([§14](#14-the-wallet-gateway-and-its-token)).
+7. Set up the TLS front ([§11](#11-tls-fronting-caddy-nginx-apache)).
+8. Pair your phone ([§17](#17-the-account-pairing-and-the-local-panel)) and back up the seed
+   ([§20](#20-seeds-identity-and-backups)).
+9. Verify the node from another machine ([§23](#23-verifying-from-outside)).
+
+#### What the script does
+
+The script runs these steps in order:
+
+1. Installs a headless JRE if `java` is missing, and tries to install `qrencode` (for pairing QR codes).
 2. Creates the unprivileged `maxima` system user, and creates `/var/lib/parlons-node` with mode 700.
 3. Uploads the jar to `/opt/maxima/parlons-node-<ver>.jar` and checks its SHA-256. Only then does it
    point the symlink `/opt/maxima/parlons-node.jar` at the new jar.
@@ -260,7 +364,7 @@ the same operation.
 6. Opens the P2P and relay ports in ufw or firewalld. It opens the DEX port only when `--dex` is
    given without `--dex-public`, and the gateway port only with `--gateway-public`.
 7. Starts the node and checks that the relay port is listening.
-8. Optional: `--seed-from` adopts an existing 24-word phrase ([§20](#20-seeds-and-identity)).
+8. Optional: `--seed-from` adopts an existing 24-word phrase ([§20](#20-seeds-identity-and-backups)).
 9. Optional: `--megammr-seed` imports a MegaMMR snapshot ([§13](#13-megammr-mode-and-the-rootnode)).
 10. Prints the account wallet address, the Maxima identity, the gateway token, and the pairing instructions.
 
@@ -284,13 +388,16 @@ the same operation.
 | `--passphrase-file F` | `-Dparlons.node.passphrase.file` | unset |
 | `--node-args "…"` | `-Dparlons.node.args` | empty |
 | `--keets` | adds `-keets -keetssidecar /opt/maxima/keets-sidecar/index.js` to the node args, and uploads the sidecar | off |
-| `--seed-from F --archive h:p` | one-time wallet resync to the phrase in F, then pins it in `identity.txt` | — |
+| `--seed-from F --archive h:p` | one-time wallet resync to the phrase in F (needs `--rpc`), then pins it in `identity.txt` | — (`--archive` defaults to an archive node written into the script) |
 | `--megammr-seed URL` | one-time MegaMMR import (needs `--rpc`) | — |
 | `--replace-relay` | stops and disables `maxima-relay.service` so the node can take its port | — |
 
-> **Always pass `--dex-public` together with `--dex`.** Without it, the DEX cape binds `0.0.0.0` and
-> the script opens the port to the internet as plain HTTP. (From 0.2.138 the node itself also defaults
-> the bind to `127.0.0.1` whenever `parlons.dex.public` is set.)
+> **Always pass `--dex-public` together with `--dex`.** With it, the script sets
+> `parlons.dex.bind=127.0.0.1` and keeps the port closed. Without it, the DEX cape binds `0.0.0.0`
+> and the script opens the port to the internet as plain HTTP.
+
+The script writes `Restart=always` into the unit, so the node also comes back after a clean exit
+(`quit`, a MegaMMR import, a resync).
 
 ### B. By hand
 
@@ -300,19 +407,82 @@ The minimum command is:
 java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 ```
 
-A node started like this has no rootnode, so it will not sync. Write your own unit from the
-example in [§7](#7-the-systemd-unit-annotated).
+A node started like this has no rootnode, so it will not sync.
+
+#### How to install by hand
+
+These steps do on the box what the deploy script does. Run them as root.
+
+1. Install Java if it is missing, and `qrencode` if you want pairing QR codes:
+
+   ```bash
+   apt-get update
+   apt-get install -y default-jre-headless qrencode
+   ```
+
+2. Create the service user and the directories:
+
+   ```bash
+   id maxima >/dev/null 2>&1 || useradd --system --home /var/lib/maxima --shell /usr/sbin/nologin maxima
+   mkdir -p /opt/maxima /var/lib/parlons-node
+   chown -R maxima:maxima /var/lib/parlons-node
+   chmod 700 /var/lib/parlons-node
+   ```
+
+3. Copy the verified jar into `/opt/maxima` and point the symlink at it:
+
+   ```bash
+   cp parlons-node-0.2.138.jar /opt/maxima/
+   cd /opt/maxima
+   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.138.jar
+   ln -sfn parlons-node-0.2.138.jar parlons-node.jar
+   ```
+
+4. Optional: install the pairing helper from a checkout of the repository:
+
+   ```bash
+   install -m 755 ops/parlons-pair /usr/local/bin/parlons-pair
+   ```
+
+5. Write the unit file `/etc/systemd/system/parlons-node.service` from the example in
+   [§7](#7-the-systemd-unit-annotated). Change the host names, the heap and `MemoryMax` to suit
+   the box.
+6. Open the P2P and relay ports ([§25](#25-firewall-notes)):
+
+   ```bash
+   ufw allow 9001/tcp
+   ufw allow 9501/tcp
+   ```
+
+7. Start the node, then follow [§6](#6-first-start):
+
+   ```bash
+   systemctl daemon-reload
+   systemctl enable --now parlons-node
+   ```
 
 ---
 
 ## 6. First start
 
-1. Start the service: `systemctl enable --now parlons-node`.
-2. Follow the log: `journalctl -u parlons-node -f`.
+1. Start the service (the deploy script has already done this):
+
+   ```bash
+   systemctl enable --now parlons-node
+   systemctl is-active parlons-node
+   ```
+
+2. Follow the log:
+
+   ```bash
+   journalctl -u parlons-node -f
+   ```
+
 3. Find the boot line. It names the version, the data folder and the ports:
 
    ```
-   [parlons-node] Parlons Node 0.2.136 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.138 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Watch the chain sync. Every 30 s a heartbeat line prints the block height:
@@ -332,8 +502,13 @@ example in [§7](#7-the-systemd-unit-annotated).
 6. On a MegaMMR node, import the MegaMMR once ([§13](#13-megammr-mode-and-the-rootnode)). Until
    you do, balances for existing addresses come back empty.
 7. Pair your phone ([§17](#17-the-account-pairing-and-the-local-panel)):
-   `sudo parlons-pair --set-admin-password`, then `sudo parlons-pair --admin`.
-8. Back up the seed ([§20](#20-seeds-and-identity)).
+
+   ```bash
+   sudo parlons-pair --set-admin-password
+   sudo parlons-pair --admin
+   ```
+
+8. Back up the seed ([§20](#20-seeds-identity-and-backups)).
 
 ---
 
@@ -349,7 +524,7 @@ explanations are in the comment block above `ExecStart`.
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.136)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.138)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -396,8 +571,7 @@ ExecStart=/usr/bin/java -Xmx3g \
 # Restart on a crash. Exit code 3 means "restart me": a wallet resync or an identity import
 # requested from a paired device ends with exit 3, and the node comes back on the same identity.
 # always, not on-failure: `quit` and a megammr import/resync end with exit 0, and the node must come back.
-# (Units written by ops/deploy-parlons-node.sh before 2026-10-23 say on-failure: change it, or
-# run `systemctl restart parlons-node` yourself after a clean exit.)
+# The deploy script writes Restart=always. Older units may say on-failure: change them.
 Restart=always
 RestartSec=10
 RestartForceExitStatus=3
@@ -461,9 +635,66 @@ Notes:
 - If you pass Minima's `-data <dir>` in `parlons.node.args`, add that directory to `ReadWritePaths`.
 - For a password-locked node, add `-Dparlons.node.passphrase.file=/var/lib/parlons-node/passphrase.txt`
   (owner `maxima`, mode 600), or set `PARLONS_NODE_PASSPHRASE` in an `EnvironmentFile=` with mode 600.
-- After editing the unit: `systemctl daemon-reload && systemctl restart parlons-node`.
-- Keep a backup of the unit before each change. The fleet convention is
-  `cp parlons-node.service parlons-node.service.before-<what>`.
+- Keep a backup of the unit before each change. The convention is
+  `parlons-node.service.before-<what>`.
+
+### How to change the unit
+
+1. Back up the current unit:
+
+   ```bash
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-<what>
+   ```
+
+2. Edit it:
+
+   ```bash
+   nano /etc/systemd/system/parlons-node.service
+   ```
+
+3. Check the unit for errors:
+
+   ```bash
+   systemd-analyze verify /etc/systemd/system/parlons-node.service
+   ```
+
+4. Load it and restart the node:
+
+   ```bash
+   systemctl daemon-reload
+   systemctl restart parlons-node
+   ```
+
+5. Wait about 25 s, then check that it runs and read the boot line:
+
+   ```bash
+   systemctl is-active parlons-node
+   journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|minima flags|REFUSING' | grep -v seed
+   ```
+
+6. If it does not come up, put the backup back and repeat step 4:
+
+   ```bash
+   cp /etc/systemd/system/parlons-node.service.before-<what> /etc/systemd/system/parlons-node.service
+   ```
+
+### How to switch an old unit to `Restart=always`
+
+1. Check what the unit says:
+
+   ```bash
+   grep -n '^Restart=' /etc/systemd/system/parlons-node.service
+   ```
+
+2. If it prints `Restart=on-failure`, change it:
+
+   ```bash
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-restart-always
+   sed -i 's/^Restart=on-failure$/Restart=always/' /etc/systemd/system/parlons-node.service
+   systemctl daemon-reload
+   ```
+
+   The new setting takes effect at once; no restart is needed.
 
 ---
 
@@ -472,6 +703,39 @@ Notes:
 All properties are JVM system properties (`-Dname=value`) placed before `-jar`. This list comes
 from a grep of every `System.getProperty`, `Integer.getInteger`, `Long.getLong` and `getenv` call
 in the modules bundled into the jar.
+
+### How to change a setting
+
+1. Find the property in the tables below.
+2. Add or change its `-D…` line in the `ExecStart` of the unit, before `-jar`, and restart the
+   node ([§7, How to change the unit](#how-to-change-the-unit)). If you deployed with the script,
+   you can instead re-run the script with the matching flag ([§5](#5-two-ways-to-install)); it
+   rewrites the unit from its flags.
+3. Check that the node took it. The boot line shows the ports, and the `minima flags:` line shows
+   Minima's own flags:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep -E 'Parlons Node|minima flags' | grep -v seed
+   ```
+
+### How to pass Minima's own flags in a conf file
+
+Use this for secrets such as `mdspassword`, so they never appear on the command line.
+
+1. Write the file, one `key=value` per line. A bare `key` is a boolean flag. Leave out the
+   leading `-`:
+
+   ```bash
+   cat > /var/lib/parlons-node/minima.conf <<'EOF'
+   mdspassword=<your MDS password>
+   EOF
+   chown maxima:maxima /var/lib/parlons-node/minima.conf
+   chmod 600 /var/lib/parlons-node/minima.conf
+   ```
+
+2. Add `-Dparlons.node.conf=/var/lib/parlons-node/minima.conf` to the unit and restart
+   ([§7](#how-to-change-the-unit)).
+3. Check the `minima flags:` line in the log. The `mdspassword` value is masked there.
 
 ### 8.1 Node and chain
 
@@ -533,10 +797,10 @@ Environment: `MAXIMA_STUN=false` turns off the UDP STUN responder on the relay p
 | Property | Meaning | Default | Example |
 |---|---|---|---|
 | `parlons.dex.port` | Port of the DEX relay cape. `0` = off. | `0` | `9602` |
-| `parlons.dex.bind` | Interface it listens on. **Set `127.0.0.1` and front it with TLS.** Up to 0.2.137 the default is every interface; from 0.2.138 it is `127.0.0.1` when `parlons.dex.public` is set, else `0.0.0.0`. | see meaning | `127.0.0.1` |
+| `parlons.dex.bind` | Interface it listens on. An explicit value wins. If unset, the cape binds `127.0.0.1` when `parlons.dex.public` is set, else `0.0.0.0`. Keep it on loopback and front it with TLS. | `127.0.0.1` with `parlons.dex.public`, else `0.0.0.0` | `127.0.0.1` |
 | `parlons.dex.public` | Public base URL announced in the mesh. If unset, the node announces `http://<public host>:<port>` once it knows its public host. | empty | `https://node.example.com/dex-relay` |
 
-Fixed in code: DEX relay version `0.1.4` (`0.1.5` from node 0.2.138); global rate 200 requests/s and per-IP rate 20 requests/s
+Fixed in code: DEX relay version `0.1.5`; global rate 200 requests/s and per-IP rate 20 requests/s
 (see [§16](#16-the-dex-relay-cape-dexicon) for what this means behind a proxy).
 
 ### 8.5 Account and panel
@@ -609,7 +873,7 @@ boot log shows the applied flags as `minima flags: …`, with the `mdspassword` 
 | `9501` | UDP | STUN binding responder on the relay port | all | Optional. The deploy script does not open UDP. |
 | `9585` (`parlons.gateway.port`) | TCP/HTTP | Wallet gateway `/cmd` and `/nft` | `127.0.0.1` | Loopback, behind a TLS front at `/parlons-node/`. |
 | `9587` (`parlons.panel.port`) | TCP/HTTP | Account panel and API | `127.0.0.1`, hard-coded | Loopback. Reach it with an SSH tunnel. |
-| `9602` (`parlons.dex.port`, off by default) | TCP/HTTP | DEX relay cape | **`0.0.0.0` unless set** (0.2.138+: `127.0.0.1` when `parlons.dex.public` is set) | Loopback, behind a TLS front at `/dex-relay/`. |
+| `9602` (`parlons.dex.port`, off by default) | TCP/HTTP | DEX relay cape | `127.0.0.1` when `parlons.dex.public` is set, **else `0.0.0.0`**; `parlons.dex.bind` overrides | Loopback, behind a TLS front at `/dex-relay/`. |
 
 Port conflicts to know about:
 
@@ -621,6 +885,36 @@ Port conflicts to know about:
   tenants then take 9597, 9598 and so on, on loopback.
 - On a box where only one port is forwarded (a home router), use `-Dparlons.relay.port=shared` or
   pick a relay port you can forward.
+
+### How to move the node off port 9001
+
+Use this when a stock Minima node already runs on the box.
+
+1. Pick a free base port, for example 9101. Check that it and the next four are free:
+
+   ```bash
+   ss -ltnp | grep -E ':(9101|9103|9104|9105) '
+   ```
+
+2. Set `-Dparlons.node.port=9101` in the unit and restart ([§7](#how-to-change-the-unit)). With the
+   deploy script, pass `--p2p-port 9101` instead.
+3. Open the new P2P port:
+
+   ```bash
+   ufw allow 9101/tcp
+   ```
+
+4. Use the new admin RPC port (`9105`) in every `curl` command in this manual.
+
+### How to see which ports the node holds
+
+```bash
+ss -ltnp | grep java
+ss -lunp | grep java
+```
+
+The first command lists the TCP listeners and their bind addresses; the second lists the UDP STUN
+responder.
 
 ---
 
@@ -648,6 +942,24 @@ script). The directory and every secret file must be owned by the service user, 
 | `account-history/<import-id>/previous/` | The previous identity after an identity import. | **Yes.** |
 | `.seed-adopted` | Marker written by the deploy script's `--seed-from`. | No. |
 
+### How to check the data directory's permissions
+
+1. List the owner and mode of the directory and the secret files:
+
+   ```bash
+   ls -ld /var/lib/parlons-node
+   ls -l /var/lib/parlons-node/*.txt
+   ```
+
+2. The directory must be `drwx------ maxima maxima`, and each `.txt` secret `-rw------- maxima maxima`.
+   If not, fix them:
+
+   ```bash
+   chown -R maxima:maxima /var/lib/parlons-node
+   chmod 700 /var/lib/parlons-node
+   chmod 600 /var/lib/parlons-node/*.txt
+   ```
+
 ---
 
 ## 11. TLS fronting: Caddy, nginx, Apache
@@ -660,12 +972,7 @@ same box terminates TLS and forwards these two paths:
 | `https://node.example.com/parlons-node/…` | `http://127.0.0.1:9585/…` | strip `/parlons-node` (so `/parlons-node/cmd` reaches `/cmd`, and `/parlons-node/nft/…` reaches `/nft/…`) |
 | `https://node.example.com/dex-relay/…` | `http://127.0.0.1:9602/…` | strip `/dex-relay` (so `/dex-relay/dex/health` reaches `/dex/health`) |
 
-Then set:
-
-```
--Dparlons.node.public=https://node.example.com/parlons-node
--Dparlons.dex.public=https://node.example.com/dex-relay
-```
+Then set `parlons.node.public` and `parlons.dex.public` to the public URLs (step 4 below).
 
 Never forward the admin RPC (`p2p+4`), the panel (9587) or MDS.
 
@@ -677,29 +984,87 @@ Sizes and timeouts that matter:
   envelopes at most 256 KiB.
 - Most proxies' default read timeout (60 s) is enough. If you have lowered it, keep it above 30 s.
 
+### How to set up any TLS front
+
+1. Point a DNS name (here `node.example.com`) at the box, and open TCP 443 (and 80 for the
+   certificate challenge):
+
+   ```bash
+   ufw allow 80/tcp
+   ufw allow 443/tcp
+   ```
+
+2. Check that the node's two HTTP services answer on loopback (the DEX one only if you turned it on):
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:9585/cmd   # 401 = gateway up
+   curl -s http://127.0.0.1:9602/dex/health
+   ```
+
+3. Configure one of Caddy, nginx or Apache with the steps below.
+4. Set the public URLs in the unit and restart the node ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.node.public=https://node.example.com/parlons-node
+   -Dparlons.dex.public=https://node.example.com/dex-relay
+   ```
+
+5. Test from another machine:
+
+   ```bash
+   curl -s https://node.example.com/dex-relay/dex/health
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://node.example.com/parlons-node/cmd   # 401
+   ```
+
 ### Caddy
 
-```caddy
-node.example.com {
-    # DEX relay cape: use `handle` + `uri strip_prefix`, NOT `handle_path` (see the trap below).
-    handle /dex-relay/* {
-        uri strip_prefix /dex-relay
-        reverse_proxy 127.0.0.1:9602
-    }
+Caddy gets and renews the certificate by itself.
 
-    # Wallet gateway + NFT files.
-    handle /parlons-node/* {
-        uri strip_prefix /parlons-node
-        reverse_proxy 127.0.0.1:9585
-    }
+#### How to front the node with Caddy
 
-    # Your site's catch-all (if any) goes LAST.
-    handle {
-        root * /var/www/html
-        file_server
-    }
-}
-```
+1. Install Caddy from its official packages (<https://caddyserver.com/docs/install>).
+2. Back up the Caddyfile:
+
+   ```bash
+   cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-parlons-node
+   ```
+
+3. Add these blocks to the site block for your host name in `/etc/caddy/Caddyfile`:
+
+   ```caddy
+   node.example.com {
+       # DEX relay cape: use `handle` + `uri strip_prefix`, NOT `handle_path` (see the trap below).
+       handle /dex-relay/* {
+           uri strip_prefix /dex-relay
+           reverse_proxy 127.0.0.1:9602
+       }
+
+       # Wallet gateway + NFT files.
+       handle /parlons-node/* {
+           uri strip_prefix /parlons-node
+           reverse_proxy 127.0.0.1:9585
+       }
+
+       # Your site's catch-all (if any) goes LAST.
+       handle {
+           root * /var/www/html
+           file_server
+       }
+   }
+   ```
+
+4. Check the file, then reload Caddy:
+
+   ```bash
+   caddy validate --config /etc/caddy/Caddyfile
+   systemctl reload caddy
+   ```
+
+5. Test from another machine (step 5 of [How to set up any TLS front](#how-to-set-up-any-tls-front)).
+   If `/dex-relay/dex/health` returns your web page instead of JSON, you have hit the trap below.
+
+Caddy's `reverse_proxy` sends `X-Forwarded-For` by default, so the DEX cape rate-limits each
+client separately.
 
 > **Caddy ordering trap: `handle_path` vs `handle`.** Caddy sorts directives by a fixed directive
 > order before it applies them, and `handle` sorts **before** `handle_path`. Among `handle` blocks,
@@ -710,74 +1075,122 @@ node.example.com {
 > /dex-relay; reverse_proxy … }`, which is sorted with the other `handle` blocks by path. In a
 > site block with no catch-all `handle`, `handle_path /dex-relay/*` works.
 
-Optional per-client rate limiting in front of the gateway uses the third-party `rate_limit`
-module, which is not part of stock Caddy:
+#### How to add per-client rate limiting in Caddy (optional)
 
-```caddy
-    handle /parlons-node/* {
-        rate_limit {
-            zone phones {
-                key    {remote_host}
-                events 60
-                window 1m
-            }
-        }
-        uri strip_prefix /parlons-node
-        reverse_proxy 127.0.0.1:9585
-    }
-```
+The node's own per-IP gateway bucket sees only `127.0.0.1` behind a proxy, so limit each client
+in Caddy instead. This needs the third-party `rate_limit` module, which is not part of stock Caddy.
+
+1. Build or download a Caddy binary that includes the `rate_limit` module.
+2. Replace the gateway block with:
+
+   ```caddy
+       handle /parlons-node/* {
+           rate_limit {
+               zone phones {
+                   key    {remote_host}
+                   events 60
+                   window 1m
+               }
+           }
+           uri strip_prefix /parlons-node
+           reverse_proxy 127.0.0.1:9585
+       }
+   ```
+
+3. Validate and reload, as in steps 4 and 5 above.
 
 ### nginx
 
-Inside the `server { listen 443 ssl; server_name node.example.com; … }` block:
+#### How to front the node with nginx
 
-```nginx
-# DEX relay cape. The trailing slashes strip the prefix.
-location /dex-relay/ {
-    proxy_pass http://127.0.0.1:9602/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_read_timeout 60s;
-}
+1. Get a certificate for the host name (for example with certbot) and have a
+   `server { listen 443 ssl; server_name node.example.com; … }` block for it.
+2. Back up the site file you are about to change:
 
-# Wallet gateway + NFT files.
-location /parlons-node/ {
-    proxy_pass http://127.0.0.1:9585/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    client_max_body_size 2m;
-}
-```
+   ```bash
+   cp /etc/nginx/sites-available/<your site> /etc/nginx/sites-available/<your site>.before-parlons-node
+   ```
 
-`client_max_body_size 2m` gives room above the gateway's 1 MiB body limit (the nginx default is
-`1m`). Check with `nginx -t`, then run `systemctl reload nginx`.
+   If the box has a file-integrity monitor watching the nginx config, an edit will trip it. Tell
+   whoever owns that monitor before you change the file.
+3. Add these blocks inside the `server { … }` block:
 
-If the box has a file-integrity monitor watching the nginx config, an edit will trip it. Tell
-whoever owns that monitor before you change the file.
+   ```nginx
+   # DEX relay cape. The trailing slashes strip the prefix.
+   location /dex-relay/ {
+       proxy_pass http://127.0.0.1:9602/;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_read_timeout 60s;
+   }
+
+   # Wallet gateway + NFT files.
+   location /parlons-node/ {
+       proxy_pass http://127.0.0.1:9585/;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       client_max_body_size 2m;
+   }
+   ```
+
+4. Check the configuration, then reload nginx:
+
+   ```bash
+   nginx -t
+   systemctl reload nginx
+   ```
+
+5. Test from another machine (step 5 of [How to set up any TLS front](#how-to-set-up-any-tls-front)).
+
+Notes:
+
+- `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` is needed in the `/dex-relay/`
+  block. nginx does not send the header by default, and without it every DEX client shares one
+  rate-limit bucket ([§16](#16-the-dex-relay-cape-dexicon)).
+- `client_max_body_size 2m` gives room above the gateway's 1 MiB body limit (the nginx default is
+  `1m`).
 
 ### Apache
 
-Enable the modules first: `a2enmod proxy proxy_http`. Then put this in a snippet included from
-the TLS vhost (`<VirtualHost *:443>`):
+#### How to front the node with Apache
 
-```apache
-# DEX relay cape
-ProxyPass        /dex-relay/ http://127.0.0.1:9602/
-ProxyPassReverse /dex-relay/ http://127.0.0.1:9602/
+1. Have a TLS virtual host (`<VirtualHost *:443>`) for the host name, for example from certbot.
+2. Enable the proxy modules:
 
-# Wallet gateway (POST /cmd) and NFT files (GET/HEAD /nft/...)
-<Location "/parlons-node/cmd">
-    ProxyPass        http://127.0.0.1:9585/cmd
-    ProxyPassReverse http://127.0.0.1:9585/cmd
-</Location>
-<Location "/parlons-node/nft">
-    ProxyPass        http://127.0.0.1:9585/nft
-    ProxyPassReverse http://127.0.0.1:9585/nft
-</Location>
-```
+   ```bash
+   a2enmod proxy proxy_http
+   ```
 
-Check with `apachectl configtest`, then run `systemctl reload apache2`. Behind Apache, the node's
-own global token buckets are the rate limit.
+3. Put this in a snippet included from the TLS virtual host:
+
+   ```apache
+   # DEX relay cape
+   ProxyPass        /dex-relay/ http://127.0.0.1:9602/
+   ProxyPassReverse /dex-relay/ http://127.0.0.1:9602/
+
+   # Wallet gateway (POST /cmd) and NFT files (GET/HEAD /nft/...)
+   <Location "/parlons-node/cmd">
+       ProxyPass        http://127.0.0.1:9585/cmd
+       ProxyPassReverse http://127.0.0.1:9585/cmd
+   </Location>
+   <Location "/parlons-node/nft">
+       ProxyPass        http://127.0.0.1:9585/nft
+       ProxyPassReverse http://127.0.0.1:9585/nft
+   </Location>
+   ```
+
+4. Check the configuration, then reload Apache:
+
+   ```bash
+   apachectl configtest
+   systemctl reload apache2
+   ```
+
+5. Test from another machine (step 5 of [How to set up any TLS front](#how-to-set-up-any-tls-front)).
+
+Apache's `ProxyPass` sends `X-Forwarded-For` by default. For the gateway, the node's own global
+token buckets are the rate limit behind Apache.
 
 ---
 
@@ -828,7 +1241,7 @@ From `core/.../session/RelayPeers.java`:
   to **50** (`SHARE_LIMIT`).
 - **TTL 2 h** (`TTL_MS`). A verified peer that is not re-claimed or successfully re-dialled within
   2 hours expires.
-- **Re-dial every 10 min** (`REDIAL_MS`, fixed in 0.2.136). When its queue is idle, the check
+- **Re-dial every 10 min** (`REDIAL_MS`). When its queue is idle, the check
   thread re-dials every verified peer it has not dialled in 10 minutes. This keeps each peer's
   advertised details (pool bit, DEX URL, gateway) current, and a successful re-dial refreshes the
   TTL. A dead peer fails the dial and expires.
@@ -863,6 +1276,108 @@ hands it every connection that greets as a Parlons client. One public port then 
 chain and the relay. The desktop apps use this when "contribute" is on. Fleet boxes keep an
 explicit 9501.
 
+### How to check that the cape is up
+
+1. Look for the cape and mesh lines in this boot's log:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep -E 'Maxima cape|mesh:|public address learned|own relay' | grep -v seed
+   ```
+
+   You want `Maxima cape up on port 9501 — identity Mx…` and `mesh: N bootstrap peer(s)`.
+2. Check the heartbeat. It must show `cape=up:9501`:
+
+   ```bash
+   journalctl -u parlons-node --since -2min --no-pager | grep heartbeat | tail -1
+   ```
+
+3. Test it end to end from another machine ([§23](#23-verifying-from-outside), step 2).
+
+### How to set the mesh bootstrap peers
+
+1. Collect the `host:port` of each relay you want to reach. Use the port each relay really
+   listens on.
+2. Set them as one comma-separated value in the unit, then restart ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.relay.peers=peer1.example.net:9501,peer2.example.net:9501,peer3.example.net:8001
+   ```
+
+   With the deploy script, pass `--peers "peer1.example.net:9501,peer2.example.net:9501"`.
+3. If the box blocks outbound traffic by default, allow each peer's relay port
+   ([§25](#25-firewall-notes)).
+4. Check the boot log. It must say `mesh: N bootstrap peer(s)` with your count:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep 'mesh:'
+   ```
+
+### How to set the public host
+
+Do this when the log says `own relay NOT advertised`, or when the box has a fixed name you want
+the cape to use.
+
+1. Add the public host name or IP to the unit, then restart ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.relay.host=node.example.com
+   ```
+
+   Never use a bind address such as `0.0.0.0`, or a private, loopback or CGNAT address.
+2. Check that the warning is gone:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep -E 'own relay NOT advertised' || echo advertised-ok
+   ```
+
+### How to run the relay on the Minima P2P port (shared-port mode)
+
+1. Set the relay port to `shared` in the unit, then restart ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.relay.port=shared
+   ```
+
+2. Open (or forward) only the P2P port, for example 9001. Remove the 9501 rule if you no longer need it:
+
+   ```bash
+   ufw delete allow 9501/tcp
+   ```
+
+3. Tell your users and mesh peers to use `node.example.com:9001` as this relay's address.
+
+### How to turn on the media blob shelf
+
+1. Set the shelf size in MB in the unit, then restart ([§7](#how-to-change-the-unit)). With the
+   deploy script, pass `--blobstore 1024`:
+
+   ```
+   -Dparlons.relay.blob=1024
+   ```
+
+2. Make sure the disk has that much space free (`df -h /var/lib`).
+3. Check the boot log. It must say `blob shelf: 1024 MB`:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep 'blob shelf'
+   ```
+
+### How to raise the connection cap
+
+1. Run the node on JDK 21 or newer. The cap then rises to 4096 by itself.
+2. To set your own cap, add it to the unit and restart ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.relay.maxconn=8192
+   ```
+
+3. Raise `LimitNOFILE` in the unit too if the cap comes near it (the unit sets 65536).
+
+### How to turn the relay off
+
+Set `-Dparlons.relay.port=0` in the unit and restart. The account then uses other relays. Close
+the relay port in the firewall.
+
 ---
 
 ## 13. MegaMMR mode and the rootnode
@@ -879,6 +1394,33 @@ This node fork ships an **empty default peer list**. Give it one of these:
 
 Without one of these, the node boots and serves its local services, but `block=` never moves.
 
+#### How to set the rootnode
+
+1. Print the project's suggested rootnode, or pick a Minima node you trust:
+
+   ```bash
+   java -jar /opt/maxima/parlons-node.jar --help | grep -i rootnode
+   ```
+
+2. Check that the box can reach it (replace the host and port):
+
+   ```bash
+   nc -z -w 8 seed-peer.example.net 9001 && echo reachable
+   ```
+
+3. Add it to the unit, then restart ([§7](#how-to-change-the-unit)). With the deploy script, pass
+   `--rootnode seed-peer.example.net:9001`:
+
+   ```
+   -Dparlons.node.rootnode=seed-peer.example.net:9001
+   ```
+
+4. Watch `block=` climb in the heartbeat:
+
+   ```bash
+   journalctl -u parlons-node -f | grep heartbeat
+   ```
+
 ### MegaMMR
 
 MegaMMR is **on by default** on the node; Minima's own default is off. With MegaMMR, the node
@@ -889,37 +1431,92 @@ makes it a wallet gateway for phones.
 bytes) and only tracks coins created from then on. Until you import a snapshot, balances for
 existing addresses come back **empty**.
 
-Seed it once:
+#### How to import a MegaMMR snapshot
 
-1. Enable the admin RPC (`-Dparlons.node.rpc=true`).
-2. Download a snapshot into the data directory and give it to the service user:
+Do this once, after the first sync. Run the commands on the box as root.
+
+1. Make sure the admin RPC is on (`-Dparlons.node.rpc=true`, [§21](#21-the-admin-rpc)). This
+   must print a JSON status:
+
+   ```bash
+   curl -s http://127.0.0.1:9005/status | head -c 200; echo
+   ```
+
+2. Check the current MegaMMR size. Under 1 MB means it is empty:
+
+   ```bash
+   stat -c %s /var/lib/parlons-node/1.1/databases/megammr.mmr
+   ```
+
+3. Download a snapshot into the data directory and give it to the service user (about 460 MB;
+   `-c` resumes a broken download):
 
    ```bash
    cd /var/lib/parlons-node
-   wget -c https://eurobuddha.com/mega.mmr
+   wget -c -O mega.mmr https://eurobuddha.com/mega.mmr
    chown maxima:maxima mega.mmr
    ```
 
-   Alternatively, produce your own snapshot on any MegaMMR node you control with
-   `megammr action:export file:/path/donor.megammr` (a read lock, no downtime).
-3. Import it over the loopback RPC (P2P port 9001 means RPC 9005):
+   To use your own snapshot instead, see the next procedure.
+4. Import it over the loopback RPC (P2P port 9001 means RPC 9005):
 
    ```bash
-   curl -s 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
+   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
    ```
 
    It must reply with `"status":true`. The import ends with a node shutdown.
-4. Restart: `systemctl restart parlons-node`.
-5. Check that `megammr.mmr` is now large (over 1 MB), then query an address you know is funded:
+5. Bring the node back. `Restart=always` restarts it after 10 s; to be sure, run:
+
+   ```bash
+   systemctl restart parlons-node
+   ```
+
+6. Wait about 20 s, then check that `megammr.mmr` is now over 1 MB:
+
+   ```bash
+   stat -c %s /var/lib/parlons-node/1.1/databases/megammr.mmr
+   ```
+
+7. Query an address you know is funded. Its balance must not be empty:
 
    ```bash
    curl -s 'http://127.0.0.1:9005/balance%20megammr:true%20address:<a funded Mx or 0x address>'
    ```
 
-6. Delete the downloaded `mega.mmr`.
+8. Delete the downloaded file:
+
+   ```bash
+   rm -f /var/lib/parlons-node/mega.mmr
+   ```
 
 The deploy script's `--rpc --megammr-seed <URL>` runs all of these steps, and skips them when the
 MegaMMR is already populated.
+
+#### How to make your own snapshot
+
+1. On any MegaMMR node you control, with its admin RPC on, export the MegaMMR. This takes a read
+   lock and needs no downtime:
+
+   ```bash
+   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:export%20file:/var/lib/parlons-node/donor.megammr'
+   ```
+
+2. Copy the file to the new node's data directory, and give it to the service user:
+
+   ```bash
+   scp /var/lib/parlons-node/donor.megammr root@node.example.com:/var/lib/parlons-node/mega.mmr
+   ssh root@node.example.com chown maxima:maxima /var/lib/parlons-node/mega.mmr
+   ```
+
+3. Delete the export on the donor, then import on the new node from step 4 of the procedure above.
+
+#### How to run a node without MegaMMR
+
+1. Add `-Dparlons.node.megammr=false` to the unit (or pass `--no-megammr` to the deploy script).
+2. Lower the heap to suit (768 MB on a 2 GB box, [§3](#3-requirements)) and set `MemoryMax`
+   512 MB above it.
+3. Restart ([§7](#how-to-change-the-unit)). The node can no longer be a wallet gateway for other
+   addresses.
 
 **Order matters when you also adopt a seed:** run `--seed-from` **before** the MegaMMR import.
 `megammrsync` resets the chain databases and throws away an imported MegaMMR.
@@ -985,15 +1582,107 @@ Everything else is refused: `send`, `vault`, `keys`, `sign`, `quit`, and so on. 
   request comes from `127.0.0.1`, so do per-client limiting in the proxy.
 - `/nft` has its own separate buckets (400 global, 40 per IP).
 
-### Test it
+### How to publish the gateway for phones
 
-```bash
-TOKEN=$(sudo cat /var/lib/parlons-node/gateway-token.txt)
-curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"command":"block"}' https://node.example.com/parlons-node/cmd
-```
+1. Run the node with MegaMMR on, and import the MegaMMR ([§13](#13-megammr-mode-and-the-rootnode)).
+2. Keep the gateway on loopback (`-Dparlons.gateway.bind=127.0.0.1`, the default), and front
+   `/parlons-node/` with TLS ([§11](#11-tls-fronting-caddy-nginx-apache)).
+3. Set the public base URL, without `/cmd`, in the unit and restart ([§7](#how-to-change-the-unit)):
 
-Do not paste the token into shared chats or tickets.
+   ```
+   -Dparlons.node.public=https://node.example.com/parlons-node
+   ```
+
+4. Check that the node advertises it:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep -E 'wallet gateway (up|advertised|FAILED)'
+   ```
+
+   You want `wallet gateway advertised to phones: https://node.example.com/parlons-node/cmd`.
+5. Test it from another machine (next procedure).
+
+### How to test the gateway
+
+1. On the box, read the token into a shell variable. Do not paste it into shared chats or tickets:
+
+   ```bash
+   TOKEN=$(sudo cat /var/lib/parlons-node/gateway-token.txt)
+   ```
+
+2. Send a `block` command. It must return the node's JSON with `"status":true`:
+
+   ```bash
+   curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+        -d '{"command":"block"}' https://node.example.com/parlons-node/cmd
+   ```
+
+3. Send it without the token. It must return HTTP 401:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' \
+        -d '{"command":"block"}' https://node.example.com/parlons-node/cmd
+   ```
+
+4. Send a refused command. It must return HTTP 403:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
+        -H 'Content-Type: application/json' -d '{"command":"vault"}' \
+        https://node.example.com/parlons-node/cmd
+   ```
+
+### How to share one token across several gateways
+
+1. Copy `gateway-token.txt` from the first box to each other box:
+
+   ```bash
+   scp root@node.example.com:/var/lib/parlons-node/gateway-token.txt ./gateway-token.txt
+   scp ./gateway-token.txt root@node2.example.com:/var/lib/parlons-node/gateway-token.txt
+   rm ./gateway-token.txt
+   ```
+
+2. On each box that received it, fix the owner and mode, then restart:
+
+   ```bash
+   chown maxima:maxima /var/lib/parlons-node/gateway-token.txt
+   chmod 600 /var/lib/parlons-node/gateway-token.txt
+   systemctl restart parlons-node
+   ```
+
+### How to replace the token
+
+1. Delete the token file and restart. The node writes a new 256-bit token at start:
+
+   ```bash
+   rm /var/lib/parlons-node/gateway-token.txt
+   systemctl restart parlons-node
+   ```
+
+2. Wait until the wallet is up (`wallet gateway up` in the log), then read the new token:
+
+   ```bash
+   sudo cat /var/lib/parlons-node/gateway-token.txt
+   ```
+
+3. Give the new token to anything that was set up with the old one by hand. Phones that found
+   the gateway through the relay greeting receive the new key there.
+
+If `-Dparlons.gateway.token` is set in the unit, it wins over the file: change it there instead.
+
+### How to change the gateway rate limits
+
+1. Add the properties you want to change to the unit (values are requests per second; `0`
+   turns a `/cmd` bucket off):
+
+   ```
+   -Dparlons.gateway.rate.global=100
+   -Dparlons.gateway.rate.perip=0
+   ```
+
+2. Restart ([§7](#how-to-change-the-unit)).
+3. Behind a TLS front, limit each client in the proxy instead
+   ([§11, Caddy](#how-to-add-per-client-rate-limiting-in-caddy-optional)).
 
 ---
 
@@ -1030,11 +1719,54 @@ link straight to your box.
 - Content types are set from the extension: png, jpg/jpeg, gif, webp, svg, avif, mp4, webm, mp3,
   json, txt, glb. Anything else is `application/octet-stream`.
 
+### How to turn on NFT hosting
+
+NFT hosting is always on; it needs only a public URL.
+
+1. Front `/parlons-node/` to `http://127.0.0.1:9585/` with TLS
+   ([§11](#11-tls-fronting-caddy-nginx-apache)).
+2. Set the public base in the unit and restart ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.node.public=https://node.example.com/parlons-node
+   ```
+
+3. Check the log line:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep 'nft hosting'
+   ```
+
+   It must end with `served at https://node.example.com/parlons-node/nft/<file>`, not with
+   `(no public base …)`.
+4. Upload a file from a paired device. The upload returns the file's public `url`.
+5. Check the file from another machine. It must return `200`:
+
+   ```bash
+   curl -sI https://node.example.com/parlons-node/nft/<sha256>.<ext> | head -1
+   ```
+
+### How to see and remove hosted files
+
+1. List what the node holds:
+
+   ```bash
+   ls -l /var/lib/parlons-node/nft/ /var/lib/parlons-node/nft/c/
+   ```
+
+2. Remove a file from a paired device (`parlons.nft.delete`). A collection's `manifest.json` lists
+   each item, so do not delete collection files by hand.
+3. Check the disk use:
+
+   ```bash
+   du -sh /var/lib/parlons-node/nft
+   ```
+
 ---
 
 ## 16. The DEX relay cape (Dexicon)
 
-The DEX relay cape (`dexrelay/`, version `0.1.4`, no dependencies) is the order-book relay for
+The DEX relay cape (`dexrelay/`, version `0.1.5`, no dependencies) is the order-book relay for
 Dexicon. It runs **inside** the node; it is not a separate service. It is untrusted by design:
 
 - Every order and message is a **signed envelope** (Ed25519), and the relay checks the signature
@@ -1043,29 +1775,53 @@ Dexicon. It runs **inside** the node; it is not a separate service. It is untrus
 - **Nothing is saved to disk.** A restarted relay starts empty, and makers republish on their next tick.
 - There is no authentication and CORS is open, because each message authenticates itself.
 
-### Turn it on (always on loopback)
+### How to turn on the DEX relay cape
 
-```
--Dparlons.dex.port=9602
--Dparlons.dex.bind=127.0.0.1
--Dparlons.dex.public=https://node.example.com/dex-relay
-```
+1. Add the three properties to the unit, then restart ([§7](#how-to-change-the-unit)):
 
-Then front `/dex-relay/` to `http://127.0.0.1:9602/` ([§11](#11-tls-fronting-caddy-nginx-apache)).
+   ```
+   -Dparlons.dex.port=9602
+   -Dparlons.dex.bind=127.0.0.1
+   -Dparlons.dex.public=https://node.example.com/dex-relay
+   ```
 
-> Up to 0.2.137 the **default bind is `0.0.0.0`**. If you set only `parlons.dex.port`, the cape answers
-> plain HTTP to the whole internet. From 0.2.138 the default is `127.0.0.1` whenever
-> `parlons.dex.public` is set. Either way, set `parlons.dex.bind=127.0.0.1` and put TLS in front.
+   With the deploy script, pass `--dex 9602 --dex-public https://node.example.com/dex-relay`. The
+   script then sets the loopback bind for you.
+2. Front `/dex-relay/` to `http://127.0.0.1:9602/` ([§11](#11-tls-fronting-caddy-nginx-apache)).
+   With nginx, include the `X-Forwarded-For` line.
+3. Check the boot log:
 
-Boot log lines:
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep 'dex relay'
+   ```
 
-```
-[parlons-node] dex relay 0.1.4 up on 127.0.0.1:9602 (GET /dex/health)
-[parlons-node] dex relay announced in the mesh as https://node.example.com/dex-relay (GET /dex/relays)
-```
+   You want these two lines:
 
-If no public URL or host is known yet, the second line reads instead
-`dex relay: no public host known yet - NOT announced in the mesh until one is learned …`.
+   ```
+   [parlons-node] dex relay 0.1.5 up on 127.0.0.1:9602 (GET /dex/health)
+   [parlons-node] dex relay announced in the mesh as https://node.example.com/dex-relay (GET /dex/relays)
+   ```
+
+   If no public URL or host is known yet, the second line reads instead
+   `dex relay: no public host known yet - NOT announced in the mesh until one is learned …`.
+4. Check that the cape listens on loopback only. The address must be `127.0.0.1:9602`:
+
+   ```bash
+   ss -ltnp | grep ':9602 '
+   ```
+
+5. Check it from another machine (see [Check it](#check-it) below).
+
+**The bind.** An explicit `parlons.dex.bind` always wins. If it is unset, the cape binds
+`127.0.0.1` when `parlons.dex.public` is set, and `0.0.0.0` when it is not. So if you set only
+`parlons.dex.port`, the cape answers plain HTTP to the whole internet. Set `parlons.dex.public`
+(and, to be explicit, `parlons.dex.bind=127.0.0.1`) and put TLS in front.
+
+### How to turn off the DEX relay cape
+
+1. Remove the three `parlons.dex.*` properties from the unit (or set `-Dparlons.dex.port=0`) and
+   restart ([§7](#how-to-change-the-unit)).
+2. Remove the `/dex-relay/` block from the TLS front and reload it.
 
 ### API
 
@@ -1075,7 +1831,7 @@ If no public URL or host is known yet, the second line reads instead
 | `GET /dex/book?market=&since=&hold=` | Order-book changes since a cursor. Long-polls for up to `hold` seconds (at most 25). `since=0` returns a full snapshot (`reset:true`). | `200 {"cursor":…,"reset":…,"orders":[…]}` · `503` busy |
 | `POST /dex/msg` | Deliver one sealed trade message (at most 256 KiB). | `200 {"ok":true}` · `400` · `413` · `503` inbox full |
 | `GET /dex/inbox?pk=&since=&hold=` | Messages for a public id (`pk` must be `0x` plus 64 bytes of hex). Long-polls for up to 25 s. | `200 {"cursor":…,"messages":[…]}` · `400` · `503` busy |
-| `GET /dex/health` | Liveness. | `{"ok":true,"version":"0.1.4","orders":<n>,"cursor":<n>,"uptime":<s>}` |
+| `GET /dex/health` | Liveness. | `{"ok":true,"version":"0.1.5","orders":<n>,"cursor":<n>,"uptime":<s>}` |
 | `GET /dex/relays` | Every DEX relay URL this host knows, itself included, learned through the relay mesh. | `{"ok":true,"relays":[{"url":"…","seen":<epoch s>}]}` |
 
 Any other path returns 404. Rate limiting returns 429 with `{"ok":false,"error":"rate limited"}`.
@@ -1096,12 +1852,12 @@ Any other path returns 404. Rate limiting returns 429 with `{"ok":false,"error":
 | Rate | 200 requests/s global, 20 requests/s per IP (burst = 2 s worth) |
 
 **Rate limiting behind a proxy.** Behind a loopback TLS front, every request arrives from `127.0.0.1`.
-Up to DEX relay 0.1.4 (node 0.2.137) the per-IP bucket of 20 requests/s (burst 40) therefore applies to
-**all public traffic together**. From 0.1.5 (node 0.2.138), when a request comes from loopback the cape
-rate-limits the **rightmost `X-Forwarded-For` entry** (the one your proxy appended) instead. A direct,
-non-loopback caller's header is ignored, so nobody can choose their own bucket. Your front must send the
-header: Caddy's `reverse_proxy` and Apache's `ProxyPass` do by default; nginx needs
-`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` in the `/dex-relay/` block.
+When a request comes from loopback, the cape rate-limits the **rightmost `X-Forwarded-For` entry**
+(the one your proxy appended) instead of the connection address. A direct, non-loopback caller's
+header is ignored, so nobody can choose their own bucket. Your front must send the header:
+Caddy's `reverse_proxy` and Apache's `ProxyPass` do by default; nginx needs
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` in the `/dex-relay/` block. Without
+the header, the per-IP bucket of 20 requests/s (burst 40) applies to **all public traffic together**.
 
 ### Discovery
 
@@ -1111,16 +1867,31 @@ header: Caddy's `reverse_proxy` and Apache's `ProxyPass` do by default; nginx ne
   peers. Wildcard addresses (`0.0.0.0`, `::`) are never listed.
 - A new relay appears in other relays' lists within about one re-dial cycle (10 minutes) after
   it is verified.
-- Dexicon clients start from built-in relays (`https://eurobuddha.com/dex-relay`,
-  `https://store.eurobuddha.com/dex-relay`, `https://minimammr.com/dex-relay`) and merge
-  `/dex/relays` from each one, so a slow mesh never blocks trading.
+- Dexicon clients start from a built-in list of relays and merge `/dex/relays` from each one, so a
+  slow mesh never blocks trading.
 
 ### Check it
 
-```bash
-curl -s https://node.example.com/dex-relay/dex/health
-curl -s https://node.example.com/dex-relay/dex/relays
-```
+1. From another machine, ask for the health record. It must return
+   `{"ok":true,"version":"0.1.5",…}`:
+
+   ```bash
+   curl -s https://node.example.com/dex-relay/dex/health
+   ```
+
+2. List the DEX relays this one knows. Its own URL must be in the list:
+
+   ```bash
+   curl -s https://node.example.com/dex-relay/dex/relays
+   ```
+
+3. Check that the plain port is closed from outside. This must print nothing:
+
+   ```bash
+   nc -z -w 5 node.example.com 9602 && echo "EXPOSED 9602"
+   ```
+
+4. About 10 minutes later, ask another DEX relay for its list. This node's URL should appear there too.
 
 ---
 
@@ -1130,19 +1901,58 @@ Every Parlons Node also runs the Parlons **account**: the same code as `parlons-
 node's identity, with the node's own wallet and the cape as its relay. Phones pair with it from the
 Parlons Cloud app. Turn it off with `-Dparlons.account=false`.
 
-### Pairing
+### How to pair your phone
 
-Run these on the box, in an interactive SSH terminal:
+Run these on the box, in an interactive SSH terminal. The app side of each step is in the
+[Parlons Cloud Portal manual](parlons-cloud-portal.md#4-pair-the-app-to-your-account).
 
-1. Set the admin pairing password once: `sudo parlons-pair --set-admin-password`.
-2. Show your account's address and a one-time invitation (a QR code is drawn if `qrencode` is
-   installed): `sudo parlons-pair --admin`.
+1. Set the admin pairing password once:
+
+   ```bash
+   sudo parlons-pair --set-admin-password
+   ```
+
+2. Show your account's address and a one-time owner invitation. A QR code is drawn if `qrencode`
+   is installed:
+
+   ```bash
+   sudo parlons-pair --admin
+   ```
+
 3. Scan or paste the invitation in the Parlons Cloud app. A valid code pairs immediately.
-4. To host a guest account (this needs the separate tenants service):
-   `sudo parlons-pair --guest <name>`.
+4. Check the heartbeat. The device count in `account=up:… devices` goes up by one:
+
+   ```bash
+   journalctl -u parlons-node --since -2min --no-pager | grep heartbeat | tail -1
+   ```
+
+`parlons-pair` reads `/var/lib/parlons-node` by default. Pass `--data DIR` if your data directory
+is elsewhere.
 
 The unused code is kept in `pair-code.txt` until it is used. A used code is never valid again.
 Do not take codes from old logs or old `invite.txt` copies.
+
+### How to host a guest account
+
+Guest accounts need the separate `parlons-tenants` service next to the node. Set it up first
+([Parlons Cloud Portal manual, §21](parlons-cloud-portal.md#21-many-accounts-the-parlons-tenants-service)).
+Give it `--panel-port 9597` so it does not clash with the node's panel on 9587.
+
+1. Make a guest invitation for a new account name:
+
+   ```bash
+   sudo parlons-pair --guest <name>
+   ```
+
+2. Send the invitation to your guest over a private channel. They pair from their own Parlons
+   Cloud app.
+
+More on invitations: [Parlons Cloud Portal manual, §23](parlons-cloud-portal.md#23-owner-and-guest-invitations-from-the-server).
+
+### How to run a node without the account
+
+Set `-Dparlons.account=false` in the unit and restart ([§7](#how-to-change-the-unit)). The node
+then runs as a relay and gateway only. The heartbeat shows `account=off`.
 
 ### Own relay
 
@@ -1150,26 +1960,80 @@ When the cape is on and its public host is known, the account attaches to its ow
 advertises it first, and anchors its permanent address on it. If the host is unknown or private,
 the log says `own relay NOT advertised: … set -Dparlons.relay.host=<public ip>`.
 
-### Local panel
+### How to open the local panel
 
-- The panel listens on `127.0.0.1:9587` only (`parlons.panel.port`; `0` turns it off).
-- From your computer, open a tunnel: `ssh -L 9587:127.0.0.1:9587 root@node.example.com`.
-- Read the one-time link from `/var/lib/parlons-node/panel-ticket.txt` and open it in a browser.
-  The account makes a new link as soon as one is used.
-- The panel cannot reach the seed, backups, wallet sends, payments, the node console or NFT
-  hosting. Those stay on paired phones and the CLI.
+1. From your computer, open an SSH tunnel to the panel port and leave it open:
 
-### Restoring a portable account
+   ```bash
+   ssh -L 9587:127.0.0.1:9587 root@node.example.com
+   ```
 
-```bash
-# Run as the service user, into a FRESH data directory, with an interactive console.
-sudo -u maxima java -Dparlons.node.data=/var/lib/parlons-node \
-    -Dparlons.restore=/var/lib/parlons-node/backup.pbk -jar /opt/maxima/parlons-node.jar
-```
+2. In that SSH session, read the one-time link:
 
-This writes the identity, paired devices, settings, contacts and chat, then exits. The host the
-backup came from **must be stopped for good**: one identity, one live account. The node's wallet
-stays its own vault. To make the funds follow, resync the wallet to the old phrase from a paired device.
+   ```bash
+   sudo cat /var/lib/parlons-node/panel-ticket.txt
+   ```
+
+   It looks like `http://127.0.0.1:9587/open?ticket=…`.
+3. Open the link in a browser on your computer. The account makes a new link as soon as one is used.
+4. If you revoked the panel before and want it back, delete the local-device key and restart:
+
+   ```bash
+   rm /var/lib/parlons-node/local-device.key
+   systemctl restart parlons-node
+   ```
+
+The panel listens on `127.0.0.1:9587` only (`parlons.panel.port`; `0` turns it off). It cannot
+reach the seed, backups, wallet sends, payments, the node console or NFT hosting. Those stay on
+paired phones and the CLI. What it shows: [Parlons Cloud Portal manual, §24](parlons-cloud-portal.md#24-the-local-web-panel).
+
+### How to restore a portable account onto a new node
+
+A `.pbk` bundle is made from a paired device (Settings → **Back up account…**, see
+[Parlons Cloud Portal manual, §16](parlons-cloud-portal.md#16-backups-recovery-and-moving)). It
+holds the identity, paired devices, settings, contacts and chat.
+
+1. Stop the host the backup came from **for good**: one identity, one live account.
+2. Install the node ([§5](#5-two-ways-to-install)) but do not start it, or stop it and move its
+   data directory away. The restore needs a **fresh** data directory:
+
+   ```bash
+   systemctl stop parlons-node
+   mv /var/lib/parlons-node /var/lib/parlons-node.before-restore
+   mkdir -p /var/lib/parlons-node
+   chown maxima:maxima /var/lib/parlons-node
+   chmod 700 /var/lib/parlons-node
+   ```
+
+3. Copy the bundle in and give it to the service user:
+
+   ```bash
+   cp backup.pbk /var/lib/parlons-node/backup.pbk
+   chown maxima:maxima /var/lib/parlons-node/backup.pbk
+   ```
+
+4. Run the restore as the service user, in an interactive terminal. It asks for the bundle's
+   passphrase, writes the account, then exits:
+
+   ```bash
+   sudo -u maxima java -Dparlons.node.data=/var/lib/parlons-node \
+       -Dparlons.restore=/var/lib/parlons-node/backup.pbk -jar /opt/maxima/parlons-node.jar
+   ```
+
+5. Delete the bundle and start the node:
+
+   ```bash
+   rm /var/lib/parlons-node/backup.pbk
+   systemctl start parlons-node
+   ```
+
+6. Paired devices reconnect by themselves, because the `MAX#` is the same.
+7. The node's wallet stays its own vault. To make the funds follow, resync the wallet to the old
+   phrase from a paired device ([§20](#how-to-resync-the-wallet-to-another-phrase)).
+
+The app can also import an identity or a `.pbk` straight onto a running node (Settings →
+**Import identity or backup…**). The node then exits with code 3 and comes back on the imported
+identity. The previous identity is kept in `account-history/<import-id>/previous/`.
 
 ---
 
@@ -1193,6 +2057,52 @@ and the node becomes the **single reader** of its keets inbox.
 - `-Dparlons.node.keetschat=off` lets a host app read the keets inbox itself (minimaCore Desktop
   does this). There must only ever be one reader per node.
 
+### How to turn on keets with the deploy script
+
+1. Install Node.js on the box. The script refuses to continue without a `node` runtime:
+
+   ```bash
+   apt-get install -y nodejs
+   node --version
+   ```
+
+2. On your computer, check out the keets repository next to the maxima checkout, so the sidecar
+   is at `../keets/sidecar`, and install its packages:
+
+   ```bash
+   (cd ../keets/sidecar && npm ci --omit=dev)
+   ```
+
+   To use a sidecar elsewhere, set `SIDECAR=/path/to/sidecar` before the script.
+3. Re-run the deploy script with all your usual flags plus `--keets`. It uploads the sidecar to
+   `/opt/maxima/keets-sidecar`, adds the flags, and adds `AF_NETLINK` to the unit.
+4. Check the log:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep -E 'keets'
+   ```
+
+   You want `keets chat bridge up (KeetChat interop)` and `keets identity: 0x…`.
+
+### How to turn on keets by hand
+
+1. Install Node.js on the box, and copy a sidecar with its `node_modules` to
+   `/opt/maxima/keets-sidecar` (it must contain `index.js`).
+2. Add the keets flags to `parlons.node.args` in the unit:
+
+   ```
+   "-Dparlons.node.args=-keets -keetssidecar /opt/maxima/keets-sidecar/index.js"
+   ```
+
+3. Add `AF_NETLINK` to the address families in the unit:
+
+   ```ini
+   RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+   ```
+
+4. Reload and restart ([§7](#how-to-change-the-unit)), then check the log as in step 4 above.
+5. Give the `keets identity: 0x…` value to KeetChat users who want to add the node as a contact.
+
 ---
 
 ## 19. MDS (MiniHUB) on the node
@@ -1207,9 +2117,38 @@ and the node becomes the **single reader** of its keets inbox.
 - Only the hub, the login page, `mds.js`, publicmds and the Pending dapp are bundled. Install other
   dapps yourself.
 
+### How to turn on MDS and open MiniHUB
+
+1. Put the MDS password in a conf file ([§8, conf file](#how-to-pass-minimas-own-flags-in-a-conf-file)),
+   or skip this step and let the node generate one.
+2. Add these properties to the unit and restart ([§7](#how-to-change-the-unit)). Leave out the
+   `parlons.node.conf` line if you skipped step 1: a conf file that cannot be read stops the node
+   with exit code 2.
+
+   ```
+   -Dparlons.mds=true
+   -Dparlons.mds.bind=127.0.0.1
+   -Dparlons.node.conf=/var/lib/parlons-node/minima.conf
+   ```
+
+3. If you did not set a password, read the generated one over the admin RPC, on the box:
+
+   ```bash
+   curl -s http://127.0.0.1:9005/mds
+   ```
+
+4. From your computer, open an SSH tunnel to the MDS file port (P2P port 9001 means 9003):
+
+   ```bash
+   ssh -L 9003:127.0.0.1:9003 root@node.example.com
+   ```
+
+5. Open `https://127.0.0.1:9003/` in a browser, accept the self-signed certificate, and log in
+   with the password.
+
 ---
 
-## 20. Seeds and identity
+## 20. Seeds, identity and backups
 
 > **The seed is a wallet.** The node's 24-word phrase, `identity.txt`, and any `seed.txt` you
 > adopt can all spend funds. Never print them to a log, a ticket, a chat or a terminal that is
@@ -1232,19 +2171,73 @@ instead. From then on, the identity comes from `identity.txt`, not from the vaul
   fails, the node stays up, the wallet is unchanged, and the reason is shown to the device.
 - To re-pin the identity to whatever the vault now holds, delete `identity.txt` and restart.
 
-### Back up the wallet seed
+### How to back up the wallet seed
 
-With the admin RPC on, run this **on the box** and copy the phrase to offline storage:
+1. Make sure the admin RPC is on ([§21](#21-the-admin-rpc)).
+2. On the box, in a session that is not recorded, print the vault:
 
-```bash
-curl -s http://127.0.0.1:9005/vault
-```
+   ```bash
+   curl -s http://127.0.0.1:9005/vault
+   ```
 
-Do not redirect it into a file in a shared place, and do not run it inside a recorded session.
+3. Write the 24-word `phrase` on paper, or into offline storage. Do not redirect it into a file in
+   a shared place.
+4. Clear the terminal's scrollback.
+5. If the identity phrase differs from the wallet phrase (after a resync or an identity import),
+   back up `identity.txt` too (next procedure).
 
-### Adopt an existing phrase (`--seed-from`)
+### How to back up the whole node
 
-This keeps the identity of an existing relay or cloud account. The deploy script:
+The chain itself does not need a backup; a new node syncs it again. Back up the secrets and your
+settings.
+
+1. Back up the wallet seed (previous procedure).
+2. Copy the identity and account files to a private, encrypted place you control. Stop the node
+   first so the files are consistent:
+
+   ```bash
+   systemctl stop parlons-node
+   tar -C /var/lib/parlons-node -czf /root/parlons-node-backup.tgz \
+       --exclude='./1.1' --exclude='./nft/tmp' .
+   systemctl start parlons-node
+   chmod 600 /root/parlons-node-backup.tgz
+   ```
+
+   This holds `identity.txt`, the account (devices, contacts, chat), the relay state, the gateway
+   token and the hosted NFT files. It is a wallet-grade secret: treat it like the seed.
+3. Copy the unit and your TLS front configuration:
+
+   ```bash
+   cp /etc/systemd/system/parlons-node.service /root/
+   ```
+
+4. Move the archive off the box, then delete it there:
+
+   ```bash
+   scp root@node.example.com:/root/parlons-node-backup.tgz .
+   ssh root@node.example.com rm /root/parlons-node-backup.tgz
+   ```
+
+5. For a portable copy of the account alone, make a `.pbk` bundle from a paired device
+   ([Parlons Cloud Portal manual, §16](parlons-cloud-portal.md#16-backups-recovery-and-moving)).
+
+Never restore this archive onto a second box while the first one still runs. One identity runs in
+one place.
+
+### How to adopt an existing phrase with the deploy script
+
+1. Put the 24-word phrase in a file on the box, owned by root, mode 600. A box that ran
+   `maxima-server.jar` already has it at `/var/lib/maxima/seed.txt`.
+2. Re-run the deploy script with `--rpc --seed-from <file on the box>`, plus your usual flags.
+   Pass `--archive <host:port>` to choose the archive node. If you also seed the MegaMMR, the
+   script adopts the phrase first, as it must.
+3. Read the result. `vault MATCHES <file> - identity preserved (and pinned in identity.txt)` means
+   it worked. Any other result means: do not trust the node until you know why.
+4. Delete the phrase file from the box once you have an offline copy.
+
+### What `--seed-from` does
+
+It keeps the identity of an existing relay or cloud account. The deploy script:
 
 1. Checks that the file on the box holds exactly 24 words.
 2. Sends `megammrsync action:resync host:<--archive> phrase:"…"` as a **POST body from a temporary
@@ -1255,12 +2248,91 @@ This keeps the identity of an existing relay or cloud account. The deploy script
 
 The phrase never leaves the box.
 
-### Password-locked nodes
+### How to resync the wallet to another phrase
+
+From a paired device: Wallet → **Resync wallet to a new phrase…**. The node uses the archive host
+in `parlons.node.archive`, exits with code 3, and comes back on the same identity.
+
+By hand on the box (this is what the deploy script's `--seed-from` does):
+
+1. Write the command into a private temporary file, so the phrase is never in argv or a log:
+
+   ```bash
+   umask 077
+   tmp=$(mktemp /var/lib/parlons-node/.resync.XXXXXX)
+   printf 'megammrsync action:resync host:%s phrase:"%s"' 'archive.example.net:9001' '<24 words>' > "$tmp"
+   ```
+
+   Type the phrase in an unrecorded session, and clear the shell history afterwards.
+2. Send it to the admin RPC as a POST body. This can take several minutes:
+
+   ```bash
+   curl -s -m 3600 --data-binary @"$tmp" http://127.0.0.1:9005/
+   shred -u "$tmp"
+   ```
+
+   It must reply with `"status":true`. The resync ends with a node shutdown.
+3. Restart, and wait until the RPC answers again:
+
+   ```bash
+   systemctl restart parlons-node
+   until curl -s -m 5 http://127.0.0.1:9005/status >/dev/null; do sleep 2; done
+   ```
+
+4. Check that the vault now holds the new phrase (`curl -s http://127.0.0.1:9005/vault`), in an
+   unrecorded session.
+5. If you seed the MegaMMR, import it again now ([§13](#13-megammr-mode-and-the-rootnode)): the
+   resync reset the chain databases.
+
+The identity stays pinned in `identity.txt`, so the `MAX#`, paired devices and contacts do not
+change.
+
+### How to re-pin the identity to the vault
+
+This changes the Maxima identity and the `MAX#` whenever the vault phrase differs from
+`identity.txt`. Paired devices and contacts then point at the old identity.
+
+1. Keep a copy of the old identity file, then remove it:
+
+   ```bash
+   cp /var/lib/parlons-node/identity.txt /var/lib/parlons-node/identity.txt.before-repin
+   rm /var/lib/parlons-node/identity.txt
+   ```
+
+2. Restart. The boot log says `identity: pinned from the vault into identity.txt`:
+
+   ```bash
+   systemctl restart parlons-node
+   journalctl -u parlons-node -b --no-pager | grep 'identity:' | grep -v seed
+   ```
+
+3. Delete the `.before-repin` copy once you are sure you do not need the old identity.
+
+### How to run a password-locked node
 
 If the vault is locked, the cape, gateway and account cannot start until it is unlocked. The
-Minima node itself keeps running. Supply the passphrase with `-Dparlons.node.passphrase.file`
-(a file with mode 600 under `/var/lib/parlons-node` or `/etc`) or `PARLONS_NODE_PASSPHRASE`.
-The node tries to unlock exactly once per boot.
+Minima node itself keeps running. The node tries to unlock exactly once per boot, from a file or
+from the `PARLONS_NODE_PASSPHRASE` environment variable.
+
+1. Write the passphrase into a file under `/var/lib/parlons-node` or `/etc` (not under `/root` or
+   `/home`: `ProtectHome=true` hides them). The passphrase must not contain whitespace, `"` or `;`:
+
+   ```bash
+   umask 077
+   printf '%s\n' '<passphrase>' > /var/lib/parlons-node/passphrase.txt
+   chown maxima:maxima /var/lib/parlons-node/passphrase.txt
+   chmod 600 /var/lib/parlons-node/passphrase.txt
+   ```
+
+2. Add it to the unit and restart ([§7](#how-to-change-the-unit)). With the deploy script, pass
+   `--passphrase-file /var/lib/parlons-node/passphrase.txt`:
+
+   ```
+   -Dparlons.node.passphrase.file=/var/lib/parlons-node/passphrase.txt
+   ```
+
+3. Check that the cape, gateway and account come up (`cape=up`, `gateway=up` in the heartbeat).
+   `node is password-locked but no passphrase provided` in the log means the file was not read.
 
 ### Never
 
@@ -1286,11 +2358,58 @@ The node tries to unlock exactly once per boot.
   curl -s --data-binary 'network' http://127.0.0.1:9005/
   ```
 
-- `quit` stops the node, and the JVM exits about 0.8 s later with code 0. Under
-  `Restart=on-failure`, systemd does **not** restart it.
+- `quit` stops the node, and the JVM exits about 0.8 s later with code 0. Under `Restart=always`
+  (what the deploy script writes), systemd starts it again after 10 s. To stop the node for good,
+  use `systemctl stop parlons-node` instead.
 - **Never put it behind a proxy, and never open its port.** The gateway is the hardened public surface.
 - If the port is already taken, the node logs `REFUSING to run: admin rpc on 127.0.0.1:N cannot
   start …` and exits with code 2.
+
+### How to turn on the admin RPC
+
+1. Add `-Dparlons.node.rpc=true` to the unit and restart ([§7](#how-to-change-the-unit)). With the
+   deploy script, pass `--rpc`.
+2. Check the boot line. It must say `admin rpc 127.0.0.1:9005 (loopback-bound)`:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep 'admin rpc' | grep -v seed
+   ```
+
+3. On the box, run a command:
+
+   ```bash
+   curl -s http://127.0.0.1:9005/status
+   ```
+
+4. From another machine, check that the port does not answer. This must print nothing:
+
+   ```bash
+   nc -z -w 5 node.example.com 9005 && echo "EXPOSED 9005"
+   ```
+
+### How to run a command with spaces or quotes
+
+1. For a short command, URL-encode the spaces as `%20`:
+
+   ```bash
+   curl -s 'http://127.0.0.1:9005/balance%20megammr:true%20address:<address>'
+   ```
+
+2. For anything longer, or with quotes, send it as a POST body (up to 64 KiB):
+
+   ```bash
+   curl -s --data-binary 'coins relevant:true' http://127.0.0.1:9005/
+   ```
+
+### How to stop or restart the node
+
+Use systemd, not `quit`:
+
+```bash
+systemctl stop parlons-node
+systemctl start parlons-node
+systemctl restart parlons-node
+```
 
 ---
 
@@ -1299,13 +2418,13 @@ The node tries to unlock exactly once per boot.
 The convention is **versioned jars plus a symlink**. Every jar is kept in `/opt/maxima`, and the
 unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 
-### Upgrade one box
+### How to upgrade one box
 
 1. On your computer, download the new jar and check its SHA-256 ([§4](#4-download-and-verify-the-jar)).
 2. Copy it to the box under a temporary name:
 
    ```bash
-   B=parlons-node-0.2.136.jar
+   B=parlons-node-0.2.138.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -1313,43 +2432,99 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 
    ```bash
    cd /opt/maxima
-   echo 'e354bdf4906ab216863c6dc4b0eb6fbe93c9427140fe2e931eb3bf305b59369c  parlons-node-0.2.136.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.136.jar.part parlons-node-0.2.136.jar
-   chmod 644 parlons-node-0.2.136.jar
+   echo '597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.138.jar.part parlons-node-0.2.138.jar
+   chmod 644 parlons-node-0.2.138.jar
    ```
 
-4. Back up the unit: `cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.136.jar`.
-5. Point the symlink at the new jar: `ln -sfn /opt/maxima/parlons-node-0.2.136.jar /opt/maxima/parlons-node.jar`.
-6. Restart: `systemctl daemon-reload && systemctl restart parlons-node`.
-7. Wait about 25 s, then check:
+4. Note the jar the symlink points at now. You need it to roll back:
+
+   ```bash
+   readlink /opt/maxima/parlons-node.jar
+   ```
+
+5. Back up the unit:
+
+   ```bash
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.138.jar
+   ```
+
+6. Update the version in the unit's `Description` line (optional; it is only a label):
+
+   ```bash
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.138)/' /etc/systemd/system/parlons-node.service
+   ```
+
+7. Point the symlink at the new jar:
+
+   ```bash
+   ln -sfn /opt/maxima/parlons-node-0.2.138.jar /opt/maxima/parlons-node.jar
+   ```
+
+8. Restart:
+
+   ```bash
+   systemctl daemon-reload
+   systemctl restart parlons-node
+   ```
+
+9. Wait about 25 s, then check:
 
    ```bash
    systemctl is-active parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   The boot line must show the new version.
-8. Verify from outside ([§23](#23-verifying-from-outside)).
+   The boot line must show `Parlons Node 0.2.138`, and a DEX cape must show `dex relay 0.1.5 up`.
+10. Verify from outside ([§23](#23-verifying-from-outside)).
 
 If you run several boxes, upgrade **one box at a time**, and verify each one before you start the next.
 
-The deploy script does steps 2 to 6 for you (`ops/deploy-parlons-node.sh <box> --jar <new jar> …`
-with the same flags you used before). Note that it rewrites the unit from its own flags.
+### How to upgrade with the deploy script
 
-### Roll back
+1. Put the new verified jar in `dist/` on your computer.
+2. Re-run the script with the **same flags** you used before, and the new jar:
 
-1. Point the symlink at the previous jar:
+   ```bash
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.138.jar <your usual flags>
+   ```
+
+   The script uploads and checks the jar, flips the symlink, and rewrites the unit from its flags.
+   A flag you leave out goes back to its default.
+3. Verify from outside ([§23](#23-verifying-from-outside)).
+
+### How to roll back
+
+1. Point the symlink at the previous jar (the one `readlink` showed in step 4 of the upgrade):
 
    ```bash
    cd /opt/maxima && ln -sfn parlons-node-<old version>.jar parlons-node.jar
    ```
 
-2. If you changed the unit, restore it from the `.before-…` backup.
-3. Run `systemctl daemon-reload && systemctl restart parlons-node`.
-4. Verify from outside.
+2. If you changed the unit, restore it from the `.before-…` backup:
+
+   ```bash
+   cp /etc/systemd/system/parlons-node.service.before-<what> /etc/systemd/system/parlons-node.service
+   ```
+
+3. Restart:
+
+   ```bash
+   systemctl daemon-reload
+   systemctl restart parlons-node
+   ```
+
+4. Check the boot line shows the old version, then verify from outside ([§23](#23-verifying-from-outside)).
+
+### How to go back to `maxima-relay.service`
 
 If the box used to run `maxima-relay.service` and the node replaced it, you can roll back to that
-too: `systemctl disable --now parlons-node && systemctl enable --now maxima-relay`.
+too. The deploy script kept its unit on disk:
+
+```bash
+systemctl disable --now parlons-node
+systemctl enable --now maxima-relay
+```
 
 ---
 
@@ -1379,7 +2554,7 @@ false results in both directions.
 3. **DEX cape:**
 
    ```bash
-   curl -s https://node.example.com/dex-relay/dex/health    # {"ok":true,"version":"0.1.4",...}
+   curl -s https://node.example.com/dex-relay/dex/health    # {"ok":true,"version":"0.1.5",...}
    curl -s https://node.example.com/dex-relay/dex/relays
    ```
 
@@ -1424,6 +2599,60 @@ The heartbeat line, every 30 s:
 
 If you see `heartbeat: node not ready: …`, the embedded node is not answering `status` yet. This is
 normal for a short time after boot.
+
+### How to check a node's health in one minute
+
+1. Is the service running? `-w` matches the whole word, so `inactive` does not count:
+
+   ```bash
+   systemctl is-active parlons-node | grep -qw active && echo running
+   ```
+
+2. Read the latest heartbeat:
+
+   ```bash
+   journalctl -u parlons-node --since -2min --no-pager | grep heartbeat | tail -1
+   ```
+
+3. Check each field against the table above.
+4. Look for errors in the last hour:
+
+   ```bash
+   journalctl -u parlons-node --since -1h --no-pager | grep -E 'Exception|FAILED|REFUSING|OutOfMemoryError' | grep -v seed
+   ```
+
+5. Check the disk and memory:
+
+   ```bash
+   df -h /var/lib
+   systemctl status parlons-node --no-pager | grep -E 'Memory|Tasks'
+   ```
+
+6. Run the outside checks ([§23](#23-verifying-from-outside)).
+
+### How to alert on problems
+
+The node has no metrics endpoint; the heartbeat and the log lines below are the interface. A
+simple check is a cron job that alerts when the heartbeat is missing or an alert line appears:
+
+1. Write the check script `/usr/local/bin/parlons-node-check`:
+
+   ```bash
+   #!/bin/sh
+   # Exit 1 (and print why) when the node needs attention.
+   systemctl is-active parlons-node | grep -qw active || { echo "parlons-node not active"; exit 1; }
+   journalctl -u parlons-node --since -2min --no-pager | grep -q heartbeat || { echo "no heartbeat for 2 min"; exit 1; }
+   bad=$(journalctl -u parlons-node --since -5min --no-pager | grep -E 'REFUSING|FAILED|OutOfMemoryError|password-locked' | grep -v seed)
+   [ -z "$bad" ] || { echo "$bad"; exit 1; }
+   ```
+
+2. Make it executable, and run it every 5 minutes from root's crontab with your own alert command:
+
+   ```bash
+   chmod 755 /usr/local/bin/parlons-node-check
+   crontab -e
+   # */5 * * * * /usr/local/bin/parlons-node-check || <your alert command>
+   ```
 
 Log lines worth alerting on:
 
@@ -1471,6 +2700,86 @@ that never reach one relay.
 
 **Home routers.** Forward the P2P port and the relay port, or use `-Dparlons.relay.port=shared`
 so that one forwarded port is enough.
+
+### How to open the ports with ufw
+
+1. Allow SSH first, so you do not lock yourself out, then the node's public ports:
+
+   ```bash
+   ufw allow OpenSSH
+   ufw allow 9001/tcp
+   ufw allow 9501/tcp
+   ufw allow 80/tcp
+   ufw allow 443/tcp
+   ```
+
+2. Optional: allow STUN on the relay port:
+
+   ```bash
+   ufw allow 9501/udp
+   ```
+
+3. Turn ufw on if it is off, and check the rules:
+
+   ```bash
+   ufw enable
+   ufw status numbered
+   ```
+
+4. Open the same ports in the cloud provider's firewall, if it has one.
+5. Test from another machine ([§23](#23-verifying-from-outside)).
+
+### How to open the ports with firewalld
+
+1. Add the ports permanently, then reload so they take effect:
+
+   ```bash
+   firewall-cmd --permanent --add-port=9001/tcp
+   firewall-cmd --permanent --add-port=9501/tcp
+   firewall-cmd --permanent --add-service=http
+   firewall-cmd --permanent --add-service=https
+   firewall-cmd --reload
+   ```
+
+2. Check the result:
+
+   ```bash
+   firewall-cmd --list-all
+   ```
+
+The deploy script adds the ports with `--permanent` but does not reload firewalld. Run
+`firewall-cmd --reload` after the script on a firewalld box.
+
+### How to allow outbound traffic on a default-deny box
+
+1. Allow each mesh peer's relay port (repeat for every peer, with its real port):
+
+   ```bash
+   ufw allow out to <peer ip> port 9501 proto tcp
+   ```
+
+2. Allow the rootnode, your Minima peers and the archive node (repeat for each):
+
+   ```bash
+   ufw allow out to <peer ip> port 9001 proto tcp
+   ```
+
+3. Allow HTTPS out for snapshot downloads, and DNS:
+
+   ```bash
+   ufw allow out 443/tcp
+   ufw allow out 53
+   ```
+
+4. Check that a peer missing from `/dex/relays` appears within about 10 minutes.
+
+### How to forward ports on a home router
+
+1. Give the box a fixed address on your LAN (a DHCP reservation in the router).
+2. In the router, forward TCP 9001 and TCP 9501 to that address. With
+   `-Dparlons.relay.port=shared`, forward 9001 only.
+3. Test from outside your home network, for example from a phone on mobile data or a VPS. A test
+   from inside the LAN is not valid (hairpin NAT).
 
 ---
 
@@ -1548,10 +2857,243 @@ It has not been investigated further. What to do:
 | The DEX cape answers on the public IP | `parlons.dex.bind` is still `0.0.0.0`. Set it to `127.0.0.1` and restart. |
 | Caddy serves your website at `/dex-relay/…` | The `handle_path` vs `handle` ordering trap ([§11](#11-tls-fronting-caddy-nginx-apache)). |
 | The account never says "attached" | There is no outbound internet, or the clock is badly wrong. |
-| The cape, gateway and account never start; the log mentions a password lock | Supply the passphrase ([§20](#20-seeds-and-identity)). |
-| The service stopped after a manual megammr import or resync | It exited 0, and `Restart=on-failure` does not restart a clean exit. Run `systemctl restart parlons-node`. |
+| The cape, gateway and account never start; the log mentions a password lock | Supply the passphrase ([§20](#how-to-run-a-password-locked-node)). |
+| The service stopped after `quit`, a manual megammr import or a resync | The unit still says `Restart=on-failure`, which does not restart a clean exit. Switch it to `Restart=always` (see the fixes below). |
 | keets sidecar fails with `EPERM` on sockets | Add `AF_NETLINK` to `RestrictAddressFamilies`. |
 | Killing a stuck process | Kill it by PID. Never run `pkill -f parlons-node.jar`: the pattern can match your own SSH session. |
+
+### Step-by-step fixes
+
+#### Fix: the admin RPC port is taken
+
+1. See who holds it:
+
+   ```bash
+   ss -ltnp | grep ':9005 '
+   ```
+
+2. If it is a stock Minima node, move the Parlons Node's P2P port ([§9](#how-to-move-the-node-off-port-9001)).
+3. If nothing holds it, the JRE lacks `jdk.httpserver`. Check, and install a full JRE if the line is missing:
+
+   ```bash
+   java --list-modules | grep jdk.httpserver || apt-get install -y default-jre-headless
+   ```
+
+#### Fix: the relay port is taken
+
+1. See who holds 9501:
+
+   ```bash
+   ss -ltnp | grep ':9501 '
+   ```
+
+2. If it is the old standalone relay, stop it and restart the node:
+
+   ```bash
+   systemctl disable --now maxima-relay
+   systemctl restart parlons-node
+   ```
+
+3. Check that the heartbeat shows `cape=up:9501`.
+
+#### Fix: the panel or gateway port is taken
+
+1. See who holds it:
+
+   ```bash
+   ss -ltnp | grep -E ':(9585|9587) '
+   ```
+
+2. For a `parlons-tenants` service on 9587, give it `--panel-port 9597`
+   ([Parlons Cloud Portal manual, §21](parlons-cloud-portal.md#21-many-accounts-the-parlons-tenants-service)).
+   Otherwise move the node: set `-Dparlons.panel.port=<free port>` or `-Dparlons.gateway.port=<free port>`.
+3. If you moved the gateway, change the port in the TLS front too, then reload it.
+4. Restart the node ([§7](#how-to-change-the-unit)).
+
+#### Fix: the node exits at once or refuses to start
+
+1. Read why:
+
+   ```bash
+   journalctl -u parlons-node -n 30 --no-pager | grep -E 'REFUSING|usage|Usage' | grep -v seed
+   ```
+
+2. If the help text was printed, remove every argument after `-jar …parlons-node.jar` in the unit.
+   All settings are `-D` properties before `-jar`.
+3. If it names refused Minima flags, remove them from `parlons.node.args` or the conf file
+   ([§8.8](#88-minima-flags-the-node-refuses)).
+4. If it says it cannot read `-conf`, check the conf file's path, owner (`maxima`) and mode (600).
+5. Restart ([§7](#how-to-change-the-unit)).
+
+#### Fix: `block=` stays at 0
+
+1. Check that the unit has a rootnode or connect list:
+
+   ```bash
+   grep -E 'parlons.node.(rootnode|connect)' /etc/systemd/system/parlons-node.service
+   ```
+
+2. If it has none, set one ([§13](#how-to-set-the-rootnode)).
+3. Check that the box can reach it:
+
+   ```bash
+   nc -z -w 8 seed-peer.example.net 9001 && echo reachable
+   ```
+
+4. If it cannot, allow outbound traffic to it ([§25](#how-to-allow-outbound-traffic-on-a-default-deny-box)).
+5. Check the clock:
+
+   ```bash
+   timedatectl | grep -E 'synchronized|NTP'
+   ```
+
+#### Fix: out-of-memory loop, or the service is "failed"
+
+1. Confirm the cause:
+
+   ```bash
+   journalctl -u parlons-node --since -1h --no-pager | grep -E 'OutOfMemoryError|oom' | tail -5
+   ```
+
+2. Raise `-Xmx` in the unit (3g or more with MegaMMR) and set `MemoryMax` at least 512 MB above it,
+   for example `-Xmx3g` with `MemoryMax=3584M`.
+3. Reload, clear the start limit and start again:
+
+   ```bash
+   systemctl daemon-reload
+   systemctl reset-failed parlons-node
+   systemctl restart parlons-node
+   ```
+
+4. Check a minute later that it is still `active`.
+
+#### Fix: phones see empty balances
+
+1. Check the MegaMMR size. Under 1 MB means it was never imported:
+
+   ```bash
+   stat -c %s /var/lib/parlons-node/1.1/databases/megammr.mmr
+   ```
+
+2. Import it ([§13](#how-to-import-a-megammr-snapshot)).
+
+#### Fix: the gateway is never advertised to phones
+
+1. Check the three conditions: MegaMMR on, `parlons.node.public` set, relay on:
+
+   ```bash
+   grep -E 'megammr|node.public|relay.port' /etc/systemd/system/parlons-node.service
+   ```
+
+2. Fix whichever is missing and restart ([§14](#how-to-publish-the-gateway-for-phones)).
+3. Look for `wallet gateway advertised to phones:` in the log.
+
+#### Fix: the cape does not advertise itself, or the DEX cape is not announced
+
+1. Read the warning:
+
+   ```bash
+   journalctl -u parlons-node -b --no-pager | grep -E 'own relay NOT advertised|dex relay: no public host'
+   ```
+
+2. Set the public host ([§12](#how-to-set-the-public-host)), and for the DEX cape also
+   `-Dparlons.dex.public=https://node.example.com/dex-relay`.
+3. Restart and check the log again.
+
+#### Fix: the DEX cape answers on the public IP
+
+1. Check the bind:
+
+   ```bash
+   ss -ltnp | grep ':9602 '
+   ```
+
+2. If it shows `0.0.0.0:9602` or `*:9602`, add `-Dparlons.dex.bind=127.0.0.1` (and
+   `-Dparlons.dex.public=…`) to the unit, and restart.
+3. Close the port in the firewall if the deploy script opened it:
+
+   ```bash
+   ufw delete allow 9602/tcp
+   ```
+
+4. Check from outside that 9602 no longer answers ([§23](#23-verifying-from-outside), step 6).
+
+#### Fix: Caddy serves your website at `/dex-relay/…`
+
+1. Find the DEX block in the Caddyfile:
+
+   ```bash
+   grep -n 'dex-relay' /etc/caddy/Caddyfile
+   ```
+
+2. If it says `handle_path /dex-relay/*`, change it to `handle /dex-relay/*` with
+   `uri strip_prefix /dex-relay` inside ([§11](#how-to-front-the-node-with-caddy)).
+3. Validate and reload Caddy, then test `/dex-relay/dex/health` from outside.
+
+#### Fix: every DEX client is rate-limited together behind nginx
+
+1. Check that the `/dex-relay/` block sends the header:
+
+   ```bash
+   grep -n 'X-Forwarded-For' /etc/nginx/sites-enabled/*
+   ```
+
+2. If it is missing, add `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` to the
+   block ([§11](#how-to-front-the-node-with-nginx)), then run `nginx -t` and `systemctl reload nginx`.
+
+#### Fix: the service stays stopped after a clean exit
+
+1. Switch the unit to `Restart=always` ([§7](#how-to-switch-an-old-unit-to-restartalways)).
+2. Start the node:
+
+   ```bash
+   systemctl start parlons-node
+   ```
+
+#### Fix: the keets sidecar fails with `EPERM`
+
+1. Add `AF_NETLINK` to the unit:
+
+   ```bash
+   sed -i 's/^RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX$/RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK/' /etc/systemd/system/parlons-node.service
+   ```
+
+2. Reload and restart:
+
+   ```bash
+   systemctl daemon-reload
+   systemctl restart parlons-node
+   ```
+
+#### Fix: the account never says "attached"
+
+1. Check outbound internet and the clock:
+
+   ```bash
+   curl -sI https://github.com | head -1
+   timedatectl | grep synchronized
+   ```
+
+2. If the box blocks outbound traffic, allow the relays' ports ([§25](#how-to-allow-outbound-traffic-on-a-default-deny-box)).
+3. Look for `account up: attached to N relay(s)` in the log after a restart.
+
+#### Fix: a stuck process
+
+1. Find the PID. Never use `pkill -f parlons-node.jar`: the pattern can match your own SSH session:
+
+   ```bash
+   systemctl show -p MainPID parlons-node
+   ```
+
+2. Ask it to stop, then force it only if it does not:
+
+   ```bash
+   kill <pid>
+   sleep 15
+   kill -0 <pid> 2>/dev/null && kill -9 <pid>
+   ```
+
+3. Start it again with `systemctl start parlons-node`.
 
 ---
 
@@ -1564,7 +3106,7 @@ It has not been investigated further. What to do:
 - [ ] The seed and wallet phrase are backed up offline, and appear in **no** log, ticket or chat.
 - [ ] Only the P2P port, the relay port and 443 are open inbound.
 - [ ] From outside, 9005 (admin RPC), 9585, 9587 and 9602 do **not** answer ([§23](#23-verifying-from-outside), step 6).
-- [ ] `parlons.dex.bind=127.0.0.1` is set whenever `parlons.dex.port` is set.
+- [ ] Whenever `parlons.dex.port` is set, `parlons.dex.public` is set too (the cape then binds `127.0.0.1`), or `parlons.dex.bind=127.0.0.1` is set.
 - [ ] `parlons.gateway.bind` is `127.0.0.1` (no `--gateway-public` in production).
 - [ ] The admin RPC is never proxied, and `parlons.mds.bind` is never public.
 - [ ] `-Xmx` is set, and `MemoryMax` is above it.

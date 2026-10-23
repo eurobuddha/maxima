@@ -6,11 +6,11 @@ This manual covers:
 
 - **Parlons! for Android**, version **0.6.145**. This is the full app. Your identity lives on the phone.
 - **Parlons Desktop**, version **1.5.115**, for Mac, Windows and Linux. This is the full app for a computer. It installs as **MaximaNode**.
-- **Parlons Cloud** for Android (version **0.2.89**) and iPhone, briefly. These pair with an always-on Parlons account. A separate manual covers the Portal and running accounts in depth.
+- **Parlons Cloud** for Android (version **0.2.90**) and iPhone, briefly. These pair with an always-on Parlons account. The [Parlons Cloud manual](parlons-cloud-portal.md) covers the Portal in depth, and the [Parlons Node manual](parlons-node.md) covers running an account server.
 
 All downloads are on the releases page: <https://github.com/eurobuddha/maxima/releases>
 
-The short guide in `docs/guide/` is the quick-start version of this manual. This manual follows it and goes deeper.
+Every task in this manual has numbered steps. Labels in **bold** are the exact words you see on screen in English. Where Android and Desktop differ, each has its own steps.
 
 ---
 
@@ -238,7 +238,7 @@ The restore window also warns about **key uses**. Your wallet signs with one-tim
 #### After the first screen
 
 1. Android asks to send you notifications. **Allow it.** Without it you will not see messages arriving.
-2. Go to **Settings** (three-dot menu, top right). Under **Node & power**, check **Battery exemption**. If it says **not set**, tap **Fix battery settings** and allow Parlons to run without restrictions. Android kills background apps, and for a chat app that means missed messages, especially overnight.
+2. Open **Settings**: tap the **three dots** (top right), then **Settings**. Under **Node & power**, check **Battery exemption**. If it says **not set**, tap **Fix battery settings** and allow Parlons to run without restrictions. Android kills background apps, and for a chat app that means missed messages, especially overnight.
 3. In **Settings**, under **Your name**, type the name your contacts should see and tap **Set**. Names are up to 32 characters.
 
 ### 5.2 Parlons Desktop
@@ -255,7 +255,7 @@ The restore window also warns about **key uses**. Your wallet signs with one-tim
    | Windows | `C:\Users\<you>\.maxima\seed.txt` |
 
 5. You land on the **Chats** tab.
-6. Give yourself a name. Open the three-dot menu (top right), choose **Settings**. The first field is **Your name**. Type it and click **Set**.
+6. Give yourself a name. Click the **three dots** button (top right). It opens **Settings**. Under **Your name**, type your name in **Display name** and click **Set**.
 
 The backup window appears only on the very first launch. If you missed it, see [section 18.2](#182-desktop-settings) to show the words again.
 
@@ -272,10 +272,10 @@ Top-bar buttons:
 | Button | What it does |
 |---|---|
 | Search (magnifier) | Search messages, contacts and groups. |
-| Theme | Cycles System, Light and Dark. |
+| Theme | Cycles System, Light and Dark. A short note shows the new choice, for example "Theme: Dark". |
 | Three dots | Menu: **New group**, **Scan QR**, **Search**, **Settings**. |
 
-Swipe between five tabs:
+Four tabs show under the top bar. Tap a tab, or swipe sideways:
 
 | Tab | What is on it |
 |---|---|
@@ -283,24 +283,72 @@ Swipe between five tabs:
 | **Contacts** | Your address card, your contacts, and **+ Add**. |
 | **Wallet** | Your Minima wallet: balance, tokens, send and receive, history. |
 | **Network** | Connection status, relays, help-the-network, event log. |
-| **Settings** | Language, name, privacy, appearance, power, keys and backup. |
 
-Many cards have a **What is this?** link or an info button. It opens a short, plain explanation. Use them.
+**Settings** has no tab of its own. It holds language, name, privacy, appearance, power, keys and backup.
+
+#### How to open Settings (Android)
+
+1. Tap the **three dots** at the top right.
+2. Tap **Settings**.
+
+You can also swipe left once more from the **Network** tab.
+
+#### How to change the theme (Android)
+
+1. Tap the **Theme** button in the top bar.
+2. Each tap moves to the next choice: System, Light, Dark.
+
+Or open **Settings**, go to **Appearance**, and tap **System**, **Light** or **Dark**.
+
+Many cards have a **What is this?** link, a **?** or an info button. It opens a short, plain explanation. Use them.
 
 ### 6.2 Parlons Desktop
 
-The window has four tabs: **Chats**, **Contacts**, **Wallet**, **Network**. The top bar has **Search**, a **Theme** button, and a three-dot menu with **Settings**. The bottom says "Powered by Maxima".
+The window has four tabs: **Chats**, **Contacts**, **Wallet**, **Network**. The top bar has a **Theme** button, a **Search** button and a **three dots** button. The bottom says "Powered by Maxima".
+
+| Button | What it does |
+|---|---|
+| Theme (sun or moon) | Switches between Light and Dark. |
+| Search (magnifier) | Jumps to the **Chats** tab and puts the cursor in **Search chats**. |
+| Three dots | Opens **Settings**. |
 
 The app also puts an icon in the menu bar (Mac) or system tray (Windows, Linux). Its menu has:
 
 - **Copy my public address**
 - **Re-check reachability**
 - **Open data folder**
+- **Change language**
 - **Quit**
 
 Only one copy runs at a time. If you open it twice you see **"Maxima is already running."**
 
-**Text size.** Press **Ctrl +** or **Ctrl −** to change text size in steps, from 80% to 150%. **Ctrl 0** resets it to 100%. On a Mac, **Command** works too. The size is remembered.
+#### How to open Settings (Desktop)
+
+1. Click the **three dots** button at the top right of the window.
+2. The **Settings** page opens.
+
+#### How to change the theme (Desktop)
+
+1. Click the **Theme** button (sun or moon) in the top bar. It switches between Light and Dark.
+2. To follow your computer's own setting instead, open **Settings**, go to **Appearance**, and click **System**.
+
+#### How to change the text size (Desktop)
+
+1. Press **Ctrl +** to make text bigger, or **Ctrl −** to make it smaller. On a Mac, **Command +** and **Command −** work too.
+2. Each press moves one step. The range is 80% to 150%.
+3. Press **Ctrl 0** (or **Command 0**) to go back to 100%.
+
+The size is remembered the next time you open the app.
+
+#### How to use the tray menu (Desktop)
+
+1. Click the Parlons icon in the menu bar (Mac) or the system tray (Windows, Linux).
+2. Choose an item:
+   - **Copy my public address** puts your full address on the clipboard.
+   - **Re-check reachability** tests again whether the internet can reach this computer.
+   - **Open data folder** opens the `.maxima` folder.
+   - **Change language** opens the language list.
+   - **Quit** closes the app completely.
 
 ---
 
@@ -331,14 +379,17 @@ If you see **"Couldn't resolve a shareable IP address."**, check your connection
 ### Show and share your address (Desktop)
 
 1. Open the **Contacts** tab. The card says **Your Maxima address**.
-2. Click **Share my address**. You see a QR for a phone to scan, and the full address with **Click to copy**.
-3. **Copy share address** copies the full text.
+2. Click **Share my address**. A window opens with a QR code for a phone to scan.
+3. Under the QR, each address is shown in full. With a permanent address you see **permanent MAX# address** and **current address**. Without one you see **maxima address**. Click an address to copy it. The tooltip says **Click to copy**.
+4. Paste it into an email or any other message to the person.
+
+If you see "Couldn't resolve a shareable address. Try again when online.", check your connection and click **Share my address** again.
 
 ### Get a permanent address
 
 A permanent `MAX#` address comes from a **location service** (also called MLS). It answers one question: "what is the current address for this identity?"
 
-On Android:
+#### How to get a permanent address (Android)
 
 1. Open the **Network** tab.
 2. Find the card **Location service · finds you when you move** and tap **Location settings**.
@@ -348,7 +399,17 @@ On Android:
    - Enter a location service yourself (it must be in the form `Mx<key>@<host>:<port>`) and tap **Pin this MLS**.
    - **Use the host's directory** goes back to the default.
 
-On Desktop, the **Network** tab shows your location address and its **Mode**: **static (pinned)** or **rotating (host-assigned)**. Pin a static location service there in the same way.
+#### How to get a permanent address (Desktop)
+
+1. Open the **Network** tab.
+2. Find the card **Location service · finds you when you move**. It shows your **location address** and its **Mode**: **static (pinned)** or **rotating (host-assigned)**.
+3. Click **Location settings**.
+4. Choose one:
+   - **Use the eurobuddha pool (register)**. You see "Registered — permanent MAX# address active".
+   - Enter a location service in the form `Mx<key>@<host>:<port>` and click **Pin this MLS**.
+   - **Use the host's directory** goes back to the default.
+
+Your permanent address then shows as **permanent MAX# address**. Click it to copy it in full.
 
 ---
 
@@ -367,7 +428,7 @@ Adding someone is a **handshake**. You introduce yourself to their address. They
 
 They appear in your list the moment their device answers.
 
-You can also use the three-dot menu, **Scan QR**. A scanned address goes to the Contacts tab.
+You can also tap the **three dots**, then **Scan QR**. A scanned address goes to the Contacts tab.
 
 ### 8.2 Desktop: paste
 
@@ -382,27 +443,58 @@ There is no camera on the desktop. People scan you; you paste them.
 
 You can pass one contact's address to another contact as a **contact card**.
 
-On Android:
+#### How to send a contact card (Android)
 
-1. In **Contacts**, tap the person you want to share.
-2. Tap **Share…**, then **Send to a contact…**.
-3. Pick who should receive it. You see "Contact sent to {name}".
+1. Open the **Contacts** tab and tap the person you want to share.
+2. Tap **Send to a contact…**. (**Share…** next to it sends the address through another app instead.)
+3. In **Send {name} to…**, tap who should receive it.
+4. You see "Contact sent to {name}".
 
-The receiver sees a card that says **Shared contact** and **Tap to add this contact**. Tapping it offers **Add** (sends an introduction) or **Copy address**.
+#### How to send a contact card (Desktop)
 
-### 8.4 A contact's details (Android)
+1. Open the **Contacts** tab and click the person you want to share.
+2. Click **Send to a contact…**.
+3. Click who should receive it.
 
-Tap a contact in the **Contacts** tab. You see:
+To copy the address yourself instead, click **Copy share address** in the same window.
+
+#### How to add someone from a contact card (Android)
+
+1. In the chat, tap the card. It says **Shared contact** and **Tap to add this contact**.
+2. A window asks "Add {name}?" and shows their full address.
+3. Tap **Add contact** to send them an introduction. Or tap **Copy address** to copy it in full.
+4. You see "Introduction sent - they appear in Contacts once they answer".
+
+### 8.4 A contact's details
+
+Tap (Android) or click (Desktop) a contact in the **Contacts** tab. You see:
 
 - **Message**, to open the chat.
-- **Parlons address**, and each host they are reachable through. Tap to copy.
+- **Parlons address** (Desktop: **maxima address**), and each host they are reachable through (**Host 1**, **Host 2** …). Tap to copy.
 - **Share address (permanent)**, if they have one.
-- **Share…** and **Send to a contact…**
+- **Share…** (Android) or **Copy share address** (Desktop), and **Send to a contact…**
 - **Payment address (MINIMA)**, once they have shared a wallet address.
 - **Software**, and **Last seen** (or **Online now**).
 - **Remove contact**.
 
+#### How to remove a contact (Android)
+
+1. Open the **Contacts** tab and tap the person.
+2. Scroll down and tap **Remove contact**.
+3. A window asks "Remove {name}?". Tap **Remove**.
+
+#### How to remove a contact (Desktop)
+
+1. Open the **Contacts** tab and click the person.
+2. Click **Remove contact**. The contact is removed at once. There is no second question.
+
 Removing someone only removes them from **your** list. They keep your address and can still write to you.
+
+#### How to find a contact
+
+1. Open the **Contacts** tab.
+2. Type part of a name in the search field (**Search contacts** on Android, **Search** on Desktop).
+3. The list shows only the people who match.
 
 ### 8.5 Status words next to contacts
 
@@ -423,10 +515,35 @@ People on classic Maxima can chat with you. They cannot take calls or play voice
 
 ### 9.1 Start a chat
 
-- Android: tap a contact in **Contacts**, then **Message**. Or tap an existing chat in **Chats**.
-- Desktop: click a contact, or use the round **New chat** button on the Chats tab.
+#### How to start a chat (Android)
+
+1. Open the **Contacts** tab.
+2. Tap the person.
+3. Tap **Message**.
+
+To go back to a chat you already have, open the **Chats** tab and tap it.
+
+#### How to start a chat (Desktop)
+
+1. Open the **Chats** tab.
+2. Click the round **New chat** button.
+3. Click the person in the list.
+
+Or open the **Contacts** tab, click the person, and click **Message**.
 
 A new chat says: "This is the start of your conversation with {name}. Messages are end-to-end encrypted - only the two of you can read them."
+
+#### How to send a message
+
+1. Open the chat.
+2. Type in the **Message** field.
+3. Tap (or click) **Send**. On Desktop you can also press **Enter**.
+
+#### How to add an emoji
+
+1. In the chat, tap (or click) the **Emoji** button.
+2. Pick a group: **Smileys**, **Gestures**, **Hearts**, **Animals & nature**, **Food & drink** or **Objects & symbols**.
+3. Tap an emoji. It goes into the message field. Send as usual.
 
 ### 9.2 The message bar (Android)
 
@@ -439,41 +556,77 @@ From left to right:
 | Camera | Takes a photo and sends it with an optional caption. |
 | Send / microphone | With text in the field, it sends. With an empty field, it shows a microphone and records a voice note. |
 
-The chat header has **Video call**, **Voice call**, a theme button and an **info** button. Info shows the contact's name, full key and addresses, and a **What do the ticks mean?** button. In a group, info shows the members.
+The chat header has **Video call**, **Voice call**, a theme button and an **info** button. In a group, info shows the members.
+
+#### How to see a contact's details from a chat
+
+1. Open the chat.
+2. Android: tap the **info** button in the header. Desktop: click the name at the top of the conversation.
+3. You see the contact's name, full key and addresses. In a group you see the **Members**, with **(admin)** next to each admin.
+4. On Android, tap **What do the ticks mean?** for a short explanation of the ticks. Tap **Close** when done.
 
 ### 9.3 Long-press a message (Android)
 
-Long-press a message bubble for:
+#### How to copy, save or check a message (Android)
 
-- **Copy message**, **Copy caption** or **Copy contact address**, depending on what it is.
-- **Copy transaction id**, on a payment. The full id is copied.
-- **Save photo** and **Share photo**, on a photo.
-- **Info**: who sent it, when, and its state (Sending…, Sent (relay took it), Delivered, Read, Failed to send).
+1. Long-press the message bubble.
+2. Tap one of the choices. You only see the ones that fit that message:
+   - **Copy message**, **Copy caption** or **Copy contact address**.
+   - **Copy transaction id**, on a payment. The full id is copied. You see "Transaction id copied".
+   - **Save photo** or **Share photo**, on a photo. A saved photo shows "Saved to Photos".
+   - **Info**: who sent it, when, and its state (Sending…, Sent (relay took it), Delivered, Read, Failed to send). On a payment, Info also shows the full **Transaction id** and a **Copy tx id** button.
 
 ### 9.4 Right-click a message (Desktop)
 
-Right-click a message for **Copy message** or **Copy caption**, **Copy contact address**, **Copy transaction id**, **Open image**, and **Info**. Info shows when it was sent and when it arrived. A message that arrived late shows "sent … · arrived …".
+#### How to copy, open or check a message (Desktop)
+
+1. Right-click the message.
+2. Choose one of the items. You only see the ones that fit that message:
+   - **Copy message**, **Copy caption** or **Copy contact address**.
+   - **Copy transaction id**, on a payment. The full id is copied.
+   - **Open image**, on a photo.
+   - **Info**. It shows who sent it, **Sent:** and **Arrived:** times, and its status. A message that arrived late shows "sent … · arrived …".
 
 ### 9.5 Manage a chat
 
-Long-press a chat in the **Chats** list (Android) or right-click it (Desktop):
+#### How to mark a chat as read
 
-- **Mark as read**
-- **Clear messages**. This deletes every message in that chat **on this device only**. It does not unsend anything and does not leave a group. It cannot be undone.
+1. Open the **Chats** tab.
+2. Long-press the chat (Android) or right-click it (Desktop).
+3. Choose **Mark as read**.
+
+#### How to clear a chat
+
+**Clear messages** deletes every message in that chat **on this device only**. It does not unsend anything and does not leave a group. It cannot be undone.
+
+1. Open the **Chats** tab.
+2. Long-press the chat (Android) or right-click it (Desktop).
+3. Choose **Clear messages**.
+4. A window asks **Clear this chat?**. Confirm with **Clear** (Android) or **OK** (Desktop).
 
 ### 9.6 Search
 
-- Android: tap the magnifier in the top bar (or three dots, **Search**). Type in **Search messages…**. Results are grouped under **Contacts & groups** and **Messages**. Tap a result to open it.
-- Desktop: use **Search** in the top bar.
+#### How to search (Android)
+
+1. Tap the magnifier in the top bar. Or tap the **three dots**, then **Search**.
+2. Type in **Search messages…**.
+3. Results are grouped under **Contacts & groups** and **Messages**. Tap a result to open it.
+
+#### How to search (Desktop)
+
+1. Click the magnifier in the top bar. The app jumps to the **Chats** tab.
+2. Type in **Search chats**. The chat list shows only the matches.
+3. Click a result to open it.
 
 ### 9.7 Read receipts
 
 Read receipts are **off** by default. Delivery (two grey ticks) is always on. That is the transport doing its job.
 
-To let people see when you have read their messages:
+#### How to turn read receipts on or off
 
-- Android: **Settings**, **Privacy**, turn on **Read receipts**.
-- Desktop: **Settings**, **Privacy**, **Read receipts**.
+1. Open **Settings** (Android: **three dots**, then **Settings**. Desktop: the **three dots** button).
+2. Under **Privacy**, find **Read receipts**.
+3. Turn the switch on or off. When on, the line under it says "Contacts are told when you read their message". When off it says "Contacts see delivery only, never when you read".
 
 The setting applies to everyone. There is no per-contact setting.
 
@@ -512,18 +665,34 @@ You need at least one contact first. Tap **How groups work** in the picker for t
 ### Create a group (Desktop)
 
 1. On the **Chats** tab, click the round **New chat** button.
-2. Choose **New group**.
-3. Pick at least one person and type a **Group name**. Click **Create group**.
+2. Click **New group** at the top of the list.
+3. Type a name in **Group name**.
+4. Under **Who is in the group?**, tick at least one person.
+5. Click **Create**.
+
+Click **How groups work** in the same window for the rules above.
 
 ### Change members
 
 Only an admin can do this. You are the admin of a group you create.
 
-1. Open the group and tap the **info** button.
-2. Tap **Edit members**.
-3. Tick or untick people. Tap **Save**. You see "Group updated".
+#### How to change members (Android)
 
-There is no "leave group" button. To stop seeing a group, use **Clear messages**, or ask an admin to remove you.
+1. Open the group and tap the **info** button.
+2. Tap **Edit members**. You only see it if you are an admin.
+3. In **Members**, tick or untick people.
+4. Tap **Save**.
+
+#### How to change members (Desktop)
+
+1. Open the group and click its name at the top of the conversation.
+2. Click **Edit members**. You only see it if you are an admin.
+3. In **Members**, tick or untick people.
+4. Click **Save**.
+
+You always stay in a group you are admin of. If you tick too many people you see the 12-person limit message and nothing changes.
+
+There is no "leave group" button. To stop seeing a group, use **Clear messages** ([section 9.5](#95-manage-a-chat)), or ask an admin to remove you.
 
 ---
 
@@ -536,35 +705,55 @@ A photo, voice note or other media in a message can be **at most 16 MB**. A larg
 ### Send a photo (Android)
 
 1. In a chat, tap **Attach**, then **Photo library**. Or tap the **camera** button to take a new photo.
-2. Pick the photo.
+2. Pick the photo, or take it.
 3. Under **Send photo**, add an optional caption in **Add a caption…**.
-4. Tap **Send**.
+4. Tap **Send**. You see "Sending photo…".
 
 ### Send a photo (Desktop)
 
-- Click **Attach**, then **Photo…**, pick an image, add an optional **Caption**, and send. Or:
-- Copy a screenshot or image (or an image file in your file manager), click in the conversation and press **Ctrl V** (**Command V** on a Mac). A preview appears. Add a caption if you like and choose **Send** or **Cancel**.
+#### How to send a photo from a file (Desktop)
+
+1. In a chat, click **Attach**, then **Photo…**.
+2. Pick an image file.
+3. In **Send a photo**, add an optional **Caption (optional)**.
+4. Send it.
+
+#### How to paste a photo (Desktop)
+
+1. Copy a screenshot or image, or an image file in your file manager.
+2. Click in the conversation.
+3. Press **Ctrl V** (**Command V** on a Mac). A preview appears.
+4. Add a caption if you like.
+5. Choose **Send**, or **Cancel**.
 
 Pasted images are limited to 32 MB on the clipboard before they are prepared for sending. Ordinary text copy and paste work as usual.
 
 ### The photo gallery
 
-Tap any photo in a chat. It opens a gallery of every photo in that conversation, sent and received, in chat order.
+Tapping any photo in a chat opens a gallery of every photo in that conversation, sent and received, in chat order.
 
-On Android:
+#### How to browse, save and share photos (Android)
 
-- Swipe sideways to move to newer or older photos.
-- Pinch to zoom, drag to pan, double-tap to reset.
-- Use **Save** (to Photos) or **Share**.
-- If a photo shows "Photo unavailable · tap to retry", tap it.
+1. In a chat, tap a photo. The gallery opens on it.
+2. Swipe sideways to move to newer or older photos.
+3. Pinch to zoom, drag to pan, double-tap to reset.
+4. Tap **Save** to save it to Photos, or **Share** to send it through another app.
+5. If a photo shows "Photo unavailable · tap to retry", tap it.
+6. Use the back button or the close button to leave the gallery.
 
-On Desktop, use the left and right arrow keys or drag sideways to move between photos. Use the mouse wheel to zoom, drag to pan, and double-click to reset. **Save image** saves a copy. **Escape** closes the viewer.
+#### How to browse and save photos (Desktop)
+
+1. In a chat, click a photo. The viewer opens on it.
+2. Press the left and right arrow keys, or drag sideways, to move between photos.
+3. Use the mouse wheel to zoom, drag to pan, and double-click to reset.
+4. Click **Save image** to save a copy.
+5. Press **Escape** to close the viewer.
 
 The gallery is a snapshot. Close and reopen it to include photos that arrive while it is open.
 
 ### Voice notes
 
-On Android:
+#### How to record a voice note (Android)
 
 1. In a chat with an empty message field, tap the **microphone** button. Or tap **Attach**, then **Voice note**.
 2. Allow the microphone the first time.
@@ -573,9 +762,21 @@ On Android:
 
 If the recording is under a second you see "Too short - hold on a moment longer".
 
-On Desktop, use **Attach**, then **Voice note**.
+#### How to record a voice note (Desktop)
 
-Tap **Play** on a voice note to hear it. Voice notes need Parlons on both ends; a contact on classic Maxima cannot receive them.
+1. In a chat, click **Attach**, then **Voice note**.
+2. Allow the microphone if your computer asks. The window shows **●  Recording** and a waveform.
+3. Speak. The limit is **60 seconds**. At the limit, recording stops and the note is sent.
+4. Click **Send**, or **Cancel**.
+
+If there is no microphone you see "No microphone available."
+
+#### How to play a voice note
+
+1. Tap (or click) **Play** on the voice note.
+2. Tap it again to stop.
+
+Voice notes need Parlons on both ends; a contact on classic Maxima cannot receive them.
 
 ---
 
@@ -585,15 +786,16 @@ Private files let you send a file of up to **512 MB** inside a chat. The file is
 
 ### Send a private file
 
-On Android:
+#### How to send a private file (Android)
 
 1. In a chat, tap **Attach**, then **Private file**.
-2. Pick a file (up to 512 MB). You see "Preparing…" and then "Sending private file".
+2. Pick a file (up to 512 MB).
+3. A window titled **Sending private file** shows "Preparing…" while the file is encrypted. Tap **Hide** to close the window; the work carries on.
 
-On Desktop:
+#### How to send a private file (Desktop)
 
-1. Click **Attach**, then **Private file…** ("Send private file (up to 512 MB)").
-2. Pick the file.
+1. In a chat, click **Attach**, then **Private file…**.
+2. In **Send private file (up to 512 MB)**, pick the file.
 
 The chat shows a file card with the name and size.
 
@@ -601,19 +803,29 @@ The chat shows a file card with the name and size.
 
 Receiving does **not** start by itself. You choose.
 
-1. Tap the file card. It says "Tap Download to receive this encrypted file. Keep a participant online until it finishes."
+#### How to receive a private file
+
+1. Tap (or click) the file card. It says "Tap Download to receive this encrypted file. Keep a participant online until it finishes."
 2. Tap **Download**.
-3. When it says **Complete** or **Ready · sharing**, tap **Save file…** to save a copy where you want it.
+3. Wait. The status moves through **Connecting**, **Downloading** and **Verifying**.
+4. When it says **Complete** or **Ready · sharing**, tap **Save file…**.
+5. Choose where to save it. You see "File saved".
 
 ### Transfer controls
 
-Open **File transfers** from the attach menu to see every transfer this device keeps.
+#### How to pause, resume, save or remove a transfer
+
+1. In the chat, tap (or click) **Attach**, then **File transfers**. You see every transfer this device keeps. (Or tap the file card itself.)
+2. Tap (or click) a transfer.
+3. Use the control you need:
 
 | Control | What it does |
 |---|---|
 | **Pause sharing** / **Resume** | Stop or restart this transfer. |
 | **Save file…** | Save the finished file. |
-| **Remove local transfer** | Delete this device's transfer and stop sharing it. Copies you saved are kept. |
+| **Remove local transfer** | Delete this device's transfer and stop sharing it. Copies you saved are kept. It asks first. Confirm it (on Android the button is **Remove**). |
+
+If there are none you see "No local file transfers".
 
 While you are downloading, your device may also **upload encrypted pieces** to the other people in the chat. That helps everyone finish faster.
 
@@ -648,7 +860,7 @@ After a restart, transfers that were active **resume by themselves**. Transfers 
 
 ## 13. Voice and video calls
 
-Calls work in the **Android app** and in **Parlons Cloud for Android**. Parlons Desktop does not carry call audio or video: it shows an incoming call ("Answer on your phone — the desktop app does not carry call audio/video yet.") and declines it politely so the caller is not left ringing. The iPhone app has no calls yet.
+Calls work in the **Android app** and in **Parlons Cloud for Android**. Parlons Desktop does not carry call audio or video: it shows an incoming call ("Answer on your phone — the desktop app does not carry call audio/video yet.") and declines it politely so the caller is not left ringing. The **Video call** and **Voice call** buttons on Desktop only explain this. The iPhone app has no calls yet.
 
 ### Place a call (Android)
 
@@ -668,13 +880,18 @@ During a call:
 
 ### Answer a call (Android)
 
-An incoming call rings with your ringtone and shows **Incoming Parlons call** or **Incoming Parlons video call**, with **Answer** and **Decline**. It can show over the lock screen. An unanswered call stops ringing after about 45 seconds.
+An incoming call rings with your ringtone and shows **Incoming Parlons call** or **Incoming Parlons video call**. It can show over the lock screen. An unanswered call stops ringing after about 45 seconds.
 
-For calls to ring properly on the lock screen:
+1. Tap **Answer** to take the call, or **Decline** to refuse it.
+2. Allow the microphone (and camera, for video) if asked.
+3. Use the in-call buttons as above. Tap **End** to hang up.
 
-1. Open **Settings**, **Privacy**.
-2. Find **Incoming calls**. If it says "Allow full-screen alerts to show calls on the lock screen", tap **ALLOW** and allow it.
-3. Tap **SETTINGS** on the same row to choose ringtone and vibration.
+#### How to make calls ring on the lock screen (Android)
+
+1. Open **Settings** (**three dots**, then **Settings**).
+2. Under **Privacy**, find **Incoming calls**.
+3. If it says "Allow full-screen alerts to show calls on the lock screen", tap the row (it shows **ALLOW**) and allow it in the Android screen that opens.
+4. Once allowed, the row says "Ringtone, vibration and call alerts" and shows **SETTINGS**. Tap it to choose ringtone and vibration.
 
 ### Call limits
 
@@ -690,8 +907,21 @@ Call history appears in the chat, for example "Voice call · 2:35", **Missed cal
 
 Web links in messages and photo captions are **clickable**. This includes `http://`, `https://`, `www.` and bare domain names (which open as HTTPS).
 
-- **Tap** a link to open it in your normal browser.
-- **Long-press** a link (Android) or **right-click** it (Desktop) for **Open link**, **Copy link** and **Share link** (Desktop: **Copy link to share**).
+#### How to open a link
+
+1. Tap (or click) the link in the message.
+2. It opens in your normal browser.
+
+#### How to copy or share a link (Android)
+
+1. Long-press the link.
+2. Tap **Open link**, **Copy link** or **Share link**.
+
+#### How to copy or share a link (Desktop)
+
+1. Right-click the link.
+2. Choose **Open link**, **Copy link** or **Copy link to share**.
+3. After **Copy link to share**, paste the link into the conversation or app you want to share it with.
 
 Parlons never fetches link previews, and never runs HTML or formatting from a received message. Nothing is loaded until you tap.
 
@@ -715,46 +945,80 @@ Payments are **real** and **cannot be undone**. Transactions are built and signe
 1. Open a **one-to-one** chat. Payments are not available in groups.
 2. Tap **Attach**, then **Send payment**.
 3. In **Pay {name}**, choose **Minima** or **MxUSD**.
-4. Enter the amount, and an optional note.
+4. Enter the amount in **Amount (MINIMA)** or **Amount (MxUSD)**, and an optional **Note (optional)**.
 5. Tap **Send**. A confirmation says "Send {amount} {token}?" and "This signs and broadcasts a real transaction and cannot be undone."
 6. Tap **Confirm**. You see "Signing payment…", then **Payment sent**.
 
-The chat shows a payment bubble. Long-press it to **Copy transaction id** (the full id).
+The chat shows a payment bubble. Long-press it and tap **Copy transaction id** to copy the full id.
 
 If you see "No wallet address yet — ask them to open this chat", the other person's app has not shared its wallet address with you yet. Ask them to open your chat.
 
 ### 15.2 Pay someone in a chat (Desktop)
 
-1. Open a one-to-one chat. Click **Attach**, then **Send payment**.
-2. Choose Minima or MxUSD, enter an amount and an optional note.
-3. Click **Sign & send**.
+1. Open a one-to-one chat with a contact. Click **Attach**, then **Send payment**.
+2. The window says **To {name}**. Choose **Minima** or **MxUSD**.
+3. Enter an **amount** and an optional **note (optional)**.
+4. Click **Sign & send**.
 
-The chat shows "↑ You sent" or "↓ You received". Right-click to **Copy transaction id**.
+The chat shows "↑ You sent" or "↓ You received". Right-click the payment and choose **Copy transaction id** to copy the full id.
+
+If you see "No wallet address for this contact yet — they need to share one.", ask them to open your chat in their app.
 
 ### 15.3 The Wallet tab
 
-The Wallet tab (Android and Desktop) has two views: **Balance** and **History**.
+The Wallet tab (Android and Desktop) has two views: **Balance** and **History**. Tap (or click) either name at the top to switch.
 
 **Balance** shows:
 
-- Your total balance and the amount **sendable now**. Coins that are still confirming are not sendable yet. On Android, if it says "tap Sync to unlock the rest", tap **Sync**.
-- **Your tokens**, including MxUSD. Tap a token to see its full **Token ID**, supply and coins.
-- **Signatures used**: "{remaining} of {maximum} signatures left · each send spends one". See below.
+- Your total balance and the amount **sendable now**. Coins that are still confirming are not sendable yet.
+- **YOUR TOKENS** (Desktop: **Tokens**), including MxUSD.
+- **Signatures used**: "{remaining} of {maximum} signatures left · each send spends one". See [section 15.4](#154-signature-uses-read-this-before-you-import-a-phrase).
 - **Send** and **Receive**.
 
-**Receive.** Tap **Receive**. You see your full Minima address and a QR. Tap the address to copy the complete string. Anyone can send Minima or MxUSD to it.
+#### How to unlock coins that are still syncing (Android)
 
-**Send to an address:**
+1. Open the **Wallet** tab.
+2. If the line under the balance says "… sendable · tap Sync to unlock the rest", tap that line.
+3. You see "Syncing coins…", then "Coins synced — … now spendable".
 
-1. Tap **Send**.
+#### How to see a token's details
+
+1. Open the **Wallet** tab, on **Balance**.
+2. Tap (or click) a token under **YOUR TOKENS** (Desktop: **Tokens**).
+3. You see its full **Token ID**, **Total supply** and **Coins**. Tap the Token ID to copy it.
+
+#### How to receive Minima or MxUSD
+
+1. Open the **Wallet** tab.
+2. Tap (or click) **Receive**.
+3. The **Receive MINIMA** window shows your full Minima address and a QR.
+4. Tap (or click) the address to copy the complete string, or let the sender scan the QR.
+
+Anyone can send Minima or MxUSD to this address.
+
+#### How to send to an address (Android)
+
+1. Open the **Wallet** tab and tap **Send**.
 2. Enter the address in the field (it starts with `Mx` or `0x`), or tap the scan button to scan it.
 3. Choose **Minima** or **MxUSD**.
 4. Enter the amount.
 5. Tap **Sign & send**. You see "Selecting coins…", "Signing on this device…", "Publishing via …", then "Sent — mining into a block".
 
+#### How to send to an address (Desktop)
+
+1. Open the **Wallet** tab and click **Send**.
+2. Paste the address in **Mx… address**.
+3. Choose **Minima** or **MxUSD**.
+4. Enter the **amount**.
+5. Click **Sign & send**. You see "Selecting coins…", then "Publishing via …".
+
 "Mining into a block" is normal. The payment confirms when it is in a block.
 
-**History** lists your transactions. Filter by **All**, **Sent** or **Received**. Tap one for its amount, token, time, full address and full transaction id.
+#### How to look at your payment history
+
+1. Open the **Wallet** tab and tap (or click) **History**.
+2. Tap **All**, **Sent** or **Received** to filter the list.
+3. Tap a payment. You see its **Direction**, **Amount**, **Token**, **When**, the full **To** or **From** address, and the full **Transaction ID**.
 
 ### 15.4 Signature uses: read this before you import a phrase
 
@@ -762,22 +1026,57 @@ Minima wallets sign with one-time keys. Each key can sign a limited number of ti
 
 - The counter **only goes up**.
 - Signing reserves one use, even if the payment does not complete.
-- Long-press the counter to raise it if you know this seed has signed more times elsewhere. You cannot lower it.
 - A words-only restore cannot know the old count. An encrypted backup ([section 20](#20-backups-and-moving-to-a-new-device)) carries it.
+
+#### How to raise the signature counter (Android)
+
+Do this only if you know this seed has signed more times elsewhere.
+
+1. Open the **Wallet** tab, on **Balance**.
+2. Long-press the **Key uses** card (it says **Signatures used** and **Long-press to adjust**).
+3. In **Set signatures used**, enter a number at least as high as the uses this seed has had anywhere.
+4. Tap **Set**. You see "Set to …".
+
+You cannot lower it. A smaller number shows "Ignored — can only raise above …". Tap **Cancel** to read **Why this matters** instead.
+
+On Desktop, click the **?** next to **Signatures used** (**About signature uses**) for the same explanation. The Desktop wallet has no control to raise the counter.
 
 ### 15.5 Wallet settings (Android)
 
-Tap **Wallet settings** on the Wallet tab.
+Open the **Wallet** tab, scroll to the bottom, and tap **Wallet settings**. The sheet says which seed the wallet uses now.
 
-- **Wallet node.** By default the wallet reads the chain through the Parlons fleet of Minima nodes, with automatic failover. You can point it at your own Parlons Node. Your seed never leaves the phone. **Reset to the Parlons fleet** undoes it.
-- **Import a phrase.** Replaces the wallet's seed with another 12- or 24-word phrase. The address and funds change. Only import a phrase whose key has **not** signed on another wallet or node. Your chat identity does not change.
-- **Use Parlons seed.** Switches the wallet back to your Parlons identity. The imported wallet is not deleted.
+#### How to use your own wallet node (Android)
+
+By default the wallet reads the chain through the Parlons fleet of Minima nodes, with automatic failover. You can point it at your own Parlons Node instead. Your seed never leaves the phone.
+
+1. In **Wallet settings**, tap **Wallet node**.
+2. Enter your node's endpoint in the first field (it looks like `https://your-node…/cmd`), and its **access token** in the second.
+3. Tap **Save node**. You see "Wallet node saved".
+
+To undo it, open **Wallet node** again and tap **Reset to the Parlons fleet**. See [the Parlons Node manual](parlons-node.md#14-the-wallet-gateway-and-its-token) for the endpoint and token.
+
+#### How to import a different wallet phrase (Android)
+
+This replaces the wallet's seed with another 12- or 24-word phrase. The address and funds change. Your chat identity does not change. Only import a phrase whose key has **not** signed on another wallet or node.
+
+1. In **Wallet settings**, tap **Import a phrase**.
+2. In **Import a wallet seed**, read the warning.
+3. Type the phrase in **12 / 24-word seed phrase**.
+4. Tap **Import**. You see "Importing wallet seed…".
+
+#### How to go back to your Parlons seed (Android)
+
+1. In **Wallet settings**, tap **Use Parlons seed**.
+2. A window asks **Use the Parlons seed?**. Tap **Use Parlons seed**.
+3. You see "Back to the Parlons seed…".
+
+The imported wallet is not deleted. Import its phrase again to return to it.
 
 ### 15.6 Payment problems
 
 | Message | What to do |
 |---|---|
-| Not enough confirmed funds. | Wait for incoming coins to confirm, or tap **Sync**. |
+| Not enough confirmed funds. | Wait for incoming coins to confirm. On Android, tap the "tap Sync to unlock the rest" line under the balance. |
 | Invalid Mx address. / bad checksum | Copy the address again, in full. |
 | That's the burn address. | You entered an address that destroys coins. Check the address. |
 | Payments are one-to-one for now | Open a one-to-one chat. |
@@ -791,9 +1090,23 @@ Parlons speaks **English**, **Simplified Chinese (简体中文)**, **Russian (Р
 
 ### Change the language
 
-- **Android:** the first launch asks you. Later: **Settings**, the language card at the top, the button **English · 简体中文 · Русский · Українська**. Pick one. The app switches without restarting.
-- **Android welcome screen:** **Change language**.
-- **Desktop:** **Settings**, **Language**, **Change language**.
+The first launch on Android asks you to choose. After that, use these steps.
+
+#### How to change the language (Android)
+
+1. Open **Settings** (**three dots**, then **Settings**).
+2. The first card says "Choose the language for this device." Tap the button **English · 简体中文 · Русский · Українська**.
+3. Tap your language. The app switches without restarting.
+
+On the welcome screen, before you have an identity, tap **Change language** instead.
+
+#### How to change the language (Desktop)
+
+1. Open **Settings** (the **three dots** button).
+2. Under **Language**, click **Change language**.
+3. Click your language.
+
+You can also choose **Change language** from the tray or menu-bar icon.
 
 The language is a setting on this device only. Your contacts see your messages exactly as you typed them.
 
@@ -805,7 +1118,15 @@ The language is a setting on this device only. Your contacts see your messages e
 
 Allow notifications when Parlons asks. On Android 13 and newer there are **no** chat notifications without this permission.
 
-Parlons uses separate notification channels, which you can adjust in Android's settings:
+#### How to turn notifications back on (Android)
+
+If you said no the first time:
+
+1. Open the Android **Settings** app.
+2. Go to **Apps**, then **Parlons!**, then **Notifications**. (The exact names vary a little by phone maker.)
+3. Turn notifications on.
+
+Parlons uses separate notification channels, which you can adjust on the same Android screen:
 
 | Channel | Used for |
 |---|---|
@@ -814,16 +1135,29 @@ Parlons uses separate notification channels, which you can adjust in Android's s
 | Incoming calls | Ringing calls, with Answer and Decline. |
 | A transport notification | Shows Parlons is running and how many relays are connected. It keeps the connection alive. |
 
-**Message sound.** In **Settings**, **Privacy**, **Message sound** plays "Pssst!" when a message arrives. Turn it off for silent notifications that still appear and vibrate.
+#### How to turn the message sound on or off (Android)
 
-**To make notifications arrive on time:**
+1. Open **Settings** (**three dots**, then **Settings**).
+2. Under **Privacy**, find **Message sound**.
+3. Turn the switch on for "Pssst! when a message arrives". Turn it off for "Silent - notifications still appear and vibrate".
 
-1. **Settings**, **Node & power**, **Battery exemption**. If it says **not set**, tap **Fix battery settings**.
-2. Check the **Network** tab shows at least one host connected.
+#### How to make notifications arrive on time (Android)
+
+1. Open **Settings**.
+2. Under **Node & power**, look at **Battery exemption**.
+3. If it says **not set**, tap **Fix battery settings**.
+4. In the Android window that opens, allow Parlons to run in the background. The row now says **granted**.
+5. Open the **Network** tab and check that at least one host is connected.
 
 ### Desktop
 
-Desktop shows a notification for a new message while the app runs. **Settings**, **Privacy**, **Message sound** turns the sound on or off ("Silent").
+Desktop shows a notification for a new message while the app runs.
+
+#### How to turn the message sound on or off (Desktop)
+
+1. Open **Settings** (the **three dots** button).
+2. Under **Privacy**, find **Message sound**.
+3. Turn it on for "Pssst! when a message arrives", or off for **Silent**.
 
 ---
 
@@ -831,7 +1165,7 @@ Desktop shows a notification for a new message while the app runs. **Settings**,
 
 ### 18.1 Android settings
 
-Open **Settings** from the three-dot menu or the last tab.
+Open **Settings**: tap the **three dots** at the top right, then **Settings**.
 
 | Section | Setting | What it does |
 |---|---|---|
@@ -855,9 +1189,70 @@ Open **Settings** from the three-dot menu or the last tab.
 | Apps using Maxima | Approve or revoke | Other apps on this phone that ask to use your Parlons identity as their transport. Only approve apps you trust. |
 | About | Version | The app version. |
 
+#### How to set your name (Android)
+
+1. Open **Settings**.
+2. Under **Your name**, type the name your contacts should see. Up to 32 characters.
+3. Tap **Set**. You see "Name set to {name}". Your contacts are told.
+
+#### How to copy your public key (Android)
+
+1. Open **Settings**.
+2. Under **Your name**, tap the **maxima publickey** field. The full key is copied. You see "maxima publickey copied".
+
+#### How to turn on App lock (Android)
+
+Your phone must have a screen lock (PIN, pattern, password or fingerprint) first. Otherwise the row says "Set a screen lock on this device to use this".
+
+1. Open **Settings**.
+2. Under **Privacy**, turn on **App lock**.
+3. Android asks you to confirm it is you (**Turn on app lock**, "Confirm it's you"). Use your fingerprint or device PIN.
+4. You see "App lock on". From now on Parlons asks for your fingerprint or PIN when you open it.
+
+To turn it off, turn off the same switch and confirm it is you. You see "App lock off".
+
+#### How to hide Parlons from screen sharing (Android)
+
+1. Open **Settings**.
+2. Under **Privacy**, turn off **Allow screen sharing**.
+3. The row now says "Screen is hidden from mirroring/casting when App lock is on".
+
+This only takes effect while **App lock** is on.
+
+#### How to mark this phone as a core node (Android)
+
+1. Open **Settings**.
+2. Under **Node & power**, turn on **Run as core node**.
+3. Contacts now see "core" next to you instead of an ordinary phone.
+
+#### How to switch to the classic engine (Android)
+
+Leave this off unless you know you need it. Private files need the built-in engine.
+
+1. Open **Settings**.
+2. Under **Node & power**, turn on **Classic engine**.
+3. You see "Switching engine - Parlons restarts in a moment". Parlons restarts by itself.
+
+Turn the switch off again to go back. Contacts added on the classic engine are carried across.
+
+#### How to approve or revoke another app (Android)
+
+Another app on the phone may ask to use your Parlons identity as its transport. It shows under **Apps using Maxima** with the word **pending**.
+
+1. Open **Settings** and scroll to **Apps using Maxima**.
+2. Tap the app that says "{app} wants access".
+3. A window asks "Let {app} use Parlons?". Tap **Approve**, or **Deny**.
+
+To take access away later:
+
+1. Tap the app that says "Approved — tap to revoke".
+2. A window asks "Revoke {app}?". Tap **Revoke**.
+
+Tap the **?** next to **Apps using Maxima** for a plain explanation.
+
 ### 18.2 Desktop settings
 
-Open the three-dot menu, **Settings**.
+Click the **three dots** button at the top right. It opens **Settings**.
 
 | Section | Setting | What it does |
 |---|---|---|
@@ -874,6 +1269,37 @@ Open the three-dot menu, **Settings**.
 | Keys & security | **Show seed phrase** | Shows your 24 words. **Copy (auto-clears in 60s)** is offered; writing them down is safer. |
 | Keys & security | **Restore a seed phrase** | Replaces this computer's identity. Contacts and chats here are cleared. The app then closes; open it again. |
 | About | Version | The app version. |
+
+#### How to set your name (Desktop)
+
+1. Open **Settings**.
+2. Under **Your name**, type in **Display name**.
+3. Click **Set**. Your contacts are told.
+
+Your full **maxima publickey** shows just below. Click it to copy it.
+
+#### How to connect minimaDocs (Desktop)
+
+1. Open **Settings**.
+2. Under **Connected apps**, click **Connect minimaDocs**.
+3. A window titled **Connect minimaDocs · {name}** shows a **Connection link**.
+4. Copy the link and paste it into minimaDocs, in **People**. The link expires in two minutes and works once.
+
+#### How to disconnect minimaDocs (Desktop)
+
+1. Open **Settings**.
+2. Under **Connected apps**, click **Revoke minimaDocs**.
+3. Confirm "Disconnect every minimaDocs workspace from this Parlons account?". Document access is unchanged.
+
+#### How to link a minimaCore Desktop node for KeetChat (Desktop)
+
+You need minimaCore Desktop 0.18.4 or newer running on this same computer.
+
+1. Open **Settings**.
+2. Under **Node**, find **Node link (KeetChat)**.
+3. Enter the node's **RPC URL**, and its **RPC password (if set)**.
+4. Click **Save & connect**.
+5. The status changes to "Linked — KeetChat contacts available". Click **Clear** to remove the link.
 
 ---
 
@@ -893,23 +1319,63 @@ Other counters:
 | Mailbox held for others | Encrypted messages this phone is storing for offline people. It cannot read them. |
 | Services you answer | Lookups and receipts this phone answers for others. |
 
+Tap any counter for a short explanation.
+
+#### How to reconnect quickly (Android and Desktop)
+
+1. Open the **Network** tab.
+2. Tap (or click) **Auto-connect** in the top card. It says **Working…** while it runs.
+3. The app tries the relays it knows, then tries to make you directly reachable. A note tells you how many relays you are connected through.
+
 ### 19.2 Relays (hosts)
 
 Parlons ships with a built-in list of relays and also learns relays from the network.
 
-**Add a relay you trust (Android):**
-
-1. Network tab, **Hosts · they relay your traffic**, **Manage**.
-2. Type `host:port` in **Add a relay** or paste a relay QR text, or tap **Scan a relay QR**.
-3. Tap **Add & connect** and confirm. The transport restarts. Your chats and wallet are unaffected.
-
-**Built-in relays.** The switch **Use built-in relays** keeps the shipped list on. If you turn it off, only relays you added or that this phone remembers are used. You must keep at least one relay: "Keep at least one relay - add your own before dropping this one". **Reset to defaults** brings the shipped list back.
-
-**Share a relay.** Tap a relay, then **Share relay**. Anyone who scans the QR adds it to their relays.
-
-Desktop has the same controls under **Network**, **Hosts**.
-
 Any public Maxima node works as a relay, including a classic Minima node with Maxima turned on.
+
+#### How to add a relay you trust (Android)
+
+1. Open the **Network** tab and find **Hosts · they relay your traffic**.
+2. Type `host:port` in the **add relay  host:port** field, or paste the text of a relay QR.
+3. Tap **Add & connect**.
+4. A window asks **Add and connect?**. Tap **Connect**. The transport restarts. Your chats and wallet are unaffected.
+5. After a few seconds a window says **Connected** (or **Reconnecting** if the relay has not accepted you yet). Tap **OK**.
+
+To scan a relay's QR instead: tap **Manage**, then **Scan a relay QR**, and point the camera at it.
+
+#### How to manage your relays (Android)
+
+1. Open the **Network** tab. Under **Hosts · they relay your traffic**, tap **Manage**.
+2. The **Manage hosts** sheet lists **Configured hosts**. Each shows "built-in" or "yours", and **Connected** or **Idle**.
+3. Next to a relay, tap:
+   - **Connect** to connect to an idle relay now.
+   - **QR** to share it (see below).
+   - **Remove** to drop it.
+4. Tap **Reset to defaults** at the bottom to bring the shipped list back.
+
+You must keep at least one relay. If you try to remove the last one you see "Keep at least one relay - add your own before dropping this one".
+
+#### How to turn the built-in relays off or on (Android)
+
+1. Open the **Network** tab and tap **Manage**.
+2. Turn off **Use built-in relays**. Now only relays you added or that this phone remembers are used.
+3. Turn it on again to use the shipped list plus yours.
+
+If you have no relay of your own you see "Add a relay of your own first - the phone needs somewhere to start".
+
+#### How to share a relay (Android)
+
+1. Open the **Network** tab and tap **Manage**.
+2. Tap **QR** next to the relay.
+3. The **Share relay** sheet shows a QR. Anyone who scans it adds that relay to their relays. The full text is under it in **Share text**; tap to copy it.
+
+#### How to add and manage relays (Desktop)
+
+1. Open the **Network** tab. Find **Hosts · they relay your traffic**.
+2. To add one, type `host:port` (or paste a relay QR text) in **add relay  host:port** and click **Add & connect**.
+3. Each relay in the list shows "built-in", "yours" or "learned". Next to it, click **QR** to share it, **Connect** to connect now, or **Remove** to drop it.
+4. Use the switch for built-in relays. It reads "Built-in relays: on (the list shipped with the app, plus yours)" or "Built-in relays: off (only relays you added or this machine remembers)".
+5. Click **Reset to defaults** to bring the shipped list back.
 
 ### 19.3 Help the network (Android)
 
@@ -923,20 +1389,77 @@ Parlons only works if enough people carry traffic. On the Network tab, the **Hel
 
 None of this costs you messages. If your router will not open a port, you stay reachable through relays as always. The app tells you why a step is not running, for example "Relay needs Wi-Fi", "Plug in to relay for others" or "Charge above 60% to relay".
 
-**Manual port-forward.** If your router does not open a port by itself, tap **Set up manual port-forward**. The app tells you exactly which TCP port to forward (by default **9536**) and to which local address. Add that rule on your router, enter your public IP, and tap **Enable & verify**. If it still fails, your internet provider probably shares one public address across many homes (carrier-grade NAT). No forward can fix that. You stay connected through relays.
+#### How to turn Help the network on or off (Android)
+
+1. Open the **Network** tab.
+2. Under **Help the network**, turn the **Help the network** switch on or off.
+3. With it on, watch the three steps below the switch: **Contributing**, **Directly reachable** and **Relay ⚡**. If a step is not running, a note under them says why and what to do, for example **Open Wi-Fi settings**.
+
+#### How to let heavy duties run on mobile data (Android)
+
+1. Open the **Network** tab.
+2. Under **Help the network**, turn off **Wi-Fi only**. The line changes to "Heavy duties run on any network".
+3. Turn it on again to keep heavy duties to Wi-Fi ("Heavy duties pause on mobile data").
+
+#### How to see what to set on your router (Android)
+
+1. Open the **Network** tab.
+2. Find the card **This phone on your network · what to forward**. It shows **This phone (LAN)**, **Your router**, **Your public address**, and, when they apply, **Router rule for direct reach** and **Router rule for the relay**. Tap any of them to copy it.
+3. Tap **Open the router's admin page** to open your router in the browser.
+
+#### How to set up a manual port-forward (Android)
+
+Use this if your router does not open a port by itself.
+
+1. Open the **Network** tab and find **Direct reachability · a public address when possible**.
+2. Tap **Set up manual port-forward**. The **Manual port-forward** sheet opens.
+3. Under **Forward to this phone** you see the local address and port. By default the port is **9536**. You can change it in **Port to forward**. Port 9535 is reserved for relay mode.
+4. On your router, add a rule that forwards that **TCP** port to that local address.
+5. Back in the sheet, check **Your public IP (found automatically)**. Correct it if it is wrong.
+6. Tap **Enable & verify**. You see "Verifying …". If it works you see "You're directly reachable", and the button on the Network tab reads **Manual forward · on**.
+
+To stop, open the sheet again and tap **Turn manual off**.
+
+If it still fails, your internet provider probably shares one public address across many homes (carrier-grade NAT). No forward can fix that. You stay connected through relays.
 
 ### 19.4 Help the network (Desktop)
 
-Network tab:
-
-- **Check / make me reachable** asks your router for a public port and proves it from outside before advertising it. If the router refuses, **Set up manual port-forward** tells you the exact rule.
-- **Run as a relay** carries other people's sealed traffic on port 9535 and grows the network. It shows clients attached and messages relayed.
-
 Nothing listens on your computer until you turn one of these on. On Windows, the firewall asks once; allow it.
+
+#### How to make your computer directly reachable (Desktop)
+
+1. Open the **Network** tab and find **Direct reachability · a public address when possible**.
+2. Click **Check / make me reachable**. Parlons asks your router for a public port and proves it from outside before advertising it.
+3. If it works, your **Public address** shows. The button now reads **Re-check**.
+4. If the router refuses, set up a manual port-forward (next).
+
+#### How to set up a manual port-forward (Desktop)
+
+1. On the **Network** tab, click **Set up manual port-forward**.
+2. Under **Forward to this computer** you see the local address and port. Change the port in **Port to forward** if you need to. Port 9535 is reserved for relay mode.
+3. On your router, add a rule that forwards that **TCP** port to that local address.
+4. Check **Your public IP (found automatically)**, or type it.
+5. Click **Enable & verify**. You see "Enabled — verifying … from outside…". The button then reads **Manual port-forward · on**.
+
+To stop, open it again and click **Turn manual off**.
+
+#### How to run your computer as a relay (Desktop)
+
+1. Open the **Network** tab and find **Help the network**.
+2. Turn on **Run as a relay**. It carries other people's sealed traffic on port 9535 and grows the network.
+3. The card shows "You're carrying other people's traffic on port 9535", with **Clients attached** and **Messages relayed**.
+
+Turn the switch off to stop.
 
 ### 19.5 Event log
 
 The bottom of the Network tab has an **Event log**: everything the transport did, newest first. When something does not work, this tells you why. It never contains your messages or your words.
+
+#### How to read or clear the event log
+
+1. Open the **Network** tab and scroll to the bottom.
+2. Read the **Event log**. The newest line is at the top.
+3. Tap (or click) **Clear** next to the title to empty it.
 
 ---
 
@@ -954,15 +1477,32 @@ The Android backup file does **not** contain your chat history. Restoring it on 
 
 ### 20.2 Make an encrypted backup (Android)
 
-1. **Settings**, **Keys & security**, **Back up identity…**
-2. Choose a password of at least 6 characters, and repeat it. It is **not** recoverable if you lose it.
-3. Choose where to save the file. The suggested name is `parlons-backup.pbk`.
-4. Keep the file somewhere safe, for example on a computer or a USB stick you control.
+1. Open **Settings** (**three dots**, then **Settings**).
+2. Under **Keys & security**, tap **Back up identity…**
+3. In **Back up identity**, type a password of at least 6 characters in **Password**, and again in **Repeat password**. It is **not** recoverable if you lose it.
+4. Tap **OK**.
+5. Choose where to save the file. The suggested name is `parlons-backup.pbk`.
+6. You see "Backup saved".
+7. Keep the file somewhere safe, for example on a computer or a USB stick you control.
 
 ### 20.3 See your 24 words again
 
-- Android: **Settings**, **Keys & security**, **Show seed phrase**. Confirm the warning, then **Reveal**. Make sure nobody is looking.
-- Desktop: **Settings**, **Keys & security**, **Show seed phrase**. Or open the seed file (see [section 5.2](#52-parlons-desktop)).
+#### How to show your 24 words (Android)
+
+1. Make sure nobody is looking.
+2. Open **Settings**. Under **Keys & security**, tap **Show seed phrase**.
+3. A window asks **Show seed phrase?** and warns you. Tap **Reveal**.
+4. The window **Write these down, offline** shows the words. Screenshots are blocked.
+5. Tap **Close** when done. Avoid **Copy** if you can; it clears the clipboard after 60 seconds.
+
+#### How to show your 24 words (Desktop)
+
+1. Make sure nobody is looking.
+2. Open **Settings**. Under **Keys & security**, click **Show seed phrase**.
+3. Confirm **Show seed phrase?**.
+4. The window **Your seed phrase** shows the words. **Copy (auto-clears in 60s)** is offered; writing them down is safer.
+
+Or open the seed file (see [section 5.2](#52-parlons-desktop)).
 
 ### 20.4 Move to a new Android phone
 
@@ -973,38 +1513,51 @@ One identity must run in **one place** at a time. Move it; do not copy it.
 3. **Stop using the old phone for Parlons.** Uninstall it, or at least close it and do not open it again.
 4. On the **new** phone, install Parlons ([section 4.1](#41-android)).
 5. On the welcome screen, tap **Restore from seed phrase** and enter your 24 words.
-6. Open **Settings**, **Keys & security**, **Restore from backup…**, pick the `.pbk` file and enter its password.
-7. Confirm **Restore this backup?** It replaces the identity, contacts and chats on this phone with the ones in the backup. You see "Backup restored — reconnecting".
+6. Open **Settings**. Under **Keys & security**, tap **Restore from backup…**
+7. Pick the `.pbk` file.
+8. In **Restore from backup**, enter the backup password in **Password** and tap **OK**.
+9. A window asks **Restore this backup?** It replaces the identity, contacts and chats on this phone with the ones in the backup. Tap **Restore**.
+10. You see "Backup restored — reconnecting".
 
-If you have no backup file, step 5 alone restores your identity. Your contacts can still reach you, because your address is the same. You will need to re-add them to see them in your list.
+If you have no backup file, stop after step 5. That restores your identity. Your contacts can still reach you, because your address is the same. You will need to re-add them to see them in your list.
 
 If a backup says "This backup was made by a newer Parlons — update the app first.", install the newest app and try again.
 
 ### 20.5 Restore a seed phrase over an existing identity (Android)
 
-**Settings**, **Keys & security**, **Restore a seed phrase**. This **replaces** the identity on this phone. Contacts and chats stored here are cleared, and the transport restarts. Tick **Custom phrase (Minima anyphrase)** for a nonstandard Minima phrase.
+This **replaces** the identity on this phone. Contacts and chats stored here are cleared, and the transport restarts.
+
+1. Open **Settings**. Under **Keys & security**, tap **Restore a seed phrase**.
+2. Read the warning in the **Restore a seed phrase** window.
+3. Type or paste the phrase in **Enter your seed phrase**.
+4. For a nonstandard Minima phrase, tick **Custom phrase (Minima anyphrase)** and type it exactly.
+5. Tap **Restore**.
+6. A window **Restored** says "Your identity is restored." Tap **OK**.
+7. You see "Identity restored — reconnecting".
 
 ### 20.6 Move Parlons Desktop to a new computer
 
 1. Make sure you have your 24 words.
-2. Quit Parlons Desktop on the old computer, for good.
+2. Quit Parlons Desktop on the old computer, for good (tray icon, **Quit**).
 3. Install it on the new computer. It creates a new identity on first launch.
-4. Open **Settings**, **Keys & security**, **Restore a seed phrase**, paste your 24 words.
-5. The app closes. Open it again. It now uses your identity.
+4. Open **Settings**. Under **Keys & security**, click **Restore a seed phrase**.
+5. Paste your 24 words and confirm.
+6. You see "Identity restored. Maxima will now close — reopen it to use the restored identity." The app closes.
+7. Open it again. It now uses your identity.
 
 Chats and contacts from the old computer do not move this way. You can also copy the whole `.maxima` data folder from the old computer to the new one **before** first launch; this is not a documented procedure, so keep your 24 words safe either way.
 
 ### 20.7 Lost your device
 
 - **Lost phone, Android app:** restore your words on a new phone. Anyone holding the old phone can read chats stored on it, so move any funds first.
-- **Lost phone paired to a Parlons account:** revoke that phone from another paired device. The account and its history are untouched.
+- **Lost phone paired to a Parlons account:** revoke that phone from another paired device ([how to revoke a device](#how-to-revoke-a-lost-device)). The account and its history are untouched.
 - **Lost the words and every device:** the identity is gone. There is no reset, because there is nobody who could do it.
 
 ---
 
 ## 21. One account on every device: Parlons Cloud, your own account, hosted accounts
 
-This is a short overview. The Portal manual and the guide pages "Run your own account" and "Hosted accounts" have the details.
+This is a short overview. The [Parlons Cloud manual](parlons-cloud-portal.md) covers the phone app in depth. The [Parlons Node manual](parlons-node.md) covers running an account server.
 
 ### What a Parlons account is
 
@@ -1020,12 +1573,54 @@ You can get one three ways:
 
 The **invite** is a QR code, or a line of text starting `MAX#`, that carries the account's address and a one-time pairing code.
 
-1. Install **Parlons Cloud** (Android, version 0.2.89, from the releases page) or the iPhone app.
+#### How to install Parlons Cloud (Android)
+
+1. On the phone, open the releases page: <https://github.com/eurobuddha/maxima/releases>
+2. Find the release tagged `portal-v0.2.90`.
+3. Tap the file `parlons-cloud-portal-0.2.90-release.apk` to download it.
+4. Allow installs from your browser if Android asks, then tap **Install** and **Open**.
+
+#### How to pair a phone
+
+1. Open **Parlons Cloud** (Android) or the iPhone app.
 2. On the first screen, **Run Parlons in the cloud**, tap **Scan pairing QR** and scan the invite. Or paste it into **Account address or pairing invite**. Both the address and the code fill in.
 3. Tap **Connect & pair**. You see "Attaching to the network…", then "Account found — pairing…".
-4. Allow notifications. On Android, in **Settings**, **This device**, tap **Keep running in the background** if offered.
+4. Allow notifications.
+5. On Android, open **Settings**, and under **This device** tap **Keep running in the background** if offered.
 
-If you have no code, leave it empty and tap **Connect & pair**. The app says "Pairing requested. Approve it from an already-paired device". Approve it on a device that is already paired.
+If you have no code, leave **Pairing code** empty and tap **Connect & pair**. The app says "Pairing requested. Approve it from an already-paired device". Approve it on a device that is already paired (next steps).
+
+#### How to approve a device waiting to pair
+
+1. On a phone that is already paired, open the **Node** tab.
+2. Scroll to **Pending approval (N)**. Each entry reads **A device wants to pair**, with its key.
+3. Check the key matches the one the new device shows.
+4. Tap **Approve** only if it matches.
+
+#### How to pair another device from a paired phone
+
+1. On a paired phone, open the **Node** tab.
+2. Tap **Pair my other device**.
+3. If the app asks **Invite a device**, enter the account's admin password and tap **Continue**.
+4. The app shows **New pairing code minted**. Tap **Copy invite**, or **QR** to show it as a QR code.
+5. On the new device, follow [How to pair a phone](#how-to-pair-a-phone).
+
+The [Parlons Cloud manual](parlons-cloud-portal.md#10-adding-more-devices-owner-invitations) explains the admin password.
+
+#### How to revoke a lost device
+
+1. On a phone that is still paired, open the **Node** tab.
+2. Scroll to **Paired devices (N)** and find the lost device.
+3. Tap **Revoke**.
+4. Read **Revoke this device?** and tap **Revoke**.
+
+#### How to unpair this phone
+
+1. In Parlons Cloud, tap **More**, then **Unpair this device**.
+2. Read **Unpair this device?** and tap **Unpair**. The app returns to the first screen.
+3. On another paired device, revoke this phone's entry ([How to revoke a lost device](#how-to-revoke-a-lost-device)).
+
+Your account and identity stay on the account machine.
 
 ### What Parlons Cloud shows
 
@@ -1033,7 +1628,7 @@ If you have no code, leave it empty and tap **Connect & pair**. The app says "Pa
 - **Node**: your account's uptime, relays, paired devices (**Revoke** a lost one), devices waiting for approval, and **Pair my other device** for a new pairing code.
 - **Settings**: name, read receipts, app lock, notifications, the relays the phone starts from, **Show seed phrase**, **Back up account…** (an encrypted `.pbk` of the whole account, including chat history), and **Import identity or backup…**.
 
-To unpair a phone: **Unpair this device**. Your account and identity stay on the account machine.
+For every Parlons Cloud screen step by step, see [Pair the app to your account](parlons-cloud-portal.md#4-pair-the-app-to-your-account) and the rest of the [Parlons Cloud manual](parlons-cloud-portal.md).
 
 ### Hosted accounts: what the host can and cannot do
 
@@ -1042,6 +1637,15 @@ To unpair a phone: **Unpair this device**. Your account and identity stay on the
 - You can leave at any time. Back up the account and restore it on your own machine. Your address stays the same.
 
 Hosted guest accounts have **chat, calls and files only**: no wallet, terminal or host controls.
+
+#### How to back up a Parlons account
+
+1. In Parlons Cloud, tap **More**, then **Settings**.
+2. Under **Keys & backup**, tap **Back up account…**.
+3. Type a passphrase of at least 6 characters, twice. It is not recoverable if you lose it.
+4. Tap **Create backup**, then choose where to save the `.pbk` file.
+
+To move the account to your own machine, follow [How to restore an account on your own machine](parlons-cloud-portal.md#how-to-restore-an-account-on-your-own-machine).
 
 ---
 
@@ -1083,6 +1687,32 @@ The authors collect **nothing**. There is no analytics, no crash reporting servi
 ---
 
 ## 23. Troubleshooting
+
+### Common fixes, step by step
+
+#### How to fix messages that arrive late (Android)
+
+1. Open **Settings** (**three dots**, then **Settings**).
+2. Under **Node & power**, check **Battery exemption**. If it says **not set**, tap **Fix battery settings** and allow Parlons to run without restrictions.
+3. Make sure notifications are allowed ([section 17](#17-notifications)).
+4. Open the **Network** tab. Check **Hosts connected** is 1 or more.
+5. If it is 0, tap **Auto-connect**.
+
+#### How to get back online
+
+1. Open the **Network** tab.
+2. Tap (or click) **Auto-connect** and wait for it to finish.
+3. If you are still offline, check your phone or computer has internet.
+4. On Android, tap **Manage** and make sure **Use built-in relays** is on. On Desktop, check the built-in relays switch reads "Built-in relays: on".
+5. If you know a relay that works, add it ([section 19.2](#192-relays-hosts)).
+6. Read the **Event log** at the bottom of the tab for the reason.
+
+#### How to fix a missing camera or microphone (Android)
+
+1. Open the Android **Settings** app.
+2. Go to **Apps**, then **Parlons!**, then **Permissions**. (The names vary a little by phone maker.)
+3. Allow **Camera** and **Microphone**.
+4. Go back to Parlons and try again.
 
 ### Messages and contacts
 
@@ -1129,7 +1759,7 @@ The authors collect **nothing**. There is no analytics, no crash reporting servi
 |---|---|
 | No **Send payment** in the attach menu | You are in a group, or the person is not a known contact. Payments are one-to-one. |
 | "No wallet address yet — ask them to open this chat" | The other person needs to open your chat once, so their app shares its wallet address. |
-| "Not enough confirmed funds." | Wait for incoming coins to confirm. On Android, tap **Sync** if offered. |
+| "Not enough confirmed funds." | Wait for incoming coins to confirm. On Android, tap the "tap Sync to unlock the rest" line if it shows ([section 15.3](#153-the-wallet-tab)). |
 | "Wallet still opening…" | Wait a moment and try again. |
 | Balance is lower than expected after a restore | Coins may still be syncing. Check **History**. |
 
@@ -1165,13 +1795,11 @@ The authors collect **nothing**. There is no analytics, no crash reporting servi
 
 ### Reporting a problem
 
-Open an issue on the project's issue tracker: <https://github.com/eurobuddha/maxima/issues>
-
-Include:
-
-- The platform, and the version (Settings, **About**).
-- What you expected, and what happened.
-- The relevant event log lines.
+1. Note your platform and app version. Open **Settings** and scroll to **About**.
+2. Write down what you expected, and what happened.
+3. Open the **Network** tab and copy the relevant **Event log** lines.
+4. Open the project's issue tracker: <https://github.com/eurobuddha/maxima/issues>
+5. Open a new issue and paste all of the above.
 
 Logs never contain your messages or your words. Check before pasting anyway, and never paste your seed phrase anywhere.
 
