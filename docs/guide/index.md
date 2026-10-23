@@ -5,7 +5,7 @@ Private chat with no company in the middle. No sign-up, no phone number. Pick wh
 <div class="cards">
 <a href="#chat-on-your-android-phone"><b>Chat on your Android phone</b><span>Install one app and start chatting.</span><em>Android 9+</em></a>
 <a href="#chat-on-your-computer"><b>Chat on your computer</b><span>Mac, Windows or Linux.</span><em>Parlons Desktop {{DESKTOP_VERSION}}</em></a>
-<a href="#one-account-on-all-your-devices"><b>One account on all your devices</b><span>The same chats everywhere, iPhone included.</span><em>Parlons Node {{NODE_VERSION}}</em></a>
+<a href="#one-account-on-all-your-devices"><b>One account on all your devices</b><span>The same chats on every phone and computer.</span><em>Parlons Node {{NODE_VERSION}}</em></a>
 </div>
 
 > **Your 24 words are your identity and a wallet.** Write them on paper when they are shown. Never photograph them. Anyone who has them is you.
@@ -42,7 +42,7 @@ Now [add a friend](#add-a-friend).
 
 ## One account on all your devices
 
-Your account runs on a Linux machine that stays on, like a small server or a Raspberry Pi with a 64-bit system. Your phones and computers connect to it, so you get the same chats on every device, and messages wait while a phone is off. This is the only way to use Parlons on an iPhone.
+Your account runs on a Linux machine that stays on, like a small server or a Raspberry Pi with a 64-bit system. Your phones and computers connect to it, so you get the same chats on every device, and messages wait while a phone is off.
 
 The program is **Parlons Node**: your account, a relay that helps carry the network, and a full Minima node, in one.
 
@@ -61,7 +61,7 @@ The program is **Parlons Node**: your account, a relay that helps carry the netw
 
 **On your phone:**
 
-1. Install Parlons Cloud: [the Android app]({{PORTAL_APK}}), or [the iPhone app](parlons.html#45-iphone) (not in the App Store yet).
+1. On your Android phone, install [Parlons Cloud]({{PORTAL_APK}}). (An iPhone app is coming; it is not available yet.)
 2. Open it and tap **Scan pairing QR**. Point the camera at the QR code.
 3. Tap **Connect & pair**. Your account opens.
 

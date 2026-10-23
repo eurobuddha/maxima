@@ -864,7 +864,7 @@ To make a call, see section 6, "How to call a contact".
 
 One account can be driven from several places at once. Each one is a separate paired device with its own key.
 
-- **iPhone: the Parlons app.** Scan or paste the same kind of invite; it pairs to the account exactly as the Portal does. Each further device needs its own fresh code.
+- **iPhone: the Parlons app (not available yet).** When it is released: scan or paste the same kind of invite; it pairs to the account exactly as the Portal does. Each further device needs its own fresh code.
 - **A browser on the machine that runs the account: the web panel.** It looks like the Parlons! app (title bar **Parlons!**, tabs Chats, Contacts, Devices, Node, Settings) and works as a local device of the account (section 24).
 - **A terminal: the `parlons` command.** Installed by the one-line installer. `parlons chats`, `parlons send <contact key> hello` and the other commands in section 26 drive the account like a phone would.
 - **minimaCore Desktop and minimaDesk** embed the same panel on their Parlons page for the account their node runs.
@@ -872,6 +872,8 @@ One account can be driven from several places at once. Each one is a separate pa
 **The full Parlons! app for Android is not a client.** It keeps its own identity on the phone and does not pair to an account. You can, however, move an identity between the two: a backup bundle made from your cloud account (**Back up account…**) restores in the Parlons! app (identity and contacts). Never run the same identity in two places at once (section 16).
 
 ### How to pair an iPhone to the same account
+
+The iPhone app is not available yet. These are the steps once it is released.
 
 1. On a device that is already paired, open **Node → Pair my other device** and mint a fresh invite (section 10).
 2. On the iPhone, open the **Parlons** app.

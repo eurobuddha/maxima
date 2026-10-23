@@ -190,7 +190,7 @@ There is no ARM build of the desktop app. On a Raspberry Pi, run a Parlons accou
 
 The iPhone app is **Parlons Cloud for iPhone**. It does not hold an identity of its own. It pairs with a Parlons account. Apple does not let an app stay reachable in the background, so this is the only way an iPhone can receive messages while the app is closed.
 
-The iPhone app is not yet in the App Store. Check the releases page and the issue tracker for how to get a test build. It needs iOS 17 or newer. See [section 21](#21-one-account-on-every-device-parlons-cloud-your-own-account-hosted-accounts) for pairing.
+The iPhone app is **not available yet**: it is not in the App Store, and there is no test build to download. It will need iOS 17 or newer. Until then, use Parlons on Android or a computer. See [section 21](#21-one-account-on-every-device-parlons-cloud-your-own-account-hosted-accounts) for how pairing will work.
 
 ---
 
