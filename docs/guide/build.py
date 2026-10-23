@@ -36,6 +36,7 @@ LINKS = {
     "RELEASES": "https://github.com/eurobuddha/maxima/releases",
     "REPO": "https://github.com/eurobuddha/maxima",
     "ISSUES": "https://github.com/eurobuddha/maxima/issues",
+    "NODE_INSTALL_SH": "https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh",
     "INSTALL_SH": "https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.sh",
     "INSTALL_PS1": "https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.ps1",
     "PANDAAPPS": "https://github.com/eurobuddha/minima-core-android-pandaapps",

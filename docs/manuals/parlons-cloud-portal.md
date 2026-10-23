@@ -1049,26 +1049,28 @@ The installer's text says **Scan account QR**, which is the iPhone app's label. 
 
 | Option | Effect |
 |---|---|
-| `… \| bash -s -- --relay` (Windows: `.\get-parlons-cloud.ps1 -Relay`) | Also run a relay for others on TCP port 9501. On Linux the installer opens 9501 in ufw when ufw is active. A cloud console firewall must allow it too. |
+| `… \| bash -s -- --no-relay` (Windows: `.\get-parlons-cloud.ps1 -NoRelay`) | Account only: do not relay for others. By default the account also runs a relay on TCP port 9501. |
 | `… \| bash -s -- --update` | Fetch the newest release and restart. Running the install command again does the same. |
 | `… \| bash -s -- --uninstall` (Windows: `-Uninstall`) | Stop and remove the service. Your account data is kept. |
 | `PARLONS_DATA=<dir>` | Data folder (default `~/.parlons`). |
 | `PARLONS_HEAP=<size>` | Java heap (default `256m`). |
 
-Without `--relay` the account runs with `--no-relay --no-direct`: it opens no inbound port at all. Its web panel listens on `127.0.0.1:9587` (section 24).
+By default the account runs with `--relay-port 9501 --no-direct`: it relays for others on port 9501, and on Linux the installer opens 9501 in ufw when ufw is active. Nothing breaks if 9501 cannot be reached from outside; the account still works through the relay fleet, it just carries no one else's messages. With `--no-relay` it opens no inbound port at all. Its web panel listens on `127.0.0.1:9587` (section 24).
 
-#### How to install with a relay for others
+#### How to make your relay reachable for others
 
-1. Make sure TCP port 9501 can be reached from the internet. Allow it in your cloud provider's firewall too.
-2. Run the installer with `--relay`:
-
-   ```
-   curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.sh | bash -s -- --relay
-   ```
-
-   On Windows, download `get-parlons-cloud.ps1` and run `.\get-parlons-cloud.ps1 -Relay`.
+1. Install as usual; the relay is on by default.
+2. Make sure TCP port 9501 can be reached from the internet: allow it in your cloud provider's firewall, or forward it on your home router.
 3. On Linux, the installer opens 9501 in ufw when ufw is active.
 4. Prove the port from another machine (section 28).
+
+#### How to install without a relay
+
+```
+curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.sh | bash -s -- --no-relay
+```
+
+On Windows, download `get-parlons-cloud.ps1` and run `.\get-parlons-cloud.ps1 -NoRelay`.
 
 #### How to use a different data folder or heap
 
@@ -1930,7 +1932,7 @@ The tenants directory also holds `.host-status.json`, the host's heartbeat (whic
 ## 28. Ports, firewalls, TLS and reverse proxies
 
 - **A single account needs no inbound port**, no domain and no certificate. It reaches the network through the relay fleet, and phones reach it over Parlons' own encrypted transport, not a web port. The one-line installer (without `--relay`) and the tenants host both run with `--no-relay --no-direct`.
-- **If you run a relay** (`--relay`, or `deploy-parlons-cloud.sh`), TCP 9501 (or your `--port`) must be reachable from the internet. The scripts open it in ufw or firewalld when active. A cloud provider's console firewall (Hetzner Cloud Firewall, Vultr Firewall Group, an AWS security group) must allow it too; it is the usual cause of "the phone connects but pairing is flaky". Prove it from another machine, not the box itself:
+- **For others to reach your relay** (on by default; `--no-relay` turns it off), TCP 9501 (or your `--port`) must be reachable from the internet. The scripts open it in ufw or firewalld when active. A cloud provider's console firewall (Hetzner Cloud Firewall, Vultr Firewall Group, an AWS security group) must allow it too; it is the usual cause of "the phone connects but pairing is flaky". Prove it from another machine, not the box itself:
 
   ```bash
   nc -z -G 5 vps.example.com 9501 && echo reachable
@@ -2140,7 +2142,7 @@ The program never writes a seed to a log: under systemd, a newly generated seed 
    sudo ss -ltnp | grep ':9501'
    ```
 
-2. If it is a Parlons Node or another relay, keep it. Run this account without its own relay instead: for the one-line installer, run `parlons uninstall` and install again without `--relay`. For a hand-written unit, change `--relay-port 9501` to `--no-relay`.
+2. If it is a Parlons Node or another relay, keep it. Run this account without its own relay instead: for the one-line installer, run `parlons uninstall` and install again with `--no-relay`. For a hand-written unit, change `--relay-port 9501` to `--no-relay`.
 3. Or give this account a free port with `--relay-port <n>` (with `deploy-parlons-cloud.sh`, `--port <n>`), and open that port instead (section 28).
 4. Restart the service and check the log (section 30).
 

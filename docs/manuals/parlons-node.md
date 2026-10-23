@@ -28,7 +28,7 @@ Related manuals:
 2. [Architecture](#2-architecture)
 3. [Requirements](#3-requirements)
 4. [Download and verify the jar](#4-download-and-verify-the-jar)
-5. [Two ways to install](#5-two-ways-to-install)
+5. [Three ways to install](#5-three-ways-to-install)
 6. [First start](#6-first-start)
 7. [The systemd unit (annotated)](#7-the-systemd-unit-annotated)
 8. [Configuration reference: every property](#8-configuration-reference-every-property)
@@ -214,7 +214,7 @@ Disk use grows with the chain. The code sets no fixed figure. Also budget for:
    ```
 
    This should print nothing. If a stock Minima node holds 9001, plan to move the node's P2P port
-   ([§9](#9-ports)). If `maxima-relay.service` holds 9501, plan to replace it ([§5](#5-two-ways-to-install)).
+   ([§9](#9-ports)). If `maxima-relay.service` holds 9501, plan to replace it ([§5](#5-three-ways-to-install)).
 
 ---
 
@@ -294,9 +294,52 @@ pick a node release by its tag.
 
 ---
 
-## 5. Two ways to install
+## 5. Three ways to install
 
-### A. The deploy script (supported)
+### A. The one-line installer (start here)
+
+On the Linux machine itself (a VPS, a Raspberry Pi with a 64-bit OS, a home server), as root or a user with `sudo`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash
+```
+
+What it does, in order:
+
+1. Installs Java 11+ and `qrencode` (apt, dnf, apk or pacman) if they are missing.
+2. Finds the newest `node-v…` release on GitHub, downloads `parlons-node-<ver>.jar` and refuses it unless its sha256 matches the release's `SHA256SUMS`.
+3. Creates the `maxima` user and `/var/lib/parlons-node` (mode 700), installs `/usr/local/bin/parlons-pair`, and writes the same hardened `parlons-node.service` as the deploy script ([§7](#7-the-systemd-unit-annotated)).
+4. Sizes the node to the machine: with 3.5 GB of RAM or more it runs MegaMMR with a 2 GB heap; below that, a plain full node with a 768 MB heap. It syncs from `65.109.31.226:9001`.
+5. Opens TCP 9001 (Minima) and 9501 (the relay) in ufw or firewalld when one is active.
+6. Starts the node, waits for your account address and prints it in full.
+7. Asks you to set the admin pairing password (first install only), then asks for it once more and draws the QR code your phone scans in Parlons Cloud.
+
+Options (put them after `bash -s --`):
+
+| Option | Effect |
+|---|---|
+| `--update` | Fetch the newest release and restart. Running the install command again does the same. |
+| `--uninstall` | Stop and remove the service and `parlons-pair`. `/var/lib/parlons-node` (identity, wallet, chats) is kept. |
+| `--no-megammr` | A plain full node (1 GB RAM is enough). Chosen for you on machines under 3.5 GB. |
+| `--heap <size>` | A different Java heap, for example `--heap 3g`. |
+
+For example: `curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --no-megammr`
+
+The installer leaves the admin RPC off and sets no relay mesh peers, DEX relay, TLS front or keets sidecar. For any of those, use the deploy script (B) or edit the unit ([§7](#7-the-systemd-unit-annotated)). On a Mac or Windows PC, install Parlons Desktop instead. If the machine cannot run a node at all, the account-only `get-parlons-cloud.sh` runs in 1 GB ([Parlons Cloud Portal manual](parlons-cloud-portal.md)).
+
+#### How to install with the one-line installer
+
+1. Open TCP 9001 and 9501 in your cloud provider's firewall, or forward them on your home router. The account works without them; relaying for others and serving blocks needs them.
+2. Run the command above in an SSH session or a terminal on the machine. Do not run it from a script with no terminal: it then skips the password and QR steps.
+3. When asked, type an admin pairing password twice. Keep it; every new invitation for your own devices needs it.
+4. When asked again, type the password once. The QR code and the complete invite appear.
+5. In Parlons Cloud on your phone, tap **Scan pairing QR** and scan it.
+6. Watch the chain sync: `journalctl -u parlons-node -f | grep heartbeat`.
+7. Back up the seed ([§20](#20-seeds-identity-and-backups)).
+
+If step 3 or 4 was skipped, run `sudo parlons-pair --set-admin-password` once and then `sudo parlons-pair --admin`.
+
+### B. The deploy script (from your own computer)
 
 Run it from a checkout of the repository on your own computer, against a fresh Linux box that
 you can reach over SSH as root. Running it again updates the node; install and update are the
@@ -399,7 +442,7 @@ The script runs these steps in order:
 The script writes `Restart=always` into the unit, so the node also comes back after a clean exit
 (`quit`, a MegaMMR import, a resync).
 
-### B. By hand
+### C. By hand
 
 The minimum command is:
 
@@ -466,7 +509,7 @@ These steps do on the box what the deploy script does. Run them as root.
 
 ## 6. First start
 
-1. Start the service (the deploy script has already done this):
+1. Start the service (the one-line installer and the deploy script have already done this):
 
    ```bash
    systemctl enable --now parlons-node
@@ -709,7 +752,7 @@ in the modules bundled into the jar.
 1. Find the property in the tables below.
 2. Add or change its `-D…` line in the `ExecStart` of the unit, before `-jar`, and restart the
    node ([§7, How to change the unit](#how-to-change-the-unit)). If you deployed with the script,
-   you can instead re-run the script with the matching flag ([§5](#5-two-ways-to-install)); it
+   you can instead re-run the script with the matching flag ([§5](#5-three-ways-to-install)); it
    rewrites the unit from its flags.
 3. Check that the node took it. The boot line shows the ports, and the `minima flags:` line shows
    Minima's own flags:
@@ -1994,7 +2037,7 @@ A `.pbk` bundle is made from a paired device (Settings → **Back up account…*
 holds the identity, paired devices, settings, contacts and chat.
 
 1. Stop the host the backup came from **for good**: one identity, one live account.
-2. Install the node ([§5](#5-two-ways-to-install)) but do not start it, or stop it and move its
+2. Install the node ([§5](#5-three-ways-to-install)) but do not start it, or stop it and move its
    data directory away. The restore needs a **fresh** data directory:
 
    ```bash

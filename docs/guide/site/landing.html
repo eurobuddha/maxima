@@ -40,35 +40,20 @@
 .lead{max-width:760px;display:grid;gap:14px}
 .lead h2{font-size:clamp(30px,4.2vw,46px);letter-spacing:-.035em}
 .lead p{font-size:clamp(17px,1.6vw,19px);color:var(--sub)}
-.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:34px}
-@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}}
-.way{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:12px}
-.way.hot{border-color:color-mix(in srgb,var(--orange) 40%,var(--line))}
-.way h3{font-size:24px} .way p{color:var(--sub)}
-.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
-.tags span{font-size:12.5px;font-weight:700;padding:5px 10px;border-radius:100px;background:var(--surface-2);color:var(--ink)}
-.plat{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}
-@media (max-width:1000px){.plat{grid-template-columns:repeat(3,minmax(0,1fr))}} @media (max-width:620px){.plat{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.plat a{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;color:var(--ink);min-height:150px}
-.plat a:hover{border-color:var(--ink);text-decoration:none}
-.plat b{font-size:17px} .plat span{font-size:13.5px;color:var(--sub);line-height:1.45}
-.plat em{font-style:normal;margin-top:auto;font-size:11.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
-
-.band{background:var(--bar);color:var(--on-bar)}
-.band .lead p{color:var(--bar-sub)} .band .label{color:var(--bar-sub)}
-.bgrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:36px;align-items:center;margin-top:38px}
-@media (max-width:900px){.bgrid{grid-template-columns:minmax(0,1fr)}}
-.term{background:#0B0C0E;border:1px solid #2E3238;border-radius:16px;overflow:hidden;font-family:var(--f-mono);font-size:13px;line-height:1.6;min-width:0}
-.term .dots{display:flex;gap:7px;padding:12px 14px;border-bottom:1px solid #1E2126}
-.term .dots i{width:11px;height:11px;border-radius:50%;background:#3A3F48} .term .dots i:first-child{background:#FF7A2E}
-.term pre{margin:0;padding:16px 18px 20px;color:#E6E8EA;white-space:pre-wrap;overflow-wrap:anywhere}
-.term .p{color:#7C818A} .term .k{color:#FFB277} .term .g{color:#8DB0FF} .term .w{color:#FFD08A} .term .d{color:#9A9EA6}
-.phone{border-radius:32px;background:#0B0C0E;padding:7px;border:1px solid #2E3238;box-shadow:var(--shadow);width:min(70vw,240px);justify-self:center}
-.phone img{display:block;width:100%;border-radius:26px}
-.steps3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:34px}
-@media (max-width:760px){.steps3{grid-template-columns:minmax(0,1fr)}}
-.steps3 div{border:1px solid #2E3238;border-radius:14px;padding:16px 18px;background:rgba(255,255,255,.03)}
-.steps3 b{display:block;margin-bottom:4px} .steps3 span{color:var(--bar-sub);font-size:14.5px}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:34px}
+@media (max-width:980px){.three{grid-template-columns:minmax(0,1fr)}}
+.way{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.way.hot{border-color:color-mix(in srgb,var(--orange) 45%,var(--line))}
+.way h3{font-size:22px} .way .for{color:var(--sub);font-size:15px}
+.way ol{list-style:none;padding:0;margin:0;counter-reset:s;display:grid;gap:12px}
+.way li{counter-increment:s;position:relative;padding-left:40px;font-size:15.5px;line-height:1.45}
+.way li::before{content:counter(s);position:absolute;left:0;top:-2px;width:27px;height:27px;border-radius:50%;background:var(--bar);color:var(--on-bar);font-size:13px;font-weight:800;display:grid;place-items:center}
+.way code{font-family:var(--f-mono);font-size:12.5px;background:var(--surface-2);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+.way pre{margin:6px 0 0;background:#0B0C0E;color:#FFB277;border-radius:10px;padding:10px 12px;font-family:var(--f-mono);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.way .dl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.way .dl a{font-size:13px;font-weight:700;padding:5px 11px;border-radius:100px;background:var(--surface-2);color:var(--ink)}
+.way .more{margin-top:auto;font-weight:700;font-size:14.5px}
+.note2{margin-top:20px;color:var(--sub);font-size:15px;max-width:70ch}
 
 .gallery{display:flex;flex-wrap:wrap;justify-content:center;gap:28px 22px;margin-top:40px}
 .shot{width:210px;margin:0;display:grid;gap:12px}
@@ -77,23 +62,6 @@
 .shot img{display:block;width:100%;border-radius:22px}
 .shot figcaption{font-size:13.5px;color:var(--sub);text-align:center;line-height:1.45}
 .shot figcaption b{display:block;color:var(--ink);font-size:14.5px}
-
-.feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:34px}
-@media (max-width:900px){.feats{grid-template-columns:repeat(2,minmax(0,1fr))}} @media (max-width:560px){.feats{grid-template-columns:minmax(0,1fr)}}
-.feat{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;display:grid;gap:8px;align-content:start}
-.feat h3{font-size:18px} .feat p{color:var(--sub);font-size:15px}
-.feat .ic{width:34px;height:34px;border-radius:50%;background:var(--bar);color:var(--on-bar);display:grid;place-items:center;font-size:15px;font-weight:800}
-
-.ladder{display:grid;gap:10px;margin-top:30px}
-.rung{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,.9fr);gap:18px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 20px}
-@media (max-width:760px){.rung{grid-template-columns:minmax(0,1fr);gap:4px}}
-.rung b{font-size:16px} .rung p{color:var(--sub);font-size:15px} .rung .when{font-size:13.5px;color:var(--faint);font-weight:600}
-.rung .port{font-family:var(--f-mono);font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:5px;color:var(--ink)}
-
-.value{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:center}
-@media (max-width:820px){.value{grid-template-columns:minmax(0,1fr)}}
-.tokid{font-family:var(--f-mono);font-size:12.5px;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--sub)}
-.tokid b{display:block;font-family:var(--f-body);color:var(--ink);font-size:13px;margin-bottom:4px}
 
 .close{text-align:center;padding-block:80px 20px;display:grid;gap:16px;justify-items:center}
 .close h2{font-size:clamp(36px,5.6vw,64px);letter-spacing:-.04em}
@@ -107,7 +75,7 @@
     <h1>Parlons<b>!</b></h1>
     <p class="tag serif">Let's talk. Nobody in between.</p>
     <p class="stance"><strong>Private chat with no company in the middle.</strong> Your words are sealed on your device and carried by relays that people like you run. No sign-up, no phone number, no account with anyone.</p>
-    <div class="cta"><a class="btn btn-go" href="guide/index.html">Get Parlons</a><a class="btn btn-line" href="guide/parlons.html">Read the manual</a></div>
+    <div class="cta"><a class="btn btn-go" href="#start">Get started</a><a class="btn btn-line" href="guide/index.html">Step-by-step guide</a></div>
     <p class="fine">Android · Mac · Windows · Linux · iPhone with an account · Raspberry Pi</p>
   </div>
   <div class="chat" aria-label="An example Parlons conversation">
@@ -126,101 +94,54 @@
 </div></section>
 
 <section class="sec" id="start" style="padding-top:24px"><div class="wrap">
-  <div class="lead"><span class="label">Get started</span><h2>One question decides what you install.</h2>
-  <p>Do you want to chat on this device, or have one account on every device? Both keep your identity yours. Neither puts it on anyone else's server.</p></div>
-  <div class="two">
-    <div class="way"><h3>On this device</h3><p>Install the app. It creates your identity there and then, as 24 words, and you are chatting a minute later. The phone or computer helps carry the network when it safely can.</p><div class="tags"><span>Android</span><span>Mac</span><span>Windows</span><span>Linux</span></div></div>
-    <div class="way hot"><h3>One account on every device</h3><p>Run a Parlons account with one command on a machine that stays on, then pair your phones and laptops to it. The same chats everywhere, and messages wait while a phone is off. The only way an iPhone can be reached.</p><div class="tags"><span>iPhone</span><span>Android</span><span>Mac</span><span>Windows</span><span>Linux</span><span>Raspberry Pi</span></div></div>
+  <div class="lead"><span class="label">Get started</span><h2>Pick one. Follow the steps.</h2>
+  <p>Each takes a few minutes. Your 24 words are your identity: write them on paper and keep them safe.</p></div>
+  <div class="three">
+    <div class="way"><h3>Chat on your Android phone</h3><p class="for">Android 9 or newer.</p>
+      <ol>
+        <li>On the phone, download the app:<div class="dl"><a href="{{ANDROID_APK}}">parlons-{{ANDROID_VERSION}}.apk</a></div></li>
+        <li>Open the download and tap <b>Install</b>. If Android asks, allow installs from your browser.</li>
+        <li>Open Parlons and tap <b>Create new identity</b>.</li>
+        <li>Write the 24 words on paper, in order. Tap <b>I've saved them</b>.</li>
+        <li>Allow notifications, so you see messages arrive.</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-android-phone">More detail →</a></div>
+    <div class="way"><h3>Chat on your computer</h3><p class="for">Mac (Apple silicon), Windows 10/11, or Linux.</p>
+      <ol>
+        <li>Download Parlons Desktop:<div class="dl"><a href="{{DESKTOP_DMG}}">Mac</a><a href="{{DESKTOP_MSI}}">Windows</a><a href="{{DESKTOP_DEB}}">Linux</a></div></li>
+        <li>Install it. On a Mac, drag <b>MaximaNode</b> into Applications. On Windows, if a blue box appears, click <b>More info</b>, then <b>Run anyway</b>.</li>
+        <li>Open <b>MaximaNode</b>.</li>
+        <li>Write down the 24 words it shows.</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-computer">More detail →</a></div>
+    <div class="way hot"><h3>One account on all your devices</h3><p class="for">Same chats on every phone and computer. The only way for an iPhone. Needs a Linux machine that stays on: a server or a Raspberry Pi.</p>
+      <ol>
+        <li>On the Linux machine, paste:<pre>curl -fsSL {{NODE_INSTALL_SH}} | bash</pre></li>
+        <li>When asked, choose an admin password. Type it again when asked, and a QR code appears.</li>
+        <li>On your phone, install Parlons Cloud:<div class="dl"><a href="{{PORTAL_APK}}">Android</a><a href="guide/parlons.html#45-iphone">iPhone</a></div></li>
+        <li>In Parlons Cloud, tap <b>Scan pairing QR</b>, scan the code, then tap <b>Connect &amp; pair</b>.</li>
+      </ol>
+      <a class="more" href="guide/index.html#one-account-on-all-your-devices">More detail →</a></div>
   </div>
-  <div class="plat">
-    <a href="guide/parlons.html#41-android"><b>Android</b><span>The full app. Your identity on the phone, calls and payments included.</span><em>APK · {{ANDROID_VERSION}} · Android 9+</em></a>
-    <a href="guide/parlons.html#42-mac"><b>Mac</b><span>Parlons Desktop, signed and notarized. Brings its own Java.</span><em>DMG · {{DESKTOP_VERSION}} · Apple silicon</em></a>
-    <a href="guide/parlons.html#43-windows"><b>Windows</b><span>Parlons Desktop for your user. No administrator needed.</span><em>MSI · {{DESKTOP_VERSION}} · Windows 10/11</em></a>
-    <a href="guide/parlons.html#44-linux"><b>Linux</b><span>Parlons Desktop for Debian, Ubuntu and their relatives.</span><em>DEB · {{DESKTOP_VERSION}} · x86-64</em></a>
-    <a href="guide/cloud.html"><b>iPhone</b><span>Parlons Cloud pairs with your account by scanning one QR code.</span><em>iOS 17+ · with an account</em></a>
-  </div>
+  <p class="note2"><b>Then add a friend:</b> open <b>Contacts</b>, tap <b>+ Add</b> (on a computer, <b>Add contact</b>), scan or paste their address, and tap <b>Introduce myself</b>. They appear when their device answers.</p>
 </div></section>
 
-<section class="sec band" id="account"><div class="wrap">
-  <div class="lead"><span class="label">Your own account</span><h2>One command. One scan. Nobody in between.</h2>
-  <p>Paste one line into a terminal on a Mac, a Linux box, a Raspberry Pi or a VPS. It installs Java if it has to, fetches the newest release and checks its checksum, registers a service that survives reboots, and ends by drawing the QR code your phone scans.</p></div>
-  <div class="bgrid">
-    <div class="term"><div class="dots"><i></i><i></i><i></i></div><pre><span class="p">$</span> <span class="k">curl -fsSL {{INSTALL_SH}} | bash</span>
-
-<span class="g">[1/5]</span> Java                     <span class="d">present</span>
-<span class="g">[2/5]</span> Newest Parlons Cloud     <span class="d">parlons-cloud-{{CLOUD_VERSION}}.jar, sha256 verified</span>
-<span class="g">[3/5]</span> Service                  <span class="d">starts at boot</span>
-<span class="g">[4/5]</span> Waiting for the account to come online
-<span class="g">[5/5]</span> The parlons command
-
-  Your Parlons account is running (Parlons Cloud {{CLOUD_VERSION}}).
-
-  Address (share it; it never changes):
-  <span class="d">your full MAX# address is printed here</span>
-
-  Pair your phone: open the Parlons Cloud app and scan this QR.
-  <span class="d">the QR code is drawn here, with the full invite under it</span>
-
-  <span class="w">BACK UP YOUR SEED NOW:  ~/.parlons/seed.txt  -  it is your identity AND a wallet.</span></pre></div>
-    <div class="phone"><img src="assets/img/cloud-pair.png" alt="Parlons Cloud for Android, ready to pair: the account address, Scan pairing QR, the pairing code and Connect &amp; pair" width="600" height="1333" loading="lazy"></div>
-  </div>
-  <div class="steps3">
-    <div><b>Anywhere that stays on</b><span>A Raspberry Pi, a Mac mini, an old laptop, a 1 GB VPS. Outbound internet only. No port forwarding, no public address.</span></div>
-    <div><b>Every device, one identity</b><span>Pair the iPhone, the Android phone and the laptop. A new device asks to join and any paired device approves it. A lost phone is one revoke away.</span></div>
-    <div><b>Yours to move</b><span>An encrypted backup carries the whole account to another machine with the same address. Or let a friend host it, and leave whenever you like.</span></div>
-  </div>
-</div></section>
-
-<section class="sec" id="see"><div class="wrap">
-  <div class="lead"><span class="label">See it</span><h2>Real screens from the apps.</h2>
-  <p>Parlons! {{ANDROID_VERSION}} and Parlons Cloud {{PORTAL_VERSION}}, captured from the release builds with two demo identities talking over the live relays.</p></div>
+<section class="sec" id="see" style="background:var(--surface-2)"><div class="wrap">
+  <div class="lead"><span class="label">See it</span><h2>Real screens from the apps.</h2></div>
   <div class="gallery">
-    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="A Parlons! conversation between Camille and Léo, with grey and double delivery ticks" width="600" height="1333" loading="lazy"></div><figcaption><b>A conversation</b>Sealed on the sender's phone. Two ticks come from the other person's own device.</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="The Contacts tab: your Parlons address with Share my address and Scan, and one contact online" width="600" height="1333" loading="lazy"></div><figcaption><b>Contacts</b>Your address is a QR code to share. Adding someone is a handshake.</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/android-network.png" alt="The Network tab: reachable, hosts connected, contacts, mailbox and outbox counters, and the relay list" width="600" height="1333" loading="lazy"></div><figcaption><b>Network</b>Which relays carry you, and what this phone does for others.</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Parlons Cloud's Node page: always on and online, uptime, three relays attached, and the permanent address" width="600" height="1333" loading="lazy"></div><figcaption><b>Your account</b>Always on, attached to several relays, with a permanent address.</figcaption></figure>
-  </div><figcaption><b>Your account</b>Uptime, relays, paired devices and a new pairing code in one tap.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="A Parlons! conversation between Camille and Léo, with grey and double delivery ticks" width="600" height="1333" loading="lazy"></div><figcaption><b>A conversation</b>Two ticks: their own device has it.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="The Contacts tab: your Parlons address with Share my address and Scan, and one contact online" width="600" height="1333" loading="lazy"></div><figcaption><b>Contacts</b>Share your address as a QR code.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-pair.png" alt="Parlons Cloud for Android, ready to pair: the account address, Scan pairing QR, the pairing code and Connect &amp; pair" width="600" height="1333" loading="lazy"></div><figcaption><b>Pairing a phone</b>Scan the QR from your node.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Parlons Cloud's Node page: always on and online, uptime, three relays attached, and the permanent address" width="600" height="1333" loading="lazy"></div><figcaption><b>Your account</b>Always on, on several relays.</figcaption></figure>
   </div>
 </div></section>
 
-<section class="sec" id="why" style="background:var(--surface-2)"><div class="wrap">
-  <div class="lead"><span class="label">Why it holds</span><h2>Privacy that comes from how it is built.</h2></div>
-  <div class="feats">
-    <div class="feat"><span class="ic">1</span><h3>Sealed end to end</h3><p>Every message is encrypted on your device for the one key that can open it, and signed by yours. A relay carries a sealed blob and a routing key, nothing else.</p></div>
-    <div class="feat"><span class="ic">2</span><h3>No account with anyone</h3><p>Your identity is 24 words you hold. No server can reset it, sell it or hand it over, because no server has it.</p></div>
-    <div class="feat"><span class="ic">3</span><h3>Several relays at once</h3><p>Your phone attaches to several relays run by different people. Lose one and the others still carry you.</p></div>
-    <div class="feat"><span class="ic">4</span><h3>Ticks that tell the truth</h3><p>Two ticks come from the other person's own device, not from a relay. Messages to someone offline wait in a mailbox until they are back.</p></div>
-    <div class="feat"><span class="ic">5</span><h3>Your address is a key</h3><p>Where you are connected changes. Who you are does not. A permanent MAX# address reaches you on any device.</p></div>
-    <div class="feat"><span class="ic">6</span><h3>Nothing to take on trust</h3><p>The source is open. The desktop app is signed and notarized, and every release carries checksums. The authors collect nothing.</p></div>
-  </div>
-</div></section>
-
-<section class="sec" id="network"><div class="wrap">
-  <div class="lead"><span class="label">Be the network</span><h2>Nobody runs it. Everybody does.</h2>
-  <p>Phones outnumber servers, so Parlons asks phones to help, carefully: on Wi-Fi, while charging, and never at the cost of your own messages. A computer that stays on can do more. A server does the most.</p></div>
-  <div class="ladder">
-    <div class="rung"><b>Contributing</b><p>Holds sealed mail for people who are offline, answers lookups and signs delivery receipts. It cannot read any of it.</p><span class="when">Every phone, by default. Pauses on low battery.</span></div>
-    <div class="rung"><b>Directly reachable</b><p>The phone gets a real public address, so contacts reach you one hop shorter. Parlons Desktop proves its port from outside before it advertises it.</p><span class="when">On Wi-Fi, while charging, if your router opens a port.</span></div>
-    <div class="rung"><b>Relay</b><p>Carries other people's sealed traffic on port <span class="port">9535</span>. Parlons Desktop has a switch for it too.</p><span class="when">Phones: Wi-Fi, charging, battery at 60% or more.</span></div>
-    <div class="rung"><b>Account relay</b><p>An always-on account can relay for others on TCP port <span class="port">9501</span>, every hour of the day.</p><span class="when">Your own account with <span class="port">--relay</span>.</span></div>
-    <div class="rung"><b>Host</b><p>One process keeps many people's accounts online. Each of them can leave at any time with an encrypted backup.</p><span class="when">A small server for friends and family.</span></div>
-  </div>
-</div></section>
-
-<section class="sec" id="value" style="padding-top:24px"><div class="wrap value">
-  <div class="lead"><span class="label">Words and value</span><h2>Your identity is also a wallet.</h2>
-  <p>The same 24 words hold Minima. Pay a contact from inside the chat, in MINIMA or in MxUSD, the Minima dollar token, and the payment travels the same sealed path as the message. No exchange, no custodian, no address to copy by hand: the person you are talking to is the address.</p>
-  <p><a href="guide/parlons.html#15-payments-minima-and-mxusd">How to send a payment, step by step →</a></p></div>
-  <div class="tokid"><b>MxUSD token id</b>0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90</div>
-</div></section>
-
-<section class="sec" id="manuals" style="background:var(--surface-2)"><div class="wrap">
-  <div class="lead"><span class="label">The manuals</span><h2>Every feature, step by step.</h2>
-  <p>Three manuals, written from the apps' own code: every button, every setting, every command.</p></div>
+<section class="sec" id="manuals"><div class="wrap">
+  <div class="lead"><span class="label">The manuals</span><h2>Need more? Every feature, step by step.</h2></div>
   <div class="manuals" style="margin-top:30px">
-    <a class="manual" href="guide/parlons.html"><span class="label">For everyone</span><h3>Parlons! manual</h3><p>The Android app and Parlons Desktop.</p><ul><li>Your identity and backups</li><li>Contacts, chats and groups</li><li>Photos, files and calls</li><li>Payments in MINIMA and MxUSD</li><li>The network and troubleshooting</li></ul><span class="go">Open the manual →</span></a>
-    <a class="manual" href="guide/cloud.html"><span class="label">Account holders and hosts</span><h3>Parlons Cloud manual</h3><p>An always-on account, driven from your phone.</p><ul><li>Pairing the app to your account</li><li>Inviting your devices and friends</li><li>Installing an account in one line</li><li>Hosting many accounts on a server</li><li>The <code>parlons</code> command</li></ul><span class="go">Open the manual →</span></a>
-    <a class="manual" href="guide/node.html"><span class="label">Operators</span><h3>Parlons Node manual</h3><p>A Minima node, a relay and your account in one process.</p><ul><li>Install and verify</li><li>Every setting and port</li><li>TLS with Caddy, nginx or Apache</li><li>The relay mesh and DEX relay</li><li>Upgrades and rollback</li></ul><span class="go">Open the manual →</span></a>
+    <a class="manual" href="guide/parlons.html"><span class="label">The apps</span><h3>Parlons! manual</h3><p>Contacts, chats, groups, photos, calls, payments and backups on Android and Desktop.</p><span class="go">Open →</span></a>
+    <a class="manual" href="guide/cloud.html"><span class="label">Your phone and account</span><h3>Parlons Cloud manual</h3><p>Pairing phones, inviting devices and friends, and hosting accounts.</p><span class="go">Open →</span></a>
+    <a class="manual" href="guide/node.html"><span class="label">Your server</span><h3>Parlons Node manual</h3><p>Installing, configuring and updating a node.</p><span class="go">Open →</span></a>
   </div>
 </div></section>
 
@@ -228,7 +149,7 @@
   <p class="serif" style="font-size:28px;color:var(--sub)">je parle, tu parles,</p>
   <h2>nous parlons<span style="color:var(--orange)">!</span></h2>
   <p>Install the app, or run your own account. Either way, your words stay yours.</p>
-  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="guide/index.html">Get Parlons</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">All releases</a></div>
+  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="#start">Get started</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">All releases</a></div>
 </div></section>
 </main>
 {{{FOOT}}}</body></html>

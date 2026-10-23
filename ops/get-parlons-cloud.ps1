@@ -4,7 +4,7 @@ Parlons Cloud - one-command install of your own always-on Parlons account on Win
   irm https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.ps1 | iex
 
   Options (run the script from a file to pass them):
-    .\get-parlons-cloud.ps1 -Relay        public server: also run a relay for others on port 9501
+    .\get-parlons-cloud.ps1 -NoRelay      account only: do not relay for others (relaying on 9501 is the default)
     .\get-parlons-cloud.ps1 -Uninstall    stop and remove the service (your account data is kept)
 
 What it does:
@@ -17,7 +17,7 @@ What it does:
 It never prints your seed phrase. That lives in %USERPROFILE%\.parlons\seed.txt - back it up like money.
 Not yet verified on a Windows machine by the authors: if something is off, please report it.
 #>
-param([switch]$Relay, [switch]$Uninstall)
+param([switch]$Relay, [switch]$NoRelay, [switch]$Uninstall)   # -Relay is the default now; kept so old commands still work
 $ErrorActionPreference = 'Stop'
 $Repo   = 'eurobuddha/maxima'
 $Data   = Join-Path $env:USERPROFILE '.parlons'
@@ -82,7 +82,7 @@ else {
 Copy-Item $JarPath (Join-Path $Bin 'parlons-cloud.jar') -Force
 
 # ---------- the parlons command ----------
-$Args = if ($Relay) { "--data `"$Data`" --relay-port 9501 --no-direct" } else { "--data `"$Data`" --no-relay --no-direct" }
+$Args = if (-not $NoRelay) { "--data `"$Data`" --relay-port 9501 --no-direct" } else { "--data `"$Data`" --no-relay --no-direct" }
 @"
 @echo off
 rem parlons - drive your Parlons Cloud account from this computer (installed by get-parlons-cloud.ps1)

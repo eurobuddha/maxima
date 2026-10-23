@@ -5,7 +5,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-cloud.sh | bash
 #
-#   … | bash -s -- --relay        public VPS: also run a relay for others on port 9501
+#   … | bash -s -- --no-relay     account only: do not relay for others (relaying on 9501 is the default)
 #   … | bash -s -- --uninstall    stop and remove the service (your account data is kept)
 #   … | bash -s -- --update       fetch the newest release and restart (re-running does this too)
 #
@@ -24,11 +24,12 @@ DATA="${PARLONS_DATA:-$HOME/.parlons}"
 BIN="$DATA/bin"
 CLIENT="$HOME/.parlons-client"
 HEAP="${PARLONS_HEAP:-256m}"
-MODE="account"      # or "relay"
+MODE="relay"        # or "account" (--no-relay)
 ACTION="install"
 for a in "$@"; do
     case "$a" in
-        --relay) MODE="relay" ;;
+        --relay) MODE="relay" ;;      # the default; kept so old commands still work
+        --no-relay) MODE="account" ;;
         --uninstall) ACTION="uninstall" ;;
         --update) ACTION="install" ;;
         -h|--help) sed -n '2,19p' "$0" | sed 's/^#\ \?//'; exit 0 ;;
@@ -149,7 +150,7 @@ case "\${1:-}" in
     stop)    $( if [ "$OSN" = mac ]; then echo "launchctl bootout \"gui/\$(id -u)\" \"$PLIST\""; else echo "if [ -f \"$UNIT_USER\" ]; then systemctl --user stop parlons-cloud; elif [ -f \"$UNIT_SYS\" ]; then ${SUDO:-} systemctl stop parlons-cloud; else kill \"\$(cat \"\$DATA/cloud.pid\" 2>/dev/null)\" 2>/dev/null; fi"; fi ); exit \$? ;;
     restart) "\$0" stop >/dev/null 2>&1; sleep 1; exec "\$0" start ;;
     log)     exec tail -n "\${2:-50}" -f "\$DATA/log/cloud.log" ;;
-    update)  exec bash -c "curl -fsSL https://raw.githubusercontent.com/$REPO/main/ops/get-parlons-cloud.sh | bash -s -- --update $( [ "$MODE" = relay ] && echo --relay )" ;;
+    update)  exec bash -c "curl -fsSL https://raw.githubusercontent.com/$REPO/main/ops/get-parlons-cloud.sh | bash -s -- --update $( [ "$MODE" = account ] && echo --no-relay )" ;;
     uninstall) exec bash -c "curl -fsSL https://raw.githubusercontent.com/$REPO/main/ops/get-parlons-cloud.sh | bash -s -- --uninstall" ;;
     ""|-h|--help)
         "\$JAVA" -cp "\$BIN/parlons-cloud.jar" com.eurobuddha.maxima.cloud.Client
