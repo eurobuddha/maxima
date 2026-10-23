@@ -114,7 +114,7 @@ still expires. Test: `DexDiscoveryTest.verifiedPeersAreReDialledWithoutAReClaim`
 - Identifiers are never truncated anywhere, and the Minima dollar token is **MxUSD**
   (`0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90`).
 
-## 2026-10-23 — fixes in source, NOT yet released or rolled
+## 2026-10-23 — fixes released and ROLLED to all 7 boxes (node-v0.2.138, server-v0.4.107, cloud-v0.11.123)
 
 parlons-node **0.2.138** / maxima-server **0.4.107** / DEX relay **0.1.5** / parlons-cloud **0.11.123**:
 
@@ -127,3 +127,12 @@ parlons-node **0.2.138** / maxima-server **0.4.107** / DEX relay **0.1.5** / par
 - `ops/deploy-parlons-node.sh` writes `Restart=always` (a `quit` or resync exits 0). Live units still say
   `on-failure` until each box is re-deployed or hand-edited.
 - `parlons newcode` prompts for the admin password at the console when the host requires one.
+
+Rolled 2026-10-23 ~13:00 UTC: every parlons-node box on 0.2.138 with `Restart=always`; maxlite and openproject's
+maxima-relay on 0.4.107; the X-Forwarded-For line added to the `/dex-relay/` block on megammr and vigilance
+(backups `/root/<file>.before-xff`). Unit backups `*.before-parlons-node-0.2.138.jar` / `*.before-maxima-server-0.4.107.jar`.
+Verified from outside: all 7 DEX relays answer 0.1.5 and list all 7; 9602 closed publicly everywhere;
+`ops/verify-relay.sh` passes on all 8 relay ports. Tenant hosts (sally, the Pi) stay on cloud 0.11.121.
+SHA-256: node `597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af`,
+server `69201869c70d256e47459fe2207ee87e72e09ea50580738a9da83f91ca1da79e`,
+cloud `536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5`.
