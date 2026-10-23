@@ -131,6 +131,13 @@ public final class Client {
             }
             case "newcode": {
                 JSONObject o = r.newCode();
+                if (!isOk(o) && String.valueOf(o.get("error")).startsWith("Admin password required")) {
+                    // A host with the admin password service: ask for it at the console, never on the command line.
+                    java.io.Console con = System.console();
+                    if (con == null) { fail(o); System.exit(2); }
+                    char[] pw = con.readPassword("Admin password: ");
+                    try { o = r.newCode(new String(pw)); } finally { java.util.Arrays.fill(pw, '\0'); }
+                }
                 if (!isOk(o)) { fail(o); break; }
                 String code = String.valueOf(o.getOrDefault("code", ""));
                 String inv = String.valueOf(o.getOrDefault("invite", ""));
@@ -554,7 +561,7 @@ public final class Client {
         System.out.println("  pair [<code>]          pair this device (bootstrap code, or pending→approve)");
         System.out.println("  ping                   account name + address");
         System.out.println("  devices                list paired / pending devices");
-        System.out.println("  newcode                mint and receive a fresh one-time pairing code and invite");
+        System.out.println("  newcode                mint and receive a fresh one-time pairing code and invite (asks for the admin password where the host has one)");
         System.out.println("  invite                 print MAX#…?code=… for the app to scan (account on this machine)");
         System.out.println("  panel                  open the account's web panel in a browser (one-time link)");
         System.out.println("  approve <key>          approve a pending device");

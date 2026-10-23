@@ -94,8 +94,8 @@ relay network, and give phones a wallet gateway.
 │                                          │
 │  Wallet gateway + NFT  127.0.0.1:9585    │
 │  Account panel + API   127.0.0.1:9587    │
-│  DEX relay cape        127.0.0.1:9602    │  (opt-in; default bind is 0.0.0.0,
-│                                          │   so always set 127.0.0.1)
+│  DEX relay cape        127.0.0.1:9602    │  (opt-in; set the bind to 127.0.0.1;
+│                                          │   the default from 0.2.138 when public)
 │  Parlons account (pairing, chat, push)   │
 │  keets chat bridge (when -keets is on)   │──► keets sidecar (Node.js child)
 └──────────────────────────────────────────┘
@@ -109,7 +109,7 @@ relay network, and give phones a wallet gateway.
 | Relay cape | `server/.../RelayRuntime`, `RelayServer` | TCP `9501`, plus UDP STUN on the same port | on |
 | Wallet gateway and `/nft` | `node/.../NodeGateway.java`, `NftStore.java` | `127.0.0.1:9585` | on (it starts once the wallet is up) |
 | Account panel | `account/.../ParlonsLocal.java` | `127.0.0.1:9587` | on |
-| DEX relay cape | `dexrelay/.../DexRelay.java` | `0.0.0.0:<port>` unless you set the bind | off (`parlons.dex.port=0`) |
+| DEX relay cape | `dexrelay/.../DexRelay.java` | `0.0.0.0:<port>` unless you set the bind (0.2.138+: `127.0.0.1` when `parlons.dex.public` is set) | off (`parlons.dex.port=0`) |
 | keets bridge | `node/.../KeetsChatBridge.java` | none (polls the node) | on only when the node runs with `-keets` |
 
 **Boot order** (from `ParlonsNodeMain.main`):
@@ -289,7 +289,8 @@ the same operation.
 | `--replace-relay` | stops and disables `maxima-relay.service` so the node can take its port | — |
 
 > **Always pass `--dex-public` together with `--dex`.** Without it, the DEX cape binds `0.0.0.0` and
-> the script opens the port to the internet as plain HTTP.
+> the script opens the port to the internet as plain HTTP. (From 0.2.138 the node itself also defaults
+> the bind to `127.0.0.1` whenever `parlons.dex.public` is set.)
 
 ### B. By hand
 
@@ -394,9 +395,10 @@ ExecStart=/usr/bin/java -Xmx3g \
 
 # Restart on a crash. Exit code 3 means "restart me": a wallet resync or an identity import
 # requested from a paired device ends with exit 3, and the node comes back on the same identity.
-# Note: a clean exit 0 (after `quit`, or after a megammr import/resync run over the admin RPC)
-# is NOT restarted under Restart=on-failure. Run `systemctl restart parlons-node` yourself.
-Restart=on-failure
+# always, not on-failure: `quit` and a megammr import/resync end with exit 0, and the node must come back.
+# (Units written by ops/deploy-parlons-node.sh before 2026-10-23 say on-failure: change it, or
+# run `systemctl restart parlons-node` yourself after a clean exit.)
+Restart=always
 RestartSec=10
 RestartForceExitStatus=3
 SuccessExitStatus=3
@@ -531,10 +533,10 @@ Environment: `MAXIMA_STUN=false` turns off the UDP STUN responder on the relay p
 | Property | Meaning | Default | Example |
 |---|---|---|---|
 | `parlons.dex.port` | Port of the DEX relay cape. `0` = off. | `0` | `9602` |
-| `parlons.dex.bind` | Interface it listens on. **The default is every interface. Always set `127.0.0.1`.** | `0.0.0.0` | `127.0.0.1` |
+| `parlons.dex.bind` | Interface it listens on. **Set `127.0.0.1` and front it with TLS.** Up to 0.2.137 the default is every interface; from 0.2.138 it is `127.0.0.1` when `parlons.dex.public` is set, else `0.0.0.0`. | see meaning | `127.0.0.1` |
 | `parlons.dex.public` | Public base URL announced in the mesh. If unset, the node announces `http://<public host>:<port>` once it knows its public host. | empty | `https://node.example.com/dex-relay` |
 
-Fixed in code: DEX relay version `0.1.4`; global rate 200 requests/s and per-IP rate 20 requests/s
+Fixed in code: DEX relay version `0.1.4` (`0.1.5` from node 0.2.138); global rate 200 requests/s and per-IP rate 20 requests/s
 (see [§16](#16-the-dex-relay-cape-dexicon) for what this means behind a proxy).
 
 ### 8.5 Account and panel
@@ -607,7 +609,7 @@ boot log shows the applied flags as `minima flags: …`, with the `mdspassword` 
 | `9501` | UDP | STUN binding responder on the relay port | all | Optional. The deploy script does not open UDP. |
 | `9585` (`parlons.gateway.port`) | TCP/HTTP | Wallet gateway `/cmd` and `/nft` | `127.0.0.1` | Loopback, behind a TLS front at `/parlons-node/`. |
 | `9587` (`parlons.panel.port`) | TCP/HTTP | Account panel and API | `127.0.0.1`, hard-coded | Loopback. Reach it with an SSH tunnel. |
-| `9602` (`parlons.dex.port`, off by default) | TCP/HTTP | DEX relay cape | **`0.0.0.0` unless set** | Loopback, behind a TLS front at `/dex-relay/`. |
+| `9602` (`parlons.dex.port`, off by default) | TCP/HTTP | DEX relay cape | **`0.0.0.0` unless set** (0.2.138+: `127.0.0.1` when `parlons.dex.public` is set) | Loopback, behind a TLS front at `/dex-relay/`. |
 
 Port conflicts to know about:
 
@@ -1051,8 +1053,9 @@ Dexicon. It runs **inside** the node; it is not a separate service. It is untrus
 
 Then front `/dex-relay/` to `http://127.0.0.1:9602/` ([§11](#11-tls-fronting-caddy-nginx-apache)).
 
-> The **default bind is `0.0.0.0`**. If you set only `parlons.dex.port`, the cape answers plain
-> HTTP to the whole internet. Always set `parlons.dex.bind=127.0.0.1` and put TLS in front.
+> Up to 0.2.137 the **default bind is `0.0.0.0`**. If you set only `parlons.dex.port`, the cape answers
+> plain HTTP to the whole internet. From 0.2.138 the default is `127.0.0.1` whenever
+> `parlons.dex.public` is set. Either way, set `parlons.dex.bind=127.0.0.1` and put TLS in front.
 
 Boot log lines:
 
@@ -1092,10 +1095,13 @@ Any other path returns 404. Rate limiting returns 429 with `{"ok":false,"error":
 | Expired-entry sweep | every 30 s |
 | Rate | 200 requests/s global, 20 requests/s per IP (burst = 2 s worth) |
 
-**Rate limiting behind a proxy.** The DEX cape does not read `X-Forwarded-For`. Behind a loopback
-TLS front, every request arrives from `127.0.0.1`. The per-IP bucket of 20 requests/s (burst 40)
-therefore applies to **all public traffic together**. This is derived from the code and has not
-been measured under load. If a busy relay returns 429s, this limit is the first thing to check.
+**Rate limiting behind a proxy.** Behind a loopback TLS front, every request arrives from `127.0.0.1`.
+Up to DEX relay 0.1.4 (node 0.2.137) the per-IP bucket of 20 requests/s (burst 40) therefore applies to
+**all public traffic together**. From 0.1.5 (node 0.2.138), when a request comes from loopback the cape
+rate-limits the **rightmost `X-Forwarded-For` entry** (the one your proxy appended) instead. A direct,
+non-loopback caller's header is ignored, so nobody can choose their own bucket. Your front must send the
+header: Caddy's `reverse_proxy` and Apache's `ProxyPass` do by default; nginx needs
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` in the `/dex-relay/` block.
 
 ### Discovery
 

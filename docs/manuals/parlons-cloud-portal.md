@@ -710,7 +710,7 @@ The unit runs:
 
 ```
 /usr/bin/java -Xmx<heap> -jar /opt/maxima/parlons-cloud.jar \
-    --tenants /var/lib/parlons-tenants --no-relay --no-direct --no-panel --unlock env
+    --tenants /var/lib/parlons-tenants --no-relay --no-direct --panel-port 9597 --unlock env
 ```
 
 So by default the host opens **no inbound port** (it attaches to the relay fleet outbound only) and can sit beside a Parlons Node on the same box. New tenants are created with encrypted seeds (`seed.enc`) because an unlock passphrase is in force.
@@ -727,7 +727,7 @@ This adds a drop-in `/etc/systemd/system/parlons-node.service.d/hosted-accounts.
 
 ### Web panels for tenants
 
-The deploy script starts the host with `--no-panel`. To give each tenant its own loopback web panel, replace `--no-panel` in the unit with `--panel-port <first port>`. Tenants then take that port, the next one, and so on, in the order they start.
+Up to 2026-10-22 the deploy script started the host with `--no-panel`; from 2026-10-23 it writes `--panel-port 9597`, so a re-run keeps the panels. On an older unit, to give each tenant its own loopback web panel, replace `--no-panel` in the unit with `--panel-port <first port>`. Tenants then take that port, the next one, and so on, in the order they start.
 
 On a box where a Parlons Node runs, the node already holds `127.0.0.1:9587` (the default panel port), so use a higher range. The fleet uses **`--panel-port 9597`**, giving tenant panels 9597, 9598 and so on:
 
@@ -876,7 +876,7 @@ It prints the full `MAX#` address, the one-time code, a QR (if `qrencode` is ins
 | `ops/tenant-new.sh`, `--tenant-new` | no | yes (that tenant's own invite) |
 | The bootstrap code on first start (`pair-code.txt`) | yes, for the very first device | n/a |
 
-The `parlons newcode` terminal command has no admin password option. On a host with the password service, mint owner invitations from the app or the web panel instead.
+Up to cloud 0.11.122 the `parlons newcode` terminal command has no admin password option; on a host with the password service, mint owner invitations from the app or the web panel. From 0.11.123 it asks for the password at the console (never on the command line).
 
 ---
 
@@ -1003,7 +1003,7 @@ The one-line installer installs `parlons`. It is a paired device of its own (its
 | `ping` | Account name and address. |
 | `status` | Name, version, uptime, relays, pool relay, paired devices, permanent address. |
 | `devices` | Paired and pending devices, with full keys. |
-| `newcode` | Mint a fresh one-time code and invite (not on hosts that require the admin password; section 23). |
+| `newcode` | Mint a fresh one-time code and invite. From cloud 0.11.123 it asks for the admin password at the console when the host has one; older builds fail there (section 23). |
 | `invite` | Print the outstanding invite from the account's folder on this machine. |
 | `panel` | Open the account's web panel in a browser (one-time link). |
 | `approve <key>` / `revoke <key>` | Approve a pending device / revoke a device. |
@@ -1079,7 +1079,7 @@ Before an upgrade:
 
 1. Check the jar's checksum (the scripts do this for you and refuse a mismatch).
 2. Back up `/etc/parlons-tenants.env` and the data directories.
-3. Copy the unit file if you have edited it (`cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-<jar>`). Re-running the deploy script rewrites it, so re-apply edits such as `--panel-port 9597` afterwards.
+3. Copy the unit file if you have edited it (`cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-<jar>`). Re-running the deploy script rewrites it, so re-apply your own edits afterwards (the script itself writes `--panel-port 9597` since 2026-10-23).
 
 After an upgrade, check: `systemctl is-active parlons-tenants`, the version in the log, and that tenants report in (section 30).
 
@@ -1145,7 +1145,7 @@ The program never writes a seed to a log: under systemd, a newly generated seed 
 | **Set your admin password before enabling hosting** | Set the admin password first (section 23). |
 | **Enable hosting before managing guest accounts** | Built-in hosting is off; enable it (section 11). |
 | **Guest hosting is unavailable. Check the data folder permissions and that another host is not using it.** | The owner's `hosted-chat/` folder is not writable, is a symbolic link, or another process holds its lock. |
-| **Admin password required for an owner-account invitation** from `parlons newcode` | The CLI has no password option. Use the app or the panel, or pair code-less and approve. |
+| **Admin password required for an owner-account invitation** from `parlons newcode` | Up to 0.11.122 the CLI has no password option: use the app or the panel, or pair code-less and approve. From 0.11.123 it prompts for the password. |
 | **Incorrect admin password** from `parlons-pair` | Retry after two seconds. To change a forgotten password on a Parlons Node, use `sudo parlons-pair --set-admin-password` locally. |
 | Restore: **wrong passphrase (or a damaged backup file)** | Check the passphrase. |
 | Restore: refuses because an identity exists | `--restore` and `--import-seed` never overwrite. Move the old data away first, or use a fresh directory. |

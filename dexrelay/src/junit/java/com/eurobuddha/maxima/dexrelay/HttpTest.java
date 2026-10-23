@@ -75,6 +75,13 @@ public class HttpTest {
         assertFalse(DexRelay.wildcard("https://eurobuddha.com/dex-relay"));
     }
 
+    @Test public void aTlsFrontedRelayDefaultsToLoopback() {
+        assertEquals("127.0.0.1", DexRelay.bindFor(null, "https://dex.example.com/dex-relay"));
+        assertEquals("0.0.0.0", DexRelay.bindFor(null, ""));          // no front: it must listen publicly to be reached
+        assertEquals("0.0.0.0", DexRelay.bindFor("  ", null));
+        assertEquals("10.0.0.5", DexRelay.bindFor(" 10.0.0.5 ", "https://dex.example.com"));   // an explicit bind always wins
+    }
+
     @Test public void longPollWakesOnPublish() throws Exception {
         AtomicLong ms = new AtomicLong(-1);
         Thread t = new Thread(() -> {
@@ -114,6 +121,26 @@ public class HttpTest {
         assertEquals(200, options("/dex/publish").code);
     }
 
+    @Test public void clientIpTrustsTheProxyOnlyFromLoopback() {
+        // behind the TLS front every connection is 127.0.0.1; the proxy's own (rightmost) X-Forwarded-For entry is the client
+        assertEquals("203.0.113.9", DexRelay.clientIp("127.0.0.1", "198.51.100.1, 203.0.113.9"));
+        assertEquals("203.0.113.9", DexRelay.clientIp("::1", "203.0.113.9"));
+        assertEquals("127.0.0.1", DexRelay.clientIp("127.0.0.1", null));
+        assertEquals("127.0.0.1", DexRelay.clientIp("127.0.0.1", "  "));
+        // a direct (non-loopback) caller cannot pick its own bucket by forging the header
+        assertEquals("198.51.100.7", DexRelay.clientIp("198.51.100.7", "203.0.113.9"));
+    }
+
+    @Test public void eachForwardedClientGetsItsOwnBucket() throws Exception {
+        relay.stop();
+        relay = new DexRelay(() -> NOW, 1000, 3);          // 3 req/s per IP
+        relay.start("127.0.0.1", 0);
+        base = "http://127.0.0.1:" + relay.port();
+        for (int i = 0; i < 12; i++) req("GET", "/dex/health", null, "203.0.113.1");
+        assertEquals(429, req("GET", "/dex/health", null, "203.0.113.1").code);
+        assertEquals(200, req("GET", "/dex/health", null, "203.0.113.2").code);   // another user behind the same front
+    }
+
     // --- tiny client ---
     static final class Resp { int code; String body; String headers; }
 
@@ -121,9 +148,12 @@ public class HttpTest {
     Resp post(String path, String body) throws Exception { return req("POST", path, body); }
     Resp options(String path) throws Exception { return req("OPTIONS", path, null); }
 
-    Resp req(String method, String path, String body) throws Exception {
+    Resp req(String method, String path, String body) throws Exception { return req(method, path, body, null); }
+
+    Resp req(String method, String path, String body, String forwardedFor) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(base + path).openConnection();
         c.setRequestMethod(method); c.setConnectTimeout(3000); c.setReadTimeout(30000);
+        if (forwardedFor != null) c.setRequestProperty("X-Forwarded-For", forwardedFor);
         if (body != null) { c.setDoOutput(true); try (OutputStream o = c.getOutputStream()) { o.write(body.getBytes(StandardCharsets.UTF_8)); } }
         Resp r = new Resp();
         r.code = c.getResponseCode();

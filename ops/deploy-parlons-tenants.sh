@@ -151,8 +151,9 @@ Group=maxima
 EnvironmentFile=/etc/parlons-tenants.env
 # No pool relay and no direct listener: the host attaches to the fleet outbound only,
 # so it opens no inbound port and can sit next to a Parlons Node on the same box.
+# Tenant panels take 127.0.0.1:9597, 9598 ... (9587 is a Parlons Node's own panel on the same box).
 ExecStart=/usr/bin/java -Xmx$HEAP -jar /opt/maxima/parlons-cloud.jar \\
-    --tenants $DIR --no-relay --no-direct --no-panel --unlock env${PEERS:+ --peers $PEERS}
+    --tenants $DIR --no-relay --no-direct --panel-port 9597 --unlock env${PEERS:+ --peers $PEERS}
 Restart=on-failure
 RestartSec=10
 

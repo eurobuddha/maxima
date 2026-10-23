@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.137";
+    public static final String  NODE_VERSION = "0.2.138";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -82,7 +82,8 @@ public final class ParlonsNodeMain {
         out.println("  -Dparlons.relay.blob=0           media shelf in MB;  -Dparlons.relay.maxconn=0 (0 = default)");
         out.println("  -Dparlons.gateway.port=9585      wallet gateway /cmd on 127.0.0.1 (put TLS in front for phones)");
         out.println("  -Dparlons.dex.port=0             the Decks DEX relay cape (signed order book, GET /dex/health); 0 = off;");
-        out.println("                                    -Dparlons.dex.bind=0.0.0.0 the interface it listens on;");
+        out.println("                                    -Dparlons.dex.bind=<ip> the interface it listens on (default 127.0.0.1");
+        out.println("                                    when -Dparlons.dex.public is set, else 0.0.0.0);");
         out.println("                                    -Dparlons.dex.public=<url> its public base URL when behind a TLS front");
         out.println("                                    (else http://<public host>:<port>); announced in the relay mesh (GET /dex/relays)");
         out.println("  -Dparlons.node.public=https://…  public base URL, advertises the gateway + NFT hosting");
@@ -266,9 +267,11 @@ public final class ParlonsNodeMain {
         int dexPort = Integer.getInteger("parlons.dex.port", 0);
         if (dexPort > 0) {
             dex = new com.eurobuddha.maxima.dexrelay.DexRelay();
-            dex.start(System.getProperty("parlons.dex.bind", "0.0.0.0").trim(), dexPort);
+            String dexBind = com.eurobuddha.maxima.dexrelay.DexRelay.bindFor(System.getProperty("parlons.dex.bind"),
+                    System.getProperty("parlons.dex.public"));
+            dex.start(dexBind, dexPort);
             System.out.println("[parlons-node] dex relay " + com.eurobuddha.maxima.dexrelay.DexRelay.VERSION
-                    + " up on " + System.getProperty("parlons.dex.bind", "0.0.0.0").trim() + ":" + dex.port() + " (GET /dex/health)");
+                    + " up on " + dexBind + ":" + dex.port() + " (GET /dex/health)");
         } else {
             dex = null;
         }

@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   GET  /dex/relays                       {ok,relays:[{url,seen}]}  every DEX relay this host knows (itself included)
  */
 public final class DexRelay {
-    public static final String VERSION = "0.1.4";
+    public static final String VERSION = "0.1.5";
     static final int MAX_HOLD_SECONDS = 25;
     static final int MAX_CONCURRENT_HOLDS = 512;
     static final long SWEEP_MS = 30_000;
@@ -106,7 +106,8 @@ public final class DexRelay {
             ex.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
             ex.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
             if ("OPTIONS".equals(ex.getRequestMethod())) { ex.sendResponseHeaders(200, -1); return; }
-            String ip = ex.getRemoteAddress() == null ? "?" : ex.getRemoteAddress().getAddress().getHostAddress();
+            String ip = clientIp(ex.getRemoteAddress() == null ? "?" : ex.getRemoteAddress().getAddress().getHostAddress(),
+                    ex.getRequestHeaders().getFirst("X-Forwarded-For"));
             if (!limiter.allow(ip)) { send(ex, 429, "{\"ok\":false,\"error\":\"rate limited\"}"); return; }
             h.run(ex);
         } catch (Exception e) {
@@ -114,6 +115,22 @@ public final class DexRelay {
         } finally {
             ex.close();
         }
+    }
+
+    /** The interface to listen on: an explicit bind wins; a relay with a public (TLS-front) URL defaults to loopback,
+     *  so it never also answers plain HTTP on the internet; one without a front must listen publicly to be reached. */
+    public static String bindFor(String bind, String publicUrl) {
+        if (bind != null && !bind.trim().isEmpty()) return bind.trim();
+        return publicUrl != null && !publicUrl.trim().isEmpty() ? "127.0.0.1" : "0.0.0.0";
+    }
+
+    /** The address to rate-limit. Behind the TLS front every connection comes from loopback, so there the proxy's own
+     *  (rightmost) X-Forwarded-For entry names the client; a direct caller's header is ignored, so it cannot pick a bucket. */
+    static String clientIp(String remote, String forwardedFor) {
+        boolean loopback = remote.startsWith("127.") || "::1".equals(remote) || "0:0:0:0:0:0:0:1".equals(remote);
+        if (!loopback || forwardedFor == null) return remote;
+        String last = forwardedFor.substring(forwardedFor.lastIndexOf(',') + 1).trim();
+        return last.isEmpty() ? remote : last;
     }
 
     private void health(HttpExchange ex) throws IOException {

@@ -113,3 +113,17 @@ still expires. Test: `DexDiscoveryTest.verifiedPeersAreReDialledWithoutAReClaim`
 - Never run minimaDesk on this Mac (real funds). The dev node is `~/minima4442`.
 - Identifiers are never truncated anywhere, and the Minima dollar token is **MxUSD**
   (`0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90`).
+
+## 2026-10-23 — fixes in source, NOT yet released or rolled
+
+parlons-node **0.2.138** / maxima-server **0.4.107** / DEX relay **0.1.5** / parlons-cloud **0.11.123**:
+
+- DEX rate limit: from loopback, the cape buckets by the rightmost `X-Forwarded-For` entry (the front's own);
+  a direct caller's header is ignored. Caddy and Apache send it already; the **nginx fronts on megammr and
+  vigilance do not** and need `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` in the
+  `/dex-relay/` block (vigilance: owner re-baselines the integrity monitor after). Until then they behave as before.
+- DEX bind default follows the public URL: `127.0.0.1` when `parlons.dex.public` / `--dex-public` is set, else `0.0.0.0`.
+- `ops/deploy-parlons-tenants.sh` writes `--panel-port 9597` (was `--no-panel`, which undid the hand fix on re-run).
+- `ops/deploy-parlons-node.sh` writes `Restart=always` (a `quit` or resync exits 0). Live units still say
+  `on-failure` until each box is re-deployed or hand-edited.
+- `parlons newcode` prompts for the admin password at the console when the host requires one.

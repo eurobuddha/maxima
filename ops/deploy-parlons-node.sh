@@ -304,7 +304,8 @@ ExecStart=/usr/bin/java -Xmx$HEAP \\
     -Dparlons.node.passphrase.file=$PASSFILE}${NODE_ARGS:+ \\
     $ARGS_OPT} \\
     -jar /opt/maxima/parlons-node.jar
-Restart=on-failure
+# always, not on-failure: `quit` and a megammr import/resync end with exit 0, and the node must come back.
+Restart=always
 RestartSec=10
 # Exit code 3 = "restart me" (a wallet resync requested from a paired device ends with the
 # chain engine stopped; the node exits 3 and comes straight back on the same identity).
