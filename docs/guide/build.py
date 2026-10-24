@@ -106,13 +106,8 @@ REDIRECTS = {
     "security": ("parlons", "Security and privacy"), "help": ("parlons", "Troubleshooting"),
 }
 
-MARK = ('<svg viewBox="0 0 256 256" aria-hidden="true"><rect x="18" y="18" width="220" height="220" rx="52" fill="#1B1D21"/>'
-        '<path d="M104 96h44c17 0 31 13 31 29s-14 29-31 29h-21l-23 19v-20c-16-3-27-15-27-28 0-16 13-29 27-29Z" fill="#1B1D21" '
-        'stroke="#F5F4F1" stroke-width="11" stroke-linejoin="round"/><g transform="translate(128 122) skewX(-12)">'
-        '<rect x="-4.2" y="-22" width="8.4" height="28" rx="4.2" fill="#F5F4F1"/><circle cx="0" cy="15" r="4.7" fill="#F5F4F1"/></g>'
-        '<circle cx="128" cy="49" r="12" fill="#FF7A2E"/><circle cx="207" cy="128" r="12" fill="#FF7A2E"/>'
-        '<circle cx="75" cy="181" r="12" fill="#4E86FF"/><circle cx="181" cy="181" r="12" fill="#4E86FF"/></svg>')
-FAVICON = "data:image/svg+xml," + MARK.replace('"', "'").replace("#", "%23").replace("<", "%3C").replace(">", "%3E")
+MARK = '<img src="assets/img/parlons-icon.png" width="512" height="512" alt="" decoding="async">'
+FAVICON = "assets/img/parlons-icon.png"
 FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
          '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Manrope:wght@400;500;600;700;800&display=swap">')
 
@@ -371,7 +366,7 @@ def head(title, desc, root, lang="en", rel=None):
             "<meta property=\"og:title\" content=\"%s\"><meta property=\"og:description\" content=\"%s\">"
             "<meta name=\"theme-color\" content=\"#2A2E33\"><link rel=\"icon\" href=\"%s\">%s%s"
             "<link rel=\"stylesheet\" href=\"%s\"></head><body>\n"
-            % (hl, html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), FAVICON, FONTS, alts, stylesheet("site.css", root)))
+            % (hl, html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), root + FAVICON, FONTS, alts, stylesheet("site.css", root)))
 
 
 # Remembers an explicit language choice; the English home page uses it (or the browser's
@@ -402,7 +397,7 @@ def bar(root, current, lang="en", rel=None):
                         for c, h, _, n in LANGS)
         langs = '<details class="langs"><summary aria-label="%s">%s</summary><div>%s</div></details>' % (t["lang"], here, items)
     return ('<header class="bar"><div class="wrap"><a class="brand" href="%s%s">%s<span>Parlons!<small>%s</small></span></a>'
-            '<nav aria-label="Site">%s</nav>%s</div></header>\n' % (root, lpath("index.html", lang), MARK, t["tagline"], nav, langs))
+            '<nav aria-label="Site">%s</nav>%s</div></header>\n' % (root, lpath("index.html", lang), MARK.replace('src="assets/', 'src="' + root + 'assets/'), t["tagline"], nav, langs))
 
 
 def foot(root, lang="en"):
@@ -411,7 +406,7 @@ def foot(root, lang="en"):
             '<a href="%s%s">%s</a><a href="%s%s">%s</a><a href="%s%s">%s</a>'
             '<a href="%s" target="_blank" rel="noopener">%s</a><a href="%s" target="_blank" rel="noopener">%s</a>'
             '<a href="%s" target="_blank" rel="noopener">%s</a></nav>'
-            '<p>%s</p></div></footer>\n%s' % (root, lpath("guide/index.html", lang), t["nav_start"], root, lpath("guide/parlons.html", lang), t["foot_parlons"],
+            '<p>%s</p><nav aria-label="Ecosystem"><a href="https://github.com/eurobuddha/maxima">Maxima</a><a href="https://minima.global/">minima.global ↗</a><a href="https://eurobuddha.com/">eurobuddha.com ↗</a></nav></div></footer>\n%s' % (root, lpath("guide/index.html", lang), t["nav_start"], root, lpath("guide/parlons.html", lang), t["foot_parlons"],
                                                root, lpath("guide/cloud.html", lang), t["foot_cloud"], root, lpath("guide/node.html", lang), t["foot_node"], root, lpath("guide/privacy.html", lang), t["foot_privacy"],
                                                LINKS["REPO"], t["nav_source"], LINKS["RELEASES"], t["foot_releases"], LINKS["ISSUES"], t["foot_report"],
                                                t["foot_text"], LANG_JS))

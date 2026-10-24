@@ -184,3 +184,8 @@ footer.foot a{color:var(--on-bar);font-weight:600}
 .label{color:var(--sub)}
 .bar nav{min-width:0}
 @media(max-width:540px){.bar .wrap{height:auto;min-height:64px;flex-wrap:wrap;gap:6px 12px;padding-block:10px}.bar .brand{margin-right:auto}.bar nav{order:3;flex-basis:100%;margin:0}.bar nav a{font-size:13px;padding:5px 10px}.langs{margin-left:auto}html{scroll-padding-top:120px}.prose.guide{padding-top:24px}.btn{white-space:normal}.prose .cards{grid-template-columns:minmax(0,1fr)}}
+
+/* Use the original Parlons application artwork across shared page chrome. */
+.brand img{display:block;width:38px;height:38px;border-radius:22%}
+::selection{background:var(--blue);color:var(--surface)}
+a{text-underline-offset:3px}
