@@ -16,7 +16,18 @@ An account keeps your identity, contacts, chat history and paired devices on the
 
 ## What travels {#what-travels}
 
-Every message is sealed end to end on the sending device with the recipient's key and signed by the sender, then carried by relays. A relay sees a sealed blob and a routing key; it cannot open it, alter it, or learn more than that a key is talking to it. A phone or computer talking to its own account does so the same way.
+Messages are encrypted end to end to the recipient and signed by the sender. Relays carry encrypted content and cannot read it. Your paired device also communicates with its Cloud account over an encrypted channel. For Cloud, the account host is an endpoint and holds the account’s keys and readable history.
+
+## What encryption does — and does not — hide {#privacy-boundaries}
+
+Parlons does not track your activity for analytics or advertising. That is different from a guarantee of zero information visible to anyone.
+
+- Relays can observe routing keys, connection information and traffic timing, even though they cannot read message contents.
+- Direct calls and private-file transfers can reveal your IP address to the other participants.
+- An unlocked device or a Cloud host operator can access the data stored there.
+- Payments are recorded on the public Minima blockchain. Their transaction records are not hidden by chat encryption.
+
+The [security and privacy guide](parlons.html#22-security-and-privacy) explains these boundaries.
 
 ## Children {#children}
 

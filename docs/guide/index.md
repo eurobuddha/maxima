@@ -167,6 +167,7 @@ To let someone add you, share your address from **Contacts**. Keep the whole add
 - **Calls:** in an Android one-to-one chat, tap **Voice call** or **Video call** and allow microphone/camera access when asked. Desktop does not carry call audio or video.
 - **Groups:** on Android open **Chats → New group**, name it, select contacts and tap **Create**.
 - **Notifications:** allow notifications and background operation in Android settings. Cloud additionally needs its account host to stay online.
+- **Payments:** in a wallet-enabled one-to-one chat, choose **Attach → Send payment**, select Minima or MxUSD and enter the amount. Check the recipient and amount before confirming. Payments settle on the public Minima blockchain; encrypted chat does not make them anonymous. Chat-only guest accounts do not offer payments. [Payment instructions](parlons.html#15-payments-minima-and-mxusd).
 
 ## Back up before you need it {#backups}
 

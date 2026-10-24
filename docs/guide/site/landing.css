@@ -62,3 +62,11 @@ footer.foot{margin-top:0;border-top:1px solid #454950}
 /* Cloud is a primary way to run Parlons and contribute to its network. */
 .choice-cloud{border-top:3px solid var(--orange)}
 .choice-cloud .text-action{font-size:13px}
+.privacy-points{display:flex;flex-wrap:wrap;gap:8px 18px;list-style:none;padding:0;margin:20px 0 0;font-size:13px;font-weight:750;color:var(--ink)}
+.privacy-points li::before{content:"✓";color:var(--blue);margin-right:7px}
+.network-promise{padding-block:42px;border-bottom:1px solid var(--line)}
+.promise-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}
+.promise-grid h2{font-size:21px;margin-bottom:12px}
+.promise-grid p{font-size:15px;color:var(--sub)}
+.payment-note{font-size:13px;color:var(--sub);max-width:95ch;margin-top:26px}
+@media(max-width:800px){.promise-grid{grid-template-columns:1fr;gap:26px}.network-promise{padding-block:34px}}

@@ -167,6 +167,7 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 - **通话：**Android 一对一聊天中点击 **Voice call（语音通话）**或 **Video call（视频通话）**，按提示允许麦克风和摄像头。桌面端不支持通话音视频。
 - **群组：**Android 上打开 **Chats → New group（新建群组）**，命名、选择联系人并点击 **Create（创建）**。
 - **通知：**在 Android 设置中允许通知和后台运行。Cloud 的账户主机也必须在线。
+- **支付：**在支持钱包的一对一聊天中选择 **Attach → Send payment（附件 → 发送支付）**，选择 Minima 或 MxUSD 并输入金额。确认前检查收款人和金额。支付结算在公开 Minima 区块链上，加密聊天不会使其匿名。仅聊天访客账户不提供支付。[支付说明](parlons.html#15-payments-minima-and-mxusd)。
 
 ## 提前做好备份 {#backups}
 
