@@ -4,7 +4,7 @@ Pick the guide for the way you want to use Parlons. Each takes you from the down
 
 <div class="cards">
 <a href="start-android.html"><b>Android · independent app</b><span>No account server to arrange. Your identity lives on this phone.</span></a>
-<a href="start-desktop.html"><b>Mac, Windows or Linux · desktop app</b><span>Chat on your computer with its own identity.</span></a>
+<a href="start-desktop.html"><b>Mac, Windows or Linux · desktop app</b><span>Run Cloud on your computer: full node, relay, paired devices and hosted friends.</span></a>
 <a href="start-node.html"><b>Parlons Cloud · your node, your devices, your friends</b><span>Run a full Minima node and relay. Pair your devices and host separate tenant accounts.</span></a>
 <a href="start-pair.html"><b>I have an invitation · Parlons Cloud</b><span>Connect your Android phone to an existing account.</span></a>
 <a href="start-host.html"><b>I want my own always-on account</b><span>Run the lighter Cloud server, then pair your phone.</span></a>
@@ -31,9 +31,22 @@ An iPhone app is **not available yet**. Android apps require Android 9 or newer.
 
 ## Parlons Desktop {#chat-on-your-computer}
 
-**Choose this if:** you want a chat app on your computer. This is a standalone identity on that computer. Installing it alongside the phone app does not automatically give them the same chats.
+**Choose this if:** you want your computer to be your Parlons Cloud. **minimaCore Desktop** and **minimaDesk** run a full Parlons Node with the same account services as a Cloud server: messages, calls, files, payments, paired devices and separate hosted accounts. Enable network contribution and port forwarding to provide its public relay service.
 
-### Install for your computer
+### Run Cloud on your desktop
+
+1. Install [minimaCore Desktop](https://github.com/eurobuddha/minimacore-desktop/releases/latest) or [minimaDesk](https://github.com/eurobuddha/minimaDesk/releases/latest) for your operating system. minimaDesk is also listed as **MinimaClassic Desktop** in the stores. You can find both through [eurobuddha](https://eurobuddha.com/).
+2. Complete the node setup and back up the seed. Use the **Parlons Node** kind and open the **Parlons** tab. Older installations may still use the classic node; follow the app's migration flow when switching an existing wallet.
+3. Enable **Contribute to the network** in the desktop app's node/network settings. In **Parlons → Node → Port forwarding**, read the external port, internal port and **Send to** LAN address. Forward that **TCP** port on your router to the address shown, and allow it through the computer's firewall. Use the displayed values, not a port copied from another app.
+4. Reserve that LAN address on your router and leave the computer awake and online. Check the panel for **Reached from the internet**. The public port serves Minima and the Maxima relay; the local account panel and admin RPC stay local. Pairing can work through other relays before forwarding, but accepting public relay traffic needs reachability.
+5. Open **Parlons → Devices**, set the admin pairing password if needed, and choose **New pairing code**. Install [Parlons Cloud on your phone](start-pair.html), scan the invitation and connect. Repeat with a fresh invitation for each of your devices. They share this computer's account and conversations.
+6. In **Devices → Hosted accounts**, enable hosting, create a separate account for your friend, then choose **Show invitation** or **Copy tenant invite**. Your friend pairs to that account. Built-in guest accounts provide chat, calls and files without your wallet or node controls; do not give friends your owner invitation.
+
+For hosting and backups, see the [Cloud manual](cloud.html). Calls in the desktop Parlons panel use its microphone/camera; allow access when prompted.
+
+### Alternative: standalone chat with MaximaNode {#standalone-chat}
+
+**MaximaNode {{DESKTOP_VERSION}}** is the separate standalone Parlons Desktop app. It can chat, share files and run a relay, but it is not the full desktop Cloud host described above. Choose minimaCore Desktop or minimaDesk for paired accounts and hosting friends.
 
 1. Download the matching installer:
    - **Mac, Apple silicon:** [MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}}). Open it and drag **MaximaNode** into Applications.
@@ -44,7 +57,7 @@ An iPhone app is **not available yet**. Android apps require Android 9 or newer.
 4. Open the **three dots** menu, enter **Your name** and click **Set**.
 5. Check **Network** for a connection, then add a contact below. On desktop, paste their address; there is no QR camera scanner.
 
-**Calls:** Desktop supports messaging and files, but does not carry voice or video call audio. Use one of the Android apps for calls. Keep Desktop running to stay connected; use the tray icon's **Quit** when you want it to stop.
+**Calls:** standalone MaximaNode supports messaging and files, but does not carry voice or video call audio. Use one of the Android apps for calls. Keep Desktop running to stay connected; use the tray icon's **Quit** when you want it to stop.
 
 For installation problems or moving an existing identity, use the [Parlons! manual](parlons.html).
 
@@ -164,7 +177,7 @@ To let someone add you, share your address from **Contacts**. Keep the whole add
 
 - **Messages:** open **Chats**, choose the conversation and type. A queued indicator means waiting; one tick means a relay has the message; two ticks mean the recipient's device confirmed it. A read indicator depends on read receipts being enabled.
 - **Photos and files:** open a chat and use **Attach**. On Android choose **Photo library** or **Private file**, select the item and send it. For Desktop's file-transfer options, see the [app manual](parlons.html).
-- **Calls:** in an Android one-to-one chat, tap **Voice call** or **Video call** and allow microphone/camera access when asked. Desktop does not carry call audio or video.
+- **Calls:** use **Voice call** or **Video call** in an Android chat or the Parlons panel inside minimaCore Desktop/minimaDesk, and allow microphone/camera access. The standalone MaximaNode chat app does not carry call audio or video.
 - **Groups:** on Android open **Chats → New group**, name it, select contacts and tap **Create**.
 - **Notifications:** allow notifications and background operation in Android settings. Cloud additionally needs its account host to stay online.
 - **Payments:** in a wallet-enabled one-to-one chat, choose **Attach → Send payment**, select Minima or MxUSD and enter the amount. Check the recipient and amount before confirming. Payments settle on the public Minima blockchain; encrypted chat does not make them anonymous. Chat-only guest accounts do not offer payments. [Payment instructions](parlons.html#15-payments-minima-and-mxusd).

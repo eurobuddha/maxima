@@ -4,7 +4,7 @@
 
 <div class="cards">
 <a href="start-android.html"><b>Android · 独立应用</b><span>无需安排账户服务器，身份保存在这部手机上。</span></a>
-<a href="start-desktop.html"><b>Mac、Windows 或 Linux · 桌面应用</b><span>在电脑上使用独立身份聊天。</span></a>
+<a href="start-desktop.html"><b>Mac、Windows 或 Linux · 桌面应用</b><span>在电脑运行 Cloud：完整节点、中继、多设备配对，以及为朋友托管账户。</span></a>
 <a href="start-node.html"><b>Parlons Cloud · 您的节点、设备和朋友</b><span>运行完整 Minima 节点和中继，配对设备，为朋友托管独立租户账户。</span></a>
 <a href="start-pair.html"><b>我已有邀请 · Parlons Cloud</b><span>将 Android 手机连接到已有账户。</span></a>
 <a href="start-host.html"><b>我想运行自己的常久在线账户</b><span>安装较轻量的 Cloud 服务器，再配对手机。</span></a>
@@ -31,9 +31,22 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 
 ## Parlons Desktop {#chat-on-your-computer}
 
-**适合您，如果：**您想在电脑上聊天。这是在该电脑上的独立身份，与手机同时安装不会自动共享聊天。
+**适合您，如果：**希望电脑成为自己的 Parlons Cloud。**minimaCore Desktop** 和 **minimaDesk** 运行完整 Parlons Node，与 Cloud 服务器提供相同账户服务：消息、通话、文件、支付、多设备配对和独立托管账户。启用网络贡献并转发端口，即可提供公共中继服务。
 
-### 为您的电脑安装
+### 在桌面电脑运行 Cloud
+
+1. 为您的操作系统安装 [minimaCore Desktop](https://github.com/eurobuddha/minimacore-desktop/releases/latest) 或 [minimaDesk](https://github.com/eurobuddha/minimaDesk/releases/latest)。minimaDesk 在商店中也称为 **MinimaClassic Desktop**。也可从 [eurobuddha](https://eurobuddha.com/) 找到它们。
+2. 完成节点设置并备份助记词。选择 **Parlons Node** 类型，打开 **Parlons** 标签页。旧安装可能仍使用经典节点；切换已有钱包时遵循应用的迁移流程。
+3. 在节点/网络设置中启用 **Contribute to the network（贡献网络）**。在 **Parlons → Node → Port forwarding** 查看外部端口、内部端口及 **Send to** 局域网地址。将路由器上的该 **TCP** 端口转发到显示的地址，并允许电脑防火墙通过。以应用显示值为准。
+4. 在路由器中保留此局域网地址，让电脑保持唤醒和在线。检查面板是否显示 **Reached from the internet**。公共端口同时服务 Minima 与 Maxima 中继；账户面板和管理 RPC 保持本地访问。配对可以先通过其他中继进行，但接收公共中继流量需要可达端口。
+5. 打开 **Parlons → Devices**，按需设置管理员配对密码，然后选择 **New pairing code**。在手机安装 [Parlons Cloud](start-pair.html)，扫描邀请并连接。每台设备使用新的邀请，共享这台电脑上的账户和对话。
+6. 在 **Devices → Hosted accounts** 启用托管，为朋友创建独立账户，选择 **Show invitation** 或 **Copy tenant invite**。朋友配对到该账户。内置访客可聊天、通话和传文件，但没有您的钱包或节点控制权；不要分享您的所有者邀请。
+
+托管和备份详见 [Cloud 手册](cloud.html)。桌面 Parlons 面板可使用麦克风和摄像头通话，请按提示允许访问。
+
+### 另一种选择：使用 MaximaNode 独立聊天 {#standalone-chat}
+
+**MaximaNode {{DESKTOP_VERSION}}** 是独立 Parlons Desktop 应用，可聊天、传文件和运行中继，并非上文的完整桌面 Cloud 主机。若需要配对账户和为朋友托管，请选择 minimaCore Desktop 或 minimaDesk。
 
 1. 下载匹配的安装程序：
    - **Apple 芯片 Mac：**[MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}})。打开后将 **MaximaNode** 拖到 Applications（应用程序）。
@@ -44,7 +57,7 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 4. 打开**三点菜单**，填写 **Your name**，点击 **Set**。
 5. 在 **Network** 中确认连接，然后按下方步骤添加联系人。桌面端粘贴地址，不支持摄像头扫描二维码。
 
-**通话：**桌面端支持消息和文件，但不传输语音或视频通话。请使用 Android 应用通话。保持 Desktop 运行以保持连接；要退出时使用托盘图标的 **Quit（退出）**。
+**通话：**独立 MaximaNode 支持消息和文件，但不传输语音或视频通话。请使用 Android 应用通话。保持 Desktop 运行以保持连接；要退出时使用托盘图标的 **Quit（退出）**。
 
 安装问题或迁移已有身份，请参阅 [Parlons! 手册](parlons.html)。
 
@@ -164,7 +177,7 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 
 - **消息：**在 **Chats（聊天）**中打开对话并输入。排队图标表示等待；一个勾表示中继收到；两个勾表示接收设备确认收到。已读标志取决于是否开启已读回执。
 - **照片和文件：**在聊天中选择 **Attach（附件）**。Android 可选 **Photo library（照片库）**或 **Private file（私密文件）**，选中后发送。桌面传输选项见[应用手册](parlons.html)。
-- **通话：**Android 一对一聊天中点击 **Voice call（语音通话）**或 **Video call（视频通话）**，按提示允许麦克风和摄像头。桌面端不支持通话音视频。
+- **通话：**在 Android 聊天或 minimaCore Desktop/minimaDesk 的 Parlons 面板中使用 **Voice call** 或 **Video call**，允许麦克风和摄像头访问。独立 MaximaNode 聊天应用不传输通话音视频。
 - **群组：**Android 上打开 **Chats → New group（新建群组）**，命名、选择联系人并点击 **Create（创建）**。
 - **通知：**在 Android 设置中允许通知和后台运行。Cloud 的账户主机也必须在线。
 - **支付：**在支持钱包的一对一聊天中选择 **Attach → Send payment（附件 → 发送支付）**，选择 Minima 或 MxUSD 并输入金额。确认前检查收款人和金额。支付结算在公开 Minima 区块链上，加密聊天不会使其匿名。仅聊天访客账户不提供支付。[支付说明](parlons.html#15-payments-minima-and-mxusd)。
