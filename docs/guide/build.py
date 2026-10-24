@@ -48,8 +48,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # (code, html lang, file suffix, name as the apps write it). English has no suffix.
 LANGS = [("en", "en", "", "English"), ("zh", "zh-Hans", ".zh", "简体中文"), ("ru", "ru", ".ru", "Русский"), ("uk", "uk", ".uk", "Українська")]
 STR = json.load(open(os.path.join(HERE, "i18n", "strings.json"), encoding="utf-8"))
-# Pages that exist in every language; anything else (the manuals, for now) is English only.
+# Pages that exist in every language. A manual joins once all its translations are in i18n/<lang>/manuals/.
 TRANSLATED = {"index.html", "guide/index.html", "guide/privacy.html"}
+MANUAL_SRC = {"parlons": "parlons.md", "cloud": "parlons-cloud-portal.md", "node": "parlons-node.md"}
+TRANSLATED |= {"guide/%s.html" % k for k, f in MANUAL_SRC.items()
+               if all(os.path.exists(os.path.join(HERE, "i18n", c, "manuals", f)) for c, _, _, _ in LANGS[1:])}
 
 
 def lsrc(lang, en_path, name):
@@ -74,11 +77,6 @@ PAGES = [
 MD_TO_PAGE = {"parlons.md": "parlons.html", "parlons-cloud-portal.md": "cloud.html", "parlons-node.md": "node.html",
               "index.md": "index.html", "privacy.md": "privacy.html"}
 MD_TITLE = {"parlons.md": "Parlons! manual", "parlons-cloud-portal.md": "Parlons Cloud manual", "parlons-node.md": "Parlons Node manual"}
-BLURB = {
-    "parlons": "Every feature of the Android app and Parlons Desktop, step by step.",
-    "cloud": "Using an always-on account from your phone, and hosting accounts for yourself and others.",
-    "node": "Running a Parlons Node: a full Minima node, a relay and your account in one process.",
-}
 
 # old guide page -> (manual page, a phrase from the target heading); resolved against real anchors
 REDIRECTS = {
@@ -106,7 +104,8 @@ CODE = re.compile(r"(`+)(.+?)\1")
 AUTOLINK = re.compile(r"&lt;(https?://[^\s&]+(?:&amp;[^\s&]+)*)&gt;")
 LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
-ITALIC = re.compile(r"(?<![\w*])\*(?![\s*])([^*\n]+?)(?<![\s*])\*(?![\w*])")
+# ASCII word chars only, so an italic can sit right against Chinese text
+ITALIC = re.compile(r"(?<![A-Za-z0-9_*])\*(?![\s*])([^*\n]+?)(?<![\s*])\*(?![A-Za-z0-9_*])")
 
 
 def href(url):
@@ -174,9 +173,11 @@ def split_row(line):
 
 
 class Doc:
-    def __init__(self):
+    def __init__(self, ids=None):
         self.used = set()
         self.toc = []        # (level, id, text)
+        self.ids = []        # every heading id, in order
+        self.given = list(ids) if ids is not None else None   # a translation reuses the English ids
 
 
 def render(lines, doc, top=False):
@@ -219,6 +220,11 @@ def render(lines, doc, top=False):
                 text, hid = fixed.group(1), fixed.group(2); doc.used.add(hid)
             else:
                 hid = slug(text, doc.used)
+            if doc.given is not None:
+                if not doc.given:
+                    raise SystemExit("translation has more headings than the English: %r" % text)
+                hid = doc.given.pop(0)
+            doc.ids.append(hid)
             if top and level <= 2:
                 doc.toc.append((level, hid, text))
             num = re.match(r"^(\d+(?:\.\d+)*\.?)\s+(.*)$", text) if level == 2 else None
@@ -309,7 +315,7 @@ def drop_contents(lines):
     """The manuals carry their own '## Contents' list; the site shows a contents rail instead."""
     out, skip = [], False
     for ln in lines:
-        if re.match(r"^## +(Contents|Table of contents)\s*$", ln.strip(), re.I):
+        if re.match(r"^## +(Contents|Table of contents|目录|Содержание|Зміст)\s*$", ln.strip(), re.I):
             skip = True; continue
         if skip and re.match(r"^#{1,2} ", ln):
             skip = False
@@ -356,8 +362,8 @@ if(l==='zh'||l==='ru'||l==='uk')location.replace('index.'+l+'.html');})();
 
 def bar(root, current, lang="en", rel=None):
     t = STR[lang]
-    links = [(lpath("guide/index.html", lang), t["nav_start"], "index", ""), ("guide/parlons.html", "Parlons!", "parlons", ""),
-             ("guide/cloud.html", "Cloud", "cloud", ""), ("guide/node.html", "Node", "node", ""),
+    links = [(lpath("guide/index.html", lang), t["nav_start"], "index", ""), (lpath("guide/parlons.html", lang), "Parlons!", "parlons", ""),
+             (lpath("guide/cloud.html", lang), "Cloud", "cloud", ""), (lpath("guide/node.html", lang), "Node", "node", ""),
              (LINKS["REPO"], t["nav_source"], "", "opt")]
     nav = "".join('<a%s href="%s"%s>%s</a>' % (
         (' class="%s"' % " ".join(c for c in (cls, "on" if key == current else "") if c)) if (cls or key == current) else "",
@@ -375,12 +381,12 @@ def bar(root, current, lang="en", rel=None):
 
 def foot(root, lang="en"):
     t = STR[lang]
-    return ('<footer class="foot"><div class="wrap"><nav aria-label="Footer"><a href="%s%s">%s</a><a href="%sguide/parlons.html">%s</a>'
-            '<a href="%sguide/cloud.html">%s</a><a href="%sguide/node.html">%s</a><a href="%s%s">%s</a>'
+    return ('<footer class="foot"><div class="wrap"><nav aria-label="Footer"><a href="%s%s">%s</a><a href="%s%s">%s</a>'
+            '<a href="%s%s">%s</a><a href="%s%s">%s</a><a href="%s%s">%s</a>'
             '<a href="%s" target="_blank" rel="noopener">%s</a><a href="%s" target="_blank" rel="noopener">%s</a>'
             '<a href="%s" target="_blank" rel="noopener">%s</a></nav>'
-            '<p>%s</p></div></footer>\n%s' % (root, lpath("guide/index.html", lang), t["nav_start"], root, t["foot_parlons"],
-                                               root, t["foot_cloud"], root, t["foot_node"], root, lpath("guide/privacy.html", lang), t["foot_privacy"],
+            '<p>%s</p></div></footer>\n%s' % (root, lpath("guide/index.html", lang), t["nav_start"], root, lpath("guide/parlons.html", lang), t["foot_parlons"],
+                                               root, lpath("guide/cloud.html", lang), t["foot_cloud"], root, lpath("guide/node.html", lang), t["foot_node"], root, lpath("guide/privacy.html", lang), t["foot_privacy"],
                                                LINKS["REPO"], t["nav_source"], LINKS["RELEASES"], t["foot_releases"], LINKS["ISSUES"], t["foot_report"],
                                                t["foot_text"], LANG_JS))
 
@@ -394,13 +400,18 @@ Object.keys(map).forEach(function(id){var h=document.getElementById(id);if(h)io.
 </script>"""
 
 
-def manual_page(name, md):
+def manual_page(name, md, lang="en", ids=None):
+    t = STR[lang]
     lines = md.split("\n")
     title_line = next(l for l in lines if l.startswith("# "))
     title = title_line[2:].strip()
     body_lines = lines[lines.index(title_line) + 1:]
-    doc = Doc()
+    doc = Doc(ids)
     body = render(drop_contents(body_lines), doc, top=True)
+    if doc.given:
+        raise SystemExit("%s (%s): translation has %d fewer headings than the English" % (name, lang, len(doc.given)))
+    if lang != "en":   # links to other translated pages stay in this language
+        body = re.sub(r'href="(index|privacy|parlons|cloud|node)\.html', lambda m: 'href="%s' % lpath("guide/%s.html" % m.group(1), lang)[6:], body)
     toc_items = []
     for level, hid, text in doc.toc:
         if level == 1:
@@ -411,18 +422,21 @@ def manual_page(name, md):
     mobile = "".join(x for x in toc_items if 'class="part"' not in x)
     order = [p[0] for p in PAGES if p[3] == "manual"]
     idx = order.index(name)
-    titles = {p[0]: p[2] for p in PAGES}
+    titles = {k: t["foot_" + k] for k in order}
+    pg = lambda k: lpath("guide/%s.html" % k, lang)[6:]
     prev_ = order[idx - 1] if idx > 0 else None
     next_ = order[idx + 1] if idx + 1 < len(order) else None
-    pager = '<nav class="pager" aria-label="Manuals">%s%s</nav>' % (
-        '<a href="%s.html"><span>Previous manual</span>%s</a>' % (prev_, titles[prev_]) if prev_ else '<a href="index.html"><span>Back to</span>Get started</a>',
-        '<a class="next" href="%s.html"><span>Next manual</span>%s</a>' % (next_, titles[next_]) if next_ else '<a class="next" href="privacy.html"><span>Read</span>Privacy</a>')
-    page = (head(title + " · Parlons!", BLURB[name], "../") + bar("../", name) +
-            '<div class="wrap doc"><aside class="toc" aria-label="Contents"><span class="label">Contents</span><ol>%s</ol></aside>'
-            '<main class="prose" id="top"><div class="doc-head"><span class="label">Manual</span><h1>%s</h1><p class="lede">%s</p></div>'
-            '<details class="toc-m"><summary>Contents</summary><ol>%s</ol></details>%s%s</main></div>'
-            '<a class="top-link" href="#top">Top ↑</a>' % (toc, inline(title), BLURB[name], mobile, body, pager)
-            + foot("../") + TOC_JS + "</body></html>\n")
+    pager = '<nav class="pager" aria-label="%s">%s%s</nav>' % (t["manuals"],
+        '<a href="%s"><span>%s</span>%s</a>' % (pg(prev_), t["prev_manual"], titles[prev_]) if prev_ else '<a href="%s"><span>%s</span>%s</a>' % (pg("index"), t["back_to"], t["nav_start"]),
+        '<a class="next" href="%s"><span>%s</span>%s</a>' % (pg(next_), t["next_manual"], titles[next_]) if next_ else '<a class="next" href="%s"><span>%s</span>%s</a>' % (pg("privacy"), t["read"], t["foot_privacy"]))
+    rel = "guide/%s.html" % name
+    page = (head(title + " · Parlons!", t["blurb_" + name], "../", lang, rel) + bar("../", name, lang, rel) +
+            '<div class="wrap doc"><aside class="toc" aria-label="%s"><span class="label">%s</span><ol>%s</ol></aside>'
+            '<main class="prose" id="top"><div class="doc-head"><span class="label">%s</span><h1>%s</h1><p class="lede">%s</p></div>'
+            '<details class="toc-m"><summary>%s</summary><ol>%s</ol></details>%s%s</main></div>'
+            '<a class="top-link" href="#top">%s</a>' % (t["contents"], t["contents"], toc, t["manual"], inline(title), t["blurb_" + name],
+                                                         t["contents"], mobile, body, pager, t["top"])
+            + foot("../", lang) + TOC_JS + "</body></html>\n")
     return page, doc
 
 
@@ -468,11 +482,16 @@ def main():
         with open(os.path.join(gdir, name + ".html"), "w", encoding="utf-8") as f:
             f.write(page)
         print("wrote", os.path.join(gdir, name + ".html"))
-        if kind == "guide":
+        if "guide/%s.html" % name in TRANSLATED:
             for lang, _, suf, _ in LANGS[1:]:
-                md = expand(open(lsrc(lang, src, name + ".md"), encoding="utf-8").read())
+                if kind == "guide":
+                    md = expand(open(lsrc(lang, src, name + ".md"), encoding="utf-8").read())
+                    tpage = guide_page(name, md, lang)[0]
+                else:
+                    md = expand(open(os.path.join(HERE, "i18n", lang, "manuals", MANUAL_SRC[name]), encoding="utf-8").read())
+                    tpage = manual_page(name, md, lang, doc.ids)[0]
                 with open(os.path.join(gdir, name + suf + ".html"), "w", encoding="utf-8") as f:
-                    f.write(guide_page(name, md, lang)[0])
+                    f.write(tpage)
 
     for old, target in REDIRECTS.items():
         if target is None:
