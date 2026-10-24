@@ -16,6 +16,7 @@ against the real heading anchors at build time, so a renamed heading fails the b
 breaking a link.
 """
 import html
+import hashlib
 import os
 import json
 import re
@@ -354,6 +355,13 @@ def expand(text):
 
 # ---------------------------------------------------------------- page chrome
 
+def stylesheet(name, root=""):
+    """A changed stylesheet gets a new URL even when the host caches static assets."""
+    with open(os.path.join(HERE, "site", name), "rb") as f:
+        version = hashlib.sha256(f.read()).hexdigest()[:12]
+    return "%sassets/%s?v=%s" % (root, name, version)
+
+
 def head(title, desc, root, lang="en", rel=None):
     hl = dict((c, h) for c, h, _, _ in LANGS)[lang]
     alts = "".join('<link rel="alternate" hreflang="%s" href="%s%s">' % (h, root, lpath(rel, c)) for c, h, _, _ in LANGS) if rel in TRANSLATED else ""
@@ -362,8 +370,8 @@ def head(title, desc, root, lang="en", rel=None):
             "<title>%s</title><meta name=\"description\" content=\"%s\">"
             "<meta property=\"og:title\" content=\"%s\"><meta property=\"og:description\" content=\"%s\">"
             "<meta name=\"theme-color\" content=\"#2A2E33\"><link rel=\"icon\" href=\"%s\">%s%s"
-            "<link rel=\"stylesheet\" href=\"%sassets/site.css\"></head><body>\n"
-            % (hl, html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), FAVICON, FONTS, alts, root))
+            "<link rel=\"stylesheet\" href=\"%s\"></head><body>\n"
+            % (hl, html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), FAVICON, FONTS, alts, stylesheet("site.css", root)))
 
 
 # Remembers an explicit language choice; the English home page uses it (or the browser's
@@ -556,7 +564,7 @@ def main():
         landing = open(lsrc(lang, os.path.join(HERE, "site", "landing.html"), "landing.html"), encoding="utf-8").read()
         landing = landing.replace("{{{MARK}}}", MARK).replace("{{{HEAD}}}", head(
             STR[lang]["home_title"], STR[lang]["home_desc"], "", lang, "index.html").replace(
-            "</head>", '<link rel="stylesheet" href="assets/landing.css">' + (HOME_JS if lang == "en" else "") + "</head>")
+            "</head>", '<link rel="stylesheet" href="%s">' % stylesheet("landing.css") + (HOME_JS if lang == "en" else "") + "</head>")
         ).replace("{{{BAR}}}", bar("", "home", lang, "index.html")).replace("{{{FOOT}}}", foot("", lang))
         landing = localize_links(landing, lang)
         landing = expand(landing)
@@ -590,6 +598,7 @@ def check_links(out_dir):
             if t.startswith(("http:", "https:", "mailto:", "data:", "/")):
                 continue
             file_, _, frag = t.partition("#")
+            file_ = file_.partition("?")[0]
             dest = os.path.normpath(os.path.join(os.path.dirname(path), file_)) if file_ else os.path.normpath(path)
             if not os.path.exists(dest):
                 bad.append("%s -> %s (no such file)" % (os.path.relpath(path, out_dir), t))
