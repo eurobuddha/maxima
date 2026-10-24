@@ -1,0 +1,87 @@
+{{{HEAD}}}
+{{{BAR}}}
+<main>
+<section class="hero"><div class="wrap">
+  <div>
+    <span class="eyebrow"><i></i>Parlons · 基于 Maxima 和 Minima 区块链</span>
+    <h1>Parlons<b>!</b></h1>
+    <p class="tag serif">一起聊天，中间没有任何人。</p>
+    <p class="stance"><strong>私密聊天，中间没有任何公司。</strong>你的消息在你的设备上加密封存，再由像你一样的普通人运行的中继传送。不用注册，不用手机号，也不用在任何地方开账户。</p>
+    <div class="cta"><a class="btn btn-go" href="#start">开始使用</a><a class="btn btn-line" href="guide/index.html">分步指南</a></div>
+    <p class="fine">Android · Mac · Windows · Linux · Raspberry Pi</p>
+  </div>
+  <div class="chat" aria-label="一段 Parlons 对话示例">
+    <div class="top"><span class="av">C</span><span class="who"><b>Camille</b><span>在线 · 3 个中继</span></span><span class="lock">端到端加密</span></div>
+    <div class="body">
+      <span class="day">今天</span>
+      <div class="msg in">je parle<small>09:41</small></div>
+      <div class="msg out">tu parles<small>09:41 <span class="t">✓</span></small></div>
+      <div class="msg in">nous parlons. 不用手机号，也不用注册？<small>09:42</small></div>
+      <div class="msg out">都不用。你扫了我的二维码，我回应了你，这样就握手成功了。<small>09:42 <span class="t">✓✓</span></small></div>
+      <div class="msg out pay"><span class="amt">25 MxUSD</span><span class="tok">在聊天里发送，走同一条加密通道</span><small>09:43 <span class="t read">✓✓</span></small></div>
+    </div>
+    <div class="compose"><span>消息</span><i aria-hidden="true">↑</i></div>
+    <div class="legend" aria-label="勾号的含义"><div><b>⋯</b>已排队</div><div><b>✓</b>中继已收到</div><div><b>✓✓</b>对方设备已收到</div><div><b class="read">✓✓</b>已读</div></div>
+  </div>
+</div></section>
+
+<section class="sec" id="start" style="padding-top:24px"><div class="wrap">
+  <div class="lead"><span class="label">开始使用</span><h2>选一种方式，按步骤操作。</h2>
+  <p>每种只要几分钟。你的 24 个词就是你的身份：把它们写在纸上，妥善保管。</p></div>
+  <div class="three">
+    <div class="way"><h3>在 Android 手机上聊天</h3><p class="for">需要 Android 9 或更高版本。</p>
+      <ol>
+        <li>在手机上下载应用：<div class="dl"><a href="{{ANDROID_APK}}">parlons-{{ANDROID_VERSION}}.apk</a></div></li>
+        <li>打开下载的文件，点 <b>安装</b>。如果 Android 询问，请允许从浏览器安装应用。</li>
+        <li>打开 Parlons，点 <b>创建新身份</b>。</li>
+        <li>按顺序把 24 个词写在纸上。然后点 <b>我已保存</b>。</li>
+        <li>允许通知，这样有新消息时你就能看到。</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-android-phone">查看详细说明 →</a></div>
+    <div class="way"><h3>在电脑上聊天</h3><p class="for">Mac（Apple 芯片）、Windows 10/11 或 Linux。</p>
+      <ol>
+        <li>下载 Parlons Desktop：<div class="dl"><a href="{{DESKTOP_DMG}}">Mac</a><a href="{{DESKTOP_MSI}}">Windows</a><a href="{{DESKTOP_DEB}}">Linux</a></div></li>
+        <li>安装。在 Mac 上，把 <b>MaximaNode</b> 拖进“应用程序”文件夹。在 Windows 上，如果出现蓝色提示框，点 <b>更多信息</b>，再点 <b>仍要运行</b>。</li>
+        <li>打开 <b>MaximaNode</b>。</li>
+        <li>把它显示的 24 个词抄下来。</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-computer">查看详细说明 →</a></div>
+    <div class="way hot"><h3>一个账户，所有设备通用</h3><p class="for">每部手机和每台电脑上都是同样的聊天。需要一台一直开着的 Linux 机器：一台服务器或一台 Raspberry Pi。</p>
+      <ol>
+        <li>在 Linux 机器上粘贴：<pre>curl -fsSL {{NODE_INSTALL_SH}} | bash</pre></li>
+        <li>提示时，设置一个管理员密码。再次提示时再输入一遍，屏幕上就会出现一个二维码。</li>
+        <li>在 Android 手机上安装 Parlons Cloud：<div class="dl"><a href="{{PORTAL_APK}}">parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk</a></div></li>
+        <li>在 Parlons Cloud 里点 <b>扫描配对二维码</b>，扫描那个二维码，然后点 <b>连接并配对</b>。</li>
+      </ol>
+      <a class="more" href="guide/index.html#one-account-on-all-your-devices">查看详细说明 →</a></div>
+  </div>
+  <p class="note2"><b>然后添加好友：</b>打开 <b>联系人</b>，点 <b>+ 添加</b>（在电脑上点 <b>添加联系人</b>），扫描或粘贴对方的地址，再点 <b>发送介绍</b>。对方设备回应后，对方就会出现在列表里。</p>
+</div></section>
+
+<section class="sec" id="see" style="background:var(--surface-2)"><div class="wrap">
+  <div class="lead"><span class="label">看看效果</span><h2>应用的真实截图。</h2></div>
+  <div class="gallery">
+    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="Camille 和 Léo 之间的一段 Parlons! 对话，带有灰色勾号和双勾送达标记" width="600" height="1333" loading="lazy"></div><figcaption><b>一段对话</b>两个勾：对方自己的设备已经收到。</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="“联系人”页面：你的 Parlons 地址，带有“分享我的地址”和“扫描”按钮，还有一个在线的联系人" width="600" height="1333" loading="lazy"></div><figcaption><b>联系人</b>用二维码分享你的地址。</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-pair.png" alt="Android 版 Parlons Cloud，准备配对：账户地址、“扫描配对二维码”、配对码和“连接并配对”" width="600" height="1333" loading="lazy"></div><figcaption><b>配对手机</b>扫描你节点上显示的二维码。</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Parlons Cloud 的“节点”页面：持续运行并在线、运行时间、已连接三个中继，以及永久地址" width="600" height="1333" loading="lazy"></div><figcaption><b>你的账户</b>一直在线，同时连着多个中继。</figcaption></figure>
+  </div>
+</div></section>
+
+<section class="sec" id="manuals"><div class="wrap">
+  <div class="lead"><span class="label">使用手册</span><h2>想了解更多？每个功能都有分步说明。</h2></div>
+  <div class="manuals" style="margin-top:30px">
+    <a class="manual" href="guide/parlons.html"><span class="label">应用</span><h3>Parlons! 手册</h3><p>Android 和电脑版上的联系人、聊天、群组、照片、通话、付款和备份。</p><span class="go">打开 →</span></a>
+    <a class="manual" href="guide/cloud.html"><span class="label">你的手机和账户</span><h3>Parlons Cloud 手册</h3><p>配对手机、邀请设备和好友，以及托管账户。</p><span class="go">打开 →</span></a>
+    <a class="manual" href="guide/node.html"><span class="label">你的服务器</span><h3>Parlons Node 手册</h3><p>安装、设置和更新节点。</p><span class="go">打开 →</span></a>
+  </div>
+</div></section>
+
+<section class="close"><div class="wrap" style="display:grid;gap:16px;justify-items:center">
+  <p class="serif" style="font-size:28px;color:var(--sub)">je parle, tu parles,</p>
+  <h2>nous parlons<span style="color:var(--orange)">!</span></h2>
+  <p>安装应用，或者运行你自己的账户。无论哪种方式，你说的话都只属于你。</p>
+  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="#start">开始使用</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">所有版本</a></div>
+</div></section>
+</main>
+{{{FOOT}}}</body></html>

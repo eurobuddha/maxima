@@ -10,7 +10,7 @@ Private chat with no company in the middle. No sign-up, no phone number. Pick wh
 
 > **Your 24 words are your identity and a wallet.** Write them on paper when they are shown. Never photograph them. Anyone who has them is you.
 
-## Chat on your Android phone
+## Chat on your Android phone {#chat-on-your-android-phone}
 
 You need Android 9 or newer, and a pen and paper.
 
@@ -24,7 +24,7 @@ You need Android 9 or newer, and a pen and paper.
 
 Now [add a friend](#add-a-friend).
 
-## Chat on your computer
+## Chat on your computer {#chat-on-your-computer}
 
 1. Download Parlons Desktop for your computer:
    - Mac with Apple silicon: [MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}})
@@ -40,7 +40,7 @@ Now [add a friend](#add-a-friend).
 
 Now [add a friend](#add-a-friend).
 
-## One account on all your devices
+## One account on all your devices {#one-account-on-all-your-devices}
 
 Your account runs on a Linux machine that stays on, like a small server or a Raspberry Pi with a 64-bit system. Your phones and computers connect to it, so you get the same chats on every device, and messages wait while a phone is off.
 
@@ -71,7 +71,7 @@ The program is **Parlons Node**: your account, a relay that helps carry the netw
 - Back up your node's 24 words: [how to back up the seed](node.html#20-seeds-identity-and-backups).
 - Using a Mac or Windows PC instead of Linux? Run the lighter account-only program, [Parlons Cloud](cloud.html#19-one-account-on-your-own-machine-the-one-line-installers).
 
-## Add a friend
+## Add a friend {#add-a-friend}
 
 Adding someone is a handshake: you introduce yourself, and they appear when their device answers.
 
@@ -82,7 +82,7 @@ Adding someone is a handshake: you introduce yourself, and they appear when thei
 
 To give someone your address: open **Contacts** and tap **Share my address**. They can scan the QR code, or you can send them the address.
 
-## Downloads
+## Downloads {#downloads}
 
 Everything is on the [releases page]({{RELEASES}}), with checksums.
 
@@ -95,6 +95,6 @@ Everything is on the [releases page]({{RELEASES}}), with checksums.
 | Android phone, connecting to your account | [parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk]({{PORTAL_APK}}) |
 | Linux server or Raspberry Pi | `curl -fsSL {{NODE_INSTALL_SH}} \| bash` |
 
-## Need more?
+## Need more? {#need-more}
 
 Every feature, step by step: the [Parlons! manual](parlons.html) (the apps), the [Parlons Cloud manual](cloud.html) (your phone and account) and the [Parlons Node manual](node.html) (your server). Something wrong? Each manual ends with troubleshooting, or ask on the [issue tracker]({{ISSUES}}).

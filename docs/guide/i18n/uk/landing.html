@@ -1,0 +1,87 @@
+{{{HEAD}}}
+{{{BAR}}}
+<main>
+<section class="hero"><div class="wrap">
+  <div>
+    <span class="eyebrow"><i></i>Parlons · на Maxima і блокчейні Minima</span>
+    <h1>Parlons<b>!</b></h1>
+    <p class="tag serif">Поговорімо. Без посередників.</p>
+    <p class="stance"><strong>Приватний чат без компанії посередині.</strong> Ваші слова шифруються на вашому пристрої. Їх передають ретранслятори, які запускають такі самі люди, як ви. Без реєстрації, без номера телефону, без облікового запису в будь-кого.</p>
+    <div class="cta"><a class="btn btn-go" href="#start">Почати</a><a class="btn btn-line" href="guide/index.html">Покрокова інструкція</a></div>
+    <p class="fine">Android · Mac · Windows · Linux · Raspberry Pi</p>
+  </div>
+  <div class="chat" aria-label="Приклад розмови в Parlons">
+    <div class="top"><span class="av">C</span><span class="who"><b>Camille</b><span>у мережі · 3 ретранслятори</span></span><span class="lock">Наскрізне шифрування</span></div>
+    <div class="body">
+      <span class="day">Сьогодні</span>
+      <div class="msg in">je parle<small>09:41</small></div>
+      <div class="msg out">tu parles<small>09:41 <span class="t">✓</span></small></div>
+      <div class="msg in">nous parlons. Без номера, без реєстрації?<small>09:42</small></div>
+      <div class="msg out">Жодних. Ти додала мій QR-код, я відповів. Оце й було знайомство.<small>09:42 <span class="t">✓✓</span></small></div>
+      <div class="msg out pay"><span class="amt">25 MxUSD</span><span class="tok">Надіслано в чаті, тим самим захищеним шляхом</span><small>09:43 <span class="t read">✓✓</span></small></div>
+    </div>
+    <div class="compose"><span>Повідомлення</span><i aria-hidden="true">↑</i></div>
+    <div class="legend" aria-label="Що означають позначки"><div><b>⋯</b>у черзі</div><div><b>✓</b>отримав ретранслятор</div><div><b>✓✓</b>отримав пристрій співрозмовника</div><div><b class="read">✓✓</b>прочитано</div></div>
+  </div>
+</div></section>
+
+<section class="sec" id="start" style="padding-top:24px"><div class="wrap">
+  <div class="lead"><span class="label">Початок</span><h2>Виберіть варіант. Виконайте кроки.</h2>
+  <p>Кожен займає кілька хвилин. Ваші 24 слова — це ваша ідентичність. Запишіть їх на папері й зберігайте в надійному місці.</p></div>
+  <div class="three">
+    <div class="way"><h3>Чат на телефоні Android</h3><p class="for">Android 9 або новіший.</p>
+      <ol>
+        <li>Завантажте застосунок на телефон:<div class="dl"><a href="{{ANDROID_APK}}">parlons-{{ANDROID_VERSION}}.apk</a></div></li>
+        <li>Відкрийте завантажений файл і торкніться <b>Встановити</b>. Якщо Android запитає, дозвольте встановлення з браузера.</li>
+        <li>Відкрийте Parlons і торкніться <b>Створити нову ідентичність</b>.</li>
+        <li>Запишіть 24 слова на папері, по порядку. Торкніться <b>Я їх зберіг</b>.</li>
+        <li>Дозвольте сповіщення, щоб бачити нові повідомлення.</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-android-phone">Докладніше →</a></div>
+    <div class="way"><h3>Чат на комп'ютері</h3><p class="for">Mac (Apple silicon), Windows 10/11 або Linux.</p>
+      <ol>
+        <li>Завантажте Parlons Desktop:<div class="dl"><a href="{{DESKTOP_DMG}}">Mac</a><a href="{{DESKTOP_MSI}}">Windows</a><a href="{{DESKTOP_DEB}}">Linux</a></div></li>
+        <li>Встановіть його. На Mac перетягніть <b>MaximaNode</b> у папку «Програми». У Windows, якщо з'явиться синє вікно, натисніть <b>Докладніше</b>, а потім <b>Усе одно запустити</b>.</li>
+        <li>Відкрийте <b>MaximaNode</b>.</li>
+        <li>Запишіть 24 слова, які він покаже.</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-computer">Докладніше →</a></div>
+    <div class="way hot"><h3>Один обліковий запис на всіх ваших пристроях</h3><p class="for">Ті самі чати на кожному телефоні й комп'ютері. Потрібен комп'ютер з Linux, який завжди ввімкнений: сервер або Raspberry Pi.</p>
+      <ol>
+        <li>На комп'ютері з Linux вставте:<pre>curl -fsSL {{NODE_INSTALL_SH}} | bash</pre></li>
+        <li>Коли з'явиться запит, придумайте пароль адміністратора. Введіть його ще раз, коли попросять, і з'явиться QR-код.</li>
+        <li>Встановіть Parlons Cloud на телефон Android:<div class="dl"><a href="{{PORTAL_APK}}">parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk</a></div></li>
+        <li>У Parlons Cloud торкніться <b>Сканувати QR-код під'єднання</b>, відскануйте код, а потім торкніться <b>Підключитися й під'єднати</b>.</li>
+      </ol>
+      <a class="more" href="guide/index.html#one-account-on-all-your-devices">Докладніше →</a></div>
+  </div>
+  <p class="note2"><b>Потім додайте друга:</b> відкрийте <b>Контакти</b>, торкніться <b>+ Додати</b> (на комп'ютері — <b>Додати контакт</b>), відскануйте або вставте його адресу й торкніться <b>Представитися</b>. Друг з'явиться у списку, коли його пристрій відповість.</p>
+</div></section>
+
+<section class="sec" id="see" style="background:var(--surface-2)"><div class="wrap">
+  <div class="lead"><span class="label">Подивіться</span><h2>Справжні екрани застосунків.</h2></div>
+  <div class="gallery">
+    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="Розмова в Parlons! між Camille і Léo, з сірими та подвійними позначками доставки" width="600" height="1333" loading="lazy"></div><figcaption><b>Розмова</b>Дві позначки: повідомлення вже на пристрої співрозмовника.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="Вкладка «Контакти»: ваша адреса Parlons, кнопки «Поділитися моєю адресою» і «Сканувати», та один контакт у мережі" width="600" height="1333" loading="lazy"></div><figcaption><b>Контакти</b>Поділіться своєю адресою як QR-кодом.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-pair.png" alt="Parlons Cloud для Android, готовий до під'єднання: адреса облікового запису, «Сканувати QR-код під'єднання», код під'єднання і «Підключитися й під'єднати»" width="600" height="1333" loading="lazy"></div><figcaption><b>Під'єднання телефона</b>Відскануйте QR-код зі свого вузла.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Сторінка «Вузол» у Parlons Cloud: завжди ввімкнено і в мережі, час роботи, три під'єднані ретранслятори та постійна адреса" width="600" height="1333" loading="lazy"></div><figcaption><b>Ваш обліковий запис</b>Завжди ввімкнений, на кількох ретрансляторах.</figcaption></figure>
+  </div>
+</div></section>
+
+<section class="sec" id="manuals"><div class="wrap">
+  <div class="lead"><span class="label">Посібники</span><h2>Потрібно більше? Усі функції, крок за кроком.</h2></div>
+  <div class="manuals" style="margin-top:30px">
+    <a class="manual" href="guide/parlons.html"><span class="label">Застосунки</span><h3>Посібник Parlons!</h3><p>Контакти, чати, групи, фото, дзвінки, платежі й резервні копії на Android і Desktop.</p><span class="go">Відкрити →</span></a>
+    <a class="manual" href="guide/cloud.html"><span class="label">Ваш телефон і обліковий запис</span><h3>Посібник Parlons Cloud</h3><p>Під'єднання телефонів, запрошення пристроїв і друзів, розміщення облікових записів.</p><span class="go">Відкрити →</span></a>
+    <a class="manual" href="guide/node.html"><span class="label">Ваш сервер</span><h3>Посібник Parlons Node</h3><p>Встановлення, налаштування й оновлення вузла.</p><span class="go">Відкрити →</span></a>
+  </div>
+</div></section>
+
+<section class="close"><div class="wrap" style="display:grid;gap:16px;justify-items:center">
+  <p class="serif" style="font-size:28px;color:var(--sub)">je parle, tu parles,</p>
+  <h2>nous parlons<span style="color:var(--orange)">!</span></h2>
+  <p>Встановіть застосунок або запустіть власний обліковий запис. У будь-якому разі ваші слова залишаються вашими.</p>
+  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="#start">Почати</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">Усі випуски</a></div>
+</div></section>
+</main>
+{{{FOOT}}}</body></html>

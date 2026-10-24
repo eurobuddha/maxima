@@ -1,0 +1,46 @@
+{
+  "en": {
+    "lang": "Language", "tagline": "a conversation with no center",
+    "nav_start": "Get started", "nav_source": "Source",
+    "foot_parlons": "Parlons! manual", "foot_cloud": "Cloud manual", "foot_node": "Node manual",
+    "foot_privacy": "Privacy", "foot_releases": "Releases", "foot_report": "Report a problem",
+    "foot_text": "Parlons! is private chat on Maxima and the Minima blockchain. Open source, community-run, no account with anyone. The authors collect nothing.",
+    "home_title": "Parlons! · a conversation with no center",
+    "home_desc": "Private chat with no company in the middle. No sign-up, no phone number. Sealed on your device, carried by relays people like you run.",
+    "desc_index": "Get Parlons on your phone or computer, or run your own always-on account.",
+    "desc_privacy": "What Parlons collects (nothing), and where your data lives."
+  },
+  "zh": {
+    "lang": "语言", "tagline": "一场没有中心的对话",
+    "nav_start": "开始使用", "nav_source": "源代码",
+    "foot_parlons": "Parlons! 手册（英文）", "foot_cloud": "Cloud 手册（英文）", "foot_node": "Node 手册（英文）",
+    "foot_privacy": "隐私", "foot_releases": "版本发布", "foot_report": "报告问题",
+    "foot_text": "Parlons! 是基于 Maxima 和 Minima 区块链的私密聊天。开源，由社区运行，无需在任何人那里注册账户。作者不收集任何数据。",
+    "home_title": "Parlons! · 一场没有中心的对话",
+    "home_desc": "没有公司居中的私密聊天。无需注册，无需手机号码。在您的设备上加密，由像您一样的人运行的中继传递。",
+    "desc_index": "在手机或电脑上使用 Parlons，或运行您自己的始终在线账户。",
+    "desc_privacy": "Parlons 收集什么（什么都不收集），以及您的数据存放在哪里。"
+  },
+  "ru": {
+    "lang": "Язык", "tagline": "разговор без центра",
+    "nav_start": "Начать", "nav_source": "Исходный код",
+    "foot_parlons": "Руководство Parlons! (англ.)", "foot_cloud": "Руководство Cloud (англ.)", "foot_node": "Руководство Node (англ.)",
+    "foot_privacy": "Конфиденциальность", "foot_releases": "Выпуски", "foot_report": "Сообщить о проблеме",
+    "foot_text": "Parlons! — приватный чат на Maxima и блокчейне Minima. Открытый исходный код, работает силами сообщества, без аккаунтов у кого-либо. Авторы ничего не собирают.",
+    "home_title": "Parlons! · разговор без центра",
+    "home_desc": "Приватный чат без компании посередине. Без регистрации и номера телефона. Шифруется на вашем устройстве и доставляется ретрансляторами, которые запускают такие же люди, как вы.",
+    "desc_index": "Установите Parlons на телефон или компьютер или запустите свой постоянно работающий аккаунт.",
+    "desc_privacy": "Что собирает Parlons (ничего) и где хранятся ваши данные."
+  },
+  "uk": {
+    "lang": "Мова", "tagline": "розмова без центру",
+    "nav_start": "Почати", "nav_source": "Вихідний код",
+    "foot_parlons": "Посібник Parlons! (англ.)", "foot_cloud": "Посібник Cloud (англ.)", "foot_node": "Посібник Node (англ.)",
+    "foot_privacy": "Конфіденційність", "foot_releases": "Випуски", "foot_report": "Повідомити про проблему",
+    "foot_text": "Parlons! — приватний чат на Maxima та блокчейні Minima. Відкритий код, працює завдяки спільноті, без облікових записів будь у кого. Автори нічого не збирають.",
+    "home_title": "Parlons! · розмова без центру",
+    "home_desc": "Приватний чат без компанії посередині. Без реєстрації та номера телефону. Шифрується на вашому пристрої та доставляється ретрансляторами, які запускають такі самі люди, як ви.",
+    "desc_index": "Встановіть Parlons на телефон чи комп'ютер або запустіть власний постійно ввімкнений обліковий запис.",
+    "desc_privacy": "Що збирає Parlons (нічого) і де зберігаються ваші дані."
+  }
+}

@@ -1,0 +1,87 @@
+{{{HEAD}}}
+{{{BAR}}}
+<main>
+<section class="hero"><div class="wrap">
+  <div>
+    <span class="eyebrow"><i></i>Parlons · на Maxima и блокчейне Minima</span>
+    <h1>Parlons<b>!</b></h1>
+    <p class="tag serif">Давайте поговорим. Без посредников.</p>
+    <p class="stance"><strong>Личная переписка без компании посередине.</strong> Ваши слова шифруются на вашем устройстве. Их передают ретрансляторы, которые запускают такие же люди, как вы. Без регистрации, без номера телефона, без аккаунта у кого-либо.</p>
+    <div class="cta"><a class="btn btn-go" href="#start">Начать</a><a class="btn btn-line" href="guide/index.html">Пошаговое руководство</a></div>
+    <p class="fine">Android · Mac · Windows · Linux · Raspberry Pi</p>
+  </div>
+  <div class="chat" aria-label="Пример переписки в Parlons">
+    <div class="top"><span class="av">C</span><span class="who"><b>Camille</b><span>в сети · 3 ретранслятора</span></span><span class="lock">Сквозное шифрование</span></div>
+    <div class="body">
+      <span class="day">Сегодня</span>
+      <div class="msg in">je parle<small>09:41</small></div>
+      <div class="msg out">tu parles<small>09:41 <span class="t">✓</span></small></div>
+      <div class="msg in">nous parlons. Без номера и без регистрации?<small>09:42</small></div>
+      <div class="msg out">Никаких. Вы добавили мой QR-код, пришёл мой ответ — вот и всё знакомство.<small>09:42 <span class="t">✓✓</span></small></div>
+      <div class="msg out pay"><span class="amt">25 MxUSD</span><span class="tok">Отправлено прямо в чате, тем же защищённым путём</span><small>09:43 <span class="t read">✓✓</span></small></div>
+    </div>
+    <div class="compose"><span>Сообщение</span><i aria-hidden="true">↑</i></div>
+    <div class="legend" aria-label="Что значат галочки"><div><b>⋯</b>в очереди</div><div><b>✓</b>получено ретранслятором</div><div><b>✓✓</b>доставлено на устройство</div><div><b class="read">✓✓</b>прочитано</div></div>
+  </div>
+</div></section>
+
+<section class="sec" id="start" style="padding-top:24px"><div class="wrap">
+  <div class="lead"><span class="label">Начать</span><h2>Выберите вариант. Выполните шаги.</h2>
+  <p>Каждый займёт несколько минут. Ваши 24 слова — это ваша личность: запишите их на бумаге и храните в надёжном месте.</p></div>
+  <div class="three">
+    <div class="way"><h3>Переписка на телефоне Android</h3><p class="for">Android 9 или новее.</p>
+      <ol>
+        <li>Скачайте приложение на телефон:<div class="dl"><a href="{{ANDROID_APK}}">parlons-{{ANDROID_VERSION}}.apk</a></div></li>
+        <li>Откройте скачанный файл и нажмите <b>Установить</b>. Если Android спросит, разрешите установку из браузера.</li>
+        <li>Откройте Parlons и нажмите <b>Создать новую личность</b>.</li>
+        <li>Запишите 24 слова на бумаге по порядку. Нажмите <b>Я сохранил(а) слова</b>.</li>
+        <li>Разрешите уведомления, чтобы видеть новые сообщения.</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-android-phone">Подробнее →</a></div>
+    <div class="way"><h3>Переписка на компьютере</h3><p class="for">Mac (Apple silicon), Windows 10/11 или Linux.</p>
+      <ol>
+        <li>Скачайте Parlons Desktop:<div class="dl"><a href="{{DESKTOP_DMG}}">Mac</a><a href="{{DESKTOP_MSI}}">Windows</a><a href="{{DESKTOP_DEB}}">Linux</a></div></li>
+        <li>Установите его. На Mac перетащите <b>MaximaNode</b> в папку «Программы». В Windows, если появится синее окно, нажмите <b>Подробнее</b>, а затем <b>Выполнить в любом случае</b>.</li>
+        <li>Откройте <b>MaximaNode</b>.</li>
+        <li>Запишите 24 слова, которые появятся на экране.</li>
+      </ol>
+      <a class="more" href="guide/index.html#chat-on-your-computer">Подробнее →</a></div>
+    <div class="way hot"><h3>Один аккаунт на всех ваших устройствах</h3><p class="for">Одни и те же чаты на каждом телефоне и компьютере. Нужен компьютер с Linux, который всегда включён: сервер или Raspberry Pi.</p>
+      <ol>
+        <li>На компьютере с Linux вставьте:<pre>curl -fsSL {{NODE_INSTALL_SH}} | bash</pre></li>
+        <li>Когда попросят, придумайте пароль администратора. Введите его ещё раз, когда попросят, и появится QR-код.</li>
+        <li>Установите Parlons Cloud на телефон Android:<div class="dl"><a href="{{PORTAL_APK}}">parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk</a></div></li>
+        <li>В Parlons Cloud нажмите <b>Сканировать QR-код подключения</b>, отсканируйте код и нажмите <b>Подключить устройство</b>.</li>
+      </ol>
+      <a class="more" href="guide/index.html#one-account-on-all-your-devices">Подробнее →</a></div>
+  </div>
+  <p class="note2"><b>Затем добавьте друга:</b> откройте <b>Контакты</b>, нажмите <b>+ Добавить</b> (на компьютере — <b>Добавить контакт</b>), отсканируйте или вставьте его адрес и нажмите <b>Представиться</b>. Друг появится в списке, когда его устройство ответит.</p>
+</div></section>
+
+<section class="sec" id="see" style="background:var(--surface-2)"><div class="wrap">
+  <div class="lead"><span class="label">Как это выглядит</span><h2>Настоящие экраны приложений.</h2></div>
+  <div class="gallery">
+    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="Переписка в Parlons! между Camille и Léo, с серыми и двойными галочками доставки" width="600" height="1333" loading="lazy"></div><figcaption><b>Переписка</b>Две галочки: сообщение уже на устройстве собеседника.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="Вкладка «Контакты»: ваш адрес Parlons с кнопками «Поделиться моим адресом» и «Сканировать», и один контакт в сети" width="600" height="1333" loading="lazy"></div><figcaption><b>Контакты</b>Поделитесь своим адресом в виде QR-кода.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-pair.png" alt="Parlons Cloud для Android перед подключением: адрес аккаунта, «Сканировать QR-код подключения», код подключения и «Подключить устройство»" width="600" height="1333" loading="lazy"></div><figcaption><b>Подключение телефона</b>Отсканируйте QR-код с вашего узла.</figcaption></figure>
+    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Страница «Узел» в Parlons Cloud: всегда включён и в сети, время работы, подключены три ретранслятора и постоянный адрес" width="600" height="1333" loading="lazy"></div><figcaption><b>Ваш аккаунт</b>Всегда включён, работает через несколько ретрансляторов.</figcaption></figure>
+  </div>
+</div></section>
+
+<section class="sec" id="manuals"><div class="wrap">
+  <div class="lead"><span class="label">Руководства</span><h2>Нужно больше? Все функции, шаг за шагом.</h2></div>
+  <div class="manuals" style="margin-top:30px">
+    <a class="manual" href="guide/parlons.html"><span class="label">Приложения</span><h3>Руководство Parlons!</h3><p>Контакты, чаты, группы, фото, звонки, платежи и резервные копии на Android и Desktop.</p><span class="go">Открыть →</span></a>
+    <a class="manual" href="guide/cloud.html"><span class="label">Ваш телефон и аккаунт</span><h3>Руководство Parlons Cloud</h3><p>Подключение телефонов, приглашение устройств и друзей, размещение аккаунтов.</p><span class="go">Открыть →</span></a>
+    <a class="manual" href="guide/node.html"><span class="label">Ваш сервер</span><h3>Руководство Parlons Node</h3><p>Установка, настройка и обновление узла.</p><span class="go">Открыть →</span></a>
+  </div>
+</div></section>
+
+<section class="close"><div class="wrap" style="display:grid;gap:16px;justify-items:center">
+  <p class="serif" style="font-size:28px;color:var(--sub)">je parle, tu parles,</p>
+  <h2>nous parlons<span style="color:var(--orange)">!</span></h2>
+  <p>Установите приложение или запустите собственный аккаунт. В любом случае ваши слова остаются вашими.</p>
+  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="#start">Начать</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">Все выпуски</a></div>
+</div></section>
+</main>
+{{{FOOT}}}</body></html>

@@ -17,6 +17,7 @@ breaking a link.
 """
 import html
 import os
+import json
 import re
 import shutil
 import sys
@@ -43,6 +44,23 @@ LINKS = {
 }
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# (code, html lang, file suffix, name as the apps write it). English has no suffix.
+LANGS = [("en", "en", "", "English"), ("zh", "zh-Hans", ".zh", "简体中文"), ("ru", "ru", ".ru", "Русский"), ("uk", "uk", ".uk", "Українська")]
+STR = json.load(open(os.path.join(HERE, "i18n", "strings.json"), encoding="utf-8"))
+# Pages that exist in every language; anything else (the manuals, for now) is English only.
+TRANSLATED = {"index.html", "guide/index.html", "guide/privacy.html"}
+
+
+def lsrc(lang, en_path, name):
+    """A page's source in this language: docs/guide/i18n/<lang>/<name>, English from its usual place."""
+    return en_path if lang == "en" else os.path.join(HERE, "i18n", lang, name)
+
+
+def lpath(rel, lang):
+    """guide/index.html -> guide/index.zh.html when that page is translated; else the English page."""
+    suf = dict((c, x) for c, _, x, _ in LANGS)[lang]
+    return rel[:-5] + suf + ".html" if suf and rel in TRANSLATED else rel
 DOCS = os.path.dirname(HERE)
 
 # (output name, source, nav label, kind)
@@ -196,7 +214,11 @@ def render(lines, doc, top=False):
         if m and indent_of(ln) < 4:
             flush()
             level, text = len(m.group(1)), m.group(2)
-            hid = slug(text, doc.used)
+            fixed = re.match(r"^(.*?)\s*\{#([\w-]+)\}$", text)
+            if fixed:
+                text, hid = fixed.group(1), fixed.group(2); doc.used.add(hid)
+            else:
+                hid = slug(text, doc.used)
             if top and level <= 2:
                 doc.toc.append((level, hid, text))
             num = re.match(r"^(\d+(?:\.\d+)*\.?)\s+(.*)$", text) if level == 2 else None
@@ -308,35 +330,59 @@ def expand(text):
 
 # ---------------------------------------------------------------- page chrome
 
-def head(title, desc, root):
-    return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+def head(title, desc, root, lang="en", rel=None):
+    hl = dict((c, h) for c, h, _, _ in LANGS)[lang]
+    alts = "".join('<link rel="alternate" hreflang="%s" href="%s%s">' % (h, root, lpath(rel, c)) for c, h, _, _ in LANGS) if rel in TRANSLATED else ""
+    return ("<!doctype html>\n<html lang=\"%s\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
             "<title>%s</title><meta name=\"description\" content=\"%s\">"
             "<meta property=\"og:title\" content=\"%s\"><meta property=\"og:description\" content=\"%s\">"
-            "<meta name=\"theme-color\" content=\"#2A2E33\"><link rel=\"icon\" href=\"%s\">%s"
+            "<meta name=\"theme-color\" content=\"#2A2E33\"><link rel=\"icon\" href=\"%s\">%s%s"
             "<link rel=\"stylesheet\" href=\"%sassets/site.css\"></head><body>\n"
-            % (html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), FAVICON, FONTS, root))
+            % (hl, html.escape(title), html.escape(desc), html.escape(title), html.escape(desc), FAVICON, FONTS, alts, root))
 
 
-def bar(root, current):
-    links = [("guide/index.html", "Get started", "index", ""), ("guide/parlons.html", "Parlons!", "parlons", ""),
+# Remembers an explicit language choice; the English home page uses it (or the browser's
+# language, on a first visit) to open the right translation.
+LANG_JS = """<script>
+document.querySelectorAll('.langs a[data-lang]').forEach(function(a){a.addEventListener('click',function(){try{localStorage.setItem('parlons-lang',a.dataset.lang)}catch(e){}})});
+</script>"""
+HOME_JS = """<script>
+(function(){var p=null;try{p=localStorage.getItem('parlons-lang')}catch(e){}
+var l=p||((navigator.languages&&navigator.languages[0])||navigator.language||'').toLowerCase().slice(0,2);
+if(l==='zh'||l==='ru'||l==='uk')location.replace('index.'+l+'.html');})();
+</script>"""
+
+
+def bar(root, current, lang="en", rel=None):
+    t = STR[lang]
+    links = [(lpath("guide/index.html", lang), t["nav_start"], "index", ""), ("guide/parlons.html", "Parlons!", "parlons", ""),
              ("guide/cloud.html", "Cloud", "cloud", ""), ("guide/node.html", "Node", "node", ""),
-             (LINKS["REPO"], "Source", "", "opt")]
+             (LINKS["REPO"], t["nav_source"], "", "opt")]
     nav = "".join('<a%s href="%s"%s>%s</a>' % (
         (' class="%s"' % " ".join(c for c in (cls, "on" if key == current else "") if c)) if (cls or key == current) else "",
-        u if u.startswith("http") else root + u, ' target="_blank" rel="noopener"' if u.startswith("http") else "", t)
-        for u, t, key, cls in links)
-    return ('<header class="bar"><div class="wrap"><a class="brand" href="%sindex.html">%s<span>Parlons!<small>a conversation with no center</small></span></a>'
-            '<nav aria-label="Site">%s</nav></div></header>\n' % (root, MARK, nav))
+        u if u.startswith("http") else root + u, ' target="_blank" rel="noopener"' if u.startswith("http") else "", txt)
+        for u, txt, key, cls in links)
+    langs = ""
+    if rel in TRANSLATED:
+        here = {"en": "EN", "zh": "中文", "ru": "РУС", "uk": "УКР"}[lang]
+        items = "".join('<a%s data-lang="%s" lang="%s" href="%s%s">%s</a>' % (' class="on"' if c == lang else "", c, h, root, lpath(rel, c), n)
+                        for c, h, _, n in LANGS)
+        langs = '<details class="langs"><summary aria-label="%s">%s</summary><div>%s</div></details>' % (t["lang"], here, items)
+    return ('<header class="bar"><div class="wrap"><a class="brand" href="%s%s">%s<span>Parlons!<small>%s</small></span></a>'
+            '<nav aria-label="Site">%s</nav>%s</div></header>\n' % (root, lpath("index.html", lang), MARK, t["tagline"], nav, langs))
 
 
-def foot(root):
-    return ('<footer class="foot"><div class="wrap"><nav aria-label="Footer"><a href="%sguide/index.html">Get started</a><a href="%sguide/parlons.html">Parlons! manual</a>'
-            '<a href="%sguide/cloud.html">Cloud manual</a><a href="%sguide/node.html">Node manual</a><a href="%sguide/privacy.html">Privacy</a>'
-            '<a href="%s" target="_blank" rel="noopener">Source</a><a href="%s" target="_blank" rel="noopener">Releases</a>'
-            '<a href="%s" target="_blank" rel="noopener">Report a problem</a></nav>'
-            '<p>Parlons! is private chat on Maxima and the Minima blockchain. Open source, community-run, no account with anyone. '
-            'The authors collect nothing.</p></div></footer>\n' % (root, root, root, root, root, LINKS["REPO"], LINKS["RELEASES"], LINKS["ISSUES"]))
+def foot(root, lang="en"):
+    t = STR[lang]
+    return ('<footer class="foot"><div class="wrap"><nav aria-label="Footer"><a href="%s%s">%s</a><a href="%sguide/parlons.html">%s</a>'
+            '<a href="%sguide/cloud.html">%s</a><a href="%sguide/node.html">%s</a><a href="%s%s">%s</a>'
+            '<a href="%s" target="_blank" rel="noopener">%s</a><a href="%s" target="_blank" rel="noopener">%s</a>'
+            '<a href="%s" target="_blank" rel="noopener">%s</a></nav>'
+            '<p>%s</p></div></footer>\n%s' % (root, lpath("guide/index.html", lang), t["nav_start"], root, t["foot_parlons"],
+                                               root, t["foot_cloud"], root, t["foot_node"], root, lpath("guide/privacy.html", lang), t["foot_privacy"],
+                                               LINKS["REPO"], t["nav_source"], LINKS["RELEASES"], t["foot_releases"], LINKS["ISSUES"], t["foot_report"],
+                                               t["foot_text"], LANG_JS))
 
 
 TOC_JS = """<script>
@@ -380,17 +426,18 @@ def manual_page(name, md):
     return page, doc
 
 
-def guide_page(name, md):
+def guide_page(name, md, lang="en"):
     lines = md.split("\n")
     title_line = next(l for l in lines if l.startswith("# "))
     title = title_line[2:].strip()
     doc = Doc()
     body = render(lines[lines.index(title_line) + 1:], doc)
-    desc = ("Get Parlons on your phone or computer, or run your own always-on account." if name == "index"
-            else "What Parlons collects (nothing), and where your data lives.")
-    page = (head(title + " · Parlons!", desc, "../") + bar("../", name) +
+    if lang != "en":   # links to other translated pages stay in this language
+        body = re.sub(r'href="(index|privacy)\.html', lambda m: 'href="%s' % lpath("guide/%s.html" % m.group(1), lang)[6:], body)
+    rel = "guide/%s.html" % name
+    page = (head(title + " · Parlons!", STR[lang]["desc_" + name], "../", lang, rel) + bar("../", name, lang, rel) +
             '<div class="wrap"><main class="prose guide"><div class="doc-head"><h1>%s</h1></div>%s</main></div>'
-            % (inline(title), body) + foot("../") + "</body></html>\n")
+            % (inline(title), body) + foot("../", lang) + "</body></html>\n")
     return page, doc
 
 
@@ -411,6 +458,7 @@ def main():
         shutil.rmtree(adir)
     shutil.copytree(os.path.join(HERE, "site", "img"), os.path.join(adir, "img"))
     shutil.copy(os.path.join(HERE, "site", "site.css"), os.path.join(adir, "site.css"))
+    shutil.copy(os.path.join(HERE, "site", "landing.css"), os.path.join(adir, "landing.css"))
 
     anchors = {}
     for name, src, navlabel, kind in PAGES:
@@ -420,6 +468,11 @@ def main():
         with open(os.path.join(gdir, name + ".html"), "w", encoding="utf-8") as f:
             f.write(page)
         print("wrote", os.path.join(gdir, name + ".html"))
+        if kind == "guide":
+            for lang, _, suf, _ in LANGS[1:]:
+                md = expand(open(lsrc(lang, src, name + ".md"), encoding="utf-8").read())
+                with open(os.path.join(gdir, name + suf + ".html"), "w", encoding="utf-8") as f:
+                    f.write(guide_page(name, md, lang)[0])
 
     for old, target in REDIRECTS.items():
         if target is None:
@@ -434,15 +487,18 @@ def main():
         with open(os.path.join(out_dir, old + ".html"), "w", encoding="utf-8") as f:
             f.write(redirect(target, old))
 
-    landing = open(os.path.join(HERE, "site", "landing.html"), encoding="utf-8").read()
-    landing = landing.replace("{{{MARK}}}", MARK).replace("{{{HEAD}}}", head(
-        "Parlons! · a conversation with no center",
-        "Private chat with no company in the middle. No sign-up, no phone number. Sealed on your device, carried by relays people like you run.", "")
-    ).replace("{{{BAR}}}", bar("", "home")).replace("{{{FOOT}}}", foot(""))
-    landing = expand(landing)
-    with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as f:
-        f.write(landing)
-    print("wrote", os.path.join(out_dir, "index.html"))
+    for lang, _, suf, _ in LANGS:
+        landing = open(lsrc(lang, os.path.join(HERE, "site", "landing.html"), "landing.html"), encoding="utf-8").read()
+        landing = landing.replace("{{{MARK}}}", MARK).replace("{{{HEAD}}}", head(
+            STR[lang]["home_title"], STR[lang]["home_desc"], "", lang, "index.html").replace(
+            "</head>", '<link rel="stylesheet" href="assets/landing.css">' + (HOME_JS if lang == "en" else "") + "</head>")
+        ).replace("{{{BAR}}}", bar("", "home", lang, "index.html")).replace("{{{FOOT}}}", foot("", lang))
+        if lang != "en":
+            landing = re.sub(r'href="guide/(index|privacy)\.html', lambda m: 'href="%s' % lpath("guide/%s.html" % m.group(1), lang), landing)
+        landing = expand(landing)
+        with open(os.path.join(out_dir, "index%s.html" % suf), "w", encoding="utf-8") as f:
+            f.write(landing)
+        print("wrote", os.path.join(out_dir, "index%s.html" % suf))
     check_links(out_dir)
     with open(os.path.join(out_dir, "404.html"), "w", encoding="utf-8") as f:
         f.write(head("Not found · Parlons!", "This page does not exist.", "/") + bar("/", "") +

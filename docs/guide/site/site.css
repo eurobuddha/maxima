@@ -164,3 +164,13 @@ footer.foot a{color:var(--on-bar);font-weight:600}
 .prose li.task{list-style:none;margin-left:-22px;display:flex;gap:10px;align-items:baseline}
 .prose .box{flex:none;width:16px;height:16px;border:2px solid var(--sub);border-radius:4px;position:relative;top:3px}
 .prose .box.done{background:var(--ok);border-color:var(--ok)}
+.langs{position:relative;flex:none}
+.langs summary{list-style:none;cursor:pointer;color:var(--bar-sub);font-weight:700;font-size:13.5px;padding:7px 12px;border:1px solid rgba(255,255,255,.18);border-radius:100px;white-space:nowrap}
+.langs summary::-webkit-details-marker{display:none}
+.langs summary::after{content:" ▾"}
+.langs[open] summary,.langs summary:hover{color:var(--on-bar)}
+.langs div{position:absolute;right:0;top:calc(100% + 8px);background:var(--bar);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:6px;display:grid;min-width:150px;box-shadow:var(--shadow)}
+.langs div a{color:var(--bar-sub);padding:8px 12px;border-radius:9px;font-weight:600;font-size:14.5px}
+.langs div a:hover{color:var(--on-bar);background:rgba(255,255,255,.08);text-decoration:none}
+.langs div a.on{color:var(--on-bar);background:rgba(255,255,255,.12)}
+@media (max-width:720px){.bar .wrap{gap:10px}}
