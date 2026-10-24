@@ -31,7 +31,7 @@ LINKS = {
     "DESKTOP_DMG": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.115/MaximaNode-1.5.115-notarized.dmg",
     "DESKTOP_MSI": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.115/MaximaNode-1.5.115.msi",
     "DESKTOP_DEB": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.115/maximanode_1.5.115_amd64.deb",
-    "CLOUD_VERSION": "0.11.123",
+    "CLOUD_VERSION": "0.11.124",
     "NODE_VERSION": "0.2.138",
     "NODE_JAR": "https://github.com/eurobuddha/maxima/releases/download/node-v0.2.138/parlons-node-0.2.138.jar",
     "RELEASES": "https://github.com/eurobuddha/maxima/releases",

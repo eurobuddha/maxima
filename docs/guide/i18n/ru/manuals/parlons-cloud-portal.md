@@ -5,19 +5,19 @@
 В этом руководстве описаны:
 
 - **Parlons Cloud для Android** («Portal»), версия **0.2.90** (пакет Android `com.eurobuddha.parlons.cloud`, Android 9 или новее).
-- **Parlons Cloud** — программа-хост, с которой работает приложение, версия **0.11.123** (`parlons-cloud-0.11.123.jar`). Она запускает один аккаунт на вашем компьютере или сразу много аккаунтов как сервис `parlons-tenants` (`--tenants <dir>`).
+- **Parlons Cloud** — программа-хост, с которой работает приложение, версия **0.11.124** (`parlons-cloud-0.11.124.jar`). Она запускает один аккаунт на вашем компьютере или сразу много аккаунтов как сервис `parlons-tenants` (`--tenants <dir>`).
 
 Обе программы можно скачать на странице релизов: <https://github.com/eurobuddha/maxima/releases>.
 
 | Программа | Тег релиза | Файл для скачивания |
 |---|---|---|
 | Portal (Android) | `portal-v0.2.90` | `parlons-cloud-portal-0.2.90-release.apk` |
-| Parlons Cloud (хост) | `cloud-v0.11.123` | `parlons-cloud-0.11.123.jar` |
+| Parlons Cloud (хост) | `cloud-v0.11.124` | `parlons-cloud-0.11.124.jar` |
 
-SHA-256 файла `parlons-cloud-0.11.123.jar`:
+SHA-256 файла `parlons-cloud-0.11.124.jar`:
 
 ```
-536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5
+0ae833429b641393f93b427695784b534e8a2a06a7194eba74e57aed4f19b231
 ```
 
 Часть A предназначена для тех, кто **пользуется** аккаунтом через приложение Portal. Часть B — для тех, кто **размещает** аккаунты. Для каждой задачи приведена пошаговая инструкция. Надписи на экране выделены **жирным**. Команды для ввода даны в блоках кода.
@@ -1032,7 +1032,7 @@ SHA-256 файла `parlons-cloud-0.11.123.jar`:
 В конце вывод выглядит так (адрес и приглашение выводятся полностью):
 
 ```
-  Your Parlons account is running (Parlons Cloud 0.11.123).
+  Your Parlons account is running (Parlons Cloud 0.11.124).
 
   Address (share it; it never changes):
   <the full MAX# address>
@@ -1165,7 +1165,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 ### Как развернуть аккаунт на VPS
 
 1. На своём компьютере получите копию репозитория.
-2. Соберите jar или положите выпущенный `parlons-cloud-0.11.123.jar` в `dist/`:
+2. Соберите jar или положите выпущенный `parlons-cloud-0.11.124.jar` в `dist/`:
 
    ```bash
    ./gradlew :cloud:fatJar
@@ -1228,7 +1228,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 Нужен постоянно включённый компьютер с Linux (512 МБ ОЗУ хватает примерно на десять аккаунтов) и репозиторий на вашем компьютере.
 
-1. На своём компьютере соберите jar (`./gradlew :cloud:fatJar`) или положите `parlons-cloud-0.11.123.jar` в `dist/`.
+1. На своём компьютере соберите jar (`./gradlew :cloud:fatJar`) или положите `parlons-cloud-0.11.124.jar` в `dist/`.
 2. Убедитесь, что можете подключиться к серверу по SSH как root с ключом (скрипт запускает SSH в пакетном режиме и не может ответить на запрос пароля).
 3. Выполните:
 
@@ -1283,7 +1283,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 2. Выполните:
 
    ```bash
-   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.123.jar --manage-from-node
+   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.124.jar --manage-from-node
    ```
 
 3. Дождитесь перезапуска обоих сервисов.
@@ -1753,7 +1753,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 ## 25. Справочник по параметрам командной строки
 
-`java -jar parlons-cloud-0.11.123.jar [options]`. Все параметры, которые принимает программа:
+`java -jar parlons-cloud-0.11.124.jar [options]`. Все параметры, которые принимает программа:
 
 ### Отдельный аккаунт
 
@@ -1775,7 +1775,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 | `--blobstore <MB>` | `1024` | Размер хранилища медиа ретранслятора в МБ. |
 | `--import-seed <file\|prompt>` | | Принять существующую фразу из 24 слов, произвольную фразу Minima или сид в шестнадцатеричном виде — только в новый каталог, затем выйти. `prompt` считывает её из консоли. |
 | `--restore <file.pbk>` | | Восстановить зашифрованную резервную копию в новый каталог, затем выйти. Нужна интерактивная консоль. |
-| `-v`, `--version` | | Вывести `parlons-cloud 0.11.123` и выйти. |
+| `-v`, `--version` | | Вывести `parlons-cloud 0.11.124` и выйти. |
 | `-h`, `--help` | | Вывести справку и выйти. |
 
 ### Хост с несколькими аккаунтами
@@ -1985,23 +1985,23 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 ### Как проверить скачанный jar
 
-1. Скачайте `parlons-cloud-0.11.123.jar` из релиза `cloud-v0.11.123`.
+1. Скачайте `parlons-cloud-0.11.124.jar` из релиза `cloud-v0.11.124`.
 2. Вычислите его SHA-256. На Mac:
 
    ```bash
-   shasum -a 256 parlons-cloud-0.11.123.jar
+   shasum -a 256 parlons-cloud-0.11.124.jar
    ```
 
    В Linux:
 
    ```bash
-   sha256sum parlons-cloud-0.11.123.jar
+   sha256sum parlons-cloud-0.11.124.jar
    ```
 
 3. Сравните результат с опубликованным значением. Он должен совпадать полностью:
 
    ```
-   536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5
+   0ae833429b641393f93b427695784b534e8a2a06a7194eba74e57aed4f19b231
    ```
 
 Установщик и скрипты развёртывания проверяют SHA-256 сами и отказываются работать при несовпадении.
@@ -2012,13 +2012,13 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 2. Если вы редактировали модуль, сохраните его копию:
 
    ```bash
-   cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-0.11.123
+   cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-0.11.124
    ```
 
 3. Со своего компьютера снова запустите скрипт развёртывания с новым jar:
 
    ```bash
-   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.123.jar
+   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.124.jar
    ```
 
    Снова добавьте `--manage-from-node`, если вы его использовали. Скрипт сохраняет `/etc/parlons-tenants.env`. Он перезаписывает модуль с `--panel-port 9597`, поэтому заново внесите все остальные свои правки.
@@ -2029,7 +2029,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
    journalctl -u parlons-tenants | grep 'multi-account host' | tail -1
    ```
 
-   В строке должно быть указано `Parlons Cloud 0.11.123`.
+   В строке должно быть указано `Parlons Cloud 0.11.124`.
 5. Убедитесь, что каждый tenant выходит на связь (раздел 30).
 
 ### Как откатиться
@@ -2081,7 +2081,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 Полезные строки:
 
-- `Parlons Cloud 0.11.123 multi-account host: N tenant(s) under <dir>`: хост запущен.
+- `Parlons Cloud 0.11.124 multi-account host: N tenant(s) under <dir>`: хост запущен.
 - `tenant <name>: <Mx identity> (seed encrypted at rest)`: tenant запущен.
 - `hot-add: <name>`: подхвачена новая папка.
 - `tenant <name>: stopped (.stop)` / `parked (.stop present)`: tenant приостановлен.
@@ -2127,7 +2127,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 | **Enable hosting before managing guest accounts** | Встроенный хостинг выключен; включите его (раздел 11). |
 | **Guest hosting is unavailable. Check the data folder permissions and that another host is not using it.** | Папка `hosted-chat/` владельца недоступна для записи, является символической ссылкой или её блокировку удерживает другой процесс. |
 | **Admin password required for an owner-account invitation** от `parlons newcode` | У команды не было консоли для запроса (например, её запустили из скрипта). Выполните `parlons newcode` в интерактивном терминале и введите пароль на запрос `Admin password:`. Или создайте приглашение в приложении или панели, или подключитесь без кода и одобрите устройство. |
-| **Хост этого аккаунта слишком старый для отправки MxUSD — обновите его (…)** на телефоне | Хост аккаунта не может подтвердить, что учитывает ID токена. Обновите его до Parlons Cloud 0.11.121 или новее (актуальная — 0.11.123), Parlons Node 0.2.135 или новее либо minimaCore Desktop 0.18.21 или новее. |
+| **Хост этого аккаунта слишком старый для отправки MxUSD — обновите его (…)** на телефоне | Хост аккаунта не может подтвердить, что учитывает ID токена. Обновите его до Parlons Cloud 0.11.121 или новее (актуальная — 0.11.124), Parlons Node 0.2.135 или новее либо minimaCore Desktop 0.18.21 или новее. |
 | **Incorrect admin password** от `parlons-pair` | Повторите через две секунды. Чтобы сменить забытый пароль на Parlons Node, локально выполните `sudo parlons-pair --set-admin-password`. |
 | Восстановление: **wrong passphrase (or a damaged backup file)** | Проверьте парольную фразу. |
 | Восстановление: отказ, потому что личность уже существует | `--restore` и `--import-seed` никогда ничего не перезаписывают. Сначала переместите старые данные или используйте новый каталог. |

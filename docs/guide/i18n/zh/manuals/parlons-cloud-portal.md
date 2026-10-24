@@ -5,19 +5,19 @@
 本手册涵盖：
 
 - **Parlons Cloud for Android**（即“Portal”），版本 **0.2.90**（Android 软件包 `com.eurobuddha.parlons.cloud`，需要 Android 9 或更高版本）。
-- **Parlons Cloud**，即 Portal 所连接的主机程序，版本 **0.11.123**（`parlons-cloud-0.11.123.jar`）。它可以在你自己的机器上运行一个账户，也可以作为 `parlons-tenants` 服务同时运行多个账户（`--tenants <dir>`）。
+- **Parlons Cloud**，即 Portal 所连接的主机程序，版本 **0.11.124**（`parlons-cloud-0.11.124.jar`）。它可以在你自己的机器上运行一个账户，也可以作为 `parlons-tenants` 服务同时运行多个账户（`--tenants <dir>`）。
 
 两者都可以在发布页面下载：<https://github.com/eurobuddha/maxima/releases>。
 
 | 程序 | 发布标签 | 要下载的文件 |
 |---|---|---|
 | Portal（Android） | `portal-v0.2.90` | `parlons-cloud-portal-0.2.90-release.apk` |
-| Parlons Cloud（主机） | `cloud-v0.11.123` | `parlons-cloud-0.11.123.jar` |
+| Parlons Cloud（主机） | `cloud-v0.11.124` | `parlons-cloud-0.11.124.jar` |
 
-`parlons-cloud-0.11.123.jar` 的 SHA-256 为：
+`parlons-cloud-0.11.124.jar` 的 SHA-256 为：
 
 ```
-536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5
+0ae833429b641393f93b427695784b534e8a2a06a7194eba74e57aed4f19b231
 ```
 
 A 部分面向通过 Portal 应用**使用**账户的人。B 部分面向**托管**账户的人。每项任务都有带编号的操作步骤。屏幕上显示的标签用**粗体**表示。需要输入的命令放在代码块中。
@@ -1032,7 +1032,7 @@ Windows 脚本自己说明，其作者尚未在 Windows 机器上验证过它。
 它的结尾是这样的（地址和邀请会完整打印）：
 
 ```
-  Your Parlons account is running (Parlons Cloud 0.11.123).
+  Your Parlons account is running (Parlons Cloud 0.11.124).
 
   Address (share it; it never changes):
   <the full MAX# address>
@@ -1165,7 +1165,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 ### 如何将账户部署到 VPS
 
 1. 在你自己的电脑上，获取仓库的检出副本。
-2. 构建 jar，或把已发布的 `parlons-cloud-0.11.123.jar` 放入 `dist/`：
+2. 构建 jar，或把已发布的 `parlons-cloud-0.11.124.jar` 放入 `dist/`：
 
    ```bash
    ./gradlew :cloud:fatJar
@@ -1228,7 +1228,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 你需要一台保持开机的 Linux 机器（512 MB 内存大约够十个账户），以及你自己电脑上的仓库。
 
-1. 在你自己的电脑上构建 jar（`./gradlew :cloud:fatJar`），或把 `parlons-cloud-0.11.123.jar` 放入 `dist/`。
+1. 在你自己的电脑上构建 jar（`./gradlew :cloud:fatJar`），或把 `parlons-cloud-0.11.124.jar` 放入 `dist/`。
 2. 确保你能以 root 身份用密钥通过 SSH 登录该机器（脚本以批处理模式运行 SSH，因此无法回应密码提示）。
 3. 运行：
 
@@ -1283,7 +1283,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 2. 运行：
 
    ```bash
-   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.123.jar --manage-from-node
+   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.124.jar --manage-from-node
    ```
 
 3. 等待两个服务都重启。
@@ -1753,7 +1753,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 ## 25. 命令行参数参考
 
-`java -jar parlons-cloud-0.11.123.jar [options]`。程序接受的所有参数：
+`java -jar parlons-cloud-0.11.124.jar [options]`。程序接受的所有参数：
 
 ### 单个账户
 
@@ -1775,7 +1775,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 | `--blobstore <MB>` | `1024` | 中继媒体存储空间大小，单位 MB。 |
 | `--import-seed <file\|prompt>` | | 采用一个现有的 24 词助记词、自定义 Minima 短语或助记词十六进制值，只能导入全新目录，然后退出。`prompt` 表示从控制台读取。 |
 | `--restore <file.pbk>` | | 把加密备份包恢复到全新目录，然后退出。需要交互式控制台。 |
-| `-v`、`--version` | | 打印 `parlons-cloud 0.11.123` 并退出。 |
+| `-v`、`--version` | | 打印 `parlons-cloud 0.11.124` 并退出。 |
 | `-h`、`--help` | | 打印帮助并退出。 |
 
 ### 多账户主机
@@ -1985,23 +1985,23 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
 ### 如何检查下载的 jar
 
-1. 从发布版本 `cloud-v0.11.123` 下载 `parlons-cloud-0.11.123.jar`。
+1. 从发布版本 `cloud-v0.11.124` 下载 `parlons-cloud-0.11.124.jar`。
 2. 计算其 SHA-256。在 Mac 上：
 
    ```bash
-   shasum -a 256 parlons-cloud-0.11.123.jar
+   shasum -a 256 parlons-cloud-0.11.124.jar
    ```
 
    在 Linux 上：
 
    ```bash
-   sha256sum parlons-cloud-0.11.123.jar
+   sha256sum parlons-cloud-0.11.124.jar
    ```
 
 3. 与公布的值进行比较。必须完全一致：
 
    ```
-   536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5
+   0ae833429b641393f93b427695784b534e8a2a06a7194eba74e57aed4f19b231
    ```
 
 安装程序和部署脚本会替你检查 SHA-256，并拒绝不匹配的文件。
@@ -2012,13 +2012,13 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 2. 如果你编辑过单元，请保留一份副本：
 
    ```bash
-   cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-0.11.123
+   cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-0.11.124
    ```
 
 3. 在你的电脑上，用新的 jar 重新运行部署脚本：
 
    ```bash
-   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.123.jar
+   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.124.jar
    ```
 
    如果你之前用过 `--manage-from-node`，请再次加上。脚本会保留 `/etc/parlons-tenants.env`。它会用 `--panel-port 9597` 重写单元，因此请重新应用你自己做的其他修改。
@@ -2029,7 +2029,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
    journalctl -u parlons-tenants | grep 'multi-account host' | tail -1
    ```
 
-   这一行应包含 `Parlons Cloud 0.11.123`。
+   这一行应包含 `Parlons Cloud 0.11.124`。
 5. 检查每个租户是否都已上报（第 30 节）。
 
 ### 如何回滚
@@ -2081,7 +2081,7 @@ Portal 应用独立更新：把较新的 APK 覆盖安装到旧版本上（第 3
 
 有用的行：
 
-- `Parlons Cloud 0.11.123 multi-account host: N tenant(s) under <dir>`：主机已启动。
+- `Parlons Cloud 0.11.124 multi-account host: N tenant(s) under <dir>`：主机已启动。
 - `tenant <name>: <Mx identity> (seed encrypted at rest)`：一个租户已启动。
 - `hot-add: <name>`：发现了一个新文件夹。
 - `tenant <name>: stopped (.stop)` / `parked (.stop present)`：一个租户已暂停。
@@ -2127,7 +2127,7 @@ Portal 应用独立更新：把较新的 APK 覆盖安装到旧版本上（第 3
 | **Enable hosting before managing guest accounts** | 内置托管已关闭；请启用它（第 11 节）。 |
 | **Guest hosting is unavailable. Check the data folder permissions and that another host is not using it.** | 所有者的 `hosted-chat/` 文件夹不可写、是一个符号链接，或另一个进程持有它的锁。 |
 | `parlons newcode` 显示 **Admin password required for an owner-account invitation** | 该命令没有可用于询问的控制台（例如从脚本运行）。请在交互式终端中运行 `parlons newcode`，并在 `Admin password:` 处输入密码。或者从应用或面板生成邀请，或进行无配对码的配对并批准。 |
-| 手机上显示 **此账户的主机版本过旧，无法发送 MxUSD — 请更新（…）** | 账户的主机无法证明它支持该代币 ID。请将其更新到 Parlons Cloud 0.11.121 或更高版本（当前为 0.11.123）、Parlons Node 0.2.135 或更高版本，或 minimaCore Desktop 0.18.21 或更高版本。 |
+| 手机上显示 **此账户的主机版本过旧，无法发送 MxUSD — 请更新（…）** | 账户的主机无法证明它支持该代币 ID。请将其更新到 Parlons Cloud 0.11.121 或更高版本（当前为 0.11.124）、Parlons Node 0.2.135 或更高版本，或 minimaCore Desktop 0.18.21 或更高版本。 |
 | `parlons-pair` 显示 **Incorrect admin password** | 两秒后重试。要在 Parlons Node 上更改忘记的密码，请在本地使用 `sudo parlons-pair --set-admin-password`。 |
 | 恢复：**wrong passphrase (or a damaged backup file)** | 检查口令。 |
 | 恢复：因为身份已存在而拒绝 | `--restore` 和 `--import-seed` 从不覆盖。请先把旧数据移走，或使用全新目录。 |

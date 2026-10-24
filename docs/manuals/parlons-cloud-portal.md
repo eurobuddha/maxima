@@ -5,19 +5,19 @@ Your Parlons account, kept online on a machine that never sleeps, and driven fro
 This manual covers:
 
 - **Parlons Cloud for Android** (the "Portal"), version **0.2.90** (Android package `com.eurobuddha.parlons.cloud`, Android 9 or newer).
-- **Parlons Cloud**, the host program it talks to, version **0.11.123** (`parlons-cloud-0.11.123.jar`). It runs one account on your own machine, or many accounts at once as the `parlons-tenants` service (`--tenants <dir>`).
+- **Parlons Cloud**, the host program it talks to, version **0.11.124** (`parlons-cloud-0.11.124.jar`). It runs one account on your own machine, or many accounts at once as the `parlons-tenants` service (`--tenants <dir>`).
 
 Downloads for both are on the releases page: <https://github.com/eurobuddha/maxima/releases>.
 
 | Program | Release tag | File to download |
 |---|---|---|
 | Portal (Android) | `portal-v0.2.90` | `parlons-cloud-portal-0.2.90-release.apk` |
-| Parlons Cloud (host) | `cloud-v0.11.123` | `parlons-cloud-0.11.123.jar` |
+| Parlons Cloud (host) | `cloud-v0.11.124` | `parlons-cloud-0.11.124.jar` |
 
-The SHA-256 of `parlons-cloud-0.11.123.jar` is:
+The SHA-256 of `parlons-cloud-0.11.124.jar` is:
 
 ```
-536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5
+0ae833429b641393f93b427695784b534e8a2a06a7194eba74e57aed4f19b231
 ```
 
 Part A is for people who **use** an account through the Portal app. Part B is for people who **host** accounts. Every task has a numbered procedure. Labels you see on screen are in **bold**. Commands you type are in code blocks.
@@ -1032,7 +1032,7 @@ The installer:
 It ends like this (the address and invite are printed in full):
 
 ```
-  Your Parlons account is running (Parlons Cloud 0.11.123).
+  Your Parlons account is running (Parlons Cloud 0.11.124).
 
   Address (share it; it never changes):
   <the full MAX# address>
@@ -1165,7 +1165,7 @@ Paired devices reconnect on their own, because the address is the same.
 ### How to deploy an account to a VPS
 
 1. On your own computer, get a checkout of the repository.
-2. Build the jar, or put a released `parlons-cloud-0.11.123.jar` into `dist/`:
+2. Build the jar, or put a released `parlons-cloud-0.11.124.jar` into `dist/`:
 
    ```bash
    ./gradlew :cloud:fatJar
@@ -1228,7 +1228,7 @@ A multi-account host keeps one always-on account per folder under one directory,
 
 You need a Linux box that stays on (512 MB of RAM covers about ten accounts) and the repository on your own computer.
 
-1. On your own computer, build the jar (`./gradlew :cloud:fatJar`) or put `parlons-cloud-0.11.123.jar` into `dist/`.
+1. On your own computer, build the jar (`./gradlew :cloud:fatJar`) or put `parlons-cloud-0.11.124.jar` into `dist/`.
 2. Make sure you can SSH to the box as root with a key (the script runs SSH in batch mode, so it cannot answer a password prompt).
 3. Run:
 
@@ -1283,7 +1283,7 @@ Use this when a Parlons Node (0.2.118 or newer) already runs on the box and its 
 2. Run:
 
    ```bash
-   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.123.jar --manage-from-node
+   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.124.jar --manage-from-node
    ```
 
 3. Wait for both services to restart.
@@ -1753,7 +1753,7 @@ The seed, the backup, wallet sends, payments, the node console and NFT hosting a
 
 ## 25. Command-line flags reference
 
-`java -jar parlons-cloud-0.11.123.jar [options]`. Every flag the program accepts:
+`java -jar parlons-cloud-0.11.124.jar [options]`. Every flag the program accepts:
 
 ### Single account
 
@@ -1775,7 +1775,7 @@ The seed, the backup, wallet sends, payments, the node console and NFT hosting a
 | `--blobstore <MB>` | `1024` | Relay media shelf size in MB. |
 | `--import-seed <file\|prompt>` | | Adopt an existing 24-word phrase, a custom Minima phrase, or a seed hex, into a fresh directory only, then exit. `prompt` reads it from the console. |
 | `--restore <file.pbk>` | | Restore an encrypted backup bundle into a fresh directory, then exit. Needs an interactive console. |
-| `-v`, `--version` | | Print `parlons-cloud 0.11.123` and exit. |
+| `-v`, `--version` | | Print `parlons-cloud 0.11.124` and exit. |
 | `-h`, `--help` | | Print the help and exit. |
 
 ### Multi-account host
@@ -1985,23 +1985,23 @@ Every install keeps the versioned jar next to a stable symlink, so a rollback is
 
 ### How to check a downloaded jar
 
-1. Download `parlons-cloud-0.11.123.jar` from the release `cloud-v0.11.123`.
+1. Download `parlons-cloud-0.11.124.jar` from the release `cloud-v0.11.124`.
 2. Compute its SHA-256. On a Mac:
 
    ```bash
-   shasum -a 256 parlons-cloud-0.11.123.jar
+   shasum -a 256 parlons-cloud-0.11.124.jar
    ```
 
    On Linux:
 
    ```bash
-   sha256sum parlons-cloud-0.11.123.jar
+   sha256sum parlons-cloud-0.11.124.jar
    ```
 
 3. Compare it with the published value. It must match exactly:
 
    ```
-   536964bf218769f5e70ff6062a7c43eda2a9a7be5f796cfc2c0a2cabe56b90b5
+   0ae833429b641393f93b427695784b534e8a2a06a7194eba74e57aed4f19b231
    ```
 
 The installer and the deploy scripts check the SHA-256 for you and refuse a mismatch.
@@ -2012,13 +2012,13 @@ The installer and the deploy scripts check the SHA-256 for you and refuse a mism
 2. If you have edited the unit, keep a copy:
 
    ```bash
-   cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-0.11.123
+   cp /etc/systemd/system/parlons-tenants.service /etc/systemd/system/parlons-tenants.service.before-0.11.124
    ```
 
 3. From your computer, re-run the deploy script with the new jar:
 
    ```bash
-   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.123.jar
+   ops/deploy-parlons-tenants.sh root@your.box --jar dist/parlons-cloud-0.11.124.jar
    ```
 
    Add `--manage-from-node` again if you used it. The script keeps `/etc/parlons-tenants.env`. It rewrites the unit with `--panel-port 9597`, so re-apply any other edits of your own.
@@ -2029,7 +2029,7 @@ The installer and the deploy scripts check the SHA-256 for you and refuse a mism
    journalctl -u parlons-tenants | grep 'multi-account host' | tail -1
    ```
 
-   The line should name `Parlons Cloud 0.11.123`.
+   The line should name `Parlons Cloud 0.11.124`.
 5. Check that each tenant reports in (section 30).
 
 ### How to roll back
@@ -2081,7 +2081,7 @@ The Portal app updates independently: install the newer APK over the old one (se
 
 Useful lines:
 
-- `Parlons Cloud 0.11.123 multi-account host: N tenant(s) under <dir>`: the host started.
+- `Parlons Cloud 0.11.124 multi-account host: N tenant(s) under <dir>`: the host started.
 - `tenant <name>: <Mx identity> (seed encrypted at rest)`: a tenant started.
 - `hot-add: <name>`: a new folder was picked up.
 - `tenant <name>: stopped (.stop)` / `parked (.stop present)`: a tenant is paused.
@@ -2127,7 +2127,7 @@ The program never writes a seed to a log: under systemd, a newly generated seed 
 | **Enable hosting before managing guest accounts** | Built-in hosting is off; enable it (section 11). |
 | **Guest hosting is unavailable. Check the data folder permissions and that another host is not using it.** | The owner's `hosted-chat/` folder is not writable, is a symbolic link, or another process holds its lock. |
 | **Admin password required for an owner-account invitation** from `parlons newcode` | The command had no console to ask on (for example, it ran from a script). Run `parlons newcode` in an interactive terminal and type the password at `Admin password:`. Or mint the invite from the app or the panel, or pair code-less and approve. |
-| **this account's host is too old to send MxUSD - update it (…)** on a phone | The account's host cannot prove it honours the token id. Update it to Parlons Cloud 0.11.121 or newer (0.11.123 is current), Parlons Node 0.2.135 or newer, or minimaCore Desktop 0.18.21 or newer. |
+| **this account's host is too old to send MxUSD - update it (…)** on a phone | The account's host cannot prove it honours the token id. Update it to Parlons Cloud 0.11.121 or newer (0.11.124 is current), Parlons Node 0.2.135 or newer, or minimaCore Desktop 0.18.21 or newer. |
 | **Incorrect admin password** from `parlons-pair` | Retry after two seconds. To change a forgotten password on a Parlons Node, use `sudo parlons-pair --set-admin-password` locally. |
 | Restore: **wrong passphrase (or a damaged backup file)** | Check the passphrase. |
 | Restore: refuses because an identity exists | `--restore` and `--import-seed` never overwrite. Move the old data away first, or use a fresh directory. |
