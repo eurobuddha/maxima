@@ -174,3 +174,13 @@ footer.foot a{color:var(--on-bar);font-weight:600}
 .langs div a:hover{color:var(--on-bar);background:rgba(255,255,255,.08);text-decoration:none}
 .langs div a.on{color:var(--on-bar);background:rgba(255,255,255,.12)}
 @media (max-width:720px){.bar .wrap{gap:10px}}
+
+/* Setup guides: readable navigation, shared by all translated routes. */
+.guide-back{display:inline-block;font-size:14px;font-weight:700;margin-bottom:24px}
+.guide-jumps{display:flex;flex-wrap:wrap;gap:8px 18px;margin:22px 0 30px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.guide-jumps a{font-size:13px;font-weight:700;line-height:1.5}
+.skip-link{position:fixed;top:8px;left:12px;z-index:100;background:var(--surface);color:var(--ink);padding:12px 20px;transform:translateY(-160%);border-radius:8px}
+.skip-link:focus{transform:translateY(0)}
+.label{color:var(--sub)}
+.bar nav{min-width:0}
+@media(max-width:540px){.bar .wrap{height:auto;min-height:64px;flex-wrap:wrap;gap:6px 12px;padding-block:10px}.bar .brand{margin-right:auto}.bar nav{order:3;flex-basis:100%;margin:0}.bar nav a{font-size:13px;padding:5px 10px}.langs{margin-left:auto}html{scroll-padding-top:120px}.prose.guide{padding-top:24px}.btn{white-space:normal}.prose .cards{grid-template-columns:minmax(0,1fr)}}

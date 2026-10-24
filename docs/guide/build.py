@@ -50,6 +50,14 @@ LANGS = [("en", "en", "", "English"), ("zh", "zh-Hans", ".zh", "简体中文"), 
 STR = json.load(open(os.path.join(HERE, "i18n", "strings.json"), encoding="utf-8"))
 # Pages that exist in every language. A manual joins once all its translations are in i18n/<lang>/manuals/.
 TRANSLATED = {"index.html", "guide/index.html", "guide/privacy.html"}
+START_ROUTES = {
+    "android": "chat-on-your-android-phone",
+    "desktop": "chat-on-your-computer",
+    "pair": "pair-an-account",
+    "host": "one-account-on-all-your-devices",
+    "node": "run-a-full-node",
+}
+TRANSLATED |= {"guide/start-%s.html" % name for name in START_ROUTES}
 MANUAL_SRC = {"parlons": "parlons.md", "cloud": "parlons-cloud-portal.md", "node": "parlons-node.md"}
 TRANSLATED |= {"guide/%s.html" % k for k, f in MANUAL_SRC.items()
                if all(os.path.exists(os.path.join(HERE, "i18n", c, "manuals", f)) for c, _, _, _ in LANGS[1:])}
@@ -64,6 +72,16 @@ def lpath(rel, lang):
     """guide/index.html -> guide/index.zh.html when that page is translated; else the English page."""
     suf = dict((c, x) for c, _, x, _ in LANGS)[lang]
     return rel[:-5] + suf + ".html" if suf and rel in TRANSLATED else rel
+
+
+def localize_links(body, lang, in_guide=False):
+    """Keep internal navigation in the chosen language, including setup routes."""
+    def replace(match):
+        path = match.group(1)
+        rel = "guide/" + path if in_guide else path
+        translated = lpath(rel, lang)
+        return 'href="' + (translated[6:] if in_guide else translated)
+    return re.sub(r'href="([a-z/-]+\.html)', replace, body)
 DOCS = os.path.dirname(HERE)
 
 # (output name, source, nav label, kind)
@@ -410,8 +428,7 @@ def manual_page(name, md, lang="en", ids=None):
     body = render(drop_contents(body_lines), doc, top=True)
     if doc.given:
         raise SystemExit("%s (%s): translation has %d fewer headings than the English" % (name, lang, len(doc.given)))
-    if lang != "en":   # links to other translated pages stay in this language
-        body = re.sub(r'href="(index|privacy|parlons|cloud|node)\.html', lambda m: 'href="%s' % lpath("guide/%s.html" % m.group(1), lang)[6:], body)
+    body = localize_links(body, lang, in_guide=True)
     toc_items = []
     for level, hid, text in doc.toc:
         if level == 1:
@@ -446,13 +463,35 @@ def guide_page(name, md, lang="en"):
     title = title_line[2:].strip()
     doc = Doc()
     body = render(lines[lines.index(title_line) + 1:], doc)
-    if lang != "en":   # links to other translated pages stay in this language
-        body = re.sub(r'href="(index|privacy)\.html', lambda m: 'href="%s' % lpath("guide/%s.html" % m.group(1), lang)[6:], body)
+    body = localize_links(body, lang, in_guide=True)
     rel = "guide/%s.html" % name
-    page = (head(title + " · Parlons!", STR[lang]["desc_" + name], "../", lang, rel) + bar("../", name, lang, rel) +
-            '<div class="wrap"><main class="prose guide"><div class="doc-head"><h1>%s</h1></div>%s</main></div>'
-            % (inline(title), body) + foot("../", lang) + "</body></html>\n")
+    setup = name.startswith("start-")
+    back = '<a class="guide-back" href="../%s#start">← %s</a>' % (lpath("index.html", lang), STR[lang]["nav_start"]) if setup else ""
+    contents = ""
+    if name != "privacy":
+        headings = re.findall(r'<h2 id="([^"]+)">(.*?)</h2>', body)
+        contents = '<nav class="guide-jumps" aria-label="%s">%s</nav>' % (STR[lang]["contents"], "".join('<a href="#%s">%s</a>' % h for h in headings))
+    page = (head(title + " · Parlons!", STR[lang]["desc_index" if setup else "desc_" + name], "../", lang, rel) + bar("../", "index" if setup else name, lang, rel) +
+            '<div class="wrap"><main class="prose guide" id="main">%s<div class="doc-head"><h1>%s</h1></div>%s%s</main></div>'
+            % (back, inline(title), contents, body) + foot("../", lang) + "</body></html>\n")
     return page, doc
+
+
+def setup_pages(md):
+    """Derive focused setup guides from the same translated getting-started source.
+
+    Explicit anchors are shared by all languages and preserve existing incoming links.
+    Everyday use, backup and help follow each setup so the reader has a complete path.
+    """
+    headings = list(re.finditer(r'^## (.+?) \{#([\w-]+)\}\s*$', md, re.M))
+    sections = {}
+    for i, match in enumerate(headings):
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(md)
+        sections[match.group(2)] = (match.group(1), md[match.end():end].strip())
+    common = "\n\n".join("## %s {#%s}\n\n%s" % (sections[k][0], k, sections[k][1])
+                             for k in ("add-a-friend", "everyday-use", "backups", "need-more"))
+    return {name: "# %s\n\n%s\n\n%s\n" % (sections[anchor][0], re.sub(r'^### ', '## ', sections[anchor][1], flags=re.M), common)
+            for name, anchor in START_ROUTES.items()}
 
 
 def redirect(target, title):
@@ -493,6 +532,13 @@ def main():
                 with open(os.path.join(gdir, name + suf + ".html"), "w", encoding="utf-8") as f:
                     f.write(tpage)
 
+    for lang, _, suf, _ in LANGS:
+        src = lsrc(lang, os.path.join(HERE, "index.md"), "index.md")
+        for route, md in setup_pages(expand(open(src, encoding="utf-8").read())).items():
+            name = "start-" + route
+            with open(os.path.join(gdir, name + suf + ".html"), "w", encoding="utf-8") as f:
+                f.write(guide_page(name, md, lang)[0])
+
     for old, target in REDIRECTS.items():
         if target is None:
             continue
@@ -512,8 +558,7 @@ def main():
             STR[lang]["home_title"], STR[lang]["home_desc"], "", lang, "index.html").replace(
             "</head>", '<link rel="stylesheet" href="assets/landing.css">' + (HOME_JS if lang == "en" else "") + "</head>")
         ).replace("{{{BAR}}}", bar("", "home", lang, "index.html")).replace("{{{FOOT}}}", foot("", lang))
-        if lang != "en":
-            landing = re.sub(r'href="guide/(index|privacy)\.html', lambda m: 'href="%s' % lpath("guide/%s.html" % m.group(1), lang), landing)
+        landing = localize_links(landing, lang)
         landing = expand(landing)
         with open(os.path.join(out_dir, "index%s.html" % suf), "w", encoding="utf-8") as f:
             f.write(landing)

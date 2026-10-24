@@ -1,100 +1,176 @@
-# Get started with Parlons
+# Choose, set up, start talking
 
-Private chat with no company in the middle. No sign-up, no phone number. Pick what you want to do and follow the steps.
+Pick the guide for the way you want to use Parlons. Each takes you from the download to your first conversation. **The two Android apps do different jobs:** Parlons! keeps your identity on your phone; Parlons Cloud connects to an account running elsewhere.
 
 <div class="cards">
-<a href="#chat-on-your-android-phone"><b>Chat on your Android phone</b><span>Install one app and start chatting.</span><em>Android 9+</em></a>
-<a href="#chat-on-your-computer"><b>Chat on your computer</b><span>Mac, Windows or Linux.</span><em>Parlons Desktop {{DESKTOP_VERSION}}</em></a>
-<a href="#one-account-on-all-your-devices"><b>One account on all your devices</b><span>The same chats on every phone and computer.</span><em>Parlons Node {{NODE_VERSION}}</em></a>
+<a href="start-android.html"><b>Android · independent app</b><span>No account server to arrange. Your identity lives on this phone.</span></a>
+<a href="start-desktop.html"><b>Mac, Windows or Linux · desktop app</b><span>Chat on your computer with its own identity.</span></a>
+<a href="start-pair.html"><b>I have an invitation · Parlons Cloud</b><span>Connect your Android phone to an existing account.</span></a>
+<a href="start-host.html"><b>I want my own always-on account</b><span>Run the lighter Cloud server, then pair your phone.</span></a>
+<a href="start-node.html"><b>I want a full Minima node too</b><span>Run Parlons Node on Linux. For server operators.</span></a>
 </div>
 
-> **Your 24 words are your identity and a wallet.** Write them on paper when they are shown. Never photograph them. Anyone who has them is you.
+An iPhone app is **not available yet**. Android apps require Android 9 or newer. The desktop downloads below are for Apple silicon Macs, Windows 10/11, and Debian/Ubuntu on x86-64.
 
-## Chat on your Android phone {#chat-on-your-android-phone}
+## Parlons! on Android {#chat-on-your-android-phone}
 
-You need Android 9 or newer, and a pen and paper.
+**Choose this if:** you want to install one app and chat, without arranging an account server. Your identity, contacts and chats live on this phone. It connects through the Parlons relay network.
 
-1. On the phone, download [parlons-{{ANDROID_VERSION}}.apk]({{ANDROID_APK}}).
-2. Open the download and tap **Install**. If Android asks, allow installs from your browser.
-3. Tap **Open**. Choose your language.
-4. Tap **Create new identity**.
-5. Write the 24 words on paper, in order, with their numbers. Check each one, then tap **I've saved them**.
-6. When Android asks to send notifications, tap **Allow**.
-7. Tap the **three dots** (top right), then **Settings**. Under **Your name**, type your name and tap **Set**.
+### Install and create your identity
 
-Now [add a friend](#add-a-friend).
+1. Download [Parlons! {{ANDROID_VERSION}} for Android]({{ANDROID_APK}}) on your phone.
+2. Open the APK and tap **Install**. If Android asks, allow your browser to install apps.
+3. Open **Parlons!**, choose your language and tap **Create new identity**.
+4. Write all 24 words on paper, in order. Check them, then tap **I've saved them**. Keep them private: they control your identity and may also control a wallet.
+5. Allow notifications. Open the **three dots → Settings**, enter **Your name**, and tap **Set**.
+6. Check the **Network** tab: **Connected** means at least one relay is connected. You are ready to add a contact below.
 
-## Chat on your computer {#chat-on-your-computer}
+**Already have an identity?** Use the [backup and moving guide](parlons.html#20-backups-and-moving-to-a-new-device) before restoring it. Creating a new identity gives you a different address. Restoring the same seed on several running devices is not a way to synchronise chats.
 
-1. Download Parlons Desktop for your computer:
-   - Mac with Apple silicon: [MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}})
-   - Windows 10 or 11: [MaximaNode-{{DESKTOP_VERSION}}.msi]({{DESKTOP_MSI}})
-   - Linux (Debian, Ubuntu): [maximanode_{{DESKTOP_VERSION}}_amd64.deb]({{DESKTOP_DEB}})
-2. Install it:
-   - **Mac:** open the disk image and drag **MaximaNode** into Applications.
-   - **Windows:** run the installer. If a blue **Windows protected your PC** box appears, click **More info**, then **Run anyway**.
-   - **Linux:** in the folder where you saved it, run `sudo apt install ./maximanode_{{DESKTOP_VERSION}}_amd64.deb`
-3. Open **MaximaNode**.
-4. A window shows your 24 words. Write them on paper, in order.
-5. Click the **three dots** (top right). Under **Your name**, type your name and click **Set**.
+**Keep it working:** allow the app to run in the background in Android's battery settings. Update by installing the newer APK over the existing app; back up before uninstalling or clearing its data.
 
-Now [add a friend](#add-a-friend).
+## Parlons Desktop {#chat-on-your-computer}
 
-## One account on all your devices {#one-account-on-all-your-devices}
+**Choose this if:** you want a chat app on your computer. This is a standalone identity on that computer. Installing it alongside the phone app does not automatically give them the same chats.
 
-Your account runs on a Linux machine that stays on, like a small server or a Raspberry Pi with a 64-bit system. Your phones and computers connect to it, so you get the same chats on every device, and messages wait while a phone is off.
+### Install for your computer
 
-The program is **Parlons Node**: your account, a relay that helps carry the network, and a full Minima node, in one.
+1. Download the matching installer:
+   - **Mac, Apple silicon:** [MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}}). Open it and drag **MaximaNode** into Applications.
+   - **Windows 10/11:** [MaximaNode-{{DESKTOP_VERSION}}.msi]({{DESKTOP_MSI}}). Open it and follow the installer.
+   - **Debian/Ubuntu, x86-64:** [maximanode_{{DESKTOP_VERSION}}_amd64.deb]({{DESKTOP_DEB}}). In the download folder run `sudo apt install ./maximanode_{{DESKTOP_VERSION}}_amd64.deb`.
+2. Open **MaximaNode**. This is the installed name of Parlons Desktop.
+3. In **Back up your Maxima seed**, write the 24 words on paper in order and keep them private.
+4. Open the **three dots** menu, enter **Your name** and click **Set**.
+5. Check **Network** for a connection, then add a contact below. On desktop, paste their address; there is no QR camera scanner.
 
-**On the Linux machine:**
+**Calls:** Desktop supports messaging and files, but does not carry voice or video call audio. Use one of the Android apps for calls. Keep Desktop running to stay connected; use the tray icon's **Quit** when you want it to stop.
 
-1. Open a terminal on it, or connect to it with SSH.
-2. Paste this and press Enter:
+For installation problems or moving an existing identity, use the [Parlons! manual](parlons.html).
+
+## Parlons Cloud: connect with an invitation {#pair-an-account}
+
+**Choose this if:** you already have an account invitation, or an account running on your own machine. The Android app is a remote view of that account: the identity and chat history live on the host. Multiple paired phones see the same account.
+
+**Before you start:** get an invitation from your host or an already-paired device. If you do not have a host, follow [host your own account](start-host.html) first. A friend's contact QR lets you chat with them; a pairing invitation gives access to an account. They are different.
+
+### Install and pair
+
+1. Download [Parlons Cloud {{PORTAL_VERSION}} for Android]({{PORTAL_APK}}). Open the APK, allow installation if asked, and tap **Install**.
+2. Open **Parlons Cloud**. Tap **Scan pairing QR** and scan your invitation. Or paste the complete invitation into **Account address or pairing invite**.
+3. Tap **Connect & pair**. You should see **Attaching to the network…**, then **Account found — pairing…**, then your account opens.
+4. Allow notifications. In **More → Settings → This device**, choose **Keep running in the background** if shown.
+5. Open **Node** to check the account's connection and paired devices. Continue to your first conversation below.
+
+**If the code fails:** it may already have been used or replaced. Ask for a fresh invitation. Codes work once. Keep invitations private until used; share your contact address when you only want someone to message you.
+
+**Add another phone:** on a paired phone open **Node → Pair my other device**. Enter the admin password if asked; scan the new invitation on the new phone. To disconnect a lost phone, use **Node → Paired devices → Revoke**.
+
+**Using someone else's host:** the operator can access the keys and history stored on that machine. Choose someone you trust. Built-in guest accounts provide chat, calls and files; they do not include wallet or node controls. Other hosted account types may differ. See the [Cloud manual](cloud.html).
+
+## Host your own always-on account {#one-account-on-all-your-devices}
+
+**Choose this if:** you want your account to stay online while your phone is off, and want to pair several phones to it. **Parlons Cloud server** is the lighter option: it runs the account without a full Minima blockchain node. The Android Cloud app connects to it.
+
+**You need:** a Mac, Linux computer, Raspberry Pi or Windows PC that stays awake and online. On Mac, install Java 11+ first, or have Homebrew available. Linux may ask for sudo to install dependencies. You do not need a domain for the account. This creates an account; for an existing identity, read [moving an account](cloud.html#move-an-account-to-another-machine) first.
+
+### Install on the host machine
+
+1. On **Mac or Linux**, open Terminal on the machine that will stay on and run:
 
    ```
-   curl -fsSL {{NODE_INSTALL_SH}} | bash
+   curl -fsSL {{INSTALL_SH}} | bash
    ```
 
-3. Wait. It installs everything it needs and starts your node. This takes a few minutes.
-4. When asked, choose an **admin password** and type it twice. You need it every time you add a device.
-5. When asked again, type the password once. A QR code appears.
+   On **Windows 10/11**, open PowerShell and run:
 
-**On your phone:**
+   ```
+   irm {{INSTALL_PS1}} | iex
+   ```
 
-1. On your Android phone, install [Parlons Cloud]({{PORTAL_APK}}). (An iPhone app is coming; it is not available yet.)
-2. Open it and tap **Scan pairing QR**. Point the camera at the QR code.
-3. Tap **Connect & pair**. Your account opens.
+   The Windows installer is supplied but has not yet been verified on Windows by its authors. Prefer a supported Linux host if you need an established server setup.
+2. Wait for the installer to finish. It installs dependencies, downloads the release and starts the account. Keep the invitation it prints private. Mac/Linux can show a QR; Windows prints an invitation to paste.
+3. On your Android phone, follow [install and pair Parlons Cloud](start-pair.html).
+4. Open a new terminal on the host and run `parlons status` to check it. `parlons panel` opens its local web panel; `parlons newcode` creates another pairing invitation.
+5. In the paired phone, use **More → Settings → Show seed phrase** to record your identity words privately, then **Back up account…** to save an encrypted backup.
 
-**Afterwards:**
+**Leave the host awake.** Mac and Windows start the service at login; a sleeping or offline host cannot serve your account. The installer also enables a relay on TCP 9501 by default to help others. Account access works through outbound connections; public relay service additionally needs that port reachable. [Hosting options and relay settings](cloud.html#19-one-account-on-your-own-machine-the-one-line-installers).
 
-- To add another phone or computer, run `sudo parlons-pair --admin` on the Linux machine and scan the new QR code.
-- Back up your node's 24 words: [how to back up the seed](node.html#20-seeds-identity-and-backups).
-- Using a Mac or Windows PC instead of Linux? Run the lighter account-only program, [Parlons Cloud](cloud.html#19-one-account-on-your-own-machine-the-one-line-installers).
+**Everyday maintenance:** `parlons log` shows the log. On Mac/Linux, `parlons update` updates the server; on Windows rerun the installer. Keep backups before updates. To give a friend their own identity, use **Node → Manage hosted accounts**, not an invitation to your own account. [Hosting friends](cloud.html#11-hosting-friends-guest-invitations).
 
-## Add a friend {#add-a-friend}
+## Run Parlons Node {#run-a-full-node}
 
-Adding someone is a handshake: you introduce yourself, and they appear when their device answers.
+**Choose this if:** you want a full Minima node, a Parlons account and a relay on one machine. This is an operator setup. You do not need it just to chat.
 
-1. Open the **Contacts** tab.
-2. Tap **+ Add** (on a computer, click **Add contact**).
-3. Scan their QR code, or paste their address.
-4. Tap **Introduce myself**.
+**You need:** always-on Linux with systemd and sudo/root access; a 64-bit Raspberry Pi can be used. Plan RAM and growing chain storage using the [Node requirements](node.html#3-requirements). The manual recommends 2 GB RAM for a plain node or 8 GB for MegaMMR. The installer may enable MegaMMR on smaller machines, so select the mode deliberately.
 
-To give someone your address: open **Contacts** and tap **Share my address**. They can scan the QR code, or you can send them the address.
+### Install, pair and check
 
-## Downloads {#downloads}
+1. For a **plain full node without MegaMMR**, run this in the server's terminal:
 
-Everything is on the [releases page]({{RELEASES}}), with checksums.
+   ```
+   curl -fsSL {{NODE_INSTALL_SH}} | bash -s -- --no-megammr
+   ```
 
-| For | Download |
+   For a wallet gateway with MegaMMR, follow the [full installation guide](node.html#5-three-ways-to-install) to size memory and configure it.
+2. The installer adds Java if needed, starts a system service and opens TCP 9001 and 9501 in supported active host firewalls. Check any provider firewall or home router too. Chain sync can take longer than account startup.
+3. When asked, set an **admin pairing password**, then enter it to show your invitation QR. If you need it later, run `sudo parlons-pair --admin`.
+4. On your Android phone, follow [install and pair Parlons Cloud](start-pair.html). Scan the invitation, then tap **Connect & pair**.
+5. Check the server with `systemctl is-active parlons-node`. Read recent logs with `sudo journalctl -u parlons-node -n 50 --no-pager`.
+6. Follow [seeds, identity and backups](node.html#20-seeds-identity-and-backups). The chat identity and node wallet phrase can differ; preserve both where applicable.
+
+Use **Node** in the paired app for account and device management. Node owners also get node tools; guests do not. For updates, monitoring and recovery, keep the [Node manual](node.html) handy.
+
+## Your first conversation {#add-a-friend}
+
+1. Ask your friend for their **contact address or contact QR**, not their pairing invitation.
+2. Open **Contacts → + Add** (Desktop: **Add contact**).
+3. On Android, scan their QR or paste the full address. On Desktop, paste it. Tap **Introduce myself**.
+4. Wait for their device to answer the introduction. If it is offline, the contact may not appear immediately.
+5. Open the contact's chat, type a message and press the send arrow. Ask them to reply.
+
+To let someone add you, share your address from **Contacts**. Keep the whole address intact. People using different Parlons versions can message each other.
+
+## Everyday use {#everyday-use}
+
+- **Messages:** open **Chats**, choose the conversation and type. A queued indicator means waiting; one tick means a relay has the message; two ticks mean the recipient's device confirmed it. A read indicator depends on read receipts being enabled.
+- **Photos and files:** open a chat and use **Attach**. On Android choose **Photo library** or **Private file**, select the item and send it. For Desktop's file-transfer options, see the [app manual](parlons.html).
+- **Calls:** in an Android one-to-one chat, tap **Voice call** or **Video call** and allow microphone/camera access when asked. Desktop does not carry call audio or video.
+- **Groups:** on Android open **Chats → New group**, name it, select contacts and tap **Create**.
+- **Notifications:** allow notifications and background operation in Android settings. Cloud additionally needs its account host to stay online.
+
+## Back up before you need it {#backups}
+
+**The 24 words recover an identity, not your old chat history.** Write them on paper and store them privately. Do not send them to anyone or enter them on a website. Keep any separate wallet phrase too.
+
+- **Parlons! Android:** **Settings → Keys & security → Back up identity…** creates an encrypted `.pbk`. It includes identity, contacts and settings, but not chat history.
+- **Parlons Cloud:** **More → Settings → Keys & backup → Back up account…** creates an encrypted `.pbk` including contacts and chat history. Media and private-file payloads are not included.
+- **Desktop:** record your seed; read [backups and moving](parlons.html#20-backups-and-moving-to-a-new-device) before changing computers.
+
+Save the backup somewhere other than the device being backed up, and keep its password safe. It cannot be recovered for you. To use one account on several phones, pair them to a host; do not run copies of the same seed independently.
+
+## If something does not work {#need-more}
+
+| What you see | What to try |
 |---|---|
-| Android phone | [parlons-{{ANDROID_VERSION}}.apk]({{ANDROID_APK}}) |
-| Mac (Apple silicon) | [MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}}) |
-| Windows | [MaximaNode-{{DESKTOP_VERSION}}.msi]({{DESKTOP_MSI}}) |
-| Linux desktop | [maximanode_{{DESKTOP_VERSION}}_amd64.deb]({{DESKTOP_DEB}}) |
-| Android phone, connecting to your account | [parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk]({{PORTAL_APK}}) |
-| Linux server or Raspberry Pi | `curl -fsSL {{NODE_INSTALL_SH}} \| bash` |
+| Cloud will not pair | Check the host is running, paste the full invitation and use a fresh one-time code. |
+| An introduction is waiting | Ask the other person to open their app and check their connection. |
+| Messages arrive only when you open the app | Allow notifications and background operation; for Cloud, check the host too. |
+| One tick remains | A relay received it; the recipient has not confirmed receipt yet. Check their connection. |
+| A lost paired phone | Revoke that device from another paired phone's Node tab. |
 
-## Need more? {#need-more}
+Full instructions: [Parlons! manual](parlons.html), [Cloud manual](cloud.html), [Node manual](node.html). If you [report a problem]({{ISSUES}}), include the app name, version, device and exact error. Never include seeds, passwords or unused pairing invitations.
 
-Every feature, step by step: the [Parlons! manual](parlons.html) (the apps), the [Parlons Cloud manual](cloud.html) (your phone and account) and the [Parlons Node manual](node.html) (your server). Something wrong? Each manual ends with troubleshooting, or ask on the [issue tracker]({{ISSUES}}).
+## Current downloads {#downloads}
+
+| What you are installing | Current release |
+|---|---|
+| Parlons! Android, independent identity | [{{ANDROID_VERSION}} · APK]({{ANDROID_APK}}) |
+| Parlons Desktop · Apple silicon Mac | [{{DESKTOP_VERSION}} · DMG]({{DESKTOP_DMG}}) |
+| Parlons Desktop · Windows 10/11 | [{{DESKTOP_VERSION}} · MSI]({{DESKTOP_MSI}}) |
+| Parlons Desktop · Debian/Ubuntu x86-64 | [{{DESKTOP_VERSION}} · DEB]({{DESKTOP_DEB}}) |
+| Parlons Cloud Android, paired client | [{{PORTAL_VERSION}} · APK]({{PORTAL_APK}}) |
+| Parlons Cloud server | {{CLOUD_VERSION}} · use the host guide above |
+| Parlons Node | [{{NODE_VERSION}} · JAR]({{NODE_JAR}}) · use the Node guide above |
+
+The apps and servers have separate version numbers. A bigger number does not mean a better choice. Release notes and checksums are on [GitHub]({{RELEASES}}).

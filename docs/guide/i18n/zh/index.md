@@ -1,100 +1,176 @@
-# Parlons 入门
+# 选择版本，完成设置，开始聊天
 
-私密聊天，中间没有任何公司。不用注册，不用手机号。选择你想做的事，然后按步骤操作。
+选择适合您的指南，从下载到第一次对话一步步操作。**两个 Android 应用用途不同：**Parlons! 将身份保存在手机上；Parlons Cloud 连接运行在其他机器上的账户。
 
 <div class="cards">
-<a href="#chat-on-your-android-phone"><b>在 Android 手机上聊天</b><span>安装一个应用就能开始聊天。</span><em>Android 9+</em></a>
-<a href="#chat-on-your-computer"><b>在电脑上聊天</b><span>Mac、Windows 或 Linux。</span><em>Parlons Desktop {{DESKTOP_VERSION}}</em></a>
-<a href="#one-account-on-all-your-devices"><b>一个账户，所有设备通用</b><span>每部手机和每台电脑上都是同样的聊天。</span><em>Parlons Node {{NODE_VERSION}}</em></a>
+<a href="start-android.html"><b>Android · 独立应用</b><span>无需安排账户服务器，身份保存在这部手机上。</span></a>
+<a href="start-desktop.html"><b>Mac、Windows 或 Linux · 桌面应用</b><span>在电脑上使用独立身份聊天。</span></a>
+<a href="start-pair.html"><b>我已有邀请 · Parlons Cloud</b><span>将 Android 手机连接到已有账户。</span></a>
+<a href="start-host.html"><b>我想运行自己的常久在线账户</b><span>安装较轻量的 Cloud 服务器，再配对手机。</span></a>
+<a href="start-node.html"><b>我还想运行完整 Minima 节点</b><span>在 Linux 上运行 Parlons Node，面向服务器管理员。</span></a>
 </div>
 
-> **你的 24 个词既是你的身份，也是一个钱包。** 它们显示出来时，请写在纸上。千万不要拍照。谁拿到这些词，谁就能冒充你。
+iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本。桌面下载适用于 Apple 芯片 Mac、Windows 10/11 和 x86-64 Debian/Ubuntu。
 
-## 在 Android 手机上聊天 {#chat-on-your-android-phone}
+## Android 上的 Parlons! {#chat-on-your-android-phone}
 
-你需要 Android 9 或更高版本，还要准备纸和笔。
+**适合您，如果：**您想安装一个应用就开始聊天，无需安排账户服务器。身份、联系人和聊天记录保存在这部手机上，应用通过 Parlons 中继网络连接。
 
-1. 在手机上下载 [parlons-{{ANDROID_VERSION}}.apk]({{ANDROID_APK}})。
-2. 打开下载的文件，点 **安装**。如果 Android 询问，请允许从浏览器安装应用。
-3. 点 **打开**。选择你的语言。
-4. 点 **创建新身份**。
-5. 把 24 个词按顺序写在纸上，连同它们的编号。逐个核对，然后点 **我已保存**。
-6. Android 询问是否允许发送通知时，点 **允许**。
-7. 点右上角的 **三个点**，再点 **设置**。在 **您的名称** 下面输入你的名字，然后点 **设置**。
+### 安装并创建身份
 
-现在去[添加好友](#add-a-friend)。
+1. 在手机上下载 [Parlons! {{ANDROID_VERSION}} Android 版]({{ANDROID_APK}})。
+2. 打开 APK，点击 **Install（安装）**。如有提示，允许浏览器安装应用。
+3. 打开 **Parlons!**，选择语言，点击 **Create new identity（创建新身份）**。
+4. 按顺序在纸上写下全部 24 个词。检查后点击 **I've saved them（我已保存）**。这些词控制您的身份，也可能控制钱包，请保密。
+5. 允许通知。在**三点菜单 → Settings（设置）**中填写 **Your name（您的名字）**，点击 **Set（设置）**。
+6. 查看 **Network（网络）**。**Connected（已连接）**表示至少已连接一个中继，可以添加联系人了。
 
-## 在电脑上聊天 {#chat-on-your-computer}
+**已有身份？**恢复前先阅读[备份和迁移指南](parlons.html#20-backups-and-moving-to-a-new-device)。新身份有不同地址。在多台同时运行的设备上恢复同一助记词不能同步聊天。
 
-1. 下载适合你电脑的 Parlons Desktop：
-   - 使用 Apple 芯片的 Mac：[MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}})
-   - Windows 10 或 11：[MaximaNode-{{DESKTOP_VERSION}}.msi]({{DESKTOP_MSI}})
-   - Linux（Debian、Ubuntu）：[maximanode_{{DESKTOP_VERSION}}_amd64.deb]({{DESKTOP_DEB}})
-2. 安装：
-   - **Mac：** 打开磁盘映像，把 **MaximaNode** 拖进“应用程序”文件夹。
-   - **Windows：** 运行安装程序。如果出现蓝色的 **Windows 已保护你的电脑** 提示框，点 **更多信息**，再点 **仍要运行**。
-   - **Linux：** 在保存文件的文件夹里运行 `sudo apt install ./maximanode_{{DESKTOP_VERSION}}_amd64.deb`
-3. 打开 **MaximaNode**。
-4. 窗口里会显示你的 24 个词。按顺序把它们写在纸上。
-5. 点右上角的 **三个点**。在 **您的名称** 下面输入你的名字，然后点 **设置**。
+**日常维护：**在 Android 电池设置中允许后台运行。用新版 APK 覆盖安装更新；卸载或清除数据前先备份。
 
-现在去[添加好友](#add-a-friend)。
+## Parlons Desktop {#chat-on-your-computer}
 
-## 一个账户，所有设备通用 {#one-account-on-all-your-devices}
+**适合您，如果：**您想在电脑上聊天。这是在该电脑上的独立身份，与手机同时安装不会自动共享聊天。
 
-你的账户运行在一台一直开着的 Linux 机器上，比如一台小服务器，或者一台装了 64 位系统的 Raspberry Pi。你的手机和电脑都连接到它，所以每台设备上都是同样的聊天；手机关机时，消息会在那里等你。
+### 为您的电脑安装
 
-这个程序叫 **Parlons Node**：它把你的账户、一个帮助网络传送消息的中继和一个完整的 Minima 节点合在一起。
+1. 下载匹配的安装程序：
+   - **Apple 芯片 Mac：**[MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}})。打开后将 **MaximaNode** 拖到 Applications（应用程序）。
+   - **Windows 10/11：**[MaximaNode-{{DESKTOP_VERSION}}.msi]({{DESKTOP_MSI}})。打开并按照安装提示操作。
+   - **Debian/Ubuntu，x86-64：**[maximanode_{{DESKTOP_VERSION}}_amd64.deb]({{DESKTOP_DEB}})。在下载目录运行 `sudo apt install ./maximanode_{{DESKTOP_VERSION}}_amd64.deb`。
+2. 打开 **MaximaNode**，这是 Parlons Desktop 安装后的名称。
+3. 在 **Back up your Maxima seed（备份 Maxima 助记词）**窗口中，将 24 个词依次写在纸上并妥善保管。
+4. 打开**三点菜单**，填写 **Your name**，点击 **Set**。
+5. 在 **Network** 中确认连接，然后按下方步骤添加联系人。桌面端粘贴地址，不支持摄像头扫描二维码。
 
-**在 Linux 机器上：**
+**通话：**桌面端支持消息和文件，但不传输语音或视频通话。请使用 Android 应用通话。保持 Desktop 运行以保持连接；要退出时使用托盘图标的 **Quit（退出）**。
 
-1. 在它上面打开终端，或者用 SSH 连接到它。
-2. 粘贴下面这行，然后按回车：
+安装问题或迁移已有身份，请参阅 [Parlons! 手册](parlons.html)。
+
+## Parlons Cloud：使用邀请连接 {#pair-an-account}
+
+**适合您，如果：**您已有账户邀请，或在自己的机器上运行了账户。Android 应用是账户的远程界面：身份和聊天记录存放在主机上，多部配对手机访问同一账户。
+
+**开始之前：**向托管者或已配对的设备获取邀请。如果没有主机，先[托管自己的账户](start-host.html)。朋友的联系人二维码用于和对方聊天；配对邀请授予账户访问权限，两者不同。
+
+### 安装并配对
+
+1. 下载 [Parlons Cloud {{PORTAL_VERSION}} Android 版]({{PORTAL_APK}})。打开 APK，按提示允许安装并点击 **Install**。
+2. 打开 **Parlons Cloud**，点击 **Scan pairing QR（扫描配对二维码）**。或将完整邀请粘贴到 **Account address or pairing invite（账户地址或配对邀请）**。
+3. 点击 **Connect & pair（连接并配对）**。状态先显示正在连接网络，再显示找到账户并配对，然后打开账户。
+4. 允许通知。在 **More → Settings → This device（更多 → 设置 → 此设备）**中，如有 **Keep running in the background（保持后台运行）**，点击允许。
+5. 打开 **Node（节点）**查看账户连接和已配对设备，然后按下方步骤开始对话。
+
+**配对码失效？**它可能已使用或被新码替换，请索取新邀请。配对码只能使用一次；使用前请保密。只想让别人给您发消息时，分享联系人地址即可。
+
+**添加另一部手机：**在已配对手机上打开 **Node → Pair my other device（配对我的另一台设备）**，如有提示输入管理员密码，在新手机扫描新邀请。丢失手机时，在 **Node → Paired devices → Revoke（已配对设备 → 撤销）**中断开它。
+
+**使用他人主机：**管理员能访问机器上保存的密钥和历史记录，请选择可信赖的人。内置访客账户提供聊天、通话和文件，不提供钱包或节点控制。其他托管类型可能不同，详见 [Cloud 手册](cloud.html)。
+
+## 托管自己的常久在线账户 {#one-account-on-all-your-devices}
+
+**适合您，如果：**您希望手机关闭时账户仍在线，并将多部手机配对到同一账户。**Parlons Cloud 服务器**较轻量，无需运行完整 Minima 区块链节点；Android Cloud 应用连接到它。
+
+**准备：**一台保持唤醒和联网的 Mac、Linux 电脑、树莓派或 Windows PC。Mac 需先安装 Java 11+ 或具备 Homebrew；Linux 可能需要 sudo 安装依赖。账户不需要域名。这会创建账户；迁移已有身份请先阅读[迁移账户](cloud.html#move-an-account-to-another-machine)。
+
+### 在主机上安装
+
+1. **Mac 或 Linux：**在常开机器的终端运行：
 
    ```
-   curl -fsSL {{NODE_INSTALL_SH}} | bash
+   curl -fsSL {{INSTALL_SH}} | bash
    ```
 
-3. 等待。它会安装所需的一切，并启动你的节点。这需要几分钟。
-4. 提示时，设置一个 **管理员密码**，输入两遍。以后每次添加设备都要用到它。
-5. 再次提示时，输入一遍密码。屏幕上会出现一个二维码。
+   **Windows 10/11：**在 PowerShell 中运行：
 
-**在手机上：**
+   ```
+   irm {{INSTALL_PS1}} | iex
+   ```
 
-1. 在 Android 手机上安装 [Parlons Cloud]({{PORTAL_APK}})。（iPhone 应用正在开发中，暂时还不能用。）
-2. 打开它，点 **扫描配对二维码**。用摄像头对准那个二维码。
-3. 点 **连接并配对**。你的账户就会打开。
+   作者尚未在 Windows 上验证此安装程序。需要经过验证的服务器方案时，优先选择受支持的 Linux 主机。
+2. 等待依赖安装、版本下载和账户启动完成。妥善保管输出的邀请。Mac/Linux 可显示二维码，Windows 输出可粘贴的邀请。
+3. 在 Android 手机上按照 [Cloud 安装和配对指南](start-pair.html)操作。
+4. 在主机打开新终端，运行 `parlons status` 检查状态。`parlons panel` 打开本地网页面板；`parlons newcode` 创建新邀请。
+5. 在已配对手机的 **More → Settings → Show seed phrase（显示助记词）**中私下记录身份词语，再用 **Back up account…（备份账户…）**保存加密备份。
 
-**之后：**
+**主机须保持唤醒。**Mac 和 Windows 服务在登录时启动；休眠或离线的主机无法提供账户服务。安装程序默认还在 TCP 9501 启用中继。账户通过出站连接工作；为他人提供公共中继还需开放该端口。[托管选项和中继设置](cloud.html#19-one-account-on-your-own-machine-the-one-line-installers)。
 
-- 要添加另一部手机或电脑，在 Linux 机器上运行 `sudo parlons-pair --admin`，然后扫描新的二维码。
-- 备份你节点的 24 个词：[如何备份助记词](node.html#20-seeds-identity-and-backups)。
-- 用的是 Mac 或 Windows 电脑，而不是 Linux？那就运行更轻量、只含账户功能的程序 [Parlons Cloud](cloud.html#19-one-account-on-your-own-machine-the-one-line-installers)。
+**日常维护：**`parlons log` 查看日志。Mac/Linux 使用 `parlons update` 更新，Windows 重新运行安装程序。更新前备份。为朋友创建独立身份，请使用 **Node → Manage hosted accounts（管理托管账户）**，不要给出您自己账户的配对邀请。[托管朋友](cloud.html#11-hosting-friends-guest-invitations)。
 
-## 添加好友 {#add-a-friend}
+## 运行 Parlons Node {#run-a-full-node}
 
-添加好友就像握手：你先介绍自己，对方设备回应后，对方就会出现在你的列表里。
+**适合您，如果：**您想在一台机器上运行完整 Minima 节点、Parlons 账户和中继。这是管理员方案，单纯聊天不需要它。
 
-1. 打开 **联系人** 标签页。
-2. 点 **+ 添加**（在电脑上点 **添加联系人**）。
-3. 扫描对方的二维码，或者粘贴对方的地址。
-4. 点 **发送介绍**。
+**准备：**保持在线、带 systemd 和 sudo/root 权限的 Linux；可使用 64 位树莓派。参照[节点要求](node.html#3-requirements)规划内存和不断增长的链存储。手册建议普通节点配 2 GB 内存，MegaMMR 配 8 GB。安装程序可能在较小机器上开启 MegaMMR，请主动选择模式。
 
-把你的地址告诉别人：打开 **联系人**，点 **分享我的地址**。对方可以扫描二维码，你也可以把地址发给对方。
+### 安装、配对和检查
 
-## 下载 {#downloads}
+1. **不带 MegaMMR 的普通完整节点**，在服务器终端运行：
 
-所有文件都在[发布页面]({{RELEASES}})上，并附有校验和。
+   ```
+   curl -fsSL {{NODE_INSTALL_SH}} | bash -s -- --no-megammr
+   ```
 
-| 适用于 | 下载 |
+   若要带 MegaMMR 的钱包网关，请按[完整安装指南](node.html#5-three-ways-to-install)配置内存。
+2. 安装程序会按需添加 Java，启动系统服务，并在受支持且启用的主机防火墙上开放 TCP 9001、9501。还应检查云防火墙或家用路由器。区块链同步可能比账户启动更久。
+3. 按提示设置**管理员配对密码**，再输入密码显示邀请二维码。以后可运行 `sudo parlons-pair --admin`。
+4. 在手机上按 [Cloud 配对指南](start-pair.html)扫描邀请，点击 **Connect & pair**。
+5. 用 `systemctl is-active parlons-node` 检查服务，用 `sudo journalctl -u parlons-node -n 50 --no-pager` 查看最近日志。
+6. 按[助记词、身份与备份](node.html#20-seeds-identity-and-backups)备份。聊天身份和节点钱包助记词可能不同，需要时两者都保存。
+
+使用手机的 **Node** 管理账户和设备。节点所有者拥有节点工具，访客没有。更新、监控和恢复见 [Node 手册](node.html)。
+
+## 第一次对话 {#add-a-friend}
+
+1. 向朋友索取**联系人地址或二维码**，而不是配对邀请。
+2. 打开 **Contacts → + Add（联系人 → 添加）**；桌面端为 **Add contact**。
+3. Android 扫码或粘贴完整地址；桌面端粘贴。点击 **Introduce myself（介绍自己）**。
+4. 等待对方设备回复介绍。如果对方离线，联系人可能不会立刻出现。
+5. 打开聊天，输入消息，点击发送箭头，请对方回复。
+
+让别人添加您时，从 **Contacts** 分享完整地址。使用不同 Parlons 版本的人可以互相发消息。
+
+## 日常使用 {#everyday-use}
+
+- **消息：**在 **Chats（聊天）**中打开对话并输入。排队图标表示等待；一个勾表示中继收到；两个勾表示接收设备确认收到。已读标志取决于是否开启已读回执。
+- **照片和文件：**在聊天中选择 **Attach（附件）**。Android 可选 **Photo library（照片库）**或 **Private file（私密文件）**，选中后发送。桌面传输选项见[应用手册](parlons.html)。
+- **通话：**Android 一对一聊天中点击 **Voice call（语音通话）**或 **Video call（视频通话）**，按提示允许麦克风和摄像头。桌面端不支持通话音视频。
+- **群组：**Android 上打开 **Chats → New group（新建群组）**，命名、选择联系人并点击 **Create（创建）**。
+- **通知：**在 Android 设置中允许通知和后台运行。Cloud 的账户主机也必须在线。
+
+## 提前做好备份 {#backups}
+
+**24 个词恢复身份，不恢复旧聊天记录。**将它们写在纸上私密保存，不要发给任何人或输入网站。若有独立钱包助记词，也要保存。
+
+- **Parlons! Android：****Settings → Keys & security → Back up identity…** 创建加密 `.pbk`，包含身份、联系人和设置，不含聊天历史。
+- **Parlons Cloud：****More → Settings → Keys & backup → Back up account…** 创建加密 `.pbk`，包含联系人和聊天历史，但不含媒体和私密文件内容。
+- **桌面端：**保存助记词，更换电脑前阅读[备份和迁移](parlons.html#20-backups-and-moving-to-a-new-device)。
+
+将备份保存在原设备之外，并保存好密码，密码无法代为找回。多部手机共用一个账户应采用配对，不要独立运行同一种子的多个副本。
+
+## 遇到问题时 {#need-more}
+
+| 问题 | 可以尝试 |
 |---|---|
-| Android 手机 | [parlons-{{ANDROID_VERSION}}.apk]({{ANDROID_APK}}) |
-| Mac（Apple 芯片） | [MaximaNode-{{DESKTOP_VERSION}}-notarized.dmg]({{DESKTOP_DMG}}) |
-| Windows | [MaximaNode-{{DESKTOP_VERSION}}.msi]({{DESKTOP_MSI}}) |
-| Linux 电脑 | [maximanode_{{DESKTOP_VERSION}}_amd64.deb]({{DESKTOP_DEB}}) |
-| 连接到你账户的 Android 手机 | [parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk]({{PORTAL_APK}}) |
-| Linux 服务器或 Raspberry Pi | `curl -fsSL {{NODE_INSTALL_SH}} \| bash` |
+| Cloud 无法配对 | 检查主机在线，粘贴完整邀请，使用新的一次性配对码。 |
+| 介绍一直等待 | 请对方打开应用并检查连接。 |
+| 只有打开应用才收到消息 | 允许通知和后台运行；Cloud 还应检查主机。 |
+| 始终一个勾 | 中继已收到，对方设备尚未确认，检查对方连接。 |
+| 已配对手机丢失 | 从另一部已配对手机的 Node 页面撤销该设备。 |
 
-## 想了解更多？ {#need-more}
+完整说明：[Parlons! 手册](parlons.html)、[Cloud 手册](cloud.html)、[Node 手册](node.html)。[报告问题]({{ISSUES}})时请写明应用名称、版本、设备和确切错误，不要提供助记词、密码或未使用的配对邀请。
 
-每个功能都有分步说明：[Parlons! 手册](parlons.html)（应用）、[Parlons Cloud 手册](cloud.html)（你的手机和账户）和 [Parlons Node 手册](node.html)（你的服务器）。遇到问题？每本手册的最后都有故障排除，你也可以到[问题反馈页]({{ISSUES}})提问。
+## 当前下载 {#downloads}
+
+| 安装内容 | 当前版本 |
+|---|---|
+| Parlons! Android · 独立身份 | [{{ANDROID_VERSION}} · APK]({{ANDROID_APK}}) |
+| Parlons Desktop · Apple 芯片 Mac | [{{DESKTOP_VERSION}} · DMG]({{DESKTOP_DMG}}) |
+| Parlons Desktop · Windows 10/11 | [{{DESKTOP_VERSION}} · MSI]({{DESKTOP_MSI}}) |
+| Parlons Desktop · Debian/Ubuntu x86-64 | [{{DESKTOP_VERSION}} · DEB]({{DESKTOP_DEB}}) |
+| Parlons Cloud Android · 配对客户端 | [{{PORTAL_VERSION}} · APK]({{PORTAL_APK}}) |
+| Parlons Cloud 服务器 | {{CLOUD_VERSION}} · 参照上方托管指南 |
+| Parlons Node | [{{NODE_VERSION}} · JAR]({{NODE_JAR}}) · 参照 Node 指南 |
+
+应用与服务器各有版本号，数字更大不代表更适合您。发布说明和校验和见 [GitHub]({{RELEASES}})。

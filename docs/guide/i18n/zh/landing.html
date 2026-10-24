@@ -1,73 +1,15 @@
 {{{HEAD}}}
 {{{BAR}}}
-<main>
+<a class="skip-link" href="#main">选择适合的版本</a>
+<main id="main">
 <section class="hero"><div class="wrap">
-  <div>
-    <span class="eyebrow"><i></i>Parlons · 基于 Maxima 和 Minima 区块链</span>
-    <h1>Parlons<b>!</b></h1>
-    <p class="tag serif">一起聊天，中间没有任何人。</p>
-    <p class="stance"><strong>私密聊天，中间没有任何公司。</strong>你的消息在你的设备上加密封存，再由像你一样的普通人运行的中继传送。不用注册，不用手机号，也不用在任何地方开账户。</p>
-    <div class="cta"><a class="btn btn-go" href="#start">开始使用</a><a class="btn btn-line" href="guide/index.html">分步指南</a></div>
-    <p class="fine">Android · Mac · Windows · Linux · Raspberry Pi</p>
-  </div>
-  <div class="chat" aria-label="一段 Parlons 对话示例">
-    <div class="top"><span class="av">C</span><span class="who"><b>Camille</b><span>在线 · 3 个中继</span></span><span class="lock">端到端加密</span></div>
-    <div class="body">
-      <span class="day">今天</span>
-      <div class="msg in">je parle<small>09:41</small></div>
-      <div class="msg out">tu parles<small>09:41 <span class="t">✓</span></small></div>
-      <div class="msg in">nous parlons. 不用手机号，也不用注册？<small>09:42</small></div>
-      <div class="msg out">都不用。你扫了我的二维码，我回应了你，这样就握手成功了。<small>09:42 <span class="t">✓✓</span></small></div>
-      <div class="msg out pay"><span class="amt">25 MxUSD</span><span class="tok">在聊天里发送，走同一条加密通道</span><small>09:43 <span class="t read">✓✓</span></small></div>
-    </div>
-    <div class="compose"><span>消息</span><i aria-hidden="true">↑</i></div>
-    <div class="legend" aria-label="勾号的含义"><div><b>⋯</b>已排队</div><div><b>✓</b>中继已收到</div><div><b>✓✓</b>对方设备已收到</div><div><b class="read">✓✓</b>已读</div></div>
-  </div>
+<div><span class="eyebrow"><i></i>私密消息 · 开源</span><h1>Parlons<b>!</b></h1><p class="tag serif">您的对话，由您选择。</p><p class="stance">无需分享手机号码即可聊天。将身份保存在自己的设备上，或连接常久在线账户。从适合您使用方式的版本开始。</p><div class="cta"><a class="btn btn-go" href="#start">选择适合的版本 ↓</a><a class="text-action" href="guide/index.html">设置与日常使用 →</a></div><p class="fine">Android · Mac · Windows · Linux</p></div>
+<div class="hero-screens"><figure><img src="assets/img/android-chat.png" alt="Parlons! — 保存在您的设备上" width="600" height="1333"><figcaption>保存在您的设备上</figcaption></figure><figure><img src="assets/img/cloud-pair.png" alt="Parlons Cloud — 保存在账户主机上" width="600" height="1333"><figcaption>保存在账户主机上</figcaption></figure></div>
 </div></section>
-
-<section class="sec" id="start" style="padding-top:24px"><div class="wrap">
-  <div class="lead"><span class="label">开始使用</span><h2>选一种方式，按步骤操作。</h2>
-  <p>每种只要几分钟。你的 24 个词就是你的身份：把它们写在纸上，妥善保管。</p></div>
-  <div class="three">
-    <div class="way"><h3>在 Android 手机上聊天</h3><p class="for">需要 Android 9 或更高版本。</p>
-      <ol>
-        <li>在手机上下载应用：<div class="dl"><a href="{{ANDROID_APK}}">parlons-{{ANDROID_VERSION}}.apk</a></div></li>
-        <li>打开下载的文件，点 <b>安装</b>。如果 Android 询问，请允许从浏览器安装应用。</li>
-        <li>打开 Parlons，点 <b>创建新身份</b>。</li>
-        <li>按顺序把 24 个词写在纸上。然后点 <b>我已保存</b>。</li>
-        <li>允许通知，这样有新消息时你就能看到。</li>
-      </ol>
-      <a class="more" href="guide/index.html#chat-on-your-android-phone">查看详细说明 →</a></div>
-    <div class="way"><h3>在电脑上聊天</h3><p class="for">Mac（Apple 芯片）、Windows 10/11 或 Linux。</p>
-      <ol>
-        <li>下载 Parlons Desktop：<div class="dl"><a href="{{DESKTOP_DMG}}">Mac</a><a href="{{DESKTOP_MSI}}">Windows</a><a href="{{DESKTOP_DEB}}">Linux</a></div></li>
-        <li>安装。在 Mac 上，把 <b>MaximaNode</b> 拖进“应用程序”文件夹。在 Windows 上，如果出现蓝色提示框，点 <b>更多信息</b>，再点 <b>仍要运行</b>。</li>
-        <li>打开 <b>MaximaNode</b>。</li>
-        <li>把它显示的 24 个词抄下来。</li>
-      </ol>
-      <a class="more" href="guide/index.html#chat-on-your-computer">查看详细说明 →</a></div>
-    <div class="way hot"><h3>一个账户，所有设备通用</h3><p class="for">每部手机和每台电脑上都是同样的聊天。需要一台一直开着的 Linux 机器：一台服务器或一台 Raspberry Pi。</p>
-      <ol>
-        <li>在 Linux 机器上粘贴：<pre>curl -fsSL {{NODE_INSTALL_SH}} | bash</pre></li>
-        <li>提示时，设置一个管理员密码。再次提示时再输入一遍，屏幕上就会出现一个二维码。</li>
-        <li>在 Android 手机上安装 Parlons Cloud：<div class="dl"><a href="{{PORTAL_APK}}">parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk</a></div></li>
-        <li>在 Parlons Cloud 里点 <b>扫描配对二维码</b>，扫描那个二维码，然后点 <b>连接并配对</b>。</li>
-      </ol>
-      <a class="more" href="guide/index.html#one-account-on-all-your-devices">查看详细说明 →</a></div>
-  </div>
-  <p class="note2"><b>然后添加好友：</b>打开 <b>联系人</b>，点 <b>+ 添加</b>（在电脑上点 <b>添加联系人</b>），扫描或粘贴对方的地址，再点 <b>发送介绍</b>。对方设备回应后，对方就会出现在列表里。</p>
-</div></section>
-
-<section class="sec" id="see" style="background:var(--surface-2)"><div class="wrap">
-  <div class="lead"><span class="label">看看效果</span><h2>应用的真实截图。</h2></div>
-  <div class="gallery">
-    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="Camille 和 Léo 之间的一段 Parlons! 对话，带有灰色勾号和双勾送达标记" width="600" height="1333" loading="lazy"></div><figcaption><b>一段对话</b>两个勾：对方自己的设备已经收到。</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="“联系人”页面：你的 Parlons 地址，带有“分享我的地址”和“扫描”按钮，还有一个在线的联系人" width="600" height="1333" loading="lazy"></div><figcaption><b>联系人</b>用二维码分享你的地址。</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/cloud-pair.png" alt="Android 版 Parlons Cloud，准备配对：账户地址、“扫描配对二维码”、配对码和“连接并配对”" width="600" height="1333" loading="lazy"></div><figcaption><b>配对手机</b>扫描你节点上显示的二维码。</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Parlons Cloud 的“节点”页面：持续运行并在线、运行时间、已连接三个中继，以及永久地址" width="600" height="1333" loading="lazy"></div><figcaption><b>你的账户</b>一直在线，同时连着多个中继。</figcaption></figure>
-  </div>
-</div></section>
-
+<section class="sec choices-section" id="start"><div class="wrap"><div class="lead"><span class="label">01 / 选择应用</span><h2>您想怎样使用 Parlons？</h2><p>初次使用？独立 Android 或桌面应用最容易上手。已有账户邀请？请选择 Parlons Cloud。</p></div><div class="choices"><article class="choice"><span class="label">Android 手机</span><h3>Parlons!</h3><p class="choice-purpose">独立身份保存在手机上。</p><p>无需安排账户服务器。支持消息、文件及语音或视频通话。</p><p class="choice-note">聊天记录保存在这部手机上。</p><a class="btn btn-dark" href="guide/start-android.html">设置 Android <span aria-hidden="true">→</span></a><small>{{ANDROID_VERSION}} · Android 9+</small></article><article class="choice"><span class="label">Mac、Windows 或 Linux</span><h3>Parlons Desktop</h3><p class="choice-purpose">独立身份保存在电脑上。</p><p>在桌面应用中聊天和分享文件，安装后的名称为 MaximaNode。</p><p class="choice-note">语音和视频通话需要 Android 应用。</p><a class="btn btn-dark" href="guide/start-desktop.html">设置桌面端 <span aria-hidden="true">→</span></a><small>{{DESKTOP_VERSION}} · Apple 芯片 / Windows / Linux x86-64</small></article><article class="choice"><span class="label">我已有账户邀请</span><h3>Parlons Cloud</h3><p class="choice-purpose">将 Android 手机连接到已有账户。</p><p>主机保持账户在线，多部配对手机可查看相同对话。</p><p class="choice-note">需要自己的主机或可信赖的托管者。</p><a class="btn btn-dark" href="guide/start-pair.html">连接我的账户 <span aria-hidden="true">→</span></a><small>{{PORTAL_VERSION}} · Android 9+</small></article></div><p class="availability">使用 iPhone？iPhone 应用尚未提供。</p></div></section>
+<section class="sec" id="hosting"><div class="wrap"><div class="lead"><span class="label">02 / 可选：运行自己的账户</span><h2>希望账户保持在线？</h2><p>如果希望手机关闭时，配对设备仍可访问同一账户，请选择主机方案。已有他人提供的邀请则可跳过这一步。</p></div><div class="host-choices"><article class="host-choice"><div><span class="label">较轻量的托管方案</span><h3>Parlons Cloud 服务器</h3><span class="release">{{CLOUD_VERSION}}</span></div><div><p>在保持唤醒和联网的 Mac、Linux、树莓派或 Windows PC 上运行账户，手机使用上方的 Cloud 应用。</p><p class="choice-note">不运行完整 Minima 区块链节点。提供 Windows 安装程序，但作者尚未验证。</p><a class="text-action" href="guide/start-host.html">设置 Cloud 主机 →</a></div></article><article class="host-choice"><div><span class="label">同时需要完整节点的人</span><h3>Parlons Node</h3><span class="release">{{NODE_VERSION}}</span></div><div><p>在常开 Linux 机器上运行账户、中继和完整 Minima 节点，适合熟悉服务器管理的用户。</p><p class="choice-note">需要 systemd、管理员权限，以及内存和磁盘规划。</p><a class="text-action" href="guide/start-node.html">设置完整节点 →</a></div></article></div></div></section>
+<section class="sec compare-section" id="compare"><div class="wrap"><div class="lead"><span class="label">了解区别</span><h2>同一网络，身份存放在不同地方。</h2></div><div class="tablewrap comparison" tabindex="0" role="region" aria-label="了解区别"><table><caption>了解区别</caption><thead><tr><th scope="col"></th><th scope="col">Parlons! Android</th><th scope="col">Parlons Desktop</th><th scope="col">Parlons Cloud Android</th></tr></thead><tbody><tr><th scope="row">身份和聊天记录</th><td>这部手机</td><td>这台电脑</td><td>账户主机</td></tr><tr><th scope="row">需要独立账户主机</th><td>不需要</td><td>不需要</td><td>需要，自有或可信赖主机</td></tr><tr><th scope="row">语音和视频通话</th><td>支持</td><td>不支持</td><td>支持</td></tr><tr><th scope="row">多部配对手机共用账户</th><td>不支持，请使用 Cloud</td><td>不会自动与手机共享</td><td>支持</td></tr><tr><th scope="row">开始方式</th><td>创建身份</td><td>创建身份</td><td>使用账户邀请</td></tr></tbody></table></div><aside class="privacy-note"><h3>选择数据存放位置。</h3><p>消息通过加密连接传输。Cloud 主机存储账户密钥和历史，管理员可以访问这些记录。请运行自己的主机或选择可信赖的托管者。</p><a href="guide/privacy.html">了解隐私 →</a></aside></div></section>
+<section class="sec" id="questions"><div class="wrap faq-layout"><div class="lead"><span class="label">开始之前</span><h2>几个常见问题。</h2></div><div class="faq"><details><summary>可以和使用其他版本的人聊天吗？</summary><p>可以。Parlons 应用使用同一消息网络，即使应用不同，也可以交换联系人地址聊天。</p></details><details><summary>Cloud 是必须在这里购买的订阅吗？</summary><p>Cloud 应用连接您安排好的账户。您可以运行自己的主机，或从托管者获取邀请。下载应用不会在本网站自动创建托管账户。</p></details><details><summary>联系人二维码和配对邀请一样吗？</summary><p>不一样。联系人地址让别人给您发消息；配对邀请让设备访问账户。请对配对邀请保密。</p></details><details><summary>能用 24 个词同步两个应用吗？</summary><p>共享账户请使用配对。在多个设备独立运行相同种子不会同步聊天历史。指南说明了备份和身份迁移。</p></details><details><summary>为什么版本号不同？</summary><p>手机应用、桌面应用和服务器分别发布版本。应按用途和设备选择，而非版本号大小。</p></details></div></div></section>
 <section class="sec" id="manuals"><div class="wrap">
   <div class="lead"><span class="label">使用手册</span><h2>想了解更多？每个功能都有分步说明。</h2></div>
   <div class="manuals" style="margin-top:30px">
@@ -76,12 +18,6 @@
     <a class="manual" href="guide/node.html"><span class="label">你的服务器</span><h3>Parlons Node 手册</h3><p>安装、设置和更新节点。</p><span class="go">打开 →</span></a>
   </div>
 </div></section>
-
-<section class="close"><div class="wrap" style="display:grid;gap:16px;justify-items:center">
-  <p class="serif" style="font-size:28px;color:var(--sub)">je parle, tu parles,</p>
-  <h2>nous parlons<span style="color:var(--orange)">!</span></h2>
-  <p>安装应用，或者运行你自己的账户。无论哪种方式，你说的话都只属于你。</p>
-  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="#start">开始使用</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">所有版本</a></div>
-</div></section>
+<section class="close"><div class="wrap"><h2>选好版本了吗？开始聊天吧。</h2><p>每份设置指南还包括添加朋友、发消息、分享文件、备份和帮助。</p><a class="btn btn-go" href="#start">选择适合的版本 ↑</a></div></section>
 </main>
 {{{FOOT}}}</body></html>

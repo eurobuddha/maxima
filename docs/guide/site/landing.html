@@ -1,73 +1,15 @@
 {{{HEAD}}}
 {{{BAR}}}
-<main>
+<a class="skip-link" href="#main">Find your version</a>
+<main id="main">
 <section class="hero"><div class="wrap">
-  <div>
-    <span class="eyebrow"><i></i>Parlons · on Maxima and the Minima blockchain</span>
-    <h1>Parlons<b>!</b></h1>
-    <p class="tag serif">Let's talk. Nobody in between.</p>
-    <p class="stance"><strong>Private chat with no company in the middle.</strong> Your words are sealed on your device and carried by relays that people like you run. No sign-up, no phone number, no account with anyone.</p>
-    <div class="cta"><a class="btn btn-go" href="#start">Get started</a><a class="btn btn-line" href="guide/index.html">Step-by-step guide</a></div>
-    <p class="fine">Android · Mac · Windows · Linux · Raspberry Pi</p>
-  </div>
-  <div class="chat" aria-label="An example Parlons conversation">
-    <div class="top"><span class="av">C</span><span class="who"><b>Camille</b><span>online · 3 relays</span></span><span class="lock">Sealed end to end</span></div>
-    <div class="body">
-      <span class="day">Today</span>
-      <div class="msg in">je parle<small>09:41</small></div>
-      <div class="msg out">tu parles<small>09:41 <span class="t">✓</span></small></div>
-      <div class="msg in">nous parlons. No number, no sign-up?<small>09:42</small></div>
-      <div class="msg out">None. You added my QR, I answered. That was the handshake.<small>09:42 <span class="t">✓✓</span></small></div>
-      <div class="msg out pay"><span class="amt">25 MxUSD</span><span class="tok">Sent in the chat, over the same sealed path</span><small>09:43 <span class="t read">✓✓</span></small></div>
-    </div>
-    <div class="compose"><span>Message</span><i aria-hidden="true">↑</i></div>
-    <div class="legend" aria-label="What the ticks mean"><div><b>⋯</b>queued</div><div><b>✓</b>a relay has it</div><div><b>✓✓</b>their device has it</div><div><b class="read">✓✓</b>read</div></div>
-  </div>
+<div><span class="eyebrow"><i></i>Private messaging · open source</span><h1>Parlons<b>!</b></h1><p class="tag serif">Your conversations. Your choice.</p><p class="stance">Talk without sharing a phone number. Keep your identity on your own device, or connect to an always-on account. Start with the version that fits how you want to use it.</p><div class="cta"><a class="btn btn-go" href="#start">Find your version ↓</a><a class="text-action" href="guide/index.html">Setup &amp; everyday use →</a></div><p class="fine">Android · Mac · Windows · Linux</p></div>
+<div class="hero-screens"><figure><img src="assets/img/android-chat.png" alt="Parlons! — On your device" width="600" height="1333"><figcaption>On your device</figcaption></figure><figure><img src="assets/img/cloud-pair.png" alt="Parlons Cloud — On your account host" width="600" height="1333"><figcaption>On your account host</figcaption></figure></div>
 </div></section>
-
-<section class="sec" id="start" style="padding-top:24px"><div class="wrap">
-  <div class="lead"><span class="label">Get started</span><h2>Pick one. Follow the steps.</h2>
-  <p>Each takes a few minutes. Your 24 words are your identity: write them on paper and keep them safe.</p></div>
-  <div class="three">
-    <div class="way"><h3>Chat on your Android phone</h3><p class="for">Android 9 or newer.</p>
-      <ol>
-        <li>On the phone, download the app:<div class="dl"><a href="{{ANDROID_APK}}">parlons-{{ANDROID_VERSION}}.apk</a></div></li>
-        <li>Open the download and tap <b>Install</b>. If Android asks, allow installs from your browser.</li>
-        <li>Open Parlons and tap <b>Create new identity</b>.</li>
-        <li>Write the 24 words on paper, in order. Tap <b>I've saved them</b>.</li>
-        <li>Allow notifications, so you see messages arrive.</li>
-      </ol>
-      <a class="more" href="guide/index.html#chat-on-your-android-phone">More detail →</a></div>
-    <div class="way"><h3>Chat on your computer</h3><p class="for">Mac (Apple silicon), Windows 10/11, or Linux.</p>
-      <ol>
-        <li>Download Parlons Desktop:<div class="dl"><a href="{{DESKTOP_DMG}}">Mac</a><a href="{{DESKTOP_MSI}}">Windows</a><a href="{{DESKTOP_DEB}}">Linux</a></div></li>
-        <li>Install it. On a Mac, drag <b>MaximaNode</b> into Applications. On Windows, if a blue box appears, click <b>More info</b>, then <b>Run anyway</b>.</li>
-        <li>Open <b>MaximaNode</b>.</li>
-        <li>Write down the 24 words it shows.</li>
-      </ol>
-      <a class="more" href="guide/index.html#chat-on-your-computer">More detail →</a></div>
-    <div class="way hot"><h3>One account on all your devices</h3><p class="for">Same chats on every phone and computer. Needs a Linux machine that stays on: a server or a Raspberry Pi.</p>
-      <ol>
-        <li>On the Linux machine, paste:<pre>curl -fsSL {{NODE_INSTALL_SH}} | bash</pre></li>
-        <li>When asked, choose an admin password. Type it again when asked, and a QR code appears.</li>
-        <li>On your Android phone, install Parlons Cloud:<div class="dl"><a href="{{PORTAL_APK}}">parlons-cloud-portal-{{PORTAL_VERSION}}-release.apk</a></div></li>
-        <li>In Parlons Cloud, tap <b>Scan pairing QR</b>, scan the code, then tap <b>Connect &amp; pair</b>.</li>
-      </ol>
-      <a class="more" href="guide/index.html#one-account-on-all-your-devices">More detail →</a></div>
-  </div>
-  <p class="note2"><b>Then add a friend:</b> open <b>Contacts</b>, tap <b>+ Add</b> (on a computer, <b>Add contact</b>), scan or paste their address, and tap <b>Introduce myself</b>. They appear when their device answers.</p>
-</div></section>
-
-<section class="sec" id="see" style="background:var(--surface-2)"><div class="wrap">
-  <div class="lead"><span class="label">See it</span><h2>Real screens from the apps.</h2></div>
-  <div class="gallery">
-    <figure class="shot"><div class="frame"><img src="assets/img/android-chat.png" alt="A Parlons! conversation between Camille and Léo, with grey and double delivery ticks" width="600" height="1333" loading="lazy"></div><figcaption><b>A conversation</b>Two ticks: their own device has it.</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/android-contacts.png" alt="The Contacts tab: your Parlons address with Share my address and Scan, and one contact online" width="600" height="1333" loading="lazy"></div><figcaption><b>Contacts</b>Share your address as a QR code.</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/cloud-pair.png" alt="Parlons Cloud for Android, ready to pair: the account address, Scan pairing QR, the pairing code and Connect &amp; pair" width="600" height="1333" loading="lazy"></div><figcaption><b>Pairing a phone</b>Scan the QR from your node.</figcaption></figure>
-    <figure class="shot"><div class="frame"><img src="assets/img/cloud-node.png" alt="Parlons Cloud's Node page: always on and online, uptime, three relays attached, and the permanent address" width="600" height="1333" loading="lazy"></div><figcaption><b>Your account</b>Always on, on several relays.</figcaption></figure>
-  </div>
-</div></section>
-
+<section class="sec choices-section" id="start"><div class="wrap"><div class="lead"><span class="label">01 / Choose your app</span><h2>How would you like to use Parlons?</h2><p>New to Parlons? The independent Android or desktop app is the simplest place to start. Have an account invitation already? Choose Parlons Cloud.</p></div><div class="choices"><article class="choice"><span class="label">Android phone</span><h3>Parlons!</h3><p class="choice-purpose">An independent identity on your phone.</p><p>No account server to arrange. Messages, files, and voice or video calls.</p><p class="choice-note">Your chats live on this phone.</p><a class="btn btn-dark" href="guide/start-android.html">Set up Android <span aria-hidden="true">→</span></a><small>{{ANDROID_VERSION}} · Android 9+</small></article><article class="choice"><span class="label">Mac, Windows or Linux</span><h3>Parlons Desktop</h3><p class="choice-purpose">An independent identity on your computer.</p><p>Chat and share files from a desktop app. Installed under the name MaximaNode.</p><p class="choice-note">Voice and video calls need an Android app.</p><a class="btn btn-dark" href="guide/start-desktop.html">Set up Desktop <span aria-hidden="true">→</span></a><small>{{DESKTOP_VERSION}} · Apple silicon / Windows / Linux x86-64</small></article><article class="choice"><span class="label">I have an account invitation</span><h3>Parlons Cloud</h3><p class="choice-purpose">Your Android phone, connected to an existing account.</p><p>The host keeps your account online. Pair more phones to see the same conversations.</p><p class="choice-note">Needs your own host or someone you trust.</p><a class="btn btn-dark" href="guide/start-pair.html">Connect my account <span aria-hidden="true">→</span></a><small>{{PORTAL_VERSION}} · Android 9+</small></article></div><p class="availability">Using an iPhone? The iPhone app is not available yet.</p></div></section>
+<section class="sec" id="hosting"><div class="wrap"><div class="lead"><span class="label">02 / Optional: run your own account</span><h2>Want your account to stay online?</h2><p>Choose a host only if you want one account available to paired devices while your phone is off. If someone has already given you an invitation, you can skip this step.</p></div><div class="host-choices"><article class="host-choice"><div><span class="label">The lighter hosting option</span><h3>Parlons Cloud server</h3><span class="release">{{CLOUD_VERSION}}</span></div><div><p>Runs your account on a Mac, Linux machine, Raspberry Pi or Windows PC that stays awake and online. Your phone uses the Cloud app above.</p><p class="choice-note">No full Minima blockchain node. Windows installer supplied; not yet verified by its authors.</p><a class="text-action" href="guide/start-host.html">Set up a Cloud host →</a></div></article><article class="host-choice"><div><span class="label">For people who also want a full node</span><h3>Parlons Node</h3><span class="release">{{NODE_VERSION}}</span></div><div><p>Your account, a relay and a full Minima node on an always-on Linux machine. For people comfortable managing a server.</p><p class="choice-note">Needs systemd, admin access, and memory and disk planning.</p><a class="text-action" href="guide/start-node.html">Set up a full Node →</a></div></article></div></div></section>
+<section class="sec compare-section" id="compare"><div class="wrap"><div class="lead"><span class="label">Know the difference</span><h2>Same network. Different homes for your identity.</h2></div><div class="tablewrap comparison" tabindex="0" role="region" aria-label="Know the difference"><table><caption>Know the difference</caption><thead><tr><th scope="col"></th><th scope="col">Parlons! Android</th><th scope="col">Parlons Desktop</th><th scope="col">Parlons Cloud Android</th></tr></thead><tbody><tr><th scope="row">Identity &amp; chats live</th><td>On this phone</td><td>On this computer</td><td>On the account host</td></tr><tr><th scope="row">Separate account host needed</th><td>No</td><td>No</td><td>Yes — your own or a trusted host</td></tr><tr><th scope="row">Voice &amp; video calls</th><td>Yes</td><td>No</td><td>Yes</td></tr><tr><th scope="row">Shared account across paired phones</th><td>No — use Cloud for this</td><td>Not automatic with a phone app</td><td>Yes</td></tr><tr><th scope="row">Start with</th><td>Create an identity</td><td>Create an identity</td><td>An account invitation</td></tr></tbody></table></div><aside class="privacy-note"><h3>Choose where your data lives.</h3><p>Messages travel over encrypted connections. A Cloud host stores your account keys and history, so its operator can access those stored records. Run your own host or choose someone you trust.</p><a href="guide/privacy.html">Read about privacy →</a></aside></div></section>
+<section class="sec" id="questions"><div class="wrap faq-layout"><div class="lead"><span class="label">Before you start</span><h2>A few things that make it clearer.</h2></div><div class="faq"><details><summary>Can I talk to people using a different version?</summary><p>Yes. The Parlons apps use the same messaging network. Exchange contact addresses, even if you use different apps.</p></details><details><summary>Is Cloud a subscription I need to buy here?</summary><p>The Cloud app connects to an account you arrange. Run your own host, or get an invitation from someone who hosts an account for you. This site does not create a hosted account when you download the app.</p></details><details><summary>Is a contact QR the same as a pairing invitation?</summary><p>No. A contact address lets someone message you. A pairing invitation grants a device access to an account. Keep pairing invitations private.</p></details><details><summary>Can I use my 24 words to synchronise two apps?</summary><p>Use pairing for a shared account. Running the same seed independently on several devices does not synchronise chat history. The guides explain backups and moving an identity.</p></details><details><summary>Why are the version numbers different?</summary><p>The phone apps, desktop app and servers have separate releases. Choose by purpose and device, not by the biggest version number.</p></details></div></div></section>
 <section class="sec" id="manuals"><div class="wrap">
   <div class="lead"><span class="label">The manuals</span><h2>Need more? Every feature, step by step.</h2></div>
   <div class="manuals" style="margin-top:30px">
@@ -76,12 +18,6 @@
     <a class="manual" href="guide/node.html"><span class="label">Your server</span><h3>Parlons Node manual</h3><p>Installing, configuring and updating a node.</p><span class="go">Open →</span></a>
   </div>
 </div></section>
-
-<section class="close"><div class="wrap" style="display:grid;gap:16px;justify-items:center">
-  <p class="serif" style="font-size:28px;color:var(--sub)">je parle, tu parles,</p>
-  <h2>nous parlons<span style="color:var(--orange)">!</span></h2>
-  <p>Install the app, or run your own account. Either way, your words stay yours.</p>
-  <div class="cta" style="justify-content:center"><a class="btn btn-go" href="#start">Get started</a><a class="btn btn-line" href="{{RELEASES}}" target="_blank" rel="noopener">All releases</a></div>
-</div></section>
+<section class="close"><div class="wrap"><h2>Chosen your version? Let’s get you talking.</h2><p>Each setup guide continues with adding a friend, sending messages, sharing files, backups and help.</p><a class="btn btn-go" href="#start">Find your version ↑</a></div></section>
 </main>
 {{{FOOT}}}</body></html>
