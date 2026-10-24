@@ -562,11 +562,13 @@ def main():
 
     for lang, _, suf, _ in LANGS:
         landing = open(lsrc(lang, os.path.join(HERE, "site", "landing.html"), "landing.html"), encoding="utf-8").read()
+        # Translate content links before inserting chrome, whose language selector
+        # and hreflang links deliberately point to other languages.
+        landing = localize_links(landing, lang)
         landing = landing.replace("{{{MARK}}}", MARK).replace("{{{HEAD}}}", head(
             STR[lang]["home_title"], STR[lang]["home_desc"], "", lang, "index.html").replace(
             "</head>", '<link rel="stylesheet" href="%s">' % stylesheet("landing.css") + (HOME_JS if lang == "en" else "") + "</head>")
         ).replace("{{{BAR}}}", bar("", "home", lang, "index.html")).replace("{{{FOOT}}}", foot("", lang))
-        landing = localize_links(landing, lang)
         landing = expand(landing)
         with open(os.path.join(out_dir, "index%s.html" % suf), "w", encoding="utf-8") as f:
             f.write(landing)

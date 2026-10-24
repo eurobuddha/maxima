@@ -59,3 +59,6 @@ footer.foot{margin-top:0;border-top:1px solid #454950}
 @media(max-width:980px){.hero .wrap{gap:30px}.choice{padding:22px}.choices{gap:12px}.choice h3{font-size:23px}.faq-layout{gap:30px}}
 @media(max-width:800px){.hero .wrap{grid-template-columns:1fr}.hero{padding-block:38px 48px}.hero-screens{max-width:310px;margin-top:12px}.hero .stance{max-width:56ch}.choices{grid-template-columns:1fr}.choice{gap:12px}.choice .btn{width:auto;gap:18px}.host-choice{grid-template-columns:1fr;gap:14px}.faq-layout{grid-template-columns:1fr;gap:28px}.privacy-note{grid-template-columns:1fr;gap:14px}.privacy-note a{grid-column:auto}.sec{padding-block:46px}.hero-screens figure+figure{margin-top:28px}}
 @media(max-width:400px){.hero-screens{max-width:260px;gap:14px}.hero-screens img{border-radius:20px}.hero .stance{font-size:17px}.cta{gap:14px}.hero h1{font-size:76px}}
+/* Cloud is a primary way to run Parlons and contribute to its network. */
+.choice-cloud{border-top:3px solid var(--orange)}
+.choice-cloud .text-action{font-size:13px}

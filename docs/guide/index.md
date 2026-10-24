@@ -5,9 +5,9 @@ Pick the guide for the way you want to use Parlons. Each takes you from the down
 <div class="cards">
 <a href="start-android.html"><b>Android · independent app</b><span>No account server to arrange. Your identity lives on this phone.</span></a>
 <a href="start-desktop.html"><b>Mac, Windows or Linux · desktop app</b><span>Chat on your computer with its own identity.</span></a>
+<a href="start-node.html"><b>Parlons Cloud · your node, your devices, your friends</b><span>Run a full Minima node and relay. Pair your devices and host separate tenant accounts.</span></a>
 <a href="start-pair.html"><b>I have an invitation · Parlons Cloud</b><span>Connect your Android phone to an existing account.</span></a>
 <a href="start-host.html"><b>I want my own always-on account</b><span>Run the lighter Cloud server, then pair your phone.</span></a>
-<a href="start-node.html"><b>I want a full Minima node too</b><span>Run Parlons Node on Linux. For server operators.</span></a>
 </div>
 
 An iPhone app is **not available yet**. Android apps require Android 9 or newer. The desktop downloads below are for Apple silicon Macs, Windows 10/11, and Debian/Ubuntu on x86-64.
@@ -52,7 +52,7 @@ For installation problems or moving an existing identity, use the [Parlons! manu
 
 **Choose this if:** you already have an account invitation, or an account running on your own machine. The Android app is a remote view of that account: the identity and chat history live on the host. Multiple paired phones see the same account.
 
-**Before you start:** get an invitation from your host or an already-paired device. If you do not have a host, follow [host your own account](start-host.html) first. A friend's contact QR lets you chat with them; a pairing invitation gives access to an account. They are different.
+**Before you start:** get an invitation from your host or an already-paired device. If you do not have a host, follow [host your own account](start-node.html) first. A friend's contact QR lets you chat with them; a pairing invitation gives access to an account. They are different.
 
 ### Install and pair
 
@@ -68,7 +68,7 @@ For installation problems or moving an existing identity, use the [Parlons! manu
 
 **Using someone else's host:** the operator can access the keys and history stored on that machine. Choose someone you trust. Built-in guest accounts provide chat, calls and files; they do not include wallet or node controls. Other hosted account types may differ. See the [Cloud manual](cloud.html).
 
-## Host your own always-on account {#one-account-on-all-your-devices}
+## Alternative: lighter account hosting {#one-account-on-all-your-devices}
 
 **Choose this if:** you want your account to stay online while your phone is off, and want to pair several phones to it. **Parlons Cloud server** is the lighter option: it runs the account without a full Minima blockchain node. The Android Cloud app connects to it.
 
@@ -98,9 +98,11 @@ For installation problems or moving an existing identity, use the [Parlons! manu
 
 **Everyday maintenance:** `parlons log` shows the log. On Mac/Linux, `parlons update` updates the server; on Windows rerun the installer. Keep backups before updates. To give a friend their own identity, use **Node → Manage hosted accounts**, not an invitation to your own account. [Hosting friends](cloud.html#11-hosting-friends-guest-invitations).
 
-## Run Parlons Node {#run-a-full-node}
+## Run your Parlons Cloud node {#run-a-full-node}
 
-**Choose this if:** you want a full Minima node, a Parlons account and a relay on one machine. This is an operator setup. You do not need it just to chat.
+**Run Parlons Cloud to give the network its fullest support.** Your always-on machine runs a **full Minima node and a full relay**, keeps your account available on multiple paired devices, and lets you invite friends to **separate tenant accounts**. Each friend gets their own identity, contacts and conversations.
+
+The software you install for this complete Cloud setup is called **Parlons Node**. The Android **Parlons Cloud** app connects your phone to it. The future iPhone app will use this same approach; it is not available yet.
 
 **You need:** always-on Linux with systemd and sudo/root access; a 64-bit Raspberry Pi can be used. Plan RAM and growing chain storage using the [Node requirements](node.html#3-requirements). The manual recommends 2 GB RAM for a plain node or 8 GB for MegaMMR. The installer may enable MegaMMR on smaller machines, so select the mode deliberately.
 
@@ -120,6 +122,33 @@ For installation problems or moving an existing identity, use the [Parlons! manu
 6. Follow [seeds, identity and backups](node.html#20-seeds-identity-and-backups). The chat identity and node wallet phrase can differ; preserve both where applicable.
 
 Use **Node** in the paired app for account and device management. Node owners also get node tools; guests do not. For updates, monitoring and recovery, keep the [Node manual](node.html) handy.
+
+### Use your account on your other devices
+
+1. On your already-paired phone, open **Node → Pair my other device**.
+2. Enter your **admin password** when asked. Show the new QR or copy the invitation.
+3. On your other Android device, install **Parlons Cloud**, scan or paste that invitation, and tap **Connect & pair**. It opens the same account, contacts and conversations. Create a fresh invitation for each device.
+
+Pairing gives access to the existing account; it does not create another independent copy of your identity. For computer access through the paired command-line client, see [driving an account from another machine](cloud.html#how-to-drive-an-account-from-another-machine). Installing standalone Parlons Desktop does not pair it automatically.
+
+### Invite friends to their own tenant accounts
+
+A **tenant** is a separate account hosted on your Cloud node. Your friend can use Parlons without running their own server, while keeping their own identity and conversations.
+
+1. On your paired phone, open **Node → Manage hosted accounts**.
+2. The first time, select **Hosting options → Enable hosting**. The admin password must already be set. Keep your node running to keep your friends online.
+3. Tap **Create account**, enter a name for your friend’s account, and tap **Create**.
+4. Tap **Refresh** until it shows **running**. Select that account and choose **Show invitation**.
+5. Give this invitation privately to your friend. They install **Parlons Cloud**, scan or paste it, and tap **Connect & pair**.
+6. For another friend, create another tenant account. Use **Pair my other device** only when adding devices to your own account.
+
+The built-in host supports up to ten chat-only guest accounts: messages, calls and files, without your wallet or node controls. A separate tenants service also supports full accounts with their own wallets; see [hosting options](cloud.html#21-many-accounts-the-parlons-tenants-service). As the host, you store their account data and keys, so invite people who trust you and help them keep backups.
+
+### Help the network, and prepare for iPhone
+
+Keep the node online and its full relay reachable so it can carry other people’s messages as well as yours. Check the [external reachability instructions](node.html#23-verifying-from-outside) after setting up your firewall or router.
+
+**Parlons Cloud will be the way to use Parlons! on iPhone.** The iPhone app will connect to your own Cloud node or to a tenant account on a friend’s node. It is not available yet; the account and hosting model are already here.
 
 ## Your first conversation {#add-a-friend}
 
