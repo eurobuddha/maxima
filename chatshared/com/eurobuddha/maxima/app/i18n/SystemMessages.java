@@ -3307,6 +3307,10 @@ public final class SystemMessages {
             case "File size changed during export": return R.string.l10n_ios_files_size_changed;
             case "Invalid filename": return R.string.l10n_ios_files_invalid_name;
             case "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.": return R.string.l10n_files_direct_waiting;
+            case "Your account needs a reachable direct file connection": return R.string.l10n_files_direct_host_needed;
+            case "Cannot connect directly to your account. Check its port forwarding and try again.": return R.string.l10n_files_direct_host_unavailable;
+            case "Direct file connection interrupted": return R.string.l10n_files_direct_interrupted;
+            case "Update your Parlons Cloud node to use direct file transfers": return R.string.l10n_files_direct_host_update;
             default: return 0;
         }
     }

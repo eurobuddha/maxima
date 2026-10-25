@@ -1,5 +1,63 @@
 # Private file sharing — candidate build
 
+## Direct transport update — 25 October 2026
+
+Current local candidates: Android **0.6.147 (747)**, Cloud Android **0.2.92 (292)**,
+Parlons Node **0.2.139**, and legacy Cloud host **0.11.125**. These supersede the
+historical limits and transport notes below. A local build does not imply publication.
+
+New transfers are limited to **100 MiB** (displayed as 100 MB). Existing saved offers
+retain their legacy read bound. The attachment, explicit Download, Pause/Resume and
+Save workflow is unchanged.
+
+* Updated standalone Android peers negotiate reliable ordered WebRTC DataChannels
+  using the existing authenticated contact RPC. `WebRtcFiles` reuses `GatheredCallSdp`
+  and the existing four fleet STUN endpoints for small address-discovery probes only.
+  It creates no microphone/camera tracks and configures no TURN servers. It rejects
+  relay candidates and checks the selected ICE candidate pair before admitting bytes.
+* The channel feeds `TorrentTunnel`'s loopback capability/infohash gateway. The existing
+  encrypted pieces, packet validation, upload pacing, rechecking and resume stay in use.
+  A 16 × 16 KiB acknowledgement window bounds buffering; native callback buffers are
+  copied before return. Current transfer capabilities, contact/group checks and a
+  connection UUID reject unauthorised or stale signalling. Up to eight RTC sessions
+  are admitted. Sessions expire on stalled progress and release their wake locks.
+  Peers also disconnect once both confirm that their files are complete.
+* Reachable Cloud/Desktop accounts keep the existing direct TCP transfer path. Both
+  Android peers need the update for WebRTC. Desktop/headless hosts do not gain a native
+  WebRTC runtime in this change. Some NAT/firewall combinations cannot connect without
+  relaying; those transfers wait for a working direct route rather than send through
+  TURN or the fleet.
+* Cloud Android now sends **all private-file commands and replies directly to its own
+  account host**, including upload and save blocks. `parlons.files.direct` issues only
+  a short, sealed owner-RPC ticket. The ticket is single-use, expires after 60 seconds
+  unopened, and carries fresh independent AES-256-GCM keys for each direction. Bounded
+  records authenticate their sequence. Revocation is checked before each command,
+  and a watchdog closes revoked, expired or stalled sessions. Bulk RPC fallback is
+  absent from `ParlonsRemote`, including its timeout overload. Older hosts must be
+  updated; Cloud Android reports that requirement.
+* Direct Cloud connections reuse the account's verified listening address and port;
+  no additional public port is needed. A reachable own host or same-LAN route is
+  required. Older clients can still use the historical RPC API until upgraded.
+  Small photo/voice-note media paths are outside this private-file change.
+* Android holds bounded partial CPU wake locks while RTC streams or device import/export
+  are active. The existing production foreground services remain responsible for app
+  lifecycle. Classic hidden jar-engine mode still has no private-file engine.
+
+Validation evidence is under `build/direct-files-*`. The synthetic Fold test transfers
+100 MiB through native ICE/DTLS and the production encrypted torrent engine, interrupts
+it after verified pieces, resumes, then checks GCM, SHA-256 and every plaintext byte.
+The final Fold run passed in 28 seconds after interruption at three verified pieces.
+The test observed Android Dozing with active wake locks and an unfrozen foreground-service
+process during transfer; extended deep-Doze and independent-internet tests are not established.
+465 unique JVM/Android unit/integration tests and 56 browser tests passed. APK signatures
+match the existing Minima Family signer, and both host jars report their filename version.
+The direct account-channel integration test uploads and downloads 100 MiB on a real
+socket; security tests cover tampering, replay, length bounds, revocation, admission,
+current transfer capabilities and no fleet fallback. These synthetic tests do not
+establish connectivity across two independent internet connections.
+
+## Historical September candidate
+
 This implements files shared inside existing Parlons conversations, with BitTorrent distributing encrypted pieces underneath. It is not a public torrent or magnet browser.
 
 ## Using it

@@ -252,6 +252,7 @@ public final class MaximaService extends Service {
         chat.setSendReadReceipts(ChatPrefs.readReceipts(this));
         try {
             sPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(sNode, chat, new java.io.File(getFilesDir(), "private-files").toPath());
+            sPrivateFiles.setPeerTransport(new com.eurobuddha.maxima.app.files.WebRtcFiles(this));
             sFileCommands = new com.eurobuddha.maxima.files.FileCommands(sPrivateFiles, new java.io.File(getFilesDir(), "private-files/uploads").toPath());
         } catch (java.io.IOException e) { EventLog.add("Private file storage unavailable: " + e.getMessage()); }
         chat.setMediaService(sMedia);   // photos/videos in chat, self-hosted

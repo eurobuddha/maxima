@@ -82,7 +82,7 @@ public final class PrivateFileUi {
         if(closed||u.running)return;u.running=true;u.error="";updateUpload(u);
         work.execute(()->{
             boolean finished=false,removed=false;
-            try {
+            try (FileAwake awake = new FileAwake(activity)) {
                 if(!u.cancelled){
                     u.upload.run(activity.getContentResolver().openInputStream(u.uri),()->closed||u.cancelled,
                             n->{u.offset=n;main.post(()->updateUpload(u));});
@@ -160,13 +160,22 @@ public final class PrivateFileUi {
             }).setNegativeButton(Language.msg(R.string.l10n_language_close),null).show();
         });
     }catch(Exception e){main.post(()->error(e));}});}
-    private void export(Uri destination,String id){work.execute(()->{try(OutputStream out=activity.getContentResolver().openOutputStream(destination,"w")){
+    private void export(Uri destination,String id){work.execute(()->{try(FileAwake awake = new FileAwake(activity);OutputStream out=activity.getContentResolver().openOutputStream(destination,"w")){
         if(out==null)throw new IOException("Cannot save file");long offset=0,size;
         do{Map<String,String> r=call("read","id",id,"offset",Long.toString(offset));byte[] bytes=Base64.getDecoder().decode(r.get("data"));long next=Long.parseLong(r.get("next"));size=Long.parseLong(r.get("size"));if(closed||size<0||size>ChatFile.MAX_BYTES||next!=offset+bytes.length||next>size||(next<=offset&&offset<size))throw new IOException("Download interrupted");out.write(bytes);offset=next;}while(offset<size);
         main.post(()->Toast.makeText(activity,tr(R.string.l10n_native_files_saved),Toast.LENGTH_SHORT).show());
     }catch(Exception e){
         try{android.provider.DocumentsContract.deleteDocument(activity.getContentResolver(),destination);}catch(Exception ignored){}
         main.post(()->error(e));}});}
+    /** Hold the CPU only while importing/exporting bytes, including the Cloud device leg. */
+    private static final class FileAwake implements AutoCloseable {
+        private android.os.PowerManager.WakeLock lock;
+        FileAwake(android.content.Context context) {
+            android.os.PowerManager pm=(android.os.PowerManager)context.getSystemService(android.content.Context.POWER_SERVICE);
+            if(pm!=null){lock=pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"Parlons:file-import-export");lock.acquire(20*60*1000L);}
+        }
+        public void close(){if(lock!=null && lock.isHeld())lock.release();}
+    }
     private void error(Exception e){if(!closed&&!activity.isFinishing())new LanguageDialog(activity).setTitle(Language.msg(R.string.l10n_files_private)).setMessage(SystemMessages.message(e.getMessage()==null?"Transfer failed":e.getMessage())).setPositiveButton(Language.msg(R.string.l10n_common_ok),null).show();}
     private static String size(long bytes){return bytes<1024?bytes+" B":bytes<1024*1024?String.format(Language.locale(),"%.1f KB",bytes/1024.0):String.format(Language.locale(),"%.1f MB",bytes/(1024.0*1024));}
     private String tr(int resource,Object... arguments){return Language.text(activity,resource,arguments);}

@@ -4313,4 +4313,8 @@
     <string name="l10n_ios_files_size_changed" formatted="false">"File size changed during export"</string>
     <string name="l10n_ios_files_invalid_name" formatted="false">"Invalid filename"</string>
     <string name="l10n_files_direct_waiting" formatted="false">"No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node."</string>
+    <string name="l10n_files_direct_host_needed" formatted="false">"Your account needs a reachable direct file connection"</string>
+    <string name="l10n_files_direct_host_unavailable" formatted="false">"Cannot connect directly to your account. Check its port forwarding and try again."</string>
+    <string name="l10n_files_direct_interrupted" formatted="false">"Direct file connection interrupted"</string>
+    <string name="l10n_files_direct_host_update" formatted="false">"Update your Parlons Cloud node to use direct file transfers"</string>
 </resources>

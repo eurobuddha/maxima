@@ -20,6 +20,13 @@ import java.util.function.Supplier;
 public final class PrivateFiles implements AutoCloseable {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PrivateFiles.class);
     public static final String PEERS="parlons.files.peers";
+    public static final String SIGNAL="parlons.files.rtc";
+    private volatile PeerDataTransport peerTransport;
+    public synchronized void setPeerTransport(PeerDataTransport transport) {
+        if (closed || peerTransport != null) throw new IllegalStateException("Transport already configured or closed");
+        peerTransport = transport;
+    }
+    public List<String> directSources() { return sources(); }
     public static final int BLOCK=FileUpload.BLOCK;
     public static final long STORAGE_LIMIT=2L*1024*1024*1024;
     private final MaximaNode node;
@@ -68,7 +75,22 @@ public final class PrivateFiles implements AutoCloseable {
             // Also connect back, so an unreachable sender can upload to a reachable recipient.
             Map<String,String> request=Json.parse(req.payloadAsString());
             introduce(t,request.getOrDefault("sources",""),request.getOrDefault("token",""));
-            return bytes(new Json.Writer().put("sources",String.join(",",sources())).put("token",t.token).done());
+            if ("1".equals(request.get("rtc"))) introduceRtcIfNeeded(t,from,request);
+            return bytes(new Json.Writer().put("sources",String.join(",",sources())).put("token",t.token).put("rtc",peerTransport==null?"0":"1").put("complete",Boolean.toString(t.mine||t.ready)).done());
+        });
+        node.services().register(SIGNAL, req -> {
+            if (req.payload.length > 24576) throw new IOException("Signal too large");
+            Map<String,String> m = Json.parse(req.payloadAsString());
+            Transfer t = transfers.get(m.get("id"));
+            String from = new MiniData(req.fromPublicKey).to0xString().toLowerCase(Locale.ROOT);
+            synchronized (this) {
+                if (closed || peerTransport == null || t == null || t.paused || t.tunnel == null
+                        || !t.token.equals(m.get("token")) || !authorised(t,from))
+                    throw new SecurityException("Transfer unavailable");
+                introduceRtc(t,from,m.get("fromToken"));
+                peerTransport.signal(t.id,from,m);
+            }
+            return bytes("{}");
         });
         discovery.scheduleWithFixedDelay(this::discover,2,12,TimeUnit.SECONDS);
     }
@@ -187,7 +209,7 @@ public final class PrivateFiles implements AutoCloseable {
     }
     public synchronized void pause(String id)throws IOException {Transfer t=get(id);t.restorePending=false;t.paused=true;t.status=t.ready?"Ready · paused":"Paused";
         try{pauseEngine(t);}finally{if(t.file!=null)save(t);}}
-    private void pauseEngine(Transfer t){t.generation++;TorrentTunnel tunnel=t.tunnel;t.tunnel=null;t.token="";t.tunnels.clear();if(tunnel!=null)tunnel.close();if(engine!=null)engine.pause(t.id);}
+    private void pauseEngine(Transfer t){t.generation++;if(peerTransport!=null)peerTransport.stop(t.id);TorrentTunnel tunnel=t.tunnel;t.tunnel=null;t.token="";t.tunnels.clear();if(tunnel!=null)tunnel.close();if(engine!=null)engine.pause(t.id);}
     public synchronized void resume(String id)throws Exception {Transfer t=get(id);if(t.file==null)throw new IOException("Choose the file again");start(t);}
     public synchronized void remove(String id)throws Exception {Transfer t=get(id);pause(id);transfers.remove(id);
         synchronized(t.disk){try(java.util.stream.Stream<Path> paths=Files.walk(t.dir)){for(Path p:(Iterable<Path>)paths.sorted(Comparator.reverseOrder())::iterator)Files.deleteIfExists(p);}}}
@@ -217,8 +239,8 @@ public final class PrivateFiles implements AutoCloseable {
                     try {
                         if(closed || t.paused || t.tunnel==null){pendingPeers.remove(pending);return;}
                         node.rpc().call(addr,PEERS,bytes(new Json.Writer().put("id",t.id).put("token",t.token)
-                                .put("sources",String.join(",",sources())).done()),new RpcPeer.ResponseHandler(){
-                            public void onResponse(byte[] payload){pendingPeers.remove(pending);try{Map<String,String> m=Json.parse(new String(payload,StandardCharsets.UTF_8));introduce(t,m.get("sources"),m.get("token"));}catch(Exception ignored){}}
+                                .put("sources",String.join(",",sources())).put("rtc",peerTransport==null?"0":"1").put("complete",Boolean.toString(t.mine||t.ready)).done()),new RpcPeer.ResponseHandler(){
+                            public void onResponse(byte[] payload){pendingPeers.remove(pending);try{Map<String,String> m=Json.parse(new String(payload,StandardCharsets.UTF_8));introduce(t,m.get("sources"),m.get("token"));if("1".equals(m.get("rtc")))introduceRtcIfNeeded(t,key,m);}catch(Exception ignored){}}
                             public void onError(String error){pendingPeers.remove(pending);}
                         },10000,2000,3000);
                     } catch(Exception e) { pendingPeers.remove(pending); }
@@ -258,6 +280,36 @@ public final class PrivateFiles implements AutoCloseable {
             }
         });}catch(RejectedExecutionException ignored){}
     }
+    private synchronized void introduceRtcIfNeeded(Transfer t,String peer,Map<String,String> introduction) {
+        if(peerTransport==null)return;
+        if((t.mine||t.ready) && "true".equals(introduction.get("complete")))
+            peerTransport.disconnect(t.id,peer); // finished peers must not keep each other awake
+        else introduceRtc(t,peer,introduction.get("token"));
+    }
+    private synchronized void introduceRtc(Transfer t,String peer,String remoteToken) {
+        PeerDataTransport transport=peerTransport; TorrentTunnel tunnel=t.tunnel;
+        if(closed || transport==null || tunnel==null || t.paused || !authorised(t,peer)
+                || remoteToken==null || !remoteToken.matches("[a-f0-9]{64}"))return;
+        final int generation=t.generation; final String localToken=t.token;
+        try {
+            transport.connect(t.id,peer,node.identity().publicKeyHex().compareToIgnoreCase(peer)<0,
+                    tunnel.gateway(),localToken,remoteToken,(kind,body)->{
+                if(body.length()>20000)return;
+                try { peerJobs.execute(()->{
+                    Contact c=node.contact(peer);
+                    if(closed || t.generation!=generation || c==null || !authorised(t,peer))return;
+                    try { node.rpc().call(c.primaryAddress(),SIGNAL,bytes(new Json.Writer()
+                            .put("id",t.id).put("token",remoteToken).put("fromToken",localToken)
+                            .put("kind",kind).put("body",body).done()),new RpcPeer.ResponseHandler(){
+                        public void onResponse(byte[] ignored){} public void onError(String ignored){}
+                    },10000,2000,3000); }catch(Exception ignored){}
+                }); }catch(RejectedExecutionException ignored){}
+            },port->{
+                PrivateTorrent bt=engine;
+                try{if(!closed && t.generation==generation && bt!=null)bt.tunnelPeer(t.id,port);}catch(Exception ignored){}
+            });
+        }catch(Exception ignored){/* Existing direct TCP remains available. */}
+    }
     private void save(Transfer t)throws IOException {
         synchronized(t.disk){
         String json=new Json.Writer().put("ref",t.file.ref()).put("peer",t.peer).put("group",Boolean.toString(t.group))
@@ -292,7 +344,7 @@ public final class PrivateFiles implements AutoCloseable {
     }
     private static byte[] bytes(String s){return s.getBytes(StandardCharsets.UTF_8);}
     private static String message(Exception e){return e.getMessage()==null?"File transfer failed":e.getMessage();}
-    @Override public synchronized void close(){if(closed)return;closed=true;node.services().unregister(PEERS);discovery.shutdownNow();peerJobs.shutdownNow();jobs.shutdownNow();
+    @Override public synchronized void close(){if(closed)return;closed=true;node.services().unregister(PEERS);node.services().unregister(SIGNAL);if(peerTransport!=null)peerTransport.close();discovery.shutdownNow();peerJobs.shutdownNow();jobs.shutdownNow();
         try {
             for(Transfer t:transfers.values()) {
                 t.paused=true;

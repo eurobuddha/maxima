@@ -25,6 +25,34 @@ final class TorrentTunnel implements AutoCloseable {
     TorrentTunnel(boolean testLoopback) { this.testLoopback = testLoopback; }
     private volatile long bytesPerSecond=1024*1024;
     private long nextWrite;
+    private ServerSocket gateway;
+    /** Loopback handoff for a platform's authenticated direct byte transport. */
+    synchronized int gateway() throws IOException {
+        if (closed) throw new IOException("File sharing stopped");
+        if (gateway != null) return gateway.getLocalPort();
+        gateway = new ServerSocket(0, 4, InetAddress.getByName("127.0.0.1"));
+        listeners.add(gateway);
+        final ServerSocket listener = gateway;
+        workers.execute(() -> {
+            while (!closed && !listener.isClosed()) try {
+                Socket socket = listener.accept();
+                if (!slots.tryAcquire()) { socket.close(); continue; }
+                sockets.add(socket);
+                try { workers.execute(() -> {
+                    try (Socket s = socket) {
+                        s.setSoTimeout(15000);
+                        DataInputStream in = new DataInputStream(s.getInputStream());
+                        byte[] request = new byte[65]; request[0] = (byte)PrivateStreams.TYPE;
+                        in.readFully(request, 1, 64);
+                        String token = new String(request, 1, 64, StandardCharsets.US_ASCII);
+                        if (tokens.contains(token)) PrivateStreams.serve(request, s, in, new DataOutputStream(s.getOutputStream()));
+                    } catch (Exception ignored) { }
+                    finally { sockets.remove(socket); slots.release(); }
+                }); } catch (RejectedExecutionException e) { sockets.remove(socket); socket.close(); slots.release(); }
+            } catch (IOException e) { break; }
+        });
+        return gateway.getLocalPort();
+    }
     void uploadLimit(long rate) { if(rate<64*1024 || rate>16*1024*1024)throw new IllegalArgumentException("Invalid upload limit"); bytesPerSecond=rate; }
     private void pace(int bytes)throws IOException {
         long wait;

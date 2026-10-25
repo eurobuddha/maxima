@@ -29,7 +29,40 @@ public class PrivateFilesTest {
             chat.setStore(store);files=new PrivateFiles(node,chat,root.resolve("files"));commands=new FileCommands(files,root.resolve("files/uploads"));
         }
         Map<String,String> call(String... pairs)throws Exception {Map<String,String> m=new LinkedHashMap<>();for(int i=0;i<pairs.length;i+=2)m.put(pairs[i],pairs[i+1]);return commands.call(m);}
-        public void close(){commands.close();files.close();chat.close();node.stop();}
+        public void close(){commands.close();files.close();chat.close();node.stop();
+            try(java.util.stream.Stream<Path> paths=Files.walk(root)){
+                for(Path p:(Iterable<Path>)paths.sorted(Comparator.reverseOrder())::iterator)Files.deleteIfExists(p);
+            }catch(IOException e){throw new java.io.UncheckedIOException(e);}
+        }
+    }
+    @Test(timeout=30000) public void rtcSignallingRequiresContactAndCurrentAcceptedCapability()throws Exception {
+        try(Fixture f=new Fixture()){
+            java.util.concurrent.atomic.AtomicInteger signals=new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.atomic.AtomicInteger stopped=new java.util.concurrent.atomic.AtomicInteger();
+            f.files.setPeerTransport(new PeerDataTransport(){
+                public void connect(String id,String peer,boolean offerer,int gateway,String local,String remote,
+                        java.util.function.BiConsumer<String,String> send,java.util.function.IntConsumer ready){}
+                public void signal(String id,String peer,Map<String,String> m){signals.incrementAndGet();}
+                public void disconnect(String id,String peer){stopped.incrementAndGet();}
+                public void stop(String id){stopped.incrementAndGet();} public void close(){}
+            });
+            String id=f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"one.bin","application/octet-stream",f.peer.publicKeyHex(),false);
+            byte[] peerRequest=new Json.Writer().put("id",id).done().getBytes(StandardCharsets.UTF_8);
+            byte[] intro=f.node.services().dispatchLocal(new ServiceRegistry.Request(PrivateFiles.PEERS,peerRequest,f.peer.publicKey(),Collections.emptyList()));
+            String token=Json.parse(new String(intro,StandardCharsets.UTF_8)).get("token");
+            byte[] message=new Json.Writer().put("id",id).put("token",token).put("fromToken",FileCrypto.randomHex(32))
+                    .put("kind","offer").put("body","synthetic").done().getBytes(StandardCharsets.UTF_8);
+            ServiceRegistry.Request valid=new ServiceRegistry.Request(PrivateFiles.SIGNAL,message,f.peer.publicKey(),Collections.emptyList());
+            ServiceRegistry.Request foreign=new ServiceRegistry.Request(PrivateFiles.SIGNAL,message,MaximaIdentity.create().identity.publicKey(),Collections.emptyList());
+            assertTrue(f.node.services().dispatch("x",foreign).isError());assertEquals(0,signals.get());
+            assertFalse(f.node.services().dispatch("x",valid).isError());assertEquals(1,signals.get());
+            byte[] complete=new Json.Writer().put("id",id).put("rtc","1").put("complete","true").done().getBytes(StandardCharsets.UTF_8);
+            f.node.services().dispatchLocal(new ServiceRegistry.Request(PrivateFiles.PEERS,complete,f.peer.publicKey(),Collections.emptyList()));
+            assertTrue("Complete peers release the active transport",stopped.get()>0);
+            f.files.pause(id);assertTrue(stopped.get()>0);
+            assertTrue(f.node.services().dispatch("x",valid).isError());
+            f.files.resume(id);assertTrue(f.node.services().dispatch("x",valid).isError());assertEquals(1,signals.get());
+        }
     }
     @Test public void uploadRetriesAreIdempotentAndConflictsAreRejected()throws Exception {
         try(Fixture f=new Fixture()){

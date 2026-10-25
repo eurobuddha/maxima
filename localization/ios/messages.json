@@ -3856,7 +3856,11 @@
     "iosFiles.incomplete": "Incomplete file",
     "iosFiles.sizeChanged": "File size changed during export",
     "iosFiles.invalidName": "Invalid filename",
-    "files.directWaiting": "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node."
+    "files.directWaiting": "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.",
+    "files.directHostNeeded": "Your account needs a reachable direct file connection",
+    "files.directHostUnavailable": "Cannot connect directly to your account. Check its port forwarding and try again.",
+    "files.directInterrupted": "Direct file connection interrupted",
+    "files.directHostUpdate": "Update your Parlons Cloud node to use direct file transfers"
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -7671,7 +7675,11 @@
     "iosFiles.incomplete": "文件不完整",
     "iosFiles.sizeChanged": "导出过程中，文件大小发生变化",
     "iosFiles.invalidName": "文件名无效",
-    "files.directWaiting": "文件传输暂时没有进展。双方账号需要在线并建立直连。请尝试连接同一 Wi-Fi，或使用可访问的 Cloud/桌面节点。"
+    "files.directWaiting": "文件传输暂时没有进展。双方账号需要在线并建立直连。请尝试连接同一 Wi-Fi，或使用可访问的 Cloud/桌面节点。",
+    "files.directHostNeeded": "您的账号需要可访问的文件直连",
+    "files.directHostUnavailable": "无法直连您的账号。请检查其端口转发后重试。",
+    "files.directInterrupted": "文件直连已中断",
+    "files.directHostUpdate": "请更新您的 Parlons Cloud 节点以使用文件直传"
   },
   "ru": {
     "language.title": "Язык",
@@ -11618,7 +11626,11 @@
     "iosFiles.incomplete": "Файл получен не полностью",
     "iosFiles.sizeChanged": "Размер файла изменился во время экспорта",
     "iosFiles.invalidName": "Недопустимое имя файла",
-    "files.directWaiting": "В последнее время файл не передаётся. Оба аккаунта должны быть онлайн и иметь прямое соединение. Попробуйте одну сеть Wi-Fi или доступный узел Cloud/Desktop."
+    "files.directWaiting": "В последнее время файл не передаётся. Оба аккаунта должны быть онлайн и иметь прямое соединение. Попробуйте одну сеть Wi-Fi или доступный узел Cloud/Desktop.",
+    "files.directHostNeeded": "Аккаунту необходимо доступное прямое соединение для файлов",
+    "files.directHostUnavailable": "Не удалось подключиться напрямую к аккаунту. Проверьте переадресацию портов и повторите попытку.",
+    "files.directInterrupted": "Прямое соединение для передачи файла прервано",
+    "files.directHostUpdate": "Обновите узел Parlons Cloud для прямой передачи файлов"
   },
   "uk": {
     "language.title": "Мова",
@@ -15565,6 +15577,10 @@
     "iosFiles.incomplete": "Неповний файл",
     "iosFiles.sizeChanged": "Розмір файлу змінився під час експорту",
     "iosFiles.invalidName": "Недійсне ім'я файлу",
-    "files.directWaiting": "Останнім часом передавання файлу не просувається. Обидва облікові записи мають бути онлайн із прямим з’єднанням. Спробуйте одну мережу Wi-Fi або доступний вузол Cloud/Desktop."
+    "files.directWaiting": "Останнім часом передавання файлу не просувається. Обидва облікові записи мають бути онлайн із прямим з’єднанням. Спробуйте одну мережу Wi-Fi або доступний вузол Cloud/Desktop.",
+    "files.directHostNeeded": "Обліковому запису потрібне доступне пряме з’єднання для файлів",
+    "files.directHostUnavailable": "Не вдалося підключитися безпосередньо до облікового запису. Перевірте переадресацію портів і спробуйте знову.",
+    "files.directInterrupted": "Пряме з’єднання для передавання файлу перервано",
+    "files.directHostUpdate": "Оновіть вузол Parlons Cloud для прямого передавання файлів"
   }
 }

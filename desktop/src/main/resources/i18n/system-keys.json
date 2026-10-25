@@ -3220,5 +3220,9 @@
   "Incomplete file": "iosFiles.incomplete",
   "File size changed during export": "iosFiles.sizeChanged",
   "Invalid filename": "iosFiles.invalidName",
-  "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.": "files.directWaiting"
+  "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.": "files.directWaiting",
+  "Your account needs a reachable direct file connection": "files.directHostNeeded",
+  "Cannot connect directly to your account. Check its port forwarding and try again.": "files.directHostUnavailable",
+  "Direct file connection interrupted": "files.directInterrupted",
+  "Update your Parlons Cloud node to use direct file transfers": "files.directHostUpdate"
 }

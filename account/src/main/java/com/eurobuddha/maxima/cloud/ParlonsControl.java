@@ -519,10 +519,21 @@ public final class ParlonsControl implements AutoCloseable {
         }
     }
 
+    private final com.eurobuddha.maxima.files.DirectFileChannel mDirectFiles = new com.eurobuddha.maxima.files.DirectFileChannel();
+    private java.util.function.Supplier<java.util.List<String>> mFileSources = java.util.Collections::emptyList;
+    public void setFileSources(java.util.function.Supplier<java.util.List<String>> sources) { mFileSources = sources; }
     private com.eurobuddha.maxima.files.FileCommands mFileCommands;
     public void setFileCommands(com.eurobuddha.maxima.files.FileCommands commands) { mFileCommands = commands; }
 
     public void registerOn(ServiceRegistry zReg) {
+        zReg.register(com.eurobuddha.maxima.files.DirectFileChannel.METHOD, req -> {
+            requireAuth(req);
+            if (mFileCommands == null) throw new java.io.IOException("This node needs the private file update");
+            byte[] device = req.fromPublicKey.clone();
+            java.util.Map<String,String> ticket = mDirectFiles.issue(new com.eurobuddha.maxima.core.codec.MiniData(device).to0xString(),
+                    mFileSources.get(), () -> !mClosed && mPairing.isAuthorized(device), mFileCommands::call);
+            JSONObject out = new JSONObject(); out.putAll(ticket); return bytes(out);
+        });
         zReg.register(com.eurobuddha.maxima.files.FileCommands.METHOD, req -> {
             requireAuth(req);
             if (mFileCommands == null) return bytes(err("This node needs the private file update"));
@@ -2237,6 +2248,7 @@ public final class ParlonsControl implements AutoCloseable {
     @Override public synchronized void close() {
         if (mClosed) return;
         mClosed = true;
+        mDirectFiles.close();
         if (mIdentityImport != null) mIdentityImport.close();
         mSendExec.shutdownNow();
         mCallExec.shutdownNow();

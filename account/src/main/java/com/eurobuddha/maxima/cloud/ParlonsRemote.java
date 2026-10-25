@@ -35,6 +35,33 @@ public final class ParlonsRemote {
     private volatile String mCloudMax = "";
     private volatile String mCloudLive = "";
     private ScheduledExecutorService mPump;
+    private volatile com.eurobuddha.maxima.files.DirectFileChannel.Client mFileChannel;
+    private volatile boolean mClosed;
+    /** All private file commands and replies stay on the account's direct socket.
+     * Only the small one-use ticket travels through authenticated owner RPC. */
+    public synchronized JSONObject files(JSONObject input) throws Exception {
+        if (mClosed) throw new java.io.IOException("Account closed");
+        if (mFileChannel == null) {
+            JSONObject response;
+            try { response = rpc(com.eurobuddha.maxima.files.DirectFileChannel.METHOD, new JSONObject()); }
+            catch (Exception e) {
+                if (e.getMessage() != null && e.getMessage().contains("no such method: " + com.eurobuddha.maxima.files.DirectFileChannel.METHOD))
+                    throw new java.io.IOException("Update your Parlons Cloud node to use direct file transfers", e);
+                throw e;
+            }
+            java.util.Map<String,String> ticket = new java.util.LinkedHashMap<>();
+            for (Object key : response.keySet()) ticket.put(key.toString(), String.valueOf(response.get(key)));
+            mFileChannel = com.eurobuddha.maxima.files.DirectFileChannel.Client.connect(ticket);
+            if (mClosed) { mFileChannel.close(); mFileChannel = null; throw new java.io.IOException("Account closed"); }
+        }
+        java.util.Map<String,String> request = new java.util.LinkedHashMap<>();
+        for (Object key : input.keySet()) request.put(key.toString(), String.valueOf(input.get(key)));
+        try {
+            JSONObject out = new JSONObject(); out.putAll(mFileChannel.call(request)); return out;
+        } catch (Exception e) {
+            mFileChannel.close(); mFileChannel = null; throw e;
+        }
+    }
     /** The relays this device starts from to find the account: the caller's seeds (its own,
      *  remembered, and the compiled-in list if still on); {@code Bootstrap.RELAYS} by default. */
     private volatile List<String> mSeedRelays = new ArrayList<>(Bootstrap.RELAYS);
@@ -156,6 +183,7 @@ public final class ParlonsRemote {
     /** One RPC round-trip. Re-resolves the cloud address once if the first send fails (the
      *  account's live location may have rotated since we cached it). */
     public JSONObject rpc(String zMethod, JSONObject zPayload) throws Exception {
+        if (com.eurobuddha.maxima.files.FileCommands.METHOD.equals(zMethod)) return files(zPayload);
         try {
             return callOnce(zMethod, zPayload);
         } catch (Exception first) {
@@ -174,6 +202,7 @@ public final class ParlonsRemote {
 
     /** {@link #rpc(String, JSONObject)} with an explicit reply timeout. */
     public JSONObject rpc(String zMethod, JSONObject zPayload, long zTimeoutMs) throws Exception {
+        if (com.eurobuddha.maxima.files.FileCommands.METHOD.equals(zMethod)) return files(zPayload);
         try {
             return callOnce(zMethod, zPayload, zTimeoutMs);
         } catch (Exception first) {
@@ -930,6 +959,9 @@ public final class ParlonsRemote {
     }
 
     public void close() {
+        mClosed = true;
+        com.eurobuddha.maxima.files.DirectFileChannel.Client channel = mFileChannel;
+        if (channel != null) channel.close();
         if (mPump != null) {
             mPump.shutdownNow();
         }

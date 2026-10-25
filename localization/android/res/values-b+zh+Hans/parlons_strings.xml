@@ -4269,4 +4269,8 @@
     <string name="l10n_ios_files_size_changed" formatted="false">"导出过程中，文件大小发生变化"</string>
     <string name="l10n_ios_files_invalid_name" formatted="false">"文件名无效"</string>
     <string name="l10n_files_direct_waiting" formatted="false">"文件传输暂时没有进展。双方账号需要在线并建立直连。请尝试连接同一 Wi-Fi，或使用可访问的 Cloud/桌面节点。"</string>
+    <string name="l10n_files_direct_host_needed" formatted="false">"您的账号需要可访问的文件直连"</string>
+    <string name="l10n_files_direct_host_unavailable" formatted="false">"无法直连您的账号。请检查其端口转发后重试。"</string>
+    <string name="l10n_files_direct_interrupted" formatted="false">"文件直连已中断"</string>
+    <string name="l10n_files_direct_host_update" formatted="false">"请更新您的 Parlons Cloud 节点以使用文件直传"</string>
 </resources>

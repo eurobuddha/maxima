@@ -4401,4 +4401,8 @@
     <string name="l10n_ios_files_size_changed" formatted="false">"Розмір файлу змінився під час експорту"</string>
     <string name="l10n_ios_files_invalid_name" formatted="false">"Недійсне ім\'я файлу"</string>
     <string name="l10n_files_direct_waiting" formatted="false">"Останнім часом передавання файлу не просувається. Обидва облікові записи мають бути онлайн із прямим з’єднанням. Спробуйте одну мережу Wi-Fi або доступний вузол Cloud/Desktop."</string>
+    <string name="l10n_files_direct_host_needed" formatted="false">"Обліковому запису потрібне доступне пряме з’єднання для файлів"</string>
+    <string name="l10n_files_direct_host_unavailable" formatted="false">"Не вдалося підключитися безпосередньо до облікового запису. Перевірте переадресацію портів і спробуйте знову."</string>
+    <string name="l10n_files_direct_interrupted" formatted="false">"Пряме з’єднання для передавання файлу перервано"</string>
+    <string name="l10n_files_direct_host_update" formatted="false">"Оновіть вузол Parlons Cloud для прямого передавання файлів"</string>
 </resources>

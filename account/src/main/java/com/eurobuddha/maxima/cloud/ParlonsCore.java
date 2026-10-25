@@ -170,6 +170,7 @@ public final class ParlonsCore {
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
         mControl.setChatOnly(mWallet == null);
         mControl.setFileCommands(mFileCommands);
+        mControl.setFileSources(mPrivateFiles::directSources);
         mControl.setStatusSource(new ParlonsControl.StatusSource() {
             public long uptimeMillis() { return mStartedAt == 0 ? 0 : System.currentTimeMillis() - mStartedAt; }
             public String version()    { return mCfg.version; }

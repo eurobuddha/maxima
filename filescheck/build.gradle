@@ -45,3 +45,9 @@ tasks.register('copyPrivateTorrentTest', Copy) {
     into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/files')
 }
 tasks.named('preBuild').configure { dependsOn 'copyPrivateTorrentTest' }
+
+ tasks.register('copyWebRtcFiles', Copy) {
+    from '../app/src/main/java/com/eurobuddha/maxima/app/files'
+    into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app/files')
+ }
+ tasks.named('preBuild').configure { dependsOn 'copyWebRtcFiles' }
