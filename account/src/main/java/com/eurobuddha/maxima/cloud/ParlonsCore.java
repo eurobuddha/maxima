@@ -87,6 +87,8 @@ public final class ParlonsCore {
          *  first, advertised first, the MLS anchor - so the permanent address points at the
          *  node's own box. "" for the cloud (no cape of its own). */
         public String ownRelay = "";
+        /** Trusted in-process host listener sources; never ordinary fleet addresses. */
+        public java.util.function.Supplier<List<String>> fileSources = java.util.Collections::emptyList;
         /** Public host to advertise for the relay (blank = say nothing). */
         public String publicHost = "";
         /** Extra fleet relays to attach to, on top of {@link Bootstrap#RELAYS}. Runtime host
@@ -149,8 +151,9 @@ public final class ParlonsCore {
             mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, zDataDir.resolve("private-files"));
             mPrivateFiles.setExtraSources(() -> {
                 String own = mCfg.ownRelay;
-                return mRelay != null && own != null && !own.isEmpty() && mNode.isHostVerified(own)
-                        ? java.util.Collections.singletonList(own) : java.util.Collections.emptyList();
+                List<String> sources = new ArrayList<>(mCfg.fileSources.get());
+                if (mRelay != null && own != null && !own.isEmpty() && mNode.isHostVerified(own)) sources.add(own);
+                return sources;
             });
             mFileCommands = new com.eurobuddha.maxima.files.FileCommands(mPrivateFiles, zDataDir.resolve("private-files/uploads"));
         } catch (java.io.IOException e) { throw new IllegalStateException("Cannot open private file storage", e); }
@@ -372,7 +375,7 @@ public final class ParlonsCore {
         AdminPairingPassword password = mControl.adminPairingPassword();
         if (password == null) throw new IllegalStateException("Owner password service required");
         try {
-            mManagedHosting = new ManagedHosting(mDataDir, mCfg, password);
+            mManagedHosting = new ManagedHosting(mDataDir, mCfg, password, this::directFileSources);
             mControl.setManagedHosting(mManagedHosting);
         } catch (Exception e) {
             // Optional guest hosting must never take down the owner's account or wallet.
@@ -380,6 +383,7 @@ public final class ParlonsCore {
             log("guest hosting unavailable: " + e.getClass().getSimpleName());
         }
     }
+    public List<String> directFileSources() { return mPrivateFiles.directSources(); }
     public ChatEngine chat() { return mChat; }
     public MediaService media() { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }

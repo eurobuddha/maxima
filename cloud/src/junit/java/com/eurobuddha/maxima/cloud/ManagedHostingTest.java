@@ -22,6 +22,24 @@ public class ManagedHostingTest {
     private JSONObject request(String action, String name) {
         JSONObject r = new JSONObject(); r.put("action", action); r.put("name", name); return r;
     }
+    @Test public void hostedFileTicketUsesOwnerListenerButOnlyTenantPairing() throws Exception {
+        Path data = temp.newFolder("direct-tenant").toPath(); String phrase = Tenants.phraseFor(data, null);
+        ParlonsCore.Config cfg = config();
+        java.util.concurrent.atomic.AtomicReference<String> address = new java.util.concurrent.atomic.AtomicReference<>("192.0.2.1:9501");
+        cfg.fileSources = () -> Collections.singletonList(address.get());
+        ParlonsCore tenant = ManagedHosting.chatAccount(MaximaIdentity.fromNodeSecret(phrase), data, cfg, phrase);
+        byte[] paired = {1,2,3}, stranger = {4,5,6};
+        try {
+            tenant.pairing().authorizeLocal(paired, "synthetic device", true);
+            ServiceRegistry registry = tenant.node().services();
+            String method = "parlons.files.direct";
+            assertThrows(SecurityException.class, () -> registry.dispatchLocal(new ServiceRegistry.Request(method,new byte[0],stranger,Collections.emptyList())));
+            String reply = new String(registry.dispatchLocal(new ServiceRegistry.Request(method,new byte[0],paired,Collections.emptyList())),StandardCharsets.UTF_8);
+            assertEquals(address.get(),com.eurobuddha.maxima.core.util.Json.parse(reply).get("sources"));
+            address.set("192.0.2.2:9501");
+            assertEquals(Collections.singletonList(address.get()),tenant.directFileSources());
+        } finally { tenant.shutdown(); }
+    }
     @Test public void hostingIsOptInPasswordGatedAndPreservesAccountsWhenStopped() throws Exception {
         Path data = temp.getRoot().toPath(); AdminPairingPassword password = new AdminPairingPassword(data);
         try (ManagedHosting host = new ManagedHosting(data, config(), password)) {

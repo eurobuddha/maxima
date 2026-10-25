@@ -21,6 +21,10 @@ public final class ManagedHosting implements AutoCloseable {
     private boolean closed;
 
     public ManagedHosting(Path ownerData, ParlonsCore.Config ownerConfig, AdminPairingPassword password) throws Exception {
+        this(ownerData, ownerConfig, password, ownerConfig.fileSources);
+    }
+    public ManagedHosting(Path ownerData, ParlonsCore.Config ownerConfig, AdminPairingPassword password,
+            java.util.function.Supplier<java.util.List<String>> fileSources) throws Exception {
         root = ownerData.resolve("hosted-chat");
         Files.createDirectories(root);
         if (Files.isSymbolicLink(root)) throw new IllegalStateException("Hosting folder must not be a symbolic link");
@@ -29,6 +33,7 @@ public final class ManagedHosting implements AutoCloseable {
         accounts = new HostedAccounts(root, HostedAccounts.DEFAULT_LIMIT);
         config = new ParlonsCore.Config();
         config.version = ownerConfig.version;
+        config.fileSources = fileSources;
         config.relayPort = 0; config.directPort = 0; config.panelPort = 0;
         config.extraRelays.addAll(ownerConfig.extraRelays);
         config.builtInRelays = ownerConfig.builtInRelays;

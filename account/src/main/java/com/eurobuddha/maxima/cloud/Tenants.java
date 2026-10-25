@@ -220,6 +220,7 @@ public final class Tenants {
         final java.util.Map<Path, ParlonsCore> cores = new java.util.LinkedHashMap<>();
         final java.util.Map<Path, Long> failedAt = new java.util.HashMap<>();
         RelayRuntime shared;
+        java.util.function.Supplier<java.util.List<String>> fileSources = java.util.Collections::emptyList;
         int nextPanelSlot = 0;
         boolean closed;
 
@@ -238,6 +239,7 @@ public final class Tenants {
             if (!first) {
                 cfg.relayPort = 0;    // one relay per host, shared below
                 cfg.directPort = 0;   // one Tier-2 listener per host (the first tenant's)
+                cfg.fileSources = () -> fileSources.get();
             }
             // Each tenant's local panel on its own loopback port: --panel-port, +1, +2 … in start
             // order (0 = no panels). The operator opens a tenant's panel through an ssh tunnel with
@@ -250,6 +252,7 @@ public final class Tenants {
             core.start();
             if (first) {
                 shared = core.relayRuntime();
+                fileSources = core::directFileSources;
             }
             cores.put(zTenant, core);
             publish();
@@ -353,6 +356,7 @@ public final class Tenants {
         c.relayPort = b.relayPort;
         c.directPort = b.directPort;
         c.ownRelay = b.ownRelay;
+        c.fileSources = b.fileSources;
         c.publicHost = b.publicHost;
         c.extraRelays = new java.util.concurrent.CopyOnWriteArrayList<>(b.extraRelays);
         c.builtInRelays = b.builtInRelays;
