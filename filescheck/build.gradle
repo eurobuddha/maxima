@@ -1,14 +1,24 @@
 plugins { alias(libs.plugins.android.application) }
 android {
-    namespace 'com.eurobuddha.filescheck'
+    // Shared UI helpers import the production R namespace; the installed test app ID stays separate.
+    namespace 'com.eurobuddha.maxima.app'
     compileSdk 36
     defaultConfig { applicationId 'com.eurobuddha.filescheck'; minSdk 28; targetSdk 35; versionCode 1; versionName 'test' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
     // Import only the Android smoke suite used by MainActivity; the file-manager suite is JVM-only.
     sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/sha3'))
+    sourceSets.main.res.srcDir('../localization/android/res')
     packaging { resources.excludes += ['META-INF/DEPENDENCIES', 'META-INF/INDEX.LIST'] }
 }
 dependencies { implementation project(':files'); implementation('com.github.atomashpolskiy:bt-core:1.10') { exclude group: 'com.google.inject', module: 'guice' }; implementation 'com.google.inject:guice:4.2.3:no_aop'; implementation 'org.bouncycastle:bcprov-jdk15on:1.69'; implementation 'junit:junit:4.13.2' }
+dependencies { implementation libs.appcompat; implementation 'androidx.core:core:1.13.1' }
+
+tasks.register('copyFileCheckLanguage', Copy) {
+    from '../chatshared/com/eurobuddha/maxima/app/i18n'
+    include 'Language.java', 'LanguageDialog.java', 'NotificationLabels.java'
+    into layout.buildDirectory.dir('generated/sha3/com/eurobuddha/maxima/app/i18n')
+}
+tasks.named('preBuild').configure { dependsOn 'copyFileCheckLanguage' }
 
 tasks.register('copySha3', Copy) {
     from '../app/src/main/java/com/eurobuddha/maxima/app/Sha3Provider.java'

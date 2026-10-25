@@ -81,7 +81,7 @@
   "File is being prepared": "files.preparingNotice",
   "Connection interrupted": "files.interrupted",
   "Upload paused. Resume from File transfers.": "files.pausedNotice",
-  "Choose a file up to 512 MB": "files.limit",
+  "Choose a file up to 100 MB": "files.limit",
   "This file is empty": "files.empty",
   "Uploading": "files.uploading",
   "Upload paused": "files.paused",
@@ -604,7 +604,7 @@
   "Private file · update Parlons to open": "nativeFiles.update",
   "Sending private file": "nativeFiles.sending",
   "Preparing…": "nativeFiles.preparing",
-  "Choose a local file up to 512 MB": "nativeFiles.localLimit",
+  "Choose a local file up to 100 MB": "nativeFiles.localLimit",
   "Cannot open file": "nativeFiles.openFailed",
   "Save file…": "nativeFiles.save",
   "Remove this device’s transfer and stop sharing it? Saved copies are kept.": "nativeFiles.removeConfirm",
@@ -1059,7 +1059,7 @@
   "queued": "nodeCollection.queued",
   "classic": "desktopChat.classic",
   "core": "desktopChat.core",
-  "Send private file (up to 512 MB)": "desktopFiles.choose",
+  "Send private file (up to 100 MB)": "desktopFiles.choose",
   "Replace the existing file?": "desktopFiles.replace",
   "Remove transfer": "desktopFiles.removeTitle",
   "Save image": "desktopPhotos.save",
@@ -3219,5 +3219,6 @@
   "Remove this transfer from your account and stop sharing it? Saved copies are kept.": "iosFiles.removeConfirm",
   "Incomplete file": "iosFiles.incomplete",
   "File size changed during export": "iosFiles.sizeChanged",
-  "Invalid filename": "iosFiles.invalidName"
+  "Invalid filename": "iosFiles.invalidName",
+  "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.": "files.directWaiting"
 }

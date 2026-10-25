@@ -549,10 +549,10 @@
     "uk": "Вивантаження призупинено. Продовжте в розділі «Передавання файлів»."
   },
   "files.limit": {
-    "en": "Choose a file up to 512 MB",
-    "zh-Hans": "请选择不超过 512 MB 的文件",
-    "ru": "Выберите файл размером до 512 МБ",
-    "uk": "Виберіть файл розміром до 512 MB"
+    "en": "Choose a file up to 100 MB",
+    "zh-Hans": "请选择不超过 100 MB 的文件",
+    "ru": "Выберите файл размером до 100 МБ",
+    "uk": "Виберіть файл розміром до 100 MB"
   },
   "files.empty": {
     "en": "This file is empty",
@@ -4131,10 +4131,10 @@
     "uk": "Підготовка…"
   },
   "nativeFiles.localLimit": {
-    "en": "Choose a local file up to 512 MB",
-    "zh-Hans": "请选择不超过 512 MB 的本地文件",
-    "ru": "Выберите локальный файл размером до 512 МБ",
-    "uk": "Виберіть локальний файл розміром до 512 MB"
+    "en": "Choose a local file up to 100 MB",
+    "zh-Hans": "请选择不超过 100 MB 的本地文件",
+    "ru": "Выберите локальный файл размером до 100 МБ",
+    "uk": "Виберіть локальний файл розміром до 100 MB"
   },
   "nativeFiles.openFailed": {
     "en": "Cannot open file",
@@ -7704,10 +7704,10 @@
     "uk": "core"
   },
   "desktopFiles.choose": {
-    "en": "Send private file (up to 512 MB)",
-    "zh-Hans": "发送私密文件（最大 512 MB）",
-    "ru": "Отправить приватный файл (до 512 МБ)",
-    "uk": "Надіслати приватний файл (до 512 MB)"
+    "en": "Send private file (up to 100 MB)",
+    "zh-Hans": "发送私密文件（最大 100 MB）",
+    "ru": "Отправить приватный файл (до 100 МБ)",
+    "uk": "Надіслати приватний файл (до 100 MB)"
   },
   "desktopFiles.replace": {
     "en": "Replace the existing file?",
@@ -23002,5 +23002,11 @@
     "zh-Hans": "文件名无效",
     "ru": "Недопустимое имя файла",
     "uk": "Недійсне ім'я файлу"
+  },
+  "files.directWaiting": {
+    "en": "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.",
+    "zh-Hans": "文件传输暂时没有进展。双方账号需要在线并建立直连。请尝试连接同一 Wi-Fi，或使用可访问的 Cloud/桌面节点。",
+    "ru": "В последнее время файл не передаётся. Оба аккаунта должны быть онлайн и иметь прямое соединение. Попробуйте одну сеть Wi-Fi или доступный узел Cloud/Desktop.",
+    "uk": "Останнім часом передавання файлу не просувається. Обидва облікові записи мають бути онлайн із прямим з’єднанням. Спробуйте одну мережу Wi-Fi або доступний вузол Cloud/Desktop."
   }
 }

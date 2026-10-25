@@ -199,6 +199,16 @@ public class PrivateFilesTest {
             try(PrivateFiles reopened=new PrivateFiles(f.node,f.chat,f.root.resolve("files"))){
                 awaitSharing(f,reopened,offer.id);assertEquals("false",reopened.status(offer.id).get("ready"));
                 assertEquals(1,reopened.list().size());
+                java.lang.reflect.Field transfers=PrivateFiles.class.getDeclaredField("transfers");transfers.setAccessible(true);
+                Object transfer=((Map<?,?>)transfers.get(reopened)).get(offer.id);
+                java.lang.reflect.Field progress=transfer.getClass().getDeclaredField("lastProgressNanos");progress.setAccessible(true);
+                progress.setLong(transfer,System.nanoTime()-java.util.concurrent.TimeUnit.SECONDS.toNanos(31));
+                assertTrue(reopened.status(offer.id).get("error").contains("direct connection"));
+                progress.setLong(transfer,System.nanoTime());
+                assertEquals("",reopened.status(offer.id).get("error"));
+                reopened.pause(offer.id);
+                progress.setLong(transfer,System.nanoTime()-java.util.concurrent.TimeUnit.SECONDS.toNanos(31));
+                assertEquals("",reopened.status(offer.id).get("error"));
             }
         }
     }

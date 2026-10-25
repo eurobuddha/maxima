@@ -108,3 +108,15 @@ test('bad offset responses pause safely without deleting accepted bytes', async 
   assert.equal(h.calls.filter(p => p.action === 'finish').length, 0);
   assert.equal(h.calls.filter(p => p.action === 'cancelUpload').length, 0);
 });
+
+test('new uploads stop at 100 MiB while retained legacy offers remain readable', async () => {
+  const h = harness();
+  await h.ui.send({name:'too-large.bin',size:100*1024*1024+1}, 'peer', false);
+  assert.equal(h.calls.length, 0);
+  assert.match(h.toasts[0][0], /100 MB/);
+  await h.ui.send({name:'boundary.bin',size:100*1024*1024,slice(){throw Error('synthetic source unavailable');}}, 'peer', false);
+  assert.equal(h.calls.find(p => p.action === 'begin').size, String(100*1024*1024));
+  const {parse}=require('../../main/resources/panel/private-files.js');
+  const ref='pf1:'+Buffer.from(JSON.stringify({v:'1',id:'a'.repeat(32),name:'legacy.bin',size:String(512*1024*1024)})).toString('base64url');
+  assert.equal(Number(parse(ref).size),512*1024*1024);
+});

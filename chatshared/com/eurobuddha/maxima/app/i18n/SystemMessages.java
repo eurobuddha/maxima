@@ -107,7 +107,7 @@ public final class SystemMessages {
             case "File is being prepared": return R.string.l10n_files_preparing_notice;
             case "Connection interrupted": return R.string.l10n_files_interrupted;
             case "Upload paused. Resume from File transfers.": return R.string.l10n_files_paused_notice;
-            case "Choose a file up to 512 MB": return R.string.l10n_files_limit;
+            case "Choose a file up to 100 MB": return R.string.l10n_files_limit;
             case "This file is empty": return R.string.l10n_files_empty;
             case "Uploading": return R.string.l10n_files_uploading;
             case "Upload paused": return R.string.l10n_files_paused;
@@ -640,7 +640,7 @@ public final class SystemMessages {
             case "Private file · update Parlons to open": return R.string.l10n_native_files_update;
             case "Sending private file": return R.string.l10n_native_files_sending;
             case "Preparing…": return R.string.l10n_native_files_preparing;
-            case "Choose a local file up to 512 MB": return R.string.l10n_native_files_local_limit;
+            case "Choose a local file up to 100 MB": return R.string.l10n_native_files_local_limit;
             case "Cannot open file": return R.string.l10n_native_files_open_failed;
             case "Save file…": return R.string.l10n_native_files_save;
             case "Remove this device’s transfer and stop sharing it? Saved copies are kept.": return R.string.l10n_native_files_remove_confirm;
@@ -1105,7 +1105,7 @@ public final class SystemMessages {
             case "queued": return R.string.l10n_node_collection_queued;
             case "classic": return R.string.l10n_desktop_chat_classic;
             case "core": return R.string.l10n_desktop_chat_core;
-            case "Send private file (up to 512 MB)": return R.string.l10n_desktop_files_choose;
+            case "Send private file (up to 100 MB)": return R.string.l10n_desktop_files_choose;
             case "Replace the existing file?": return R.string.l10n_desktop_files_replace;
             case "Remove transfer": return R.string.l10n_desktop_files_remove_title;
             case "Save image": return R.string.l10n_desktop_photos_save;
@@ -3306,6 +3306,7 @@ public final class SystemMessages {
             case "Incomplete file": return R.string.l10n_ios_files_incomplete;
             case "File size changed during export": return R.string.l10n_ios_files_size_changed;
             case "Invalid filename": return R.string.l10n_ios_files_invalid_name;
+            case "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.": return R.string.l10n_files_direct_waiting;
             default: return 0;
         }
     }

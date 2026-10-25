@@ -9,6 +9,8 @@ import java.util.Map;
 public final class ChatFile {
     public static final String PREFIX = "pf1:";
     public static final long MAX_BYTES = 512L * 1024 * 1024;
+    /** New transfers are capped at 100 MiB. Keep the pf1 read bound for retained legacy files. */
+    public static final long TRANSFER_MAX_BYTES = 100L * 1024 * 1024;
     public static final int MAX_REF_CHARS = 65536;
     public final String id, name, mime, key, nonce, digest, torrent;
     public final long size;

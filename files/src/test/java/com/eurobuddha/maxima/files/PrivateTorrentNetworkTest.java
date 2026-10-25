@@ -13,9 +13,9 @@ import static com.eurobuddha.maxima.files.PrivateTorrentTest.*;
 /** Real sockets and synthetic data; exercises account listeners as well as phone listeners. */
 public class PrivateTorrentNetworkTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
-    @Test(timeout=150000) public void largeFileTransfersThroughReverseNodeConnection() throws Exception {
+    @Test(timeout=210000) public void largeFileTransfersThroughReverseNodeConnection() throws Exception {
         Path seed=temporary.newFolder("large-seed").toPath(), download=temporary.newFolder("large-download").toPath();
-        byte[] plain=new byte[64*1024*1024+19];new Random(18).nextBytes(plain);ChatFile f=prepare(seed,plain);
+        byte[] plain=new byte[(int)ChatFile.TRANSFER_MAX_BYTES];new Random(18).nextBytes(plain);ChatFile f=prepare(seed,plain);
         int relayPort=port();
         com.eurobuddha.maxima.server.RelayServer endpoint=new com.eurobuddha.maxima.server.RelayServer(
                 com.eurobuddha.maxima.core.identity.MaximaIdentity.create().identity,relayPort,"1.0.48");
@@ -29,9 +29,9 @@ public class PrivateTorrentNetworkTest {
             sender.start(f,seed,(x,y)->{},()->{},error::set);
             receiver.start(f,download,(x,y)->{},done::countDown,error::set);
             int proxy=outgoing.connect("127.0.0.1",relayPort,token);
-            long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(110);
+            long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(160);
             while(done.getCount()>0 && System.nanoTime()<until){sender.tunnelPeer(f.id,proxy);done.await(500,TimeUnit.MILLISECONDS);}
-            assertNull(error.get());assertEquals("64 MiB reverse transfer completed",0,done.getCount());
+            assertNull(error.get());assertEquals("100 MiB reverse transfer completed",0,done.getCount());
             receiver.pause(f.id);
             FileCrypto.decrypt(download.resolve("payload.bin"),download.resolve("out"),f,()->false);
             assertArrayEquals(plain,Files.readAllBytes(download.resolve("out")));

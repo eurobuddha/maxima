@@ -1,14 +1,14 @@
 /* Private transfer controls shared by the node panel and both Electron hosts. */
 (function (root) {
   'use strict';
-  const MAX = 512 * 1024 * 1024, BLOCK = 48 * 1024;
+  const MAX = 100 * 1024 * 1024, LEGACY_MAX = 512 * 1024 * 1024, BLOCK = 48 * 1024;
   function parse(ref) {
     if (typeof ref !== 'string' || !ref.startsWith('pf1:') || ref.length > 65536) return null;
     try {
       let b = ref.slice(4).replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
       const f = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0))));
       if (f.v !== '1' || !/^[a-f0-9]{32}$/.test(f.id) || typeof f.name !== 'string'
-          || !f.name || f.name === '.' || f.name === '..' || /[\x00-\x1f\x7f/\\]/.test(f.name) || f.name.length > 240 || !Number.isSafeInteger(Number(f.size)) || Number(f.size) < 0 || Number(f.size) > MAX) return null;
+          || !f.name || f.name === '.' || f.name === '..' || /[\x00-\x1f\x7f/\\]/.test(f.name) || f.name.length > 240 || !Number.isSafeInteger(Number(f.size)) || Number(f.size) < 0 || Number(f.size) > LEGACY_MAX) return null;
       return f;
     } catch (_) { return null; }
   }
@@ -43,7 +43,7 @@
       }
       action.onclick = async () => {
         if (busy) return; busy = true; action.disabled = true;
-        try { if (!exists) { if (!offer) throw Error('Transfer unavailable'); await call('download', { ref, peer, group }); }
+        try { if (!exists) { if (!offer) throw Error('Transfer unavailable'); if (Number(offer.size) > MAX) throw Error(tr('files.limit')); await call('download', { ref, peer, group }); }
           else await call(paused ? 'resume' : 'pause', { id });
         } catch (e) { toast(I.system(e.message), 'err'); } finally { busy = false; action.disabled = false; }
       };

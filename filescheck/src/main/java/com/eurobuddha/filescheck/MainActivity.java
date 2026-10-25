@@ -8,6 +8,9 @@ import org.junit.runner.notification.Failure;
 public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);TextView text=new TextView(this);text.setPadding(32,48,32,32);
+        // This synthetic runtime check must not time out simply because its phone is asleep.
+        setShowWhenLocked(true);setTurnScreenOn(true);
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         text.setText("Testing private file encryption, direct transfer and resume…");setContentView(text);
         try {
             TextView bubble = new TextView(this);
@@ -35,7 +38,13 @@ public final class MainActivity extends Activity {
             String report;
             try {
                 com.eurobuddha.maxima.app.Sha3Provider.install();
-                Result result=JUnitCore.runClasses(com.eurobuddha.maxima.files.PrivateTorrentTest.class);
+                JUnitCore suite=new JUnitCore();
+                suite.addListener(new org.junit.runner.notification.RunListener(){
+                    @Override public void testStarted(org.junit.runner.Description test){android.util.Log.i("PrivateFilesCheck","START "+test.getMethodName());}
+                    @Override public void testFinished(org.junit.runner.Description test){android.util.Log.i("PrivateFilesCheck","END "+test.getMethodName());}
+                    @Override public void testFailure(Failure failure){android.util.Log.e("PrivateFilesCheck",failure.getTrace());}
+                });
+                Result result=suite.run(com.eurobuddha.maxima.files.PrivateTorrentTest.class);
                 StringBuilder out=new StringBuilder(result.wasSuccessful()?"PASS":"FAIL");
                 out.append(" · ").append(result.getRunCount()).append(" tests\n");
                 for(Failure failure:result.getFailures())out.append(failure.getTrace()).append('\n');

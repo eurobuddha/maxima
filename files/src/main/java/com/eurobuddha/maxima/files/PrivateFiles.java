@@ -20,7 +20,7 @@ import java.util.function.Supplier;
 public final class PrivateFiles implements AutoCloseable {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PrivateFiles.class);
     public static final String PEERS="parlons.files.peers";
-    public static final int BLOCK=48*1024;
+    public static final int BLOCK=FileUpload.BLOCK;
     public static final long STORAGE_LIMIT=2L*1024*1024*1024;
     private final MaximaNode node;
     private final ChatEngine chat;
@@ -52,6 +52,7 @@ public final class PrivateFiles implements AutoCloseable {
         final Object disk = new Object();
         volatile long reservedSize;
         volatile long done; volatile boolean paused,ready,restorePending; volatile int generation;
+        volatile long lastProgressNanos;
         volatile TorrentTunnel tunnel;
         Transfer(String id,String peer,boolean group,boolean mine,Path dir){this.id=id;this.peer=peer;this.group=group;this.mine=mine;this.dir=dir;}
     }
@@ -106,7 +107,7 @@ public final class PrivateFiles implements AutoCloseable {
     }
     public String send(InputStream input,long size,String name,String mime,String peer,boolean group)throws Exception {
         try (InputStream source = input) {
-            if(size<0 || size>ChatFile.MAX_BYTES)throw new IOException("Files may be up to 512 MB");
+            if(size<0 || size>ChatFile.TRANSFER_MAX_BYTES)throw new IOException("Choose a file up to 100 MB");
             String id=FileCrypto.randomHex(16), key=FileCrypto.randomHex(32), nonce=FileCrypto.randomHex(8);
             new ChatFile(id,name,mime,size,key,nonce,"0000000000000000000000000000000000000000000000000000000000000000","");
             Transfer t = allocate(id, size, peer, group, true);
@@ -132,6 +133,7 @@ public final class PrivateFiles implements AutoCloseable {
         ChatFile file=ChatFile.parse(ref);
         Transfer old=transfers.get(file.id);
         if(old!=null){if(old.file==null || !old.file.ref().equals(ref) || !old.peer.equals(conversation) || old.group!=group)throw new SecurityException("Conflicting transfer");resume(file.id);return file.id;}
+        if(file.size>ChatFile.TRANSFER_MAX_BYTES)throw new IOException("Choose a file up to 100 MB");
         // The caller cannot smuggle an arbitrary manifest into a different conversation.
         boolean offered=chat.conversation(conversation).stream().anyMatch(e->ChatMedia.ref(e.body).equals(ref));
         if(!offered)throw new SecurityException("File offer is not in this conversation");
@@ -144,13 +146,16 @@ public final class PrivateFiles implements AutoCloseable {
         if(closed)throw new IOException("File sharing stopped");
         if(t.tunnel!=null)return;
         t.restorePending=false;t.paused=false;t.error="";t.status=t.ready?"Ready · sharing":t.mine?"Sharing":"Connecting";int generation=++t.generation;
+        t.lastProgressNanos=System.nanoTime();
         try {
         PrivateTorrent bt=engine();
         TorrentTunnel tunnel=new TorrentTunnel();t.tunnel=tunnel;t.token=FileCrypto.randomHex(32);
         tunnel.expose(t.token,PrivateTorrent.validate(t.file).getTorrentId().getBytes(),bt.port());
         bt.start(t.file,t.dir,(complete,total)->{
             if(t.generation!=generation)return;
-            t.done=Math.min(t.file.size,(long)complete*FileCrypto.PLAIN_PIECE);
+            long done=Math.min(t.file.size,(long)complete*FileCrypto.PLAIN_PIECE);
+            if(done>t.done)t.lastProgressNanos=System.nanoTime();
+            t.done=done;
             if(!t.ready && !t.mine && complete<total)t.status=complete>0?"Downloading":"Connecting";
         },()->{
             if(t.generation!=generation || t.ready)return;
@@ -188,6 +193,9 @@ public final class PrivateFiles implements AutoCloseable {
         synchronized(t.disk){try(java.util.stream.Stream<Path> paths=Files.walk(t.dir)){for(Path p:(Iterable<Path>)paths.sorted(Comparator.reverseOrder())::iterator)Files.deleteIfExists(p);}}}
     public Map<String,String> status(String id)throws IOException {
         Transfer t=get(id);Map<String,String> m=new LinkedHashMap<>();m.put("id",id);m.put("status",t.status);m.put("error",t.error);
+        if(t.error.isEmpty() && !t.mine && !t.ready && !t.paused && !t.restorePending
+                && !"Verifying".equals(t.status) && System.nanoTime()-t.lastProgressNanos>TimeUnit.SECONDS.toNanos(30))
+            m.put("error","No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.");
         m.put("done",Long.toString(t.done));m.put("size",Long.toString(t.reservedSize));m.put("ready",Boolean.toString(t.ready));
         m.put("name",t.file==null?"Interrupted preparation":t.file.name);m.put("paused",Boolean.toString(t.paused));return m;
     }

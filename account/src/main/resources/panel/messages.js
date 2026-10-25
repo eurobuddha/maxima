@@ -93,7 +93,7 @@ window.ParlonsMessages = {
     "files.preparingNotice": "File is being prepared",
     "files.interrupted": "Connection interrupted",
     "files.pausedNotice": "Upload paused. Resume from File transfers.",
-    "files.limit": "Choose a file up to 512 MB",
+    "files.limit": "Choose a file up to 100 MB",
     "files.empty": "This file is empty",
     "files.uploading": "Uploading",
     "files.paused": "Upload paused",
@@ -693,7 +693,7 @@ window.ParlonsMessages = {
     "nativeFiles.update": "Private file · update Parlons to open",
     "nativeFiles.sending": "Sending private file",
     "nativeFiles.preparing": "Preparing…",
-    "nativeFiles.localLimit": "Choose a local file up to 512 MB",
+    "nativeFiles.localLimit": "Choose a local file up to 100 MB",
     "nativeFiles.openFailed": "Cannot open file",
     "nativeFiles.uploadProgress": "Uploading {percent}%",
     "nativeFiles.description": "{size}\nEncrypted · shared directly with this conversation\nDownloads may also upload encrypted pieces while active.",
@@ -1296,7 +1296,7 @@ window.ParlonsMessages = {
     "desktopChat.transferAction": "Transfer controls",
     "desktopChat.classic": "classic",
     "desktopChat.core": "core",
-    "desktopFiles.choose": "Send private file (up to 512 MB)",
+    "desktopFiles.choose": "Send private file (up to 100 MB)",
     "desktopFiles.replace": "Replace the existing file?",
     "desktopFiles.removeTitle": "Remove transfer",
     "desktopFiles.bytes": "{done} / {size} bytes",
@@ -3856,7 +3856,8 @@ window.ParlonsMessages = {
     "iosFiles.removeConfirm": "Remove this transfer from your account and stop sharing it? Saved copies are kept.",
     "iosFiles.incomplete": "Incomplete file",
     "iosFiles.sizeChanged": "File size changed during export",
-    "iosFiles.invalidName": "Invalid filename"
+    "iosFiles.invalidName": "Invalid filename",
+    "files.directWaiting": "No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node."
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -3950,7 +3951,7 @@ window.ParlonsMessages = {
     "files.preparingNotice": "正在准备文件",
     "files.interrupted": "连接已中断",
     "files.pausedNotice": "上传已暂停。请在“文件传输”中继续。",
-    "files.limit": "请选择不超过 512 MB 的文件",
+    "files.limit": "请选择不超过 100 MB 的文件",
     "files.empty": "此文件为空",
     "files.uploading": "正在上传",
     "files.paused": "上传已暂停",
@@ -4544,7 +4545,7 @@ window.ParlonsMessages = {
     "nativeFiles.update": "私密文件 · 请更新 Parlons 后打开",
     "nativeFiles.sending": "正在发送私密文件",
     "nativeFiles.preparing": "正在准备…",
-    "nativeFiles.localLimit": "请选择不超过 512 MB 的本地文件",
+    "nativeFiles.localLimit": "请选择不超过 100 MB 的本地文件",
     "nativeFiles.openFailed": "无法打开文件",
     "nativeFiles.uploadProgress": "正在上传 {percent}%",
     "nativeFiles.description": "{size}\n已加密 · 直接分享给此聊天\n下载期间也可能上传加密分块。",
@@ -5132,7 +5133,7 @@ window.ParlonsMessages = {
     "desktopChat.transferAction": "传输控制",
     "desktopChat.classic": "经典",
     "desktopChat.core": "核心",
-    "desktopFiles.choose": "发送私密文件（最大 512 MB）",
+    "desktopFiles.choose": "发送私密文件（最大 100 MB）",
     "desktopFiles.replace": "替换现有文件吗？",
     "desktopFiles.removeTitle": "移除传输",
     "desktopFiles.bytes": "{done} / {size} 字节",
@@ -7670,7 +7671,8 @@ window.ParlonsMessages = {
     "iosFiles.removeConfirm": "从您的账户移除此传输并停止共享？已保存的副本将保留。",
     "iosFiles.incomplete": "文件不完整",
     "iosFiles.sizeChanged": "导出过程中，文件大小发生变化",
-    "iosFiles.invalidName": "文件名无效"
+    "iosFiles.invalidName": "文件名无效",
+    "files.directWaiting": "文件传输暂时没有进展。双方账号需要在线并建立直连。请尝试连接同一 Wi-Fi，或使用可访问的 Cloud/桌面节点。"
   },
   "ru": {
     "language.title": "Язык",
@@ -7767,7 +7769,7 @@ window.ParlonsMessages = {
     "files.preparingNotice": "Файл подготавливается",
     "files.interrupted": "Соединение прервано",
     "files.pausedNotice": "Отправка приостановлена. Возобновите её в разделе «Передача файлов».",
-    "files.limit": "Выберите файл размером до 512 МБ",
+    "files.limit": "Выберите файл размером до 100 МБ",
     "files.empty": "Этот файл пуст",
     "files.uploading": "Отправка",
     "files.paused": "Отправка приостановлена",
@@ -8379,7 +8381,7 @@ window.ParlonsMessages = {
     "nativeFiles.update": "Приватный файл · обновите Parlons для открытия",
     "nativeFiles.sending": "Отправка приватного файла",
     "nativeFiles.preparing": "Подготовка…",
-    "nativeFiles.localLimit": "Выберите локальный файл размером до 512 МБ",
+    "nativeFiles.localLimit": "Выберите локальный файл размером до 100 МБ",
     "nativeFiles.openFailed": "Не удалось открыть файл",
     "nativeFiles.uploadProgress": "Загрузка {percent}%",
     "nativeFiles.description": "{size}\nЗашифровано · передаётся напрямую участникам этого чата\nВо время скачивания могут также раздаваться зашифрованные части.",
@@ -9012,7 +9014,7 @@ window.ParlonsMessages = {
     "desktopChat.transferAction": "Управление передачей",
     "desktopChat.classic": "классика",
     "desktopChat.core": "ядро",
-    "desktopFiles.choose": "Отправить приватный файл (до 512 МБ)",
+    "desktopFiles.choose": "Отправить приватный файл (до 100 МБ)",
     "desktopFiles.replace": "Заменить существующий файл?",
     "desktopFiles.removeTitle": "Удалить передачу",
     "desktopFiles.bytes": "{done} / {size} байт",
@@ -11616,7 +11618,8 @@ window.ParlonsMessages = {
     "iosFiles.removeConfirm": "Удалить эту передачу из вашего аккаунта и прекратить раздачу? Сохранённые копии останутся.",
     "iosFiles.incomplete": "Файл получен не полностью",
     "iosFiles.sizeChanged": "Размер файла изменился во время экспорта",
-    "iosFiles.invalidName": "Недопустимое имя файла"
+    "iosFiles.invalidName": "Недопустимое имя файла",
+    "files.directWaiting": "В последнее время файл не передаётся. Оба аккаунта должны быть онлайн и иметь прямое соединение. Попробуйте одну сеть Wi-Fi или доступный узел Cloud/Desktop."
   },
   "uk": {
     "language.title": "Мова",
@@ -11713,7 +11716,7 @@ window.ParlonsMessages = {
     "files.preparingNotice": "Файл готується",
     "files.interrupted": "З'єднання перервано",
     "files.pausedNotice": "Вивантаження призупинено. Продовжте в розділі «Передавання файлів».",
-    "files.limit": "Виберіть файл розміром до 512 MB",
+    "files.limit": "Виберіть файл розміром до 100 MB",
     "files.empty": "Цей файл порожній",
     "files.uploading": "Вивантаження",
     "files.paused": "Вивантаження призупинено",
@@ -12325,7 +12328,7 @@ window.ParlonsMessages = {
     "nativeFiles.update": "Приватний файл · оновіть Parlons, щоб відкрити",
     "nativeFiles.sending": "Надсилання приватного файлу",
     "nativeFiles.preparing": "Підготовка…",
-    "nativeFiles.localLimit": "Виберіть локальний файл розміром до 512 MB",
+    "nativeFiles.localLimit": "Виберіть локальний файл розміром до 100 MB",
     "nativeFiles.openFailed": "Не вдається відкрити файл",
     "nativeFiles.uploadProgress": "Вивантаження {percent}%",
     "nativeFiles.description": "{size}\nЗашифровано · передається напряму в цю розмову\nПід час завантаження також можуть вивантажуватися зашифровані частини.",
@@ -12958,7 +12961,7 @@ window.ParlonsMessages = {
     "desktopChat.transferAction": "Керування передаванням",
     "desktopChat.classic": "classic",
     "desktopChat.core": "core",
-    "desktopFiles.choose": "Надіслати приватний файл (до 512 MB)",
+    "desktopFiles.choose": "Надіслати приватний файл (до 100 MB)",
     "desktopFiles.replace": "Замінити наявний файл?",
     "desktopFiles.removeTitle": "Видалити передавання",
     "desktopFiles.bytes": "{done} / {size} байтів",
@@ -15562,6 +15565,7 @@ window.ParlonsMessages = {
     "iosFiles.removeConfirm": "Вилучити це передавання з облікового запису й припинити спільний доступ? Збережені копії залишаться.",
     "iosFiles.incomplete": "Неповний файл",
     "iosFiles.sizeChanged": "Розмір файлу змінився під час експорту",
-    "iosFiles.invalidName": "Недійсне ім'я файлу"
+    "iosFiles.invalidName": "Недійсне ім'я файлу",
+    "files.directWaiting": "Останнім часом передавання файлу не просувається. Обидва облікові записи мають бути онлайн із прямим з’єднанням. Спробуйте одну мережу Wi-Fi або доступний вузол Cloud/Desktop."
   }
 };

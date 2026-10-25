@@ -44,7 +44,7 @@ public final class FileCommands implements AutoCloseable {
                     Upload u=new Upload(staging.resolve(id),in);
                     String zero="0000000000000000000000000000000000000000000000000000000000000000";
                     new ChatFile(id,u.name,u.mime,u.size,zero,"0000000000000000",zero,"");
-                    if(u.size<0 || u.size>ChatFile.MAX_BYTES || u.name==null || u.name.isEmpty() || u.name.length()>240 || u.peer==null)throw new IOException("Invalid file (512 MB maximum)");
+                    if(u.size<0 || u.size>ChatFile.TRANSFER_MAX_BYTES || u.name==null || u.name.isEmpty() || u.name.length()>240 || u.peer==null)throw new IOException("Choose a file up to 100 MB");
                     long pending=uploads.values().stream().filter(x->x.fileId.isEmpty()).mapToLong(x->x.size).sum();
                     if(uploads.size()>=8 || pending+u.size>ChatFile.MAX_BYTES || staging.toFile().getUsableSpace()<u.size*3+32*1024*1024)
                         throw new IOException("Finish or cancel another upload first");
@@ -89,7 +89,7 @@ public final class FileCommands implements AutoCloseable {
                 }}
                 files.remove(id);return result();
             }
-            case "cancelUpload":{Upload u=upload(id);synchronized(u){
+            case "cancelUpload":{Upload u=uploads.get(id);if(u==null)return result();synchronized(u){
                 if(u.finishing || !u.fileId.isEmpty())throw new IOException("Preparation already started");
                 Files.deleteIfExists(u.path);uploads.remove(id,u);
             }return result();}

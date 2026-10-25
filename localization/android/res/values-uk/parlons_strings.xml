@@ -102,7 +102,7 @@
     <string name="l10n_files_preparing_notice" formatted="false">"Файл готується"</string>
     <string name="l10n_files_interrupted" formatted="false">"З\'єднання перервано"</string>
     <string name="l10n_files_paused_notice" formatted="false">"Вивантаження призупинено. Продовжте в розділі «Передавання файлів»."</string>
-    <string name="l10n_files_limit" formatted="false">"Виберіть файл розміром до 512 MB"</string>
+    <string name="l10n_files_limit" formatted="false">"Виберіть файл розміром до 100 MB"</string>
     <string name="l10n_files_empty" formatted="false">"Цей файл порожній"</string>
     <string name="l10n_files_uploading" formatted="false">"Вивантаження"</string>
     <string name="l10n_files_paused" formatted="false">"Вивантаження призупинено"</string>
@@ -768,7 +768,7 @@
     <string name="l10n_native_files_update" formatted="false">"Приватний файл · оновіть Parlons, щоб відкрити"</string>
     <string name="l10n_native_files_sending" formatted="false">"Надсилання приватного файлу"</string>
     <string name="l10n_native_files_preparing" formatted="false">"Підготовка…"</string>
-    <string name="l10n_native_files_local_limit" formatted="false">"Виберіть локальний файл розміром до 512 MB"</string>
+    <string name="l10n_native_files_local_limit" formatted="false">"Виберіть локальний файл розміром до 100 MB"</string>
     <string name="l10n_native_files_open_failed" formatted="false">"Не вдається відкрити файл"</string>
     <!-- Arguments: percent -->
     <string name="l10n_native_files_upload_progress">"Вивантаження %1$s%%"</string>
@@ -1495,7 +1495,7 @@
     <string name="l10n_desktop_chat_transfer_action" formatted="false">"Керування передаванням"</string>
     <string name="l10n_desktop_chat_classic" formatted="false">"classic"</string>
     <string name="l10n_desktop_chat_core" formatted="false">"core"</string>
-    <string name="l10n_desktop_files_choose" formatted="false">"Надіслати приватний файл (до 512 MB)"</string>
+    <string name="l10n_desktop_files_choose" formatted="false">"Надіслати приватний файл (до 100 MB)"</string>
     <string name="l10n_desktop_files_replace" formatted="false">"Замінити наявний файл?"</string>
     <string name="l10n_desktop_files_remove_title" formatted="false">"Видалити передавання"</string>
     <!-- Arguments: done, size -->
@@ -4400,4 +4400,5 @@
     <string name="l10n_ios_files_incomplete" formatted="false">"Неповний файл"</string>
     <string name="l10n_ios_files_size_changed" formatted="false">"Розмір файлу змінився під час експорту"</string>
     <string name="l10n_ios_files_invalid_name" formatted="false">"Недійсне ім\'я файлу"</string>
+    <string name="l10n_files_direct_waiting" formatted="false">"Останнім часом передавання файлу не просувається. Обидва облікові записи мають бути онлайн із прямим з’єднанням. Спробуйте одну мережу Wi-Fi або доступний вузол Cloud/Desktop."</string>
 </resources>

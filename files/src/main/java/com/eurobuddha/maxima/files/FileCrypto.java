@@ -39,7 +39,7 @@ public final class FileCrypto {
     }
     public static String encrypt(InputStream source, Path target, String id, long size,
                                  String key, String nonce, BooleanSupplier cancelled, LongConsumer progress) throws Exception {
-        if (size < 0 || size > ChatFile.MAX_BYTES) throw new IOException("Files may be up to 512 MB");
+        if (size < 0 || size > ChatFile.TRANSFER_MAX_BYTES) throw new IOException("Choose a file up to 100 MB");
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         boolean success = false;
         try (OutputStream out = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW)) {
