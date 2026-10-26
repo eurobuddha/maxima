@@ -4317,4 +4317,10 @@
     <string name="l10n_files_direct_host_unavailable" formatted="false">"Cannot connect directly to your account. Check its port forwarding and try again."</string>
     <string name="l10n_files_direct_interrupted" formatted="false">"Direct file connection interrupted"</string>
     <string name="l10n_files_direct_host_update" formatted="false">"Update your Parlons Cloud node to use direct file transfers"</string>
+    <string name="l10n_files_keep_sharing" formatted="false">"Keep sharing"</string>
+    <string name="l10n_files_share_again" formatted="false">"Share again"</string>
+    <string name="l10n_files_downloaded_stopped" formatted="false">"Downloaded and verified · sharing stopped"</string>
+    <string name="l10n_files_downloaded_sharing" formatted="false">"Downloaded and verified · sharing"</string>
+    <string name="l10n_files_confirmation_unavailable" formatted="false">"Download confirmation unavailable"</string>
+    <string name="l10n_files_awaiting_download" formatted="false">"Waiting for verified download"</string>
 </resources>

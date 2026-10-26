@@ -132,6 +132,10 @@ public final class KeetsIpcTransport implements KeetsTransport {
         return out;
     }
 
+    @Override public void forget(com.eurobuddha.maxima.core.chat.ChatFile file)throws Exception {sharing(file,false);fileMedia().forget(file);}
+    @Override public void sharing(com.eurobuddha.maxima.core.chat.ChatFile file,boolean enabled)throws Exception {
+        try{fileMedia().sharing(file,enabled);}catch(Exception e){fileMedia=null;throw e;}
+    }
     @Override
     public String myPubkey() {
         if (mPubkey == null) {

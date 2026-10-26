@@ -23,21 +23,29 @@
         + '<p class="sub" data-i18n="files.description">Encrypted file sharing with this conversation. Active downloads can also upload encrypted pieces.</p>'
         + '<p class="file-status" aria-live="polite">' + (offer ? esc(size(offer.size)) : esc(tr('files.preparing'))) + '</p>'
         + '<progress class="file-progress" max="100" value="0" style="width:100%"></progress>'
+        + '<label class="file-keep-label" hidden><input type="checkbox" class="file-keep"><span data-i18n="files.keepSharing">Keep sharing</span></label>'
         + '<div class="actions"><button class="btn file-action" data-i18n="files.download">Download</button><a class="btn ghost file-save" data-i18n="files.save" hidden>Save file</a>'
         + '<button class="btn ghost danger file-remove" data-i18n="files.remove" hidden>Remove local transfer</button></div>');
       const status = panel.querySelector('.file-status'), action = panel.querySelector('.file-action'), save = panel.querySelector('.file-save');
-      const remove = panel.querySelector('.file-remove');
+      const remove = panel.querySelector('.file-remove'), keep = panel.querySelector('.file-keep');
+      let current = null, nextReceipt = 0;
       async function tick() {
         if (!panel.isConnected) return;
         try {
           const s = await call('status', { id }); if (!panel.isConnected) return;
-          id = s.fileId || id; exists = true; paused = s.paused === 'true' || s.status === 'Failed';
-          I.render(status, () => I.system(s.status) + (s.error ? '\n' + I.system(s.error) : '') + '\n' + size(s.done) + ' / ' + size(s.size));
+          current = s; id = s.fileId || id;
+          if (Date.now() >= nextReceipt) {
+            nextReceipt = Date.now() + 15000;
+            const pending = localStorage.getItem('parlons-file-receipt/' + id);
+            if (pending) try { await call('deviceReceived', {id, digest: pending}); localStorage.removeItem('parlons-file-receipt/' + id); } catch (_) {}
+          } exists = true; paused = s.paused === 'true' || s.status === 'Failed';
+          I.render(status, () => I.system(s.status) + (s.delivery ? '\n' + I.system(s.delivery) : '') + (s.deliveryError ? '\n' + s.deliveryError : '') + (s.error ? '\n' + I.system(s.error) : '') + '\n' + size(s.done) + ' / ' + size(s.size));
           panel.querySelector('progress').value = 100 * Number(s.done || 0) / Math.max(1, Number(s.size || 0));
           finished = s.ready === 'true'; save.hidden = !finished; save.href = '/private-file?id=' + encodeURIComponent(id);
           save.setAttribute('download', s.name || 'Parlons file');
           const preparing = s.status === 'Preparing' || s.status === 'Uploading';
-          I.bind(action, paused ? 'files.resume' : 'files.pause'); action.disabled = busy || preparing; remove.hidden = preparing;
+          panel.querySelector('.file-keep-label').hidden = s.mine !== 'true'; keep.checked = s.keepSharing === 'true';
+          I.bind(action, paused ? 'files.resume' : 'files.pause'); if (s.sharingStopped === 'true' && s.mine === 'true') I.bind(action, 'files.shareAgain'); action.disabled = busy || preparing; remove.hidden = preparing;
         } catch (e) { if (!exists) I.render(status, () => offer ? tr('files.ready', { size: size(offer.size) }) : I.system(e.message)); }
         if (panel.isConnected) setTimeout(tick, 1500);
       }
@@ -46,6 +54,22 @@
         try { if (!exists) { if (!offer) throw Error('Transfer unavailable'); if (Number(offer.size) > MAX) throw Error(tr('files.limit')); await call('download', { ref, peer, group }); }
           else await call(paused ? 'resume' : 'pause', { id });
         } catch (e) { toast(I.system(e.message), 'err'); } finally { busy = false; action.disabled = false; }
+      };
+      keep.onchange = async () => { try { await call('keepSharing', { id, keep: String(keep.checked) }); } catch(e) { toast(I.system(e.message), 'err'); } };
+      save.onclick = async event => {
+        event.preventDefault(); if (!current || busy) return;
+        busy = true;
+        try {
+          const response = await fetch('/private-file?id=' + encodeURIComponent(id), { credentials: 'same-origin', redirect: 'error' });
+          if (!response.ok || Number(response.headers.get('content-length')) !== Number(current.size) || Number(current.size) > LEGACY_MAX) throw Error('Download interrupted');
+          const bytes = await response.arrayBuffer();
+          const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('');
+          if (bytes.byteLength !== Number(current.size) || digest !== current.digest) throw Error('Saved file verification failed');
+          const url = URL.createObjectURL(new Blob([bytes])), link = document.createElement('a');
+          link.href = url; link.download = current.name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+          localStorage.setItem('parlons-file-receipt/' + id, digest);
+          await call('deviceReceived', { id, digest }); localStorage.removeItem('parlons-file-receipt/' + id);
+        } catch(e) { toast(I.system(e.message), 'err'); } finally { busy = false; }
       };
       remove.onclick = async () => { if (!confirm(tr('files.removeConfirm'))) return;
         try { await call('remove', { id }); closeSheet(); } catch (e) { toast(I.system(e.message), 'err'); } };

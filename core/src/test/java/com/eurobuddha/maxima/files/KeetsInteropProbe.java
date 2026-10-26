@@ -50,6 +50,10 @@ public final class KeetsInteropProbe {
             MessageDigest md=MessageDigest.getInstance("SHA-256");
             try(InputStream in=Files.newInputStream(dest.resolve("verified.bin"))){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)md.update(b,0,n);}
             if(Files.size(dest.resolve("verified.bin"))!=size || !f.digest.equals(FileCrypto.hex(md.digest())))throw new AssertionError("byte mismatch");
+            sender.reader.sharing(f,false);receiver.reader.sharing(f,false);
+            try{sender.fetch(f.torrent,KeetsFiles.MANIFEST_LIMIT);throw new AssertionError("stopped file still served locally");}catch(IOException expected){}
+            sender.reader.sharing(f,true);receiver.reader.sharing(f,true);
+            if(sender.fetch(f.torrent,KeetsFiles.MANIFEST_LIMIT).length==0)throw new AssertionError("Share again failed");
             System.out.println("PASS "+label+": 100 MiB, interrupted/resumed, SHA-256 identical, encrypted Hyperdrive blocks only");
         }finally{try(java.util.stream.Stream<Path> paths=Files.walk(dir)){for(Path p:(Iterable<Path>)paths.sorted(Comparator.reverseOrder())::iterator)Files.deleteIfExists(p);}}
     }

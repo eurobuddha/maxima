@@ -42,6 +42,18 @@ public final class KeetsMediaClient {
             throw new IOException("Keets did not confirm the media upload");
         return url;
     }
+    public void sharing(ChatFile file,boolean enabled)throws Exception {
+        com.eurobuddha.maxima.files.KeetsFiles.validate(file);
+        byte[] body=new com.eurobuddha.maxima.core.util.Json.Writer().put("url",file.torrent).put("sharing",Boolean.toString(enabled)).done().getBytes(StandardCharsets.UTF_8);
+        java.util.Map<String,String> r=com.eurobuddha.maxima.core.util.Json.parse(new String(request("POST","/private-sharing",body,4096),StandardCharsets.UTF_8));
+        if(!Boolean.toString(enabled).equals(r.get("sharing")))throw new IOException("Node did not confirm file sharing state");
+    }
+    public void forget(ChatFile file)throws Exception {
+        com.eurobuddha.maxima.files.KeetsFiles.validate(file);
+        byte[] body=new com.eurobuddha.maxima.core.util.Json.Writer().put("url",file.torrent).done().getBytes(StandardCharsets.UTF_8);
+        java.util.Map<String,String> r=com.eurobuddha.maxima.core.util.Json.parse(new String(request("POST","/private-forget",body,4096),StandardCharsets.UTF_8));
+        if(!"true".equals(r.get("forgotten")))throw new IOException("Node did not confirm file removal");
+    }
     private byte[] request(String method,String route,byte[] body,int max) throws Exception {
         HttpURLConnection con = (HttpURLConnection)new URL("http", "127.0.0.1", port, route).openConnection(Proxy.NO_PROXY);
         Timer watchdog = new Timer("KeetsMediaDeadline", true);

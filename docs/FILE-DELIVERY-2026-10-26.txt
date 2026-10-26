@@ -1,0 +1,57 @@
+Verified file delivery and exclusive payment currency — 2026-10-26
+
+Behavior
+An authenticated file-control message identifies the transfer and SHA-256 digest,
+never the file key, filename or bytes. Completion is emitted after successful
+verification, persisted and retried until acknowledged. A sender stops serving
+after every intended recipient confirms, unless Keep sharing is enabled.
+Share again reopens the same transfer. Local verified files remain available.
+Cloud hosts wait for the receiving device to verify its copy; host download alone
+is insufficient. Android owner confirmations persist and retry while the chat is
+open and after reopening it. Browser confirmations retry while its sheet is open.
+Transfer sheets display downloaded/verified, stopped, waiting or unavailable state.
+This change does not add operating-system completion notifications.
+
+Keets 1.2.12 isolates each private transfer in a separate Corestore. Closing it
+stops historical-block replication without interrupting other files/photos.
+The 128-transfer cache bound remains. Explicit removal of a stopped transfer frees
+its cache and slot. Files originally published on the legacy shared drive cannot
+be stopped independently; send them again with the updated node. Both ends need
+receipt-capable clients for automatic completion. Old clients retain manual use.
+File bytes remain P2P; controls use the existing encrypted chat transport.
+
+Payment fix
+The shared PaymentCurrency group assigns stable IDs before adding either radio
+button, then selects Minima through RadioGroup. Both Android apps use it in their
+chat and wallet send screens. The token ID is derived from that same selection.
+No real payment was sent during validation.
+
+Validation
+- FileDeliveryTest: 3 passed (retry/restart, forged/group/override, failed stop).
+- KeetsPrivateFilesTest: 2 passed (routing, verified cache, receiver restart/resume,
+  hosted-device confirmation and sender stop).
+- PaymentCurrencyTest: 2 passed (repeated real radio-button clicks, correct token,
+  invalid selection fails closed).
+- Existing native ChatFilesTest: 4 passed; all three bear variants compile.
+- Sidecar recovery/media-limit tests: 12 passed.
+- Real private-DHT stop/restart/re-share/removal fixture: passed under Node/Bare;
+  fresh peers cannot obtain stopped historical bytes; unrelated media works.
+- Real 100 MiB P2P transfers both directions: interrupt/resume/hash validation and
+  HTTP sharing controls passed. Fixture forbids fleet/message file transport.
+- Parlons 0.6.149, Cloud Android 0.2.94, Node 0.2.141 and Cloud host 0.11.127 built.
+- PandaBear, BlackBear and Pandamonium 2.0.59 release APKs built offline; the
+  exact pinned bundle and all 21 required addons/runtime per ABI passed APK checks.
+- Artifact validation: 19 tests passed; preparation/cache checks: 9 passed;
+  isolated clean-output offline rebuild reproduced every pinned hash.
+- Desktop 1.5.118 source compiled. No live wallet or device was restarted.
+
+Code Review
+Summary: Reuses the existing encrypted file codecs, chat authentication and
+loopback media client; adds shared durable receipt state and isolated serving.
+Findings resolved before release: paused receiver serving now reopens on resume;
+Keep sharing reopens native Keets; Cloud confirmation retries persist; Bare queue
+failures are handled before forwarding; explicit removal frees bounded storage.
+An initial dependency-version editing error was caught and corrected: only the
+sidecar package version changed, not the text-decoder dependency.
+Verdict: Approve for device testing. Physical Android notification/background
+behavior and external user-to-user receipt behavior remain to be field-tested.

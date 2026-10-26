@@ -42,6 +42,8 @@ public final class PrivateFiles implements AutoCloseable {
     private final Set<String> pendingPeers = ConcurrentHashMap.newKeySet();
     private volatile PrivateTorrent engine;
     private volatile boolean closed;
+    private final FileDelivery delivery;
+    private final boolean deviceReceiptRequired;
     private volatile Supplier<List<String>> extraSources = Collections::emptyList;
     public void setExtraSources(Supplier<List<String>> sources) { extraSources = sources; }
     private List<String> sources() {
@@ -58,15 +60,25 @@ public final class PrivateFiles implements AutoCloseable {
         volatile String status="Preparing",error="",token="";
         final Object disk = new Object();
         volatile long reservedSize;
-        volatile long done; volatile boolean paused,ready,restorePending,keetsRunning; volatile int generation;
+        volatile long done; volatile boolean paused,ready,restorePending,keetsRunning,keetsPaused; volatile int generation;
         volatile long lastProgressNanos;
         volatile TorrentTunnel tunnel;
         Transfer(String id,String peer,boolean group,boolean mine,Path dir){this.id=id;this.peer=peer;this.group=group;this.mine=mine;this.dir=dir;}
     }
     public PrivateFiles(MaximaNode node,ChatEngine chat,Path directory)throws IOException {
-        this.node=node;this.chat=chat;this.root=directory;
+        this(node,chat,directory,false);
+    }
+    public PrivateFiles(MaximaNode node,ChatEngine chat,Path directory,boolean deviceReceiptRequired)throws IOException {
+        this.node=node;this.chat=chat;this.root=directory;this.deviceReceiptRequired=deviceReceiptRequired;
+        this.delivery=new FileDelivery((peer,control)->{if(!chat.sendFileControl(peer,control))throw new IOException("Receipt pending");},this::pause);
+        chat.setFileControls((from,control)->{
+            Transfer t=transfers.get(Json.parse(control).get("id"));
+            if(t!=null&&authorised(t,from.toLowerCase(Locale.ROOT)))delivery.inbound(from,control);
+        });
         Files.createDirectories(root); privatePath(root,true);
         load();
+        for(Transfer t:transfers.values())if(t.file!=null){delivery.register(t.file,t.dir,t.mine,t.participants);if(t.ready&&!deviceReceiptRequired)delivery.verified(t.id);}
+        discovery.scheduleWithFixedDelay(()->{if(!closed)delivery.tick();},1,5,TimeUnit.SECONDS);
         node.services().register(PEERS,req->{
             String id=Json.parse(req.payloadAsString()).getOrDefault("id","");
             Transfer t=transfers.get(id);
@@ -148,6 +160,7 @@ public final class PrivateFiles implements AutoCloseable {
                     }
                     save(t);
                 }
+                delivery.register(t.file,t.dir,t.mine,t.participants);
                 start(t);
                 if(group)chat.sendGroup(peer,t.file.body());else chat.send(node.contact(peer),t.file.body());
                 return id;
@@ -170,7 +183,7 @@ public final class PrivateFiles implements AutoCloseable {
         if(!offered)throw new SecurityException("File offer is not in this conversation");
         if(file.isKeets())KeetsFiles.validate(file);else PrivateTorrent.validate(file);
         Transfer t=allocate(file.id,file.size,conversation,group,false);t.file=file;
-        try { save(t);start(t);return file.id; }
+        try { save(t);delivery.register(t.file,t.dir,t.mine,t.participants);start(t);return file.id; }
         catch(Exception e) { remove(file.id);throw e; }
     }
     private synchronized void start(Transfer t)throws Exception {
@@ -199,7 +212,7 @@ public final class PrivateFiles implements AutoCloseable {
                         FileCrypto.decrypt(t.dir.resolve("payload.bin"),t.dir.resolve("verified.bin"),t.file,()->closed||t.paused||t.generation!=generation);
                     }
                     synchronized(PrivateFiles.this) {
-                        if(t.generation==generation){t.ready=true;t.done=t.file.size;t.status="Ready · sharing";}
+                        if(t.generation==generation){t.ready=true;t.done=t.file.size;t.status="Ready · sharing";if(!deviceReceiptRequired)delivery.verified(t.id);}
                     }
                 }catch(Exception e){failed(t,generation,message(e));}
             });}catch(RejectedExecutionException e){
@@ -214,6 +227,7 @@ public final class PrivateFiles implements AutoCloseable {
     }
     private void startKeets(Transfer t,int generation)throws Exception {
         KeetsFiles.validate(t.file);
+        if(t.keetsPaused){transportSharing(t,true);t.keetsPaused=false;}
         if(t.ready){t.status="Ready · sharing";save(t);return;}
         KeetsTransport transport=chat.keetsTransport();
         if(transport==null)throw new IOException("Connect a Keets-enabled node, then tap Resume");
@@ -226,7 +240,7 @@ public final class PrivateFiles implements AutoCloseable {
                     else KeetsFiles.download(transport,t.file,t.dir,cancelled,n->{t.done=n;t.lastProgressNanos=System.nanoTime();});
                 }
                 synchronized(PrivateFiles.this) {
-                    if(t.generation==generation){t.ready=true;t.done=t.file.size;t.status="Ready · sharing";t.keetsRunning=false;}
+                    if(t.generation==generation){t.ready=true;t.done=t.file.size;t.status="Ready · sharing";t.keetsRunning=false;if(!deviceReceiptRequired)delivery.verified(t.id);}
                 }
             }catch(Exception e){failed(t,generation,message(e));}
         });
@@ -236,11 +250,12 @@ public final class PrivateFiles implements AutoCloseable {
         t.restorePending=false;t.paused=true;pauseEngine(t);t.status="Failed";t.error=error;
         try{save(t);}catch(IOException e){t.error+="; could not save paused state";}
     }
-    public synchronized void pause(String id)throws IOException {Transfer t=get(id);t.restorePending=false;t.paused=true;t.status=t.ready?"Ready · paused":"Paused";
+    public synchronized void pause(String id)throws IOException {Transfer t=get(id);
+        if(t.file!=null&&t.file.isKeets()){transportSharing(t,false);t.keetsPaused=true;}t.restorePending=false;t.paused=true;t.status=t.ready?"Ready · paused":"Paused";
         try{pauseEngine(t);}finally{if(t.file!=null)save(t);}}
     private void pauseEngine(Transfer t){t.generation++;t.keetsRunning=false;if(peerTransport!=null)peerTransport.stop(t.id);TorrentTunnel tunnel=t.tunnel;t.tunnel=null;t.token="";t.tunnels.clear();if(tunnel!=null)tunnel.close();if(engine!=null && (t.file==null || !t.file.isKeets()))engine.pause(t.id);}
-    public synchronized void resume(String id)throws Exception {Transfer t=get(id);if(t.file==null)throw new IOException("Choose the file again");start(t);}
-    public synchronized void remove(String id)throws Exception {Transfer t=get(id);pause(id);transfers.remove(id);
+    public synchronized void resume(String id)throws Exception {Transfer t=get(id);if("true".equals(delivery.status(id).get("sharingStopped")))delivery.keep(id,true);if(t.file==null)throw new IOException("Choose the file again");start(t);}
+    public synchronized void remove(String id)throws Exception {Transfer t=get(id);pause(id);if(t.file!=null&&t.file.isKeets())chat.keetsTransport().forget(t.file);transfers.remove(id);delivery.forget(id);
         synchronized(t.disk){try(java.util.stream.Stream<Path> paths=Files.walk(t.dir)){for(Path p:(Iterable<Path>)paths.sorted(Comparator.reverseOrder())::iterator)Files.deleteIfExists(p);}}}
     public Map<String,String> status(String id)throws IOException {
         Transfer t=get(id);Map<String,String> m=new LinkedHashMap<>();m.put("id",id);m.put("status",t.status);m.put("error",t.error);
@@ -248,7 +263,19 @@ public final class PrivateFiles implements AutoCloseable {
                 && !"Verifying".equals(t.status) && System.nanoTime()-t.lastProgressNanos>TimeUnit.SECONDS.toNanos(30))
             m.put("error","No recent file progress. Both accounts must be online with a direct connection. Try the same Wi-Fi or a reachable Cloud/Desktop node.");
         m.put("done",Long.toString(t.done));m.put("size",Long.toString(t.reservedSize));m.put("ready",Boolean.toString(t.ready));
+        m.putAll(delivery.status(id));
         m.put("name",t.file==null?"Interrupted preparation":t.file.name);m.put("paused",Boolean.toString(t.paused));return m;
+    }
+    private void transportSharing(Transfer t,boolean sharing)throws IOException {
+        try{KeetsTransport kt=chat.keetsTransport();if(kt==null)throw new IOException("Connect your Keets node");kt.sharing(t.file,sharing);}
+        catch(Exception e){throw new IOException(e.getMessage(),e);}
+    }
+    public synchronized void keepSharing(String id,boolean keep)throws Exception {
+        Transfer t=get(id);if(!t.mine)throw new IOException("Only the sender controls sharing");
+        if(keep&&t.paused)resume(id);delivery.keep(id,keep);
+    }
+    public void deviceReceived(String id,String digest)throws IOException {
+        Transfer t=get(id);if(!t.ready||t.file==null||!t.file.digest.equals(digest))throw new IOException("File is not verified yet");delivery.verified(id);
     }
     public List<Map<String,String>> list(){List<Map<String,String>> out=new ArrayList<>();for(String id:transfers.keySet())try{out.add(status(id));}catch(Exception ignored){}return out;}
     public InputStream open(String id)throws IOException {Transfer t=get(id);if(!t.ready)throw new IOException("File is not verified yet");return Files.newInputStream(t.dir.resolve("verified.bin"));}
@@ -342,7 +369,7 @@ public final class PrivateFiles implements AutoCloseable {
     private void save(Transfer t)throws IOException {
         synchronized(t.disk){
         String json=new Json.Writer().put("ref",t.file.ref()).put("peer",t.peer).put("group",Boolean.toString(t.group))
-                .put("mine",Boolean.toString(t.mine)).put("members",String.join(",",t.participants)).put("paused",Boolean.toString(t.paused)).done();
+                .put("mine",Boolean.toString(t.mine)).put("members",String.join(",",t.participants)).put("paused",Boolean.toString(t.paused)).put("keetsPaused",Boolean.toString(t.keetsPaused)).done();
         Path tmp=t.dir.resolve("offer.tmp");Files.write(tmp,bytes(json));privatePath(tmp,false);Files.move(tmp,t.dir.resolve("offer.json"),StandardCopyOption.REPLACE_EXISTING);
         }
     }
@@ -354,7 +381,7 @@ public final class PrivateFiles implements AutoCloseable {
                 if(!Files.isRegularFile(state,LinkOption.NOFOLLOW_LINKS) || Files.size(state)>100000){orphan(dir);continue;}
                 try{Map<String,String> m=Json.parse(new String(Files.readAllBytes(state),StandardCharsets.UTF_8));ChatFile f=ChatFile.parse(m.get("ref"));if(!dir.getFileName().toString().equals(f.id))continue;
                     Transfer t=new Transfer(f.id,m.get("peer"),Boolean.parseBoolean(m.get("group")),Boolean.parseBoolean(m.get("mine")),dir);
-                    t.file=f;t.reservedSize=f.size;t.paused=true;
+                    t.file=f;t.reservedSize=f.size;t.paused=true;t.keetsPaused=Boolean.parseBoolean(m.get("keetsPaused"));
                     // Old builds did not record pause intent. Leave those files paused until
                     // the owner resumes once, rather than undoing an unknown deliberate pause.
                     t.restorePending="false".equals(m.get("paused"));
@@ -373,7 +400,7 @@ public final class PrivateFiles implements AutoCloseable {
     }
     private static byte[] bytes(String s){return s.getBytes(StandardCharsets.UTF_8);}
     private static String message(Exception e){return e.getMessage()==null?"File transfer failed":e.getMessage();}
-    @Override public synchronized void close(){if(closed)return;closed=true;node.services().unregister(PEERS);node.services().unregister(SIGNAL);if(peerTransport!=null)peerTransport.close();discovery.shutdownNow();peerJobs.shutdownNow();jobs.shutdownNow();
+    @Override public synchronized void close(){if(closed)return;closed=true;chat.setFileControls(null);node.services().unregister(PEERS);node.services().unregister(SIGNAL);if(peerTransport!=null)peerTransport.close();discovery.shutdownNow();peerJobs.shutdownNow();jobs.shutdownNow();
         try {
             for(Transfer t:transfers.values()) {
                 t.paused=true;

@@ -3311,6 +3311,12 @@ public final class SystemMessages {
             case "Cannot connect directly to your account. Check its port forwarding and try again.": return R.string.l10n_files_direct_host_unavailable;
             case "Direct file connection interrupted": return R.string.l10n_files_direct_interrupted;
             case "Update your Parlons Cloud node to use direct file transfers": return R.string.l10n_files_direct_host_update;
+            case "Keep sharing": return R.string.l10n_files_keep_sharing;
+            case "Share again": return R.string.l10n_files_share_again;
+            case "Downloaded and verified · sharing stopped": return R.string.l10n_files_downloaded_stopped;
+            case "Downloaded and verified · sharing": return R.string.l10n_files_downloaded_sharing;
+            case "Download confirmation unavailable": return R.string.l10n_files_confirmation_unavailable;
+            case "Waiting for verified download": return R.string.l10n_files_awaiting_download;
             default: return 0;
         }
     }

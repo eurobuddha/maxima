@@ -3224,5 +3224,11 @@
   "Your account needs a reachable direct file connection": "files.directHostNeeded",
   "Cannot connect directly to your account. Check its port forwarding and try again.": "files.directHostUnavailable",
   "Direct file connection interrupted": "files.directInterrupted",
-  "Update your Parlons Cloud node to use direct file transfers": "files.directHostUpdate"
+  "Update your Parlons Cloud node to use direct file transfers": "files.directHostUpdate",
+  "Keep sharing": "files.keepSharing",
+  "Share again": "files.shareAgain",
+  "Downloaded and verified · sharing stopped": "files.downloadedStopped",
+  "Downloaded and verified · sharing": "files.downloadedSharing",
+  "Download confirmation unavailable": "files.confirmationUnavailable",
+  "Waiting for verified download": "files.awaitingDownload"
 }

@@ -3861,7 +3861,13 @@ window.ParlonsMessages = {
     "files.directHostNeeded": "Your account needs a reachable direct file connection",
     "files.directHostUnavailable": "Cannot connect directly to your account. Check its port forwarding and try again.",
     "files.directInterrupted": "Direct file connection interrupted",
-    "files.directHostUpdate": "Update your Parlons Cloud node to use direct file transfers"
+    "files.directHostUpdate": "Update your Parlons Cloud node to use direct file transfers",
+    "files.keepSharing": "Keep sharing",
+    "files.shareAgain": "Share again",
+    "files.downloadedStopped": "Downloaded and verified · sharing stopped",
+    "files.downloadedSharing": "Downloaded and verified · sharing",
+    "files.confirmationUnavailable": "Download confirmation unavailable",
+    "files.awaitingDownload": "Waiting for verified download"
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -7680,7 +7686,13 @@ window.ParlonsMessages = {
     "files.directHostNeeded": "您的账号需要可访问的文件直连",
     "files.directHostUnavailable": "无法直连您的账号。请检查其端口转发后重试。",
     "files.directInterrupted": "文件直连已中断",
-    "files.directHostUpdate": "请更新您的 Parlons Cloud 节点以使用文件直传"
+    "files.directHostUpdate": "请更新您的 Parlons Cloud 节点以使用文件直传",
+    "files.keepSharing": "继续分享",
+    "files.shareAgain": "重新分享",
+    "files.downloadedStopped": "已下载并验证 · 已停止分享",
+    "files.downloadedSharing": "已下载并验证 · 正在分享",
+    "files.confirmationUnavailable": "暂无下载确认",
+    "files.awaitingDownload": "等待下载验证"
   },
   "ru": {
     "language.title": "Язык",
@@ -11631,7 +11643,13 @@ window.ParlonsMessages = {
     "files.directHostNeeded": "Аккаунту необходимо доступное прямое соединение для файлов",
     "files.directHostUnavailable": "Не удалось подключиться напрямую к аккаунту. Проверьте переадресацию портов и повторите попытку.",
     "files.directInterrupted": "Прямое соединение для передачи файла прервано",
-    "files.directHostUpdate": "Обновите узел Parlons Cloud для прямой передачи файлов"
+    "files.directHostUpdate": "Обновите узел Parlons Cloud для прямой передачи файлов",
+    "files.keepSharing": "Продолжать раздачу",
+    "files.shareAgain": "Раздавать снова",
+    "files.downloadedStopped": "Загружено и проверено · раздача остановлена",
+    "files.downloadedSharing": "Загружено и проверено · раздача",
+    "files.confirmationUnavailable": "Подтверждение загрузки недоступно",
+    "files.awaitingDownload": "Ожидание проверенной загрузки"
   },
   "uk": {
     "language.title": "Мова",
@@ -15582,6 +15600,12 @@ window.ParlonsMessages = {
     "files.directHostNeeded": "Обліковому запису потрібне доступне пряме з’єднання для файлів",
     "files.directHostUnavailable": "Не вдалося підключитися безпосередньо до облікового запису. Перевірте переадресацію портів і спробуйте знову.",
     "files.directInterrupted": "Пряме з’єднання для передавання файлу перервано",
-    "files.directHostUpdate": "Оновіть вузол Parlons Cloud для прямого передавання файлів"
+    "files.directHostUpdate": "Оновіть вузол Parlons Cloud для прямого передавання файлів",
+    "files.keepSharing": "Продовжувати роздачу",
+    "files.shareAgain": "Роздавати знову",
+    "files.downloadedStopped": "Завантажено й перевірено · роздачу зупинено",
+    "files.downloadedSharing": "Завантажено й перевірено · роздається",
+    "files.confirmationUnavailable": "Підтвердження завантаження недоступне",
+    "files.awaitingDownload": "Очікування перевіреного завантаження"
   }
 };

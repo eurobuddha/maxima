@@ -33,7 +33,7 @@ const startApi = require(path.join(keets, 'sidecar/api'))
   } finally {
     clearTimeout(timer)
     for (const server of servers) await new Promise(resolve => server.close(resolve))
-    for (const peer of peers) { await peer.swarm.destroy(); if (peer.store) await peer.store.close() }
+    for (const peer of peers) { await peer.closePrivate(); await peer.swarm.destroy(); if (peer.store) await peer.store.close() }
     await boot.destroy(); fs.rmSync(dir, { recursive: true, force: true })
   }
 })().catch(e => { console.error(e.message); process.exitCode = 1 })

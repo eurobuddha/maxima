@@ -4405,4 +4405,10 @@
     <string name="l10n_files_direct_host_unavailable" formatted="false">"Не вдалося підключитися безпосередньо до облікового запису. Перевірте переадресацію портів і спробуйте знову."</string>
     <string name="l10n_files_direct_interrupted" formatted="false">"Пряме з’єднання для передавання файлу перервано"</string>
     <string name="l10n_files_direct_host_update" formatted="false">"Оновіть вузол Parlons Cloud для прямого передавання файлів"</string>
+    <string name="l10n_files_keep_sharing" formatted="false">"Продовжувати роздачу"</string>
+    <string name="l10n_files_share_again" formatted="false">"Роздавати знову"</string>
+    <string name="l10n_files_downloaded_stopped" formatted="false">"Завантажено й перевірено · роздачу зупинено"</string>
+    <string name="l10n_files_downloaded_sharing" formatted="false">"Завантажено й перевірено · роздається"</string>
+    <string name="l10n_files_confirmation_unavailable" formatted="false">"Підтвердження завантаження недоступне"</string>
+    <string name="l10n_files_awaiting_download" formatted="false">"Очікування перевіреного завантаження"</string>
 </resources>

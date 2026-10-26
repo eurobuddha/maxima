@@ -1373,20 +1373,12 @@ public final class CloudChatActivity extends AppCompatActivity {
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), 0);
         // Minima or MxUSD (the Minima dollar-pegged token); the account node signs either.
-        final android.widget.RadioGroup currency = new android.widget.RadioGroup(this);
-        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
-        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(this);
-        minimaBtn.setText("Minima");
-        minimaBtn.setChecked(true);
-        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(this);
-        usdBtn.setText("MxUSD");
-        currency.addView(minimaBtn);
-        currency.addView(usdBtn);
+        final com.eurobuddha.maxima.app.chat.PaymentCurrency currency = new com.eurobuddha.maxima.app.chat.PaymentCurrency(this);
         box.addView(currency);
         final EditText amt = new EditText(this);
         Language.hint(amt, Language.msg(R.string.l10n_android_chat_amount));
         currency.setOnCheckedChangeListener((g, id) -> Language.hint(amt, Language.msg(
-                usdBtn.isChecked() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
+                currency.isUsd() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
         amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                 | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         box.addView(amt);
@@ -1402,8 +1394,7 @@ public final class CloudChatActivity extends AppCompatActivity {
                 .setPositiveButton(Language.msg(R.string.l10n_chat_send), (d, w) -> {
                     final String amount = amt.getText().toString().trim();
                     final String note = memo.getText().toString().trim();
-                    final String tokenid = usdBtn.isChecked()
-                            ? "0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90" : "0x00";
+                    final String tokenid = currency.tokenId();
                     if (amount.isEmpty()) {
                         toast(tr(R.string.l10n_android_chat_enter_amount));
                         return;

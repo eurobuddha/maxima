@@ -36,6 +36,7 @@ public final class ChatMessage {
     /** Our application string. One app owns it via the IPC surface. */
     public static final String APPLICATION = "maxima_chat_v1";
 
+    public static final int TYPE_FILE_CONTROL = 8;
     public static final int TYPE_TEXT = 1;
     public static final int TYPE_GROUP_TEXT = 2;
     public static final int TYPE_ROSTER = 3;

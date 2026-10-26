@@ -592,13 +592,8 @@ public final class WalletPage implements Page {
         body.addView(toRow, marginBottom(dp(11)));
 
         // Currency: Minima or MxUSD. Token inputs go byte-exact via coinexport (TokenSend).
-        final android.widget.RadioGroup currency = new android.widget.RadioGroup(mAct);
-        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
-        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(mAct);
-        minimaBtn.setText("Minima"); minimaBtn.setTextColor(col(R.color.ux_text)); minimaBtn.setChecked(true);
-        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(mAct);
-        usdBtn.setText(com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME); usdBtn.setTextColor(col(R.color.ux_text));
-        currency.addView(minimaBtn); currency.addView(usdBtn);
+        final com.eurobuddha.maxima.app.chat.PaymentCurrency currency = new com.eurobuddha.maxima.app.chat.PaymentCurrency(mAct);
+        currency.minima.setTextColor(col(R.color.ux_text));currency.usd.setTextColor(col(R.color.ux_text));
         body.addView(currency, marginBottom(dp(6)));
 
         final EditText amt = new EditText(mAct);
@@ -620,8 +615,8 @@ public final class WalletPage implements Page {
         BottomSheetDialog d = sheet(m(R.string.l10n_chat_send), body);
         btn.setOnClickListener(v -> sendPayment(w, to.getText().toString().trim(),
                 amt.getText().toString().trim(), status, d,
-                usdBtn.isChecked() ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_TOKENID : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_TOKENID,
-                usdBtn.isChecked() ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_NAME));
+                currency.tokenId(),
+                currency.tokenName()));
     }
 
     private void sendPayment(final MaximaWallet w, final String to, final String amtStr,

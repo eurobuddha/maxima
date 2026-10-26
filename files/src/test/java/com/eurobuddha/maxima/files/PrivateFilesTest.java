@@ -24,9 +24,10 @@ public class PrivateFilesTest {
         final FileStore store=new FileStore(root.resolve("chat").toFile());
         final PrivateFiles files;
         final FileCommands commands;
-        Fixture()throws Exception {
+        Fixture()throws Exception {this(false);}
+        Fixture(boolean hosted)throws Exception {
             Contact contact=new Contact(peer.publicKeyHex());contact.capabilities=Capabilities.phoneDefaults();node.storeContact(contact);
-            chat.setStore(store);files=new PrivateFiles(node,chat,root.resolve("files"));commands=new FileCommands(files,root.resolve("files/uploads"));
+            chat.setStore(store);files=new PrivateFiles(node,chat,root.resolve("files"),hosted);commands=new FileCommands(files,root.resolve("files/uploads"));
         }
         Map<String,String> call(String... pairs)throws Exception {Map<String,String> m=new LinkedHashMap<>();for(int i=0;i<pairs.length;i+=2)m.put(pairs[i],pairs[i+1]);return commands.call(m);}
         public void close(){commands.close();files.close();chat.close();node.stop();

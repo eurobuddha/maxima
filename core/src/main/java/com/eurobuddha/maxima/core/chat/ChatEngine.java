@@ -1036,6 +1036,19 @@ public final class ChatEngine {
         return "";
     }
 
+    public interface FileControls { void inbound(String peer,String control)throws Exception; }
+    private volatile FileControls fileControls;
+    public void setFileControls(FileControls listener){fileControls=listener;}
+    public boolean sendFileControl(String peer,String control){
+        Contact c=mNode.contact(peer);if(c==null||control.length()>1024)return false;
+        ChatMessage m=new ChatMessage();m.type=ChatMessage.TYPE_FILE_CONTROL;m.body=control;
+        return deliver(c,m);
+    }
+    private void fileControl(String peer,String body){
+        FileControls f=fileControls;
+        if(f!=null&&mNode.contact(peer)!=null&&body.length()<=1024)try{f.inbound(peer,body);}catch(Exception ignored){}
+    }
+
     /** Tell a contact our wallet receive address so they can pay us. Silent -
      *  no message, no receipt; just deliver the control record. */
     public void shareWalletAddress(Contact zTo, String zAddress) {
@@ -1348,6 +1361,8 @@ public final class ChatEngine {
         }
 
         switch (cm.type) {
+            case ChatMessage.TYPE_FILE_CONTROL:
+                fileControl(from, cm.body);return true;
             case ChatMessage.TYPE_CALL:
                 // Signaling only: no history entry, no receipt, no notification.
                 CallSignals cs = mCallSignals;
@@ -1501,6 +1516,8 @@ public final class ChatEngine {
             return true;   // unknown state: consumed, never stored
         }
         switch (cm.type) {
+            case ChatMessage.TYPE_FILE_CONTROL:
+                fileControl(from, cm.body);return true;
             case ChatMessage.TYPE_TEXT:
                 mNode.storeKeetsContact(from, k.name);
                 handleText(from, cm);

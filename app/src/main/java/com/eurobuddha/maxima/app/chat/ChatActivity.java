@@ -493,18 +493,13 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         box.setPadding(dp(20), dp(8), dp(20), 0);
         // Currency: Minima or MxUSD (the Minima dollar-pegged token). The wire and every
         // renderer always carried the token; the send path was the only Minima-only part.
-        final android.widget.RadioGroup currency = new android.widget.RadioGroup(this);
-        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
-        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(this);
-        minimaBtn.setText("Minima"); minimaBtn.setTextColor(getColor(R.color.ux_text)); minimaBtn.setChecked(true);
-        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(this);
-        usdBtn.setText(com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME); usdBtn.setTextColor(getColor(R.color.ux_text));
-        currency.addView(minimaBtn); currency.addView(usdBtn);
+        final com.eurobuddha.maxima.app.chat.PaymentCurrency currency = new com.eurobuddha.maxima.app.chat.PaymentCurrency(this);
+        currency.minima.setTextColor(getColor(R.color.ux_text));currency.usd.setTextColor(getColor(R.color.ux_text));
         box.addView(currency);
         final EditText amt = new EditText(this);
         Language.hint(amt, Language.msg(R.string.l10n_android_chat_amount));
         currency.setOnCheckedChangeListener((g, id) -> Language.hint(amt, Language.msg(
-                usdBtn.isChecked() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
+                currency.isUsd() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
         amt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                 | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amt.setTextColor(getColor(R.color.ux_text));
@@ -536,10 +531,10 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
                         toast(tr(R.string.l10n_desktop_chat_positive_amount));
                         return;
                     }
-                    final boolean usd = usdBtn.isChecked();
+
                     confirmPay(chat, contact, to, amount, note,
-                            usd ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_TOKENID : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_TOKENID,
-                            usd ? com.eurobuddha.maxima.app.wallet.TokenSend.MXUSD_NAME : com.eurobuddha.maxima.app.wallet.TokenSend.MINIMA_NAME);
+                            currency.tokenId(),
+                            currency.tokenName());
                 })
                 .show();
     }

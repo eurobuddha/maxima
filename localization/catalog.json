@@ -23032,5 +23032,41 @@
     "zh-Hans": "请更新您的 Parlons Cloud 节点以使用文件直传",
     "ru": "Обновите узел Parlons Cloud для прямой передачи файлов",
     "uk": "Оновіть вузол Parlons Cloud для прямого передавання файлів"
+  },
+  "files.keepSharing": {
+    "en": "Keep sharing",
+    "zh-Hans": "继续分享",
+    "ru": "Продолжать раздачу",
+    "uk": "Продовжувати роздачу"
+  },
+  "files.shareAgain": {
+    "en": "Share again",
+    "zh-Hans": "重新分享",
+    "ru": "Раздавать снова",
+    "uk": "Роздавати знову"
+  },
+  "files.downloadedStopped": {
+    "en": "Downloaded and verified · sharing stopped",
+    "zh-Hans": "已下载并验证 · 已停止分享",
+    "ru": "Загружено и проверено · раздача остановлена",
+    "uk": "Завантажено й перевірено · роздачу зупинено"
+  },
+  "files.downloadedSharing": {
+    "en": "Downloaded and verified · sharing",
+    "zh-Hans": "已下载并验证 · 正在分享",
+    "ru": "Загружено и проверено · раздача",
+    "uk": "Завантажено й перевірено · роздається"
+  },
+  "files.confirmationUnavailable": {
+    "en": "Download confirmation unavailable",
+    "zh-Hans": "暂无下载确认",
+    "ru": "Подтверждение загрузки недоступно",
+    "uk": "Підтвердження завантаження недоступне"
+  },
+  "files.awaitingDownload": {
+    "en": "Waiting for verified download",
+    "zh-Hans": "等待下载验证",
+    "ru": "Ожидание проверенной загрузки",
+    "uk": "Очікування перевіреного завантаження"
   }
 }

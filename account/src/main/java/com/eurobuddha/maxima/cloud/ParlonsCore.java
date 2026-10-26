@@ -148,7 +148,7 @@ public final class ParlonsCore {
         mChat.setStore(mChatStore);   // flushed before any mailbox ack
         mChat.setMediaService(mMedia);
         try {
-            mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, zDataDir.resolve("private-files"));
+            mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, zDataDir.resolve("private-files"), true);
             mPrivateFiles.setExtraSources(() -> {
                 String own = mCfg.ownRelay;
                 List<String> sources = new ArrayList<>(mCfg.fileSources.get());

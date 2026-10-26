@@ -43,6 +43,7 @@ final class PrivateFileDialog {
         JTextArea status=new JTextArea(Language.text("files.description"));status.setEditable(false);status.setLineWrap(true);status.setWrapStyleWord(true);status.setOpaque(false);box.add(status);
         JProgressBar progress=new JProgressBar(0,100);box.add(progress);
         JButton action=Language.bind(new JButton(),Language.msg("files.download")),save=Language.bind(new JButton(),Language.msg("nativeFiles.save")),remove=Language.bind(new JButton(),Language.msg("files.remove"));save.setEnabled(false);remove.setEnabled(false);box.add(action);box.add(save);box.add(remove);
+        JCheckBox keep=Language.bind(new JCheckBox(),Language.msg("files.keepSharing"));keep.setVisible(false);box.add(keep);
         dialog.setContentPane(box);dialog.setSize(490,340);
         java.util.concurrent.atomic.AtomicReference<java.util.function.Supplier<String>> display =
                 new java.util.concurrent.atomic.AtomicReference<>(()->Language.text("files.description"));
@@ -59,12 +60,14 @@ final class PrivateFileDialog {
                 id[0]=s.getOrDefault("fileId",id[0]);exists[0]=true;paused[0]="true".equals(s.get("paused"))||"Failed".equals(s.get("status"));
                 display.set(()->statusText(s));refresh.run();
                 progress.setValue((int)(100*Long.parseLong(s.getOrDefault("done","0"))/Math.max(1,Long.parseLong(s.getOrDefault("size","0")))));
+                keep.setVisible("true".equals(s.get("mine")));keep.setSelected("true".equals(s.get("keepSharing")));
                 save.setEnabled("true".equals(s.get("ready")));boolean preparing="Preparing".equals(s.get("status"))||"Uploading".equals(s.get("status"));
-                action.setEnabled(!preparing);remove.setEnabled(!preparing);Language.bind(action,Language.msg(paused[0]?"files.resume":"files.pause"));
+                action.setEnabled(!preparing);remove.setEnabled(!preparing);Language.bind(action,Language.msg(paused[0]?"files.resume":"files.pause"));if("true".equals(s.get("sharingStopped"))&&"true".equals(s.get("mine")))Language.bind(action,Language.msg("files.shareAgain"));
             });}catch(Exception e){if(offer==null)SwingUtilities.invokeLater(()->{display.set(()->Language.system(e.getMessage()));refresh.run();});}finally{SwingUtilities.invokeLater(()->busy[0]=false);}});
         });
         dialog.addWindowListener(new java.awt.event.WindowAdapter(){public void windowClosed(java.awt.event.WindowEvent e){timer.stop();worker.shutdownNow();Language.removeListener(refresh);}});
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        keep.addActionListener(e->{boolean selected=keep.isSelected();worker.execute(()->{try{call(node.files(),"keepSharing","id",id[0],"keep",Boolean.toString(selected));}catch(Exception ex){error(dialog,ex);}});});
         action.addActionListener(e->{String command=paused[0]?"resume":"pause";boolean known=exists[0];action.setEnabled(false);worker.execute(()->{
             try{if(!known){if(offer==null)throw new IOException("Transfer unavailable");call(node.files(),"download","ref",offer.ref(),"peer",peer,"group",Boolean.toString(group));}
                 else call(node.files(),command,"id",id[0]);}catch(Exception ex){error(dialog,ex);}finally{SwingUtilities.invokeLater(()->action.setEnabled(true));}
@@ -84,7 +87,7 @@ final class PrivateFileDialog {
     }
     static String statusText(Map<String,String> state){
         String error=state.getOrDefault("error","");
-        return Language.system(state.getOrDefault("status","Waiting"))+"\n"+state.getOrDefault("name","")+"\n"
+        return Language.system(state.getOrDefault("status","Waiting"))+"\n"+Language.system(state.getOrDefault("delivery", ""))+"\n"+state.getOrDefault("deliveryError", "")+"\n"+state.getOrDefault("name","")+"\n"
                 +Language.text("desktopFiles.bytes","done",state.getOrDefault("done","0"),"size",state.getOrDefault("size","0"))
                 +(error.isEmpty()?"":"\n"+Language.system(error));
     }

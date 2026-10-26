@@ -21,6 +21,9 @@ public interface KeetsTransport {
     /** Publish bytes on the keets media mesh; returns the keets:// url. */
     String publish(String zPath, byte[] zBytes) throws Exception;
 
+    /** Per-transfer serving control. Unsupported nodes must fail honestly. */
+    default void sharing(ChatFile file,boolean enabled)throws Exception {throw new java.io.IOException("Update your Keets node to control file sharing");}
+
     /** Fetch a keets:// url back to bytes (P2P, cached by the sidecar). */
     byte[] fetch(String zUrl) throws Exception;
 
@@ -40,4 +43,5 @@ public interface KeetsTransport {
     static boolean validRef(String zUrl) {
         return zUrl != null && zUrl.matches("keets://\\S+");
     }
+    default void forget(ChatFile file)throws Exception { sharing(file,false); }
 }

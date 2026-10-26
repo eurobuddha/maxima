@@ -74,6 +74,8 @@ public final class FileCommands implements AutoCloseable {
                 Map<String,String> m=files.status(id);m.put("ok","true");return m;
             }
             case "download":return result("id",files.receive(in.get("ref"),in.get("peer"),Boolean.parseBoolean(in.get("group"))));
+            case "deviceReceived":files.deviceReceived(id,in.get("digest"));return result();
+            case "keepSharing":files.keepSharing(id,Boolean.parseBoolean(in.get("keep")));return result();
             case "pause":files.pause(id);return result();
             case "resume":{
                 Upload u=uploads.get(id);

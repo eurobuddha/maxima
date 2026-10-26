@@ -82,6 +82,8 @@ public final class KeetsWire {
         c.id = k.id;
         c.time = k.ts;
         switch (k.state) {
+            case "file-control":
+                c.type=ChatMessage.TYPE_FILE_CONTROL;c.body=k.body;return c;
             case "file":
                 try {
                     ChatFile file = ChatFile.parse(k.ref);
@@ -147,6 +149,8 @@ public final class KeetsWire {
      */
     public static String encode(ChatMessage m, String zMyName) {
         switch (m.type) {
+            case ChatMessage.TYPE_FILE_CONTROL:
+                return base(null,zMyName,System.currentTimeMillis(),m.body).put("state","file-control").done();
             case ChatMessage.TYPE_TEXT:
                 if (ChatFile.isFile(m.body)) {
                     ChatFile file = ChatFile.fromBody(m.body);
@@ -175,6 +179,11 @@ public final class KeetsWire {
             default:
                 return null;
         }
+    }
+
+    public static String fileControl(String body) {
+        if(body==null||body.length()>1024)throw new IllegalArgumentException("Invalid file control");
+        return base(null,"",System.currentTimeMillis(),body).put("state","file-control").done();
     }
 
     /** Outbound photo: state:image with a published keets:// ref. */

@@ -583,20 +583,12 @@ public final class CloudWalletPage implements Page {
         }));
         box.addView(scan);
         // Minima or MxUSD (the Minima dollar-pegged token); the account node signs either.
-        final android.widget.RadioGroup currency = new android.widget.RadioGroup(mAct);
-        currency.setOrientation(android.widget.RadioGroup.HORIZONTAL);
-        final android.widget.RadioButton minimaBtn = new android.widget.RadioButton(mAct);
-        minimaBtn.setText("Minima");
-        minimaBtn.setChecked(true);
-        final android.widget.RadioButton usdBtn = new android.widget.RadioButton(mAct);
-        usdBtn.setText(MXUSD_NAME);
-        currency.addView(minimaBtn);
-        currency.addView(usdBtn);
+        final com.eurobuddha.maxima.app.chat.PaymentCurrency currency = new com.eurobuddha.maxima.app.chat.PaymentCurrency(mAct);
         box.addView(currency);
         final EditText amt = new EditText(mAct);
         Language.hint(amt, m(R.string.l10n_android_chat_amount));
         currency.setOnCheckedChangeListener((g, id) -> Language.hint(amt, m(
-                usdBtn.isChecked() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
+                currency.isUsd() ? R.string.l10n_android_chat_amount_mxusd : R.string.l10n_android_chat_amount)));
         amt.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         box.addView(amt);
         new LanguageDialog(mAct)
@@ -606,7 +598,7 @@ public final class CloudWalletPage implements Page {
                 .setNegativeButton(m(R.string.l10n_common_cancel), null)
                 .setPositiveButton(m(R.string.l10n_common_continue), (d, w) -> confirmSend(
                         addr.getText().toString().trim(), amt.getText().toString().trim(),
-                        usdBtn.isChecked() ? MXUSD_TOKENID : "0x00"))
+                        currency.tokenId()))
                 .show();
     }
 

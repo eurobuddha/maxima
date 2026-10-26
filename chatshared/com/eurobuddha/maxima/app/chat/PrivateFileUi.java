@@ -26,7 +26,11 @@ public final class PrivateFileUi {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService work=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"private-file-ui");t.setDaemon(true);return t;});
     private String savingId;private volatile boolean closed;
-    public PrivateFileUi(Activity activity,Backend backend,String peer,boolean group){this.activity=activity;this.backend=backend;this.peer=peer;this.group=group;}
+    public PrivateFileUi(Activity activity,Backend backend,String peer,boolean group){this.activity=activity;this.backend=backend;this.peer=peer;this.group=group;receiptRetry.run();}
+    private final Runnable receiptRetry=new Runnable(){public void run(){
+        if(closed)return;
+        work.execute(()->{retryDeviceReceipts();main.postDelayed(this,15000);});
+    }};
     public static CharSequence label(String body){try{ChatFile f=ChatFile.fromBody(body);return Language.msg(R.string.l10n_native_files_offer,f.name,size(f.size));}catch(Exception e){return Language.msg(R.string.l10n_native_files_update);}}
     public void pick(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);activity.startActivityForResult(i,PICK);}
     public boolean result(int request,int result,Intent data){
@@ -113,6 +117,7 @@ public final class PrivateFileUi {
         TextView info=new TextView(activity);Language.setText(info,offer==null?Language.msg(R.string.l10n_native_files_preparing):Language.msg(R.string.l10n_native_files_description,size(offer.size)));box.addView(info);
         ProgressBar progress=new ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);box.addView(progress);
         Button action=new Button(activity);Language.setText(action,Language.msg(R.string.l10n_files_download));box.addView(action);
+        CheckBox keep=new CheckBox(activity);Language.setText(keep,Language.msg(R.string.l10n_files_keep_sharing));keep.setVisibility(android.view.View.GONE);box.addView(keep);
         Button save=new Button(activity);Language.setText(save,Language.msg(R.string.l10n_native_files_save));save.setEnabled(false);box.addView(save);
         Button remove=new Button(activity);Language.setText(remove,Language.msg(R.string.l10n_files_remove));remove.setEnabled(false);box.addView(remove);
         AlertDialog dialog=new LanguageDialog(activity).setTitle(offer==null?tr(R.string.l10n_files_private):offer.name).setView(box).setNegativeButton(Language.msg(R.string.l10n_language_close),null).create();
@@ -125,12 +130,17 @@ public final class PrivateFileUi {
                 if(closed||dismissed[0])return;filename[0]=s.getOrDefault("name",filename[0]);dialog.setTitle(filename[0]);if(heading!=null)Language.setText(heading,filename[0]);id[0]=s.getOrDefault("fileId",id[0]);exists[0]=true;ready[0]="true".equals(s.get("ready"));paused[0]="true".equals(s.get("paused"))||"Failed".equals(s.get("status"));
                 String state=s.getOrDefault("status","Waiting");Language.setText(info,Language.join(SystemMessages.message(state),s.getOrDefault("error","").isEmpty()?"":Language.join("\n",SystemMessages.message(s.get("error"))),"\n",size(Long.parseLong(s.getOrDefault("done","0")))," / ",size(Long.parseLong(s.getOrDefault("size","0")))));
                 progress.setProgress((int)(100*Long.parseLong(s.getOrDefault("done","0"))/Math.max(1,Long.parseLong(s.getOrDefault("size","0")))));
+                keep.setVisibility("true".equals(s.get("mine"))?android.view.View.VISIBLE:android.view.View.GONE);
+                keep.setChecked("true".equals(s.get("keepSharing")));
+                if(s.containsKey("delivery"))info.append(Language.join("\n",SystemMessages.message(s.get("delivery")),s.containsKey("deliveryError")?"\n"+s.get("deliveryError"):""));
                 save.setEnabled(ready[0]);remove.setEnabled(!"Preparing".equals(state)&&!"Uploading".equals(state));
                 Language.setText(action,Language.msg(paused[0]||"Failed".equals(state)?R.string.l10n_files_resume:R.string.l10n_files_pause));
+                if("true".equals(s.get("sharingStopped"))&&"true".equals(s.get("mine")))Language.setText(action,Language.msg(R.string.l10n_files_share_again));
                 action.setEnabled(!"Preparing".equals(state)&&!"Uploading".equals(state));
             });}catch(Exception e){main.post(()->{if(!exists[0])Language.setText(info,offer==null?SystemMessages.message(e.getMessage()):Language.msg(R.string.l10n_native_files_download_help,size(offer.size)));});}
                 finally{main.post(()->{busy[0]=false;if(!dismissed[0])main.postDelayed(tick[0],1200);});}});
         };
+        keep.setOnClickListener(v->{boolean selected=keep.isChecked();work.execute(()->{try{call("keepSharing","id",id[0],"keep",Boolean.toString(selected));}catch(Exception e){main.post(()->error(e));}});});
         action.setOnClickListener(v->{String command=paused[0]?"resume":"pause";action.setEnabled(false);work.execute(()->{
             try{if(!exists[0]){if(offer==null)throw new IOException("Transfer unavailable");if(offer.size>ChatFile.TRANSFER_MAX_BYTES)throw new IOException("Choose a file up to 100 MB");call("download","ref",offer.ref(),"peer",peer,"group",Boolean.toString(group));}
                 else call(command,"id",id[0]);}
@@ -160,13 +170,32 @@ public final class PrivateFileUi {
             }).setNegativeButton(Language.msg(R.string.l10n_language_close),null).show();
         });
     }catch(Exception e){main.post(()->error(e));}});}
-    private void export(Uri destination,String id){work.execute(()->{try(FileAwake awake = new FileAwake(activity);OutputStream out=activity.getContentResolver().openOutputStream(destination,"w")){
-        if(out==null)throw new IOException("Cannot save file");long offset=0,size;
-        do{Map<String,String> r=call("read","id",id,"offset",Long.toString(offset));byte[] bytes=Base64.getDecoder().decode(r.get("data"));long next=Long.parseLong(r.get("next"));size=Long.parseLong(r.get("size"));if(closed||size<0||size>ChatFile.MAX_BYTES||next!=offset+bytes.length||next>size||(next<=offset&&offset<size))throw new IOException("Download interrupted");out.write(bytes);offset=next;}while(offset<size);
-        main.post(()->Toast.makeText(activity,tr(R.string.l10n_native_files_saved),Toast.LENGTH_SHORT).show());
-    }catch(Exception e){
-        try{android.provider.DocumentsContract.deleteDocument(activity.getContentResolver(),destination);}catch(Exception ignored){}
-        main.post(()->error(e));}});}
+    private void export(Uri destination,String id){work.execute(()->{
+        boolean saved=false;
+        try(FileAwake awake = new FileAwake(activity)){
+            Map<String,String> state=call("status","id",id);
+            java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+            try(OutputStream out=activity.getContentResolver().openOutputStream(destination,"w")){
+                if(out==null)throw new IOException("Cannot save file");long offset=0,size;
+                do{Map<String,String> r=call("read","id",id,"offset",Long.toString(offset));byte[] bytes=Base64.getDecoder().decode(r.get("data"));long next=Long.parseLong(r.get("next"));size=Long.parseLong(r.get("size"));if(closed||size<0||size>ChatFile.MAX_BYTES||next!=offset+bytes.length||next>size||(next<=offset&&offset<size))throw new IOException("Download interrupted");out.write(bytes);digest.update(bytes);offset=next;}while(offset<size);
+                if(!com.eurobuddha.maxima.files.FileCrypto.hex(digest.digest()).equals(state.get("digest")))throw new IOException("Saved file verification failed");
+            }
+            saved=true;
+            // Durable owner-device acknowledgement; retry while connected and after reopening this conversation.
+            activity.getSharedPreferences("file-download-receipts",0).edit().putString(peer+"/"+id,state.get("digest")).commit();
+            retryDeviceReceipts();
+            main.post(()->Toast.makeText(activity,tr(R.string.l10n_native_files_saved),Toast.LENGTH_SHORT).show());
+        }catch(Exception e){
+            if(!saved)try{android.provider.DocumentsContract.deleteDocument(activity.getContentResolver(),destination);}catch(Exception ignored){}
+            main.post(()->error(e));
+        }
+    });}
+    private void retryDeviceReceipts(){
+        android.content.SharedPreferences prefs=activity.getSharedPreferences("file-download-receipts",0);
+        for(Map.Entry<String,?> entry:prefs.getAll().entrySet())if(entry.getKey().startsWith(peer+"/"))try{
+            call("deviceReceived","id",entry.getKey().substring(peer.length()+1),"digest",String.valueOf(entry.getValue()));prefs.edit().remove(entry.getKey()).commit();
+        }catch(Exception ignored){}
+    }
     /** Hold the CPU only while importing/exporting bytes, including the Cloud device leg. */
     private static final class FileAwake implements AutoCloseable {
         private android.os.PowerManager.WakeLock lock;

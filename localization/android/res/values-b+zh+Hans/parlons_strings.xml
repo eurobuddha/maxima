@@ -4273,4 +4273,10 @@
     <string name="l10n_files_direct_host_unavailable" formatted="false">"无法直连您的账号。请检查其端口转发后重试。"</string>
     <string name="l10n_files_direct_interrupted" formatted="false">"文件直连已中断"</string>
     <string name="l10n_files_direct_host_update" formatted="false">"请更新您的 Parlons Cloud 节点以使用文件直传"</string>
+    <string name="l10n_files_keep_sharing" formatted="false">"继续分享"</string>
+    <string name="l10n_files_share_again" formatted="false">"重新分享"</string>
+    <string name="l10n_files_downloaded_stopped" formatted="false">"已下载并验证 · 已停止分享"</string>
+    <string name="l10n_files_downloaded_sharing" formatted="false">"已下载并验证 · 正在分享"</string>
+    <string name="l10n_files_confirmation_unavailable" formatted="false">"暂无下载确认"</string>
+    <string name="l10n_files_awaiting_download" formatted="false">"等待下载验证"</string>
 </resources>
