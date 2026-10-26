@@ -786,6 +786,14 @@ Private files let you send a file of up to **100 MB** inside a chat. The file is
 
 The current limit is 100 MiB, displayed as 100 MB. Update both Android participants to 0.6.147 for direct WebRTC transfers. Cloud Android 0.2.92 connects directly to its own updated account host (Node 0.2.139 or Cloud host 0.11.125); the host must have a reachable listening port. File bytes never fall back to the fleet or TURN. Older saved offers remain readable.
 
+### Exchange files with KeetChat
+
+Update Parlons to {{ANDROID_VERSION}} (or Cloud Android {{PORTAL_VERSION}}) and PandaBear, BlackBear or Pandamonium to **2.0.57**. Both sides need an online Keets-enabled node and a **Keets-address contact**. Pandamonium's separate MAX# chat is not this connection.
+
+In KeetChat, choose **Attach → File (up to 100 MB)**. In Parlons, choose **Attach → Private file**. The recipient opens the file card and starts **Download / resume**, then saves the verified file. KeetChat's **Attach → File transfers** reopens paused transfers. On Android, enable Parlons and its existing **ADMIN** permission in the linked node's Apps tab.
+
+These files use encrypted Hyperdrive peer transfers. File bytes do not pass through fleet mailboxes. Keep both nodes online; a Cloud client also needs a reachable direct connection to its own account host. Physical-phone tests across mobile networks are still in progress.
+
 ### Send a private file
 
 #### How to send a private file (Android)

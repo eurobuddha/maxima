@@ -786,6 +786,14 @@ iPhone 应用**尚未推出**：它不在 App Store 中，也没有可下载的�
 
 当前上限为 100 MiB，界面显示为 100 MB。Android 双方均升级至 0.6.147 后可使用直接 WebRTC 传输。Cloud Android 0.2.92 直接连接自己的新版账户主机（Node 0.2.139 或 Cloud 主机 0.11.125），主机必须有可达的监听端口。文件数据不会回退到公共中继网络或 TURN。旧版已保存的文件邀请仍可读取。
 
+### 与 KeetChat 互传文件
+
+将 Parlons 更新至 {{ANDROID_VERSION}}（Cloud Android 为 {{PORTAL_VERSION}}），将 PandaBear、BlackBear 或 Pandamonium 更新至 **2.0.57**。双方都需要在线、已启用 Keets 的节点，以及 **Keets 地址联系人**。Pandamonium 中单独的 MAX# 聊天不是此通道。
+
+在 KeetChat 中选择 **Attach → File (up to 100 MB)**；在 Parlons 中选择 **Attach → Private file**。接收方打开文件卡片，启动 **Download / resume**，验证完成后再保存。KeetChat 的 **Attach → File transfers** 可重新打开暂停的传输。Android 用户需在所连接节点的 Apps 页启用 Parlons 并授予其现有的 **ADMIN** 权限。
+
+文件通过加密的 Hyperdrive 点对点传输，不经过公共节点群的消息邮箱。请保持双方节点在线；Cloud 客户端还需能直接连接自己的账户主机。跨移动网络的实体手机测试仍待完成。
+
 ### 发送私密文件
 
 #### 如何发送私密文件（Android）
