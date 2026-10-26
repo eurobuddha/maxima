@@ -50,3 +50,12 @@ change needs a new version number before release; do not replace published
 2.0.57 files. Other agents' work and pre-existing graph/artifact files were kept.
 
 Validation details and setup: [implementation notes](KEETS-FILE-INTEROP-2026-10-26.md).
+
+## Fold installation follow-up
+
+On 26 October 2026, the published Parlons **0.6.148 (748)** and Parlons Cloud
+**0.2.93 (293)** APKs were installed in place on the Fold. Both installations
+succeeded and Android package-manager read-back confirmed the versions. Existing
+app data was retained. The Fold already reported Pandamonium **2.0.57 (253)**;
+that installation was preserved. The S10 was not touched. All 18 public store
+versions/checksums and both desktop updater feeds were rechecked successfully.
