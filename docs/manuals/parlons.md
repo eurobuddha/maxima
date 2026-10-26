@@ -56,7 +56,7 @@ What you can do with it:
 
 - One-to-one chats and groups of up to 12 people.
 - Photos, voice notes, and shared contacts.
-- Private files up to 512 MB, sent encrypted, straight between the people in the chat.
+- Private files up to 100 MB, sent encrypted, straight between the people in the chat.
 - Voice and video calls (Android).
 - Send Minima or **MxUSD**, the Minima dollar token, inside a chat.
 - Use the app in English, Simplified Chinese, Russian or Ukrainian.
@@ -119,7 +119,7 @@ Answer one question: do you want to chat on **this device**, or have **one accou
 | Chats and groups | Yes | Yes |
 | Photos | Yes, including the camera | Yes, including paste from the clipboard |
 | Voice notes | Yes (up to 60 seconds) | Yes |
-| Private files (up to 512 MB) | Yes | Yes |
+| Private files (up to 100 MB) | Yes | Yes |
 | Voice and video calls | Yes | No. Incoming calls are shown and declined politely. Answer on your phone. |
 | Send Minima or MxUSD | Yes | Yes |
 | Wallet tab | Yes | Yes |
@@ -782,20 +782,22 @@ Voice notes need Parlons on both ends; a contact on classic Maxima cannot receiv
 
 ## 12. Private files
 
-Private files let you send a file of up to **512 MB** inside a chat. The file is encrypted with a fresh key and sent in encrypted pieces **directly between the people in the conversation**. There is no central server and no public index.
+Private files let you send a file of up to **100 MB** inside a chat. The file is encrypted with a fresh key and sent in encrypted pieces **directly between the people in the conversation**. There is no central server and no public index.
+
+The current limit is 100 MiB, displayed as 100 MB. Update both Android participants to 0.6.147 for direct WebRTC transfers. Cloud Android 0.2.92 connects directly to its own updated account host (Node 0.2.139 or Cloud host 0.11.125); the host must have a reachable listening port. File bytes never fall back to the fleet or TURN. Older saved offers remain readable.
 
 ### Send a private file
 
 #### How to send a private file (Android)
 
 1. In a chat, tap **Attach**, then **Private file**.
-2. Pick a file (up to 512 MB).
+2. Pick a file (up to 100 MB).
 3. A window titled **Sending private file** shows "Preparing…" while the file is encrypted. Tap **Hide** to close the window; the work carries on.
 
 #### How to send a private file (Desktop)
 
 1. In a chat, click **Attach**, then **Private file…**.
-2. In **Send private file (up to 512 MB)**, pick the file.
+2. In **Send private file (up to 100 MB)**, pick the file.
 
 The chat shows a file card with the name and size.
 
@@ -846,7 +848,7 @@ After a restart, transfers that were active **resume by themselves**. Transfers 
 
 | Limit | Value |
 |---|---|
-| One file | 512 MB |
+| One file | 100 MB |
 | Stored transfer data on a device | 2 GB |
 | Transfers kept | 32 |
 | Transfers active at once | 4 |
@@ -1733,12 +1735,12 @@ The authors collect **nothing**. There is no analytics, no crash reporting servi
 
 | Symptom | Fix |
 |---|---|
-| "Too big: 16 MB is the most a message can carry" | Send it as a **Private file** (up to 512 MB). |
+| "Too big: 16 MB is the most a message can carry" | Send it as a **Private file** (up to 100 MB). |
 | "Photo unavailable · tap to retry" | Tap it. The sender's device or relays may be offline; try later. |
 | "Update Parlons to open this file" / "Private file · update Parlons to open" | Install the newest version. Both sides need a version with private files. |
 | A private file stays on "Waiting for peers" | Someone who has the file must be online and reachable. Ask the sender to open Parlons. If nobody in the chat is directly reachable or on your local network, the transfer cannot start. |
 | "Preparation was interrupted" | Remove the transfer and choose the file again. |
-| "Choose a file up to 512 MB" | The file is too large for a private file. |
+| "Choose a file up to 100 MB" | The file is too large for a private file. |
 | Camera or "Scan their QR" does nothing | Allow the camera when asked. The permission is requested at the first scan. |
 | "Recording failed" / "Microphone unavailable" | Allow the microphone for Parlons in Android settings. |
 
@@ -1828,7 +1830,7 @@ Logs never contain your messages or your words. Check before pasting anyway, and
 | **Read receipts** | Optional. Tells contacts when you have read their messages. Off by default. |
 | **Group** | A chat of up to 12 people including you. Each message is sealed to each member. |
 | **Admin** | A group member who can change the members. |
-| **Private file** | An encrypted file of up to 512 MB shared directly between the people in a chat. |
+| **Private file** | An encrypted file of up to 100 MB shared directly between the people in a chat. |
 | **Directly reachable** | Your device has a real public address, proven from outside, so contacts reach you without a relay. |
 | **Carrier-grade NAT (CGNAT)** | When an internet provider shares one public address among many customers. No port-forward can open it. |
 | **Help the network** | The Android switch that lets your phone hold mail, answer lookups and, when charging on Wi-Fi, relay. |
