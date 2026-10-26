@@ -4,7 +4,10 @@
 
 Published on GitHub and the family catalogue: Android **0.6.147 (747)**, Cloud Android
 **0.2.92 (292)**, Desktop **1.5.116**, Parlons Node **0.2.139**, and legacy Cloud
-host **0.11.125**. Both Android builds are installed on the Fold. All six production
+host **0.11.125**. The matching bundled hosts are **minimaCore Desktop 0.18.23**
+and **minimaDesk / MinimaClassic Desktop 0.7.84**, each published for Mac, Windows
+and Linux with the exact Node 0.2.139 digest pinned. Mac installers are signed,
+notarized and Gatekeeper-verified. Both Android builds are installed on the Fold. All six production
 Node hosts and both standalone tenant services are updated. See the fleet handover
 for Sally’s pending tenant-listener approval. These supersede the historical limits
 and transport notes below.
