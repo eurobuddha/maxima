@@ -55,3 +55,48 @@ An initial dependency-version editing error was caught and corrected: only the
 sidecar package version changed, not the text-decoder dependency.
 Verdict: Approve for device testing. Physical Android notification/background
 behavior and external user-to-user receipt behavior remain to be field-tested.
+
+Publication — 26 October 2026
+Published immutable GitHub assets and store listings:
+- Parlons! Android 0.6.149 (749); Cloud Portal Android 0.2.94 (294).
+- PandaBear, BlackBear and Pandamonium 2.0.59 (255).
+- Parlons Node 0.2.141; Cloud account host 0.11.127.
+- Parlons Desktop 1.5.118: Mac, Windows and Linux.
+- minimaCore Desktop 0.18.26: Mac, Windows and Linux.
+- minimaDesk / MinimaClassic Desktop 0.7.86: Mac, Windows and Linux.
+
+Source: maxima 8aba877762a14795ca41e7625fbe30817e45fad7;
+bear editions b515b8bae7f08f12101362eef6403b653149a8e9;
+Keets 204df9d94cf4f423dacf699d41a83c3493aa99c7 (1.2.12).
+The later Keets 1.2.13 diagnostics commit is separate work and is not included.
+Companion source commits: minimaCore b919df7; minimaDesk 0735003.
+Both companion Mac bundles contain the exact tested Node JAR and Keets files.
+Their wrapper tests passed (minimaCore: 7 Parlons + 5 Keets;
+minimaDesk: 6 Parlons + 2 Keets). Both companions passed CI on all three platforms.
+All three Mac installers are signed, notarized and stapled; store URLs select
+the immutable *-notarized.dmg assets. No live wallet application was launched.
+
+Catalogue commits: b1ea15f, b6bc172, d6944751beaf7d76d74e765708c926fab9529a7a
+in eurobuddha/minima-core-apks. Exactly 18 release rows changed from 0269da6;
+only version, versionCode, file and sha256 fields changed. Full validation passed:
+57 entries, 56 binaries. All 18 rows matched the asset SHA-256 digests of their
+10 published GitHub releases. Both desktop updater feeds match all three platforms.
+PandaApps and the minimaCore MiniDapp store consume this shared catalogue.
+The GitHub main and eurobuddha.com/apks.json catalogues were byte-identical:
+8d1914851d665da897ffb6a2076a8852ed2eb00f4ab57f7d9856c1ec310cb9ba.
+The hourly web refresh briefly restored a cached earlier copy during publication;
+the final catalogue was restored and the uncached GitHub source verified current.
+Parlons.info download versions were updated in all four languages (8079de80).
+
+IPFS snapshot (built from the exact final catalogue commit):
+bafybeieftaqh4gz2k2q35fsmr75rs6viwjoe6kigghpd4pwqi7v3xjeinu
+https://ipfs.eurobuddha.com/ipfs/bafybeieftaqh4gz2k2q35fsmr75rs6viwjoe6kigghpd4pwqi7v3xjeinu/
+Recursive pin verified; pandastore IPNS resolves to this CID:
+k51qzi5uqu5dk9g8mlhkab3t2h3195r4mwf6gdgpzte3cwhjn708w89y8b6axi
+All 18 release rows and 16 distinct binaries were read from the immutable
+snapshot and matched their expected SHA-256 digests. The public gateway catalogue
+also matched all 18 rows. A complete public-gateway Parlons APK download matched
+7ca3209863699039204a61d523e0129193333750b5d3e62d42c85863e365a080
+(70,208,457 bytes). Historical artifacts and pins were preserved.
+The optional Filebase backup pin service was unavailable; no secondary-pin claim.
+No device installation or live fleet-node upgrade was performed in this publication.
