@@ -220,6 +220,19 @@ final class KeetsChatBridge implements KeetsTransport {
         }
     }
 
+    private volatile com.eurobuddha.maxima.core.chat.KeetsMediaClient fileMedia;
+    @Override public byte[] fetch(String url, int maxBytes) throws Exception {
+        try {
+            if(fileMedia==null) {
+                JSONObject info=NodeWallet.response(NodeWallet.run("keets action:info"));
+                if(!Boolean.TRUE.equals(info.get("boundedMedia")))throw new java.io.IOException("Update your Keets node to receive files");
+                String data=String.valueOf(NodeWallet.response(NodeWallet.run("status")).get("data"));
+                fileMedia=com.eurobuddha.maxima.core.chat.KeetsMediaClient.local(Integer.parseInt(String.valueOf(info.get("apiport"))),data);
+            }
+            return fileMedia.fetch(url,maxBytes);
+        } catch(Exception e){fileMedia=null;throw e;}
+    }
+
     /** Log each distinct error once, not every five seconds. */
     private void logOnce(String zErr) {
         if (!zErr.equals(mLastErr)) {

@@ -100,6 +100,18 @@ public final class KeetsNodeLinkTransport implements KeetsTransport {
         }
     }
 
+    private volatile com.eurobuddha.maxima.core.chat.KeetsMediaClient fileMedia;
+    @Override public byte[] fetch(String url, int maxBytes) throws Exception {
+        try {
+            if(fileMedia==null) {
+                JSONObject info=response(ok(mLink.cmd("keets action:info")));
+                if(!Boolean.TRUE.equals(info.get("boundedMedia")))throw new java.io.IOException("Update your Keets node to receive files");
+                fileMedia=com.eurobuddha.maxima.core.chat.KeetsMediaClient.local(Integer.parseInt(String.valueOf(info.get("apiport"))),nodeDataDir());
+            }
+            return fileMedia.fetch(url,maxBytes);
+        } catch(Exception e){fileMedia=null;throw e;}
+    }
+
     /** Cached; a miss kicks an async refresh and returns null - never blocks
      *  the EDT on the node link's socket timeouts. */
     @Override

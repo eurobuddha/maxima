@@ -100,4 +100,19 @@ public class KeetsContactsOnlyTest {
         assertEquals(1, chat.conversation(STRANGER).size());
         assertTrue("default keeps auto-create", port.stored);
     }
+    @Test public void failedMediaPublicationDoesNotSendACaptionInItsPlace() throws Exception {
+        ChatEngine chat=engine(new FakePort(true));
+        java.util.concurrent.atomic.AtomicInteger sends=new java.util.concurrent.atomic.AtomicInteger();
+        chat.setKeetsTransport(new KeetsTransport(){
+            public boolean send(String peer,String payload){sends.incrementAndGet();return true;}
+            public String publish(String path,byte[] bytes)throws Exception{throw new java.io.IOException("synthetic upload failure");}
+            public byte[] fetch(String url){throw new AssertionError();}
+        });
+        Contact friend=new FakePort(true).contact(FRIEND);
+        ChatMessage photo=ChatMessage.text("photo",ChatMedia.wrap("image/jpeg","data:image/jpeg;base64,AQID","caption"),1);
+        java.lang.reflect.Method send=ChatEngine.class.getDeclaredMethod("deliverKeets",Contact.class,ChatMessage.class);send.setAccessible(true);
+        try {assertEquals(Boolean.FALSE,send.invoke(chat,friend,photo));assertEquals(0,sends.get());}
+        finally{chat.close();}
+    }
+
 }

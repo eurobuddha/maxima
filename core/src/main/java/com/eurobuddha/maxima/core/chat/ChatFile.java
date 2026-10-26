@@ -41,6 +41,8 @@ public final class ChatFile {
     }
 
     public String body() { return ChatMedia.wrap(mime, ref(), name); }
+    /** Hyperdrive manifest for KeetChat interoperability; the AES key stays in the sealed offer. */
+    public boolean isKeets() { return torrent.startsWith("keets://"); }
     public static boolean isFile(String body) { return ChatMedia.ref(body).startsWith(PREFIX); }
     public static ChatFile fromBody(String body) { return parse(ChatMedia.ref(body)); }
 

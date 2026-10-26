@@ -24,6 +24,13 @@ public interface KeetsTransport {
     /** Fetch a keets:// url back to bytes (P2P, cached by the sidecar). */
     byte[] fetch(String zUrl) throws Exception;
 
+    /** Small authenticated blocks. Hosts should enforce this limit before allocation. */
+    default byte[] fetch(String url, int maxBytes) throws Exception {
+        byte[] bytes = fetch(url);
+        if (bytes == null || bytes.length > maxBytes) throw new java.io.IOException("Keets media exceeds size limit");
+        return bytes;
+    }
+
     /** True iff zUrl is a well-formed keets:// ref (one token, no whitespace).
      *  Inbound refs are attacker-supplied and every transport interpolates
      *  them into a node command whose tokenizer splits on whitespace with

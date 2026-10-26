@@ -729,6 +729,8 @@ public final class ChatEngine {
         mKeets = zKeets;
     }
 
+    public KeetsTransport keetsTransport() { return mKeets; }
+
     /**
      * Whether an inbound keets message from an unknown pubkey creates the
      * contact. True (default) where Parlons is the host's only chat UI
@@ -1394,6 +1396,10 @@ public final class ChatEngine {
                     || zMsg.type == ChatMessage.TYPE_CALL) {
                 return true;
             }
+            if (zMsg.type == ChatMessage.TYPE_TEXT && ChatFile.isFile(zMsg.body)) {
+                // Never turn an unsupported/private file into a successful caption-only photo.
+                return kt.send(pk, KeetsWire.encode(zMsg, mNode.name()));
+            }
             if (zMsg.type == ChatMessage.TYPE_TEXT && ChatMedia.isMedia(zMsg.body)) {
                 byte[] bytes = mediaBytes(zMsg.body);
                 String caption = ChatMedia.caption(zMsg.body);
@@ -1414,17 +1420,10 @@ public final class ChatEngine {
                         String url = kt.publish("/parlons/img-" + id + ext, bytes);
                         return kt.send(pk, KeetsWire.image(zMsg.id, mNode.name(), zMsg.time, url, caption));
                     } catch (Exception publishFailed) {
-                        // e.g. media too large for an IPC transport - fall
-                        // through to the caption, like the classic bridge
+                        return false; // retain the attachment for retry; never report a caption as delivery
                     }
                 }
-                String kind = isAudio ? "[voice note]" : "[photo]";
-                // an audio caption is "M:SS|waveformhex" - the peer should see
-                // the duration, never the raw waveform hex
-                String shown = isAudio ? caption.split("\\|")[0] : caption;
-                ChatMessage fb = ChatMessage.text(zMsg.id,
-                        shown.isEmpty() ? kind : shown + " " + kind, zMsg.time);
-                return kt.send(pk, KeetsWire.encode(fb, mNode.name()));
+                return false;
             }
             String wire = KeetsWire.encode(zMsg, mNode.name());
             if (wire == null) {

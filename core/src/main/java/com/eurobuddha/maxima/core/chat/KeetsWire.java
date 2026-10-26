@@ -82,6 +82,14 @@ public final class KeetsWire {
         c.id = k.id;
         c.time = k.ts;
         switch (k.state) {
+            case "file":
+                try {
+                    ChatFile file = ChatFile.parse(k.ref);
+                    com.eurobuddha.maxima.files.KeetsFiles.validate(file);
+                    c.type = ChatMessage.TYPE_TEXT;
+                    c.body = file.body();
+                    return c;
+                } catch (Exception invalid) { return null; }
             case "":
                 c.type = ChatMessage.TYPE_TEXT;
                 c.body = k.body;
@@ -140,6 +148,13 @@ public final class KeetsWire {
     public static String encode(ChatMessage m, String zMyName) {
         switch (m.type) {
             case ChatMessage.TYPE_TEXT:
+                if (ChatFile.isFile(m.body)) {
+                    ChatFile file = ChatFile.fromBody(m.body);
+                    try { com.eurobuddha.maxima.files.KeetsFiles.validate(file); }
+                    catch (java.io.IOException invalid) { throw new IllegalArgumentException(invalid); }
+                    return base(m.id, zMyName, m.time, file.name)
+                            .put("state", "file").put("ref", file.ref()).done();
+                }
                 return base(m.id, zMyName, m.time, m.body).done();
             case ChatMessage.TYPE_RECEIPT:
                 if (!Receipt.READ.equals(m.state) || m.ref.isEmpty()) {

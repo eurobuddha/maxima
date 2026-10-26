@@ -58,7 +58,7 @@ public final class PrivateFiles implements AutoCloseable {
         volatile String status="Preparing",error="",token="";
         final Object disk = new Object();
         volatile long reservedSize;
-        volatile long done; volatile boolean paused,ready,restorePending; volatile int generation;
+        volatile long done; volatile boolean paused,ready,restorePending,keetsRunning; volatile int generation;
         volatile long lastProgressNanos;
         volatile TorrentTunnel tunnel;
         Transfer(String id,String peer,boolean group,boolean mine,Path dir){this.id=id;this.peer=peer;this.group=group;this.mine=mine;this.dir=dir;}
@@ -136,7 +136,16 @@ public final class PrivateFiles implements AutoCloseable {
             try {
                 synchronized(t.disk) {
                     String digest=FileCrypto.encrypt(source,t.dir.resolve("payload.bin"),id,size,key,nonce,()->closed||t.paused,n->t.done=n);
-                    t.file=new ChatFile(id,name,mime,size,key,nonce,digest,Base64.getEncoder().encodeToString(PrivateTorrent.make(t.dir.resolve("payload.bin"))));
+                    Contact contact=group?null:node.contact(peer);
+                    if(contact!=null && contact.isKeets()) {
+                        KeetsTransport transport=chat.keetsTransport();
+                        if(transport==null)throw new IOException("Connect your Keets node to share this file");
+                        t.status="Uploading";t.done=0;
+                        ChatFile offer=new ChatFile(id,name,mime,size,key,nonce,digest,"");
+                        t.file=KeetsFiles.publish(transport,t.dir.resolve("payload.bin"),offer,()->closed||t.paused,n->t.done=n);
+                    } else {
+                        t.file=new ChatFile(id,name,mime,size,key,nonce,digest,Base64.getEncoder().encodeToString(PrivateTorrent.make(t.dir.resolve("payload.bin"))));
+                    }
                     save(t);
                 }
                 start(t);
@@ -159,17 +168,18 @@ public final class PrivateFiles implements AutoCloseable {
         // The caller cannot smuggle an arbitrary manifest into a different conversation.
         boolean offered=chat.conversation(conversation).stream().anyMatch(e->ChatMedia.ref(e.body).equals(ref));
         if(!offered)throw new SecurityException("File offer is not in this conversation");
-        PrivateTorrent.validate(file);
+        if(file.isKeets())KeetsFiles.validate(file);else PrivateTorrent.validate(file);
         Transfer t=allocate(file.id,file.size,conversation,group,false);t.file=file;
         try { save(t);start(t);return file.id; }
         catch(Exception e) { remove(file.id);throw e; }
     }
     private synchronized void start(Transfer t)throws Exception {
         if(closed)throw new IOException("File sharing stopped");
-        if(t.tunnel!=null)return;
+        if(t.tunnel!=null || t.keetsRunning)return;
         t.restorePending=false;t.paused=false;t.error="";t.status=t.ready?"Ready · sharing":t.mine?"Sharing":"Connecting";int generation=++t.generation;
         t.lastProgressNanos=System.nanoTime();
         try {
+        if(t.file.isKeets()) { startKeets(t,generation);return; }
         PrivateTorrent bt=engine();
         TorrentTunnel tunnel=new TorrentTunnel();t.tunnel=tunnel;t.token=FileCrypto.randomHex(32);
         tunnel.expose(t.token,PrivateTorrent.validate(t.file).getTorrentId().getBytes(),bt.port());
@@ -202,6 +212,25 @@ public final class PrivateFiles implements AutoCloseable {
         save(t);
         }catch(Exception e){failed(t,generation,message(e));throw e;}
     }
+    private void startKeets(Transfer t,int generation)throws Exception {
+        KeetsFiles.validate(t.file);
+        if(t.ready){t.status="Ready · sharing";save(t);return;}
+        KeetsTransport transport=chat.keetsTransport();
+        if(transport==null)throw new IOException("Connect a Keets-enabled node, then tap Resume");
+        t.keetsRunning=true;t.status=t.mine?"Verifying":"Downloading";save(t);
+        jobs.execute(()->{
+            try {
+                synchronized(t.disk) {
+                    java.util.function.BooleanSupplier cancelled=()->closed||t.paused||t.generation!=generation;
+                    if(t.mine)FileCrypto.decrypt(t.dir.resolve("payload.bin"),t.dir.resolve("verified.bin"),t.file,cancelled);
+                    else KeetsFiles.download(transport,t.file,t.dir,cancelled,n->{t.done=n;t.lastProgressNanos=System.nanoTime();});
+                }
+                synchronized(PrivateFiles.this) {
+                    if(t.generation==generation){t.ready=true;t.done=t.file.size;t.status="Ready · sharing";t.keetsRunning=false;}
+                }
+            }catch(Exception e){failed(t,generation,message(e));}
+        });
+    }
     private synchronized void failed(Transfer t,int generation,String error) {
         if(t.generation!=generation)return;
         t.restorePending=false;t.paused=true;pauseEngine(t);t.status="Failed";t.error=error;
@@ -209,7 +238,7 @@ public final class PrivateFiles implements AutoCloseable {
     }
     public synchronized void pause(String id)throws IOException {Transfer t=get(id);t.restorePending=false;t.paused=true;t.status=t.ready?"Ready · paused":"Paused";
         try{pauseEngine(t);}finally{if(t.file!=null)save(t);}}
-    private void pauseEngine(Transfer t){t.generation++;if(peerTransport!=null)peerTransport.stop(t.id);TorrentTunnel tunnel=t.tunnel;t.tunnel=null;t.token="";t.tunnels.clear();if(tunnel!=null)tunnel.close();if(engine!=null)engine.pause(t.id);}
+    private void pauseEngine(Transfer t){t.generation++;t.keetsRunning=false;if(peerTransport!=null)peerTransport.stop(t.id);TorrentTunnel tunnel=t.tunnel;t.tunnel=null;t.token="";t.tunnels.clear();if(tunnel!=null)tunnel.close();if(engine!=null && (t.file==null || !t.file.isKeets()))engine.pause(t.id);}
     public synchronized void resume(String id)throws Exception {Transfer t=get(id);if(t.file==null)throw new IOException("Choose the file again");start(t);}
     public synchronized void remove(String id)throws Exception {Transfer t=get(id);pause(id);transfers.remove(id);
         synchronized(t.disk){try(java.util.stream.Stream<Path> paths=Files.walk(t.dir)){for(Path p:(Iterable<Path>)paths.sorted(Comparator.reverseOrder())::iterator)Files.deleteIfExists(p);}}}
