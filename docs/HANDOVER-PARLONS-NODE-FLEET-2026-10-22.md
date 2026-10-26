@@ -1,5 +1,18 @@
 # Handover — Parlons Node fleet, 2026-10-22 (for the next agent adding work to the nodes)
 
+## 26 October 2026 — keets sidecar dead-link patch (all six account-node hosts)
+
+Every account node (sally, hetzner, megammr, vigilance, pi-old, openproject) runs keets sidecar
+**1.2.0** at `/opt/maxima/keets-sidecar/index.js`, spawned by parlons-node (`-keets -keetssidecar`).
+1.2.0 bridged an accepted link that had died during its 15 s first-bytes peek, so `conns` never came
+back down and after `--maxconns 6` ghosts the node refused every new keets link (phone diag: links
+reset by remotes in under 1 s, ~400 reconnects per 10 min). The two-line fix from keets 1.2.15
+(`7b2a52fecebb7d31850ec423dc92d6b8d66b9775`) was patched into 1.2.0 in place (marker comment
+`deadlink fix`); `VERSION` still reads 1.2.0. Backup: `index.js.before-deadlink` beside it.
+Only the sidecar process was killed; KeetsManager respawned it. parlons-node, relays and DEX were
+not restarted. Rollback: copy the backup over `index.js` and `kill` the sidecar pid
+(`pgrep -f "keets-sidecar/index.js --port"`; a plain `keets-sidecar` match also hits the java).
+
 ## 26 October 2026 — Keets file interoperability rollout
 
 All six account-node hosts now run **Parlons Node 0.2.140**; all passed the 11 external relay checks and public DEX health (0.1.5). MegaMMR was checked at its verified IPv4 address `45.77.246.226:9501` after the hostname check failed. Both existing tenant services now run **Cloud host 0.11.126**; Sally’s tenant panel returns HTTP 200. Service units, identities, firewall rules and residential forwarding were unchanged. The old jars remain available, with rollback pointers in `/opt/maxima/node-before-0.2.140.txt` and `/opt/maxima/cloud-before-0.11.126.txt`. Sally’s separately hosted tenant direct-file listener remains disabled as previously documented.
