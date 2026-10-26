@@ -1,8 +1,8 @@
 # KeetChat ↔ Parlons private files
 
-Implementation/build candidate: Parlons Android 0.6.148, Cloud Android 0.2.93,
+Release versions: Parlons Android 0.6.148, Cloud Android 0.2.93,
 Node 0.2.140, Cloud host 0.11.126, Desktop 1.5.117; bear-family Android 2.0.57.
-These versions are local candidates until the release process publishes them.
+GitHub releases are pinned to the tested source commits: maxima `d6a59f18` and bear-family `cf1d09b0`. The bundled desktop hosts are minimaCore Desktop **0.18.24** and minimaDesk **0.7.85**, both carrying the same Node 0.2.140 digest. See the release record for store and deployment verification.
 
 ## Using it
 
