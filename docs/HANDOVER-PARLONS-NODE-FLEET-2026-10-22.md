@@ -1,5 +1,36 @@
 # Handover — Parlons Node fleet, 2026-10-22 (for the next agent adding work to the nodes)
 
+## 26 October 2026 — direct-file release rollout
+
+All six account-node hosts (sally, hetzner, megammr, vigilance, pi-old and openproject)
+now run **Parlons Node 0.2.139**. Each was restarted separately, retained its previous
+jar for rollback, and passed all 11 public `ops/verify-relay.sh` checks. All six public
+DEX health endpoints still answer 0.1.5. Service flags, data folders and identities
+were preserved; maxima-relay-only services remain 0.4.107.
+
+Both `parlons-tenants` services now run **Cloud account host 0.11.125**. Sally has one
+tenant; the Pi has none. Their existing `--no-relay --no-direct` configuration is
+unchanged. **Sally's tenant direct-file listener is not enabled:** automatic approval
+review rejected the proposed service change and opening TCP 9536. Explicit user
+approval is pending. Do not report this standalone tenant service as ready for direct
+Cloud uploads. The Pi's residential port forwarding is unchanged.
+
+Owner nodes and their in-process hosted guests reuse the owner's existing verified
+listener. Hosted accounts retain separate pairing authorization and storage. The
+shared listener applies only within one process; do not advertise a different JVM's
+node listener for a standalone tenant service.
+
+Published host digests:
+- `node-v0.2.139`: `878aa84d3c368a3c807ed408d69402b4e95f1442fcf6049060ff8a54d1b1535a`
+- `cloud-v0.11.125`: `c2f18a2e54655e4c89dda57f5e2d2c8d30924d8ea592e3811a84261ed449c83a`
+
+Cloud 0.11.125 is GitHub Latest. New Android releases are 0.6.147 / Cloud 0.2.92.
+Rollback jar paths are recorded in `/opt/maxima/node-before-0.2.139.txt` and, on the
+two tenant hosts, `/opt/maxima/cloud-before-0.11.125.txt`. Public verification logs
+are in `build/direct-files-release/*-health.log` in the release workspace.
+
+The sections below retain the historical deployment record.
+
 State of every box as of the evening of 2026-10-22: what runs where, how to ship a change to the
 nodes, and the traps hit today. Read this before touching `node/`, `server/`, `core/` or any fleet box.
 

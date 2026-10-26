@@ -1,10 +1,13 @@
-# Private file sharing — candidate build
+# Private file sharing — direct transfer release
 
 ## Direct transport update — 25 October 2026
 
-Current local candidates: Android **0.6.147 (747)**, Cloud Android **0.2.92 (292)**,
-Parlons Node **0.2.139**, and legacy Cloud host **0.11.125**. These supersede the
-historical limits and transport notes below. A local build does not imply publication.
+Published on GitHub and the family catalogue: Android **0.6.147 (747)**, Cloud Android
+**0.2.92 (292)**, Desktop **1.5.116**, Parlons Node **0.2.139**, and legacy Cloud
+host **0.11.125**. Both Android builds are installed on the Fold. All six production
+Node hosts and both standalone tenant services are updated. See the fleet handover
+for Sally’s pending tenant-listener approval. These supersede the historical limits
+and transport notes below.
 
 New transfers are limited to **100 MiB** (displayed as 100 MB). Existing saved offers
 retain their legacy read bound. The attachment, explicit Download, Pause/Resume and
@@ -36,7 +39,10 @@ Save workflow is unchanged.
   absent from `ParlonsRemote`, including its timeout overload. Older hosts must be
   updated; Cloud Android reports that requirement.
 * Direct Cloud connections reuse the account's verified listening address and port;
-  no additional public port is needed. A reachable own host or same-LAN route is
+  no additional public port is needed when the account already has a listener. A
+  standalone tenant service started with `--no-direct --no-relay` must have its own
+  reachable listener enabled; another JVM’s node listener cannot serve its tickets.
+  A reachable own host or same-LAN route is
   required. Older clients can still use the historical RPC API until upgraded.
   Small photo/voice-note media paths are outside this private-file change.
 * Android holds bounded partial CPU wake locks while RTC streams or device import/export

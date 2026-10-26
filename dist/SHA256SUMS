@@ -281,6 +281,8 @@ f5cb5e87c87f49d63c9aee9bb494df72cd5a108aca8cfdd8d43b595298fdb17d  dist/parlons-c
 eca94ee059a06d22f4ba9db930c42a19385941be1138767d912f1246fd608fc7  dist/maxima-app-0.6.146-release.apk
 3c31183898d28b8414324fd3e5bc2f360f082d9124ee3e1d7907d158ea97c923  dist/parlons-cloud-portal-0.2.91-release.apk
 b49abd6bcf05699548ef18f7087f0196fd7ae53f62114a0df2daa662b67a2f2a  dist/maxima-app-0.6.147-release.apk
-80f6b260b853e8e5aa452003492260a0b0cd1be3bb2ea9093728d940857160bc  dist/parlons-cloud-portal-0.2.92-release.apk
-b120392d0e7684abfffe4d3b682a0346580eb6337cf12ccee0af4915e8f31022  dist/parlons-node-0.2.139.jar
-293cae183c08cd12196490c414cace6c0a6a40ebcd0be040b2873e28d5075292  dist/parlons-cloud-0.11.125.jar
+b49abd6bcf05699548ef18f7087f0196fd7ae53f62114a0df2daa662b67a2f2a  dist/parlons-0.6.147.apk
+c2f18a2e54655e4c89dda57f5e2d2c8d30924d8ea592e3811a84261ed449c83a  dist/parlons-cloud-0.11.125.jar
+44cb77be7e80571f4002d4df362c81e7bd3a6414d9f6c290760d1fa2cd12b152  dist/parlons-cloud-portal-0.2.92-release.apk
+878aa84d3c368a3c807ed408d69402b4e95f1442fcf6049060ff8a54d1b1535a  dist/parlons-node-0.2.139.jar
+d74f750e5056dd467a9eee6ed9222d7fdff4f5688d8631c596f38cf566a634d8  dist/MaximaNode-1.5.116-notarized.dmg
