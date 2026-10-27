@@ -10,12 +10,17 @@
 #   … | bash -s -- --uninstall    stop and remove the service (node data and seed are kept)
 #   … | bash -s -- --no-megammr   plain full node (1 GB RAM); picked for you under ~3.5 GB RAM
 #   … | bash -s -- --heap 3g      a bigger Java heap than the size-based default
+#   … | bash -s -- --fleet        FLEET BOX (public VPS): the parlons-node-fleet jar, which also runs the
+#                                 keets sidecar from its embedded Node.js as this box's keets transport,
+#                                 public HyperDHT bootstrap node (udp 49737) and keets mailbox, with the
+#                                 Minima server role, the DEX cape and the admin RPC on. One jar, every service.
+#   … | bash -s -- --fleet --public-host 1.2.3.4   the public IPv4 (default: the box's global-scope address)
 #
 # What it does:
 #   1. Java 11+ and qrencode (apt / dnf / apk / pacman)
 #   2. downloads the newest parlons-node release from GitHub and checks its sha256
 #   3. an unprivileged `maxima` user, /var/lib/parlons-node (mode 700), a hardened systemd unit
-#   4. opens Minima P2P 9001 and the relay 9501 in ufw / firewalld when one is active
+#   4. opens Minima P2P 9001 and the relay 9501 in ufw / firewalld when one is active (--fleet: + 9501/udp, 49737/udp)
 #   5. starts it, waits for the account, asks you to set the admin pairing password,
 #      and draws the QR code your phone scans
 #
@@ -33,8 +38,11 @@ UNIT=/etc/systemd/system/parlons-node.service
 ROOTNODE="65.109.31.226:9001"
 P2P_PORT=9001
 RELAY_PORT=9501
+DHT_PORT=49737
 HEAP=""
 MEGAMMR=""
+FLEET=""
+PUBLIC_HOST=""
 ACTION="install"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -42,6 +50,8 @@ while [ $# -gt 0 ]; do
         --uninstall) ACTION="uninstall"; shift ;;
         --no-megammr) MEGAMMR="false"; shift ;;
         --heap) HEAP="${2:?--heap needs a size such as 2g}"; shift 2 ;;
+        --fleet) FLEET="true"; shift ;;
+        --public-host) PUBLIC_HOST="${2:?--public-host needs an IPv4 address}"; shift 2 ;;
         -h|--help) echo "Usage and options: the header of $RAW/get-parlons-node.sh"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
@@ -61,6 +71,7 @@ if [ "$ACTION" = uninstall ]; then
     say "Removing the Parlons Node service (your node data in $DATA stays)"
     $SUDO systemctl disable --now parlons-node >/dev/null 2>&1 || true
     $SUDO rm -f "$UNIT" /usr/local/bin/parlons-pair
+    $SUDO rm -rf "$DATA/runtime"     # the fleet jar's extracted Node.js + sidecar (re-extracted on install)
     $SUDO systemctl daemon-reload
     note "Done. Jars are in $OPT. To remove the node itself (identity, wallet, chats): sudo rm -rf $DATA"
     exit 0
@@ -76,6 +87,24 @@ case "$HEAP" in
     *) die "--heap must end in m or g (got '$HEAP')" ;;
 esac
 [ "$MEM_MB" -ge 900 ] || die "This machine has ${MEM_MB} MB of RAM; a Parlons Node needs at least 1 GB. Use get-parlons-cloud.sh for an account only."
+
+# Fleet box: the sidecar (Node.js + DHT + mailbox) lives in the same cgroup - give it room; the
+# DHT must be told the address other nodes reach it on.
+FLEET_PROPS=""; AF_EXTRA=""; TASKS_MAX=1024; JAR_RE='parlons-node-[0-9.]+\.jar'; JAR_PREFIX="parlons-node-"
+if [ "$FLEET" = true ]; then
+    case "$(uname -m)" in x86_64|aarch64) ;; *) die "A fleet box needs x86_64 or aarch64 (the embedded Node.js has no $(uname -m) build)." ;; esac
+    [ "$MEM_MB" -ge 1900 ] || die "A fleet box needs at least 2 GB of RAM (node + relay + keets sidecar); this one has ${MEM_MB} MB."
+    if [ -z "$PUBLIC_HOST" ]; then
+        PUBLIC_HOST="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -vE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)' | head -1 || true)"
+        [ -n "$PUBLIC_HOST" ] || die "Could not find this box's public IPv4; pass --public-host <ip> (a fleet box must be directly reachable)."
+    fi
+    case "$MEMMAX" in *M) MEMMAX="$(( ${MEMMAX%M} + 1024 ))M" ;; esac
+    FLEET_PROPS="    -Dparlons.fleet=true -Dparlons.public.host=$PUBLIC_HOST \\
+"
+    AF_EXTRA=" AF_NETLINK"      # udx-native watches interfaces over netlink
+    TASKS_MAX=2048
+    JAR_RE='parlons-node-fleet-[0-9.]+\.jar'; JAR_PREFIX="parlons-node-fleet-"
+fi
 
 # ---------- 1. java + qrencode ----------
 say "[1/5] Java"
@@ -101,10 +130,11 @@ JAVA_BIN="$(readlink -f "$(command -v java)")"
 # ---------- 2. download ----------
 say "[2/5] Newest Parlons Node release"
 JSON="$(curl -fsSL -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/releases?per_page=50")" || die "Could not reach GitHub to find the release."
-JAR_URL="$(printf '%s' "$JSON" | grep -oE 'https://github.com/[^"]+/node-v[^"]+/parlons-node-[0-9.]+\.jar' | head -1)"
-SUM_URL="$(printf '%s' "$JSON" | grep -oE 'https://github.com/[^"]+/node-v[^"]+/SHA256SUMS' | head -1)"
-[ -n "$JAR_URL" ] && [ -n "$SUM_URL" ] || die "No parlons-node release with checksums found under $REPO."
-JAR_NAME="$(basename "$JAR_URL")"; VER="${JAR_NAME#parlons-node-}"; VER="${VER%.jar}"
+JAR_URL="$(printf '%s' "$JSON" | grep -oE "https://github.com/[^\"]+/node-v[^\"]+/$JAR_RE" | head -1)"
+[ -n "$JAR_URL" ] || die "No ${JAR_PREFIX}<ver>.jar release found under $REPO${FLEET:+ (the fleet jar ships from node-v0.2.143 on)}."
+SUM_URL="$(printf '%s' "$JSON" | grep -oE "https://github.com/[^\"]+/$(basename "$(dirname "$JAR_URL")")/SHA256SUMS" | head -1)"
+[ -n "$SUM_URL" ] || die "The release holding $(basename "$JAR_URL") has no SHA256SUMS."
+JAR_NAME="$(basename "$JAR_URL")"; VER="${JAR_NAME#$JAR_PREFIX}"; VER="${VER%.jar}"
 $SUDO mkdir -p "$OPT"
 if [ -f "$OPT/$JAR_NAME" ]; then
     note "already have $VER"
@@ -129,7 +159,7 @@ $SUDO mkdir -p "$DATA"; $SUDO chown maxima:maxima "$DATA"; $SUDO chmod 700 "$DAT
 # Same hardened unit as ops/deploy-parlons-node.sh, at its defaults.
 $SUDO tee "$UNIT" >/dev/null <<EOF
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway ($VER)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway${FLEET:+ + keets fleet endpoint} ($VER)
 Documentation=https://parlons.info/guide/node.html
 After=network-online.target
 Wants=network-online.target
@@ -146,7 +176,7 @@ ExecStart=$JAVA_BIN -Xmx$HEAP \\
     -Dparlons.relay.port=$RELAY_PORT \\
     -Dparlons.node.megammr=$MEGAMMR \\
     -Dparlons.node.rootnode=$ROOTNODE \\
-    -jar $OPT/parlons-node.jar
+$FLEET_PROPS    -jar $OPT/parlons-node.jar
 # always, not on-failure: a resync ends with exit 0 and the node must come back.
 Restart=always
 RestartSec=10
@@ -179,10 +209,10 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged ~@resources ~@obsolete
 SystemCallErrorNumber=EPERM
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX$AF_EXTRA
 IPAddressDeny=169.254.0.0/16 fe80::/10
 MemoryMax=$MEMMAX
-TasksMax=1024
+TasksMax=$TASKS_MAX
 LimitNOFILE=65536
 StandardOutput=journal
 StandardError=journal
@@ -190,20 +220,21 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-note "heap $HEAP (MemoryMax $MEMMAX), MegaMMR $MEGAMMR, syncing from $ROOTNODE"
+note "heap $HEAP (MemoryMax $MEMMAX), MegaMMR $MEGAMMR, syncing from $ROOTNODE${FLEET:+, FLEET endpoint on $PUBLIC_HOST}"
 
 # ---------- 4. firewall ----------
 say "[4/5] Firewall"
 opened=no
+PORTS="$P2P_PORT/tcp $RELAY_PORT/tcp"
+[ "$FLEET" = true ] && PORTS="$PORTS $RELAY_PORT/udp $DHT_PORT/udp"     # STUN on the relay port, the HyperDHT
 if command -v ufw >/dev/null 2>&1 && $SUDO ufw status 2>/dev/null | head -1 | grep -qw active; then
-    $SUDO ufw allow $P2P_PORT/tcp >/dev/null; $SUDO ufw allow $RELAY_PORT/tcp >/dev/null; opened=ufw
+    for p in $PORTS; do $SUDO ufw allow $p >/dev/null; done; opened=ufw
 fi
 if command -v firewall-cmd >/dev/null 2>&1 && $SUDO firewall-cmd --state >/dev/null 2>&1; then
-    $SUDO firewall-cmd --permanent --add-port=$P2P_PORT/tcp >/dev/null
-    $SUDO firewall-cmd --permanent --add-port=$RELAY_PORT/tcp >/dev/null
+    for p in $PORTS; do $SUDO firewall-cmd --permanent --add-port=$p >/dev/null; done
     $SUDO firewall-cmd --reload >/dev/null; opened=firewalld
 fi
-[ "$opened" = no ] && note "no host firewall active - nothing to open" || note "$opened: opened $P2P_PORT/tcp and $RELAY_PORT/tcp"
+[ "$opened" = no ] && note "no host firewall active - nothing to open" || note "$opened: opened $PORTS"
 note "A cloud firewall (Hetzner/Vultr/AWS console) or a home router can still block them."
 note "Your account works without them; other people's messages and blocks need them open."
 
@@ -234,6 +265,14 @@ else
     echo "  No terminal to ask for a password. Pair your phone later with:"
     echo "    sudo parlons-pair --set-admin-password   (once)"
     echo "    sudo parlons-pair --admin                (draws the QR)"
+fi
+if [ "$FLEET" = true ]; then
+    echo
+    echo "  Fleet endpoint ($PUBLIC_HOST): Minima P2P $P2P_PORT/tcp, Maxima relay $RELAY_PORT, keets DHT bootstrap $DHT_PORT/udp."
+    echo "  The Minima P2P and relay meshes pick this box up by gossip. Its keets mailbox joins once its pubkey"
+    echo "  is signed into the published list - the node prints the exact command (wait for the sidecar):"
+    for i in $(seq 1 60); do $SUDO journalctl -u parlons-node --no-pager 2>/dev/null | grep -q 'keets mailbox   0x' && break; sleep 2; done
+    $SUDO journalctl -u parlons-node --no-pager 2>/dev/null | grep -A4 'FLEET ENDPOINT' | tail -5 | sed 's/^.*\[parlons-node\]/   /' || true
 fi
 echo
 echo "  Watch it sync:   journalctl -u parlons-node -f | grep heartbeat"

@@ -1,0 +1,8 @@
+{
+  "_comment": "Node.js runtime embedded in parlons-node-fleet-<ver>.jar (fleet mode spawns the keets sidecar with it). Pinned to the latest Node 20 LTS at the time; update version + both sha256 from https://nodejs.org/dist/<version>/SHASUMS256.txt together.",
+  "version": "v20.20.2",
+  "binaries": {
+    "x64":   { "url": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.gz",   "sha256": "19e56f0825510207dd904f087fe52faa0a4eb6b2aab5f0ea7a33830d04888b8b" },
+    "arm64": { "url": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-arm64.tar.gz", "sha256": "47ef73d543ecf6eb19435f6c03a0ac4809b3bf0dd6b26c7c571efc2a6572a74d" }
+  }
+}

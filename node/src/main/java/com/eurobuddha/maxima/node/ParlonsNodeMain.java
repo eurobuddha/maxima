@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.142";
+    public static final String  NODE_VERSION = "0.2.143";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -92,6 +92,11 @@ public final class ParlonsNodeMain {
         out.println("                                    the one-time link in <data>/panel-ticket.txt (ssh tunnel on a server)");
         out.println("  -Dparlons.node.passphrase.file=<f>  unlock a password-locked node (or PARLONS_NODE_PASSPHRASE)");
         out.println("  -Dparlons.restore=<bundle.pbk>   restore a portable account bundle into a FRESH data dir, then exit");
+        out.println("  -Dparlons.fleet=true             FLEET MODE (parlons-node-fleet-<ver>.jar only): a public box serving every");
+        out.println("                                    service - Minima server role, Maxima cape, admin RPC, the DEX cape when a TLS");
+        out.println("                                    front is given (-Dparlons.dex.public), and the keets sidecar from the jar's");
+        out.println("                                    embedded Node.js as transport + DHT bootstrap (udp 49737, -Dparlons.keets.dhtport)");
+        out.println("                                    + keets mailbox; -Dparlons.public.host=<ip> names this box");
         out.println();
         out.println("First run: the node syncs the chain (watch the 'heartbeat' log line until block= reaches the tip),");
         out.println("pins its identity into <data>/identity.txt, attaches to the relays and prints");
@@ -117,6 +122,8 @@ public final class ParlonsNodeMain {
             System.exit(help ? 0 : 2);
             return;
         }
+        // Fleet mode's property defaults (rpc on, DEX cape on, cape host) - before anything reads them.
+        FleetRuntime.applyPropertyDefaults();
         // --- configure the embedded node's global params (mirrors Minima.main, minus the CLI bits) ---
         GeneralParams.resetDefaults();
 
@@ -187,6 +194,12 @@ public final class ParlonsNodeMain {
             GeneralParams.CONNECT_LIST = connect;
             GeneralParams.P2P_ENABLED  = false;   // explicit peer list => static, no discovery
             System.out.println("[parlons-node] static connect list: " + connect);
+        }
+
+        // Fleet mode (-Dparlons.fleet=true): extract the embedded Node.js + keets sidecar and run the
+        // sidecar in serve mode (transport + DHT bootstrap + mailbox); server role on. See FleetRuntime.
+        if (FleetRuntime.enabled()) {
+            FleetRuntime.apply(dataFolder);
         }
 
         // MegaMMR: keep the full MegaMMR so `coins/balance megammr:true address:<any>` proves coins

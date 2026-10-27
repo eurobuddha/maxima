@@ -56,27 +56,114 @@ application {
  * dependsOn/inputs on runtimeClasspath so an edit to :core/:server actually reaches the artifact
  * (a jar with a new version and old code is the worst failure mode — see :server's fatJar note).
  */
-tasks.register('fatJar', Jar) {
-    group = 'build'
-    description = 'Self-contained runnable Parlons Node jar'
-
-    dependsOn configurations.runtimeClasspath
-    inputs.files configurations.runtimeClasspath
-
-    archiveBaseName = 'parlons-node'
-    manifest {
+def runnableJar = { Jar jar ->
+    jar.dependsOn configurations.runtimeClasspath
+    jar.inputs.files configurations.runtimeClasspath
+    jar.manifest {
         attributes 'Main-Class': 'com.eurobuddha.maxima.node.ParlonsNodeMain'
     }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from sourceSets.main.output
+    jar.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    jar.from sourceSets.main.output
     // BouncyCastle jars are signed; flattening their META-INF/*.SF|DSA|RSA into one jar makes the
     // JVM fail signature verification ("Invalid signature file digest"). Drop the signatures — the
     // exclude must be scoped to the dependency tree (a task-level exclude doesn't reach zipTree).
-    from({ configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }) {
+    jar.from({ configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }) {
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC', 'META-INF/INDEX.LIST'
     }
 }
 
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Self-contained runnable Parlons Node jar'
+    archiveBaseName = 'parlons-node'
+    runnableJar(it)
+}
+
+/*
+ * The FLEET jar (node 0.2.143): the same jar plus everything a fresh public Linux box needs to be
+ * a full fleet endpoint under -Dparlons.fleet=true — the keets sidecar (serve mode: transport +
+ * DHT bootstrap + mailbox in one process) and the Node.js runtime that runs it, for linux-x64 and
+ * linux-arm64. A separate artifact so the plain jar (bundled into minimaDesk by CI) stays small.
+ *   fleet/VERSIONS               node=<v> sidecar=<v>
+ *   fleet/node-linux-<arch>.gz   the bare `node` binary, gzip (from the pinned nodejs.org tarball)
+ *   fleet/keets-sidecar.zip      ../keets/sidecar with node_modules, Linux prebuilds only
+ * Pins: node-runtime.lock.json (version + sha256 per arch). Sidecar: -PkeetsSidecar=<dir>.
+ */
+def fleetDir = layout.buildDirectory.dir('fleet')
+def nodeLock = new groovy.json.JsonSlurper().parse(file('node-runtime.lock.json'))
+// the family layout: <workspace>/maxima and <workspace>/keets - or this repo as a worktree under <workspace>/_worktrees/
+def sidecarDir = file(findProperty('keetsSidecar') ?: ["$rootDir/../keets/sidecar", "$rootDir/../../keets/sidecar"].find { new File(it, 'index.js').isFile() } ?: "$rootDir/../keets/sidecar")
+
+tasks.register('downloadNodeRuntime') {
+    group = 'build'
+    description = 'Fetch the pinned Node.js runtimes (sha256-checked) and gzip their bin/node into build/fleet'
+    inputs.file file('node-runtime.lock.json')
+    outputs.files nodeLock.binaries.keySet().collect { fleetDir.get().file("node-linux-${it}.gz").asFile }
+    doLast {
+        File dl = layout.buildDirectory.dir('node-dl').get().asFile
+        dl.mkdirs()
+        fleetDir.get().asFile.mkdirs()
+        nodeLock.binaries.each { arch, bin ->
+            File tgz = new File(dl, "node-${nodeLock.version}-linux-${arch}.tar.gz")
+            if (!tgz.exists()) {
+                logger.lifecycle("downloading ${bin.url}")
+                ant.get(src: bin.url, dest: tgz, verbose: false)
+            }
+            def md = java.security.MessageDigest.getInstance('SHA-256')
+            tgz.withInputStream { md.update(it.bytes) }
+            String got = md.digest().encodeHex().toString()
+            if (got != bin.sha256) {
+                tgz.delete()
+                throw new GradleException("sha256 mismatch for ${tgz.name}: got ${got}, lock says ${bin.sha256}")
+            }
+            File out = fleetDir.get().file("node-linux-${arch}.gz").asFile
+            File node = null
+            tarTree(resources.gzip(tgz)).visit { d -> if (!d.isDirectory() && d.path.endsWith('/bin/node')) node = d.file }
+            if (node == null) throw new GradleException("no bin/node inside ${tgz.name}")
+            new java.util.zip.GZIPOutputStream(new FileOutputStream(out)).withStream { gz -> node.withInputStream { gz << it } }
+            logger.lifecycle("${out.name}: node ${nodeLock.version} linux-${arch}, ${(out.length() / 1048576) as int} MB")
+        }
+    }
+}
+
+tasks.register('fleetSidecarZip', Zip) {
+    group = 'build'
+    description = 'The keets sidecar (Linux prebuilds only) for the fleet jar'
+    doFirst {
+        if (!new File(sidecarDir, 'index.js').isFile() || !new File(sidecarDir, 'node_modules').isDirectory()) {
+            throw new GradleException("keets sidecar with node_modules not found at ${sidecarDir} (pass -PkeetsSidecar=<dir>)")
+        }
+    }
+    from(sidecarDir) {
+        exclude '.git/**', '**/prebuilds/android-*/**', '**/prebuilds/ios-*/**', '**/prebuilds/win32-*/**', '**/prebuilds/darwin-*/**'
+    }
+    into 'keets-sidecar'
+    archiveFileName = 'keets-sidecar.zip'
+    destinationDirectory = fleetDir
+}
+
+tasks.register('fleetVersions') {
+    group = 'build'
+    description = 'fleet/VERSIONS: the node + sidecar versions the fleet jar carries'
+    def out = fleetDir.get().file('VERSIONS').asFile
+    outputs.file out
+    doLast {
+        def pkg = new groovy.json.JsonSlurper().parse(new File(sidecarDir, 'package.json'))
+        out.parentFile.mkdirs()
+        out.text = "node=${nodeLock.version}\nsidecar=${pkg.version}\n"
+    }
+}
+
+tasks.register('fleetJar', Jar) {
+    group = 'build'
+    description = 'Parlons Node jar + embedded Node.js runtime + keets sidecar (fleet mode)'
+    dependsOn 'downloadNodeRuntime', 'fleetSidecarZip', 'fleetVersions'
+    archiveBaseName = 'parlons-node-fleet'
+    runnableJar(it)
+    from(fleetDir) { into 'fleet' }
+}
+
 // Artifact and boot metadata have one release version.
-version = "0.2.142"
+version = "0.2.143"
 tasks.named("fatJar") { archiveVersion = project.version }
+tasks.named("fleetJar") { archiveVersion = project.version }
