@@ -32,6 +32,26 @@ public class FileDeliveryTest {
         d.keep(f.id,true);d.inbound("carol",control("complete",f.digest));d.tick();assertEquals(0,stops.get());
         d.keep(f.id,false);d.tick();assertEquals(1,stops.get());
     }
+    @Test public void resendsBackOffUntilThePeerAnswers()throws Exception {
+        ChatFile f=file();List<String> sent=new ArrayList<>();FileDelivery d=new FileDelivery((p,c)->sent.add(c),id->{});
+        d.register(f,Files.createTempDirectory("receipt-backoff"),true,List.of("bob"));
+        long t=1_000_000L;d.tick(t);assertEquals(1,sent.size());          // first hello at once
+        d.tick(t+14_000);assertEquals(1,sent.size());d.tick(t+15_000);assertEquals(2,sent.size());   // 15 s
+        d.tick(t+15_000+29_000);assertEquals(2,sent.size());d.tick(t+15_000+30_000);assertEquals(3,sent.size()); // 30 s
+        d.tick(t+45_000+59_000);assertEquals(3,sent.size());d.tick(t+45_000+60_000);assertEquals(4,sent.size()); // 60 s
+        for(int i=0;i<10;i++)d.tick(t+105_000+i*600_000L);                 // 2, 4, 8 min, then every 10 min
+        assertEquals(13,sent.size());
+        d.inbound("bob",control("capable",f.digest));                       // the peer is back: fast again
+        long u=t+105_000+10*600_000L;d.tick(u-300_000);assertEquals(13,sent.size()); // the current gap still runs
+        d.tick(u);assertEquals(14,sent.size());d.tick(u+15_000);assertEquals(15,sent.size());
+    }
+    @Test public void aReceiverThatSendsNothingDoesNotBackOff()throws Exception {
+        ChatFile f=file();List<String> sent=new ArrayList<>();FileDelivery d=new FileDelivery((p,c)->sent.add(c),id->{});
+        d.register(f,Files.createTempDirectory("receipt-quiet"),false,List.of("alice"));
+        long t=1_000_000L;for(int i=0;i<10;i++)d.tick(t+i*600_000L);assertEquals(0,sent.size()); // a long download: nothing to say
+        d.verified(f.id);long v=t+10*600_000L;d.tick(v);assertEquals(1,sent.size());              // complete at once
+        d.tick(v+14_000);assertEquals(1,sent.size());d.tick(v+15_000);assertEquals(2,sent.size()); // and again after 15 s, not 10 min
+    }
     @Test public void failedStopIsNeverReportedAsStoppedAndWillRetry()throws Exception {
         ChatFile f=file();AtomicInteger stops=new AtomicInteger();FileDelivery d=new FileDelivery((p,c)->{},id->{if(stops.getAndIncrement()==0)throw new java.io.IOException("offline");});
         d.register(f,Files.createTempDirectory("receipt-stop"),true,List.of("bob"));d.inbound("bob",control("complete",f.digest));d.tick();

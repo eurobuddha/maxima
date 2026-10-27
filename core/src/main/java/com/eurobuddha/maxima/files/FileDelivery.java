@@ -19,7 +19,7 @@ public final class FileDelivery {
     private static final class State {
         ChatFile file; Path path; boolean mine,complete,acked,keep,stopped,stopping;
         Set<String> peers=new TreeSet<>(),capable=new TreeSet<>(),delivered=new TreeSet<>();
-        long next; String error="";
+        long next; int backoff; String error="";
     }
     public FileDelivery(Channel channel,Stop stop){this.channel=channel;this.stop=stop;}
     public synchronized void register(ChatFile f,Path directory,boolean mine,Collection<String> peers)throws IOException {
@@ -46,21 +46,30 @@ public final class FileDelivery {
         Map<String,String> m=Json.parse(control);State s=states.get(m.get("id"));peer=peer.toLowerCase(Locale.ROOT);
         if(s==null||!s.peers.contains(peer)||!"1".equals(m.get("v"))||!s.file.digest.equals(m.get("digest")))return;
         String kind=m.get("kind");
+        s.backoff=0; // the peer is answering: re-send at the fast cadence again
         if("hello".equals(kind)&&!s.mine)reply(peer,wire(s,"capable"));
         else if("capable".equals(kind)&&s.mine){s.capable.add(peer);save(s);}
         else if("complete".equals(kind)&&s.mine){s.capable.add(peer);s.delivered.add(peer);save(s);reply(peer,wire(s,"ack"));}
         else if("ack".equals(kind)&&!s.mine&&s.complete){s.acked=true;save(s);}
     }
     private void reply(String peer,String body){if(replies.size()<128)replies.add(new String[]{peer,body});}
-    public void tick() {
-        List<String[]> sends=new ArrayList<>();List<State> stops=new ArrayList<>();long now=System.currentTimeMillis();
+    public void tick() {tick(System.currentTimeMillis());}
+    /** hello/complete re-send gaps: 15 s, 30 s, ... capped at 10 min while the peer stays silent;
+     * an answer from the peer makes the gap after the current one 15 s again. A fixed 15 s forever
+     * pushed ~3 sealed mailbox messages every 15 s per pending file to a peer that was away
+     * (Fold, 2026-10-27). Only a state that actually sends advances its gap. Package-private
+     * clock for tests. */
+    void tick(long now) {
+        List<String[]> sends=new ArrayList<>();List<State> stops=new ArrayList<>();
         synchronized(this){
             sends.addAll(replies);replies.clear();
             for(State s:states.values()){
                 if(!s.stopped&&!s.keep&&((s.mine&&!s.peers.isEmpty()&&s.delivered.containsAll(s.peers))||(!s.mine&&s.complete&&s.acked)))stops.add(s);
-                if(now<s.next)continue;s.next=now+15000;
+                if(now<s.next)continue;int before=sends.size();
                 if(s.mine){for(String p:s.peers)if(!s.delivered.contains(p))sends.add(new String[]{p,wire(s,"hello")});}
                 else if(s.complete&&!s.acked)for(String p:s.peers)sends.add(new String[]{p,wire(s,"complete")});
+                if(sends.size()==before)continue;
+                s.next=now+Math.min(15000L<<s.backoff,600000L);if(s.backoff<6)s.backoff++;
             }
         }
         for(String[] send:sends)try{channel.send(send[0],send[1]);}catch(Exception ignored){/* complete/hello are durable and retried */}
