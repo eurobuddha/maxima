@@ -68,10 +68,19 @@ public final class KeetsMediaClient {
             }
             int code = con.getResponseCode();
             if (code == 401) throw new IOException("Keets restarted; tap Resume");
-            if (code != 200) throw new IOException("File block unavailable; keep both nodes online and tap Resume");
+            if (code != 200) throw new IOException(sidecarError(con, "File block unavailable; keep both nodes online and tap Resume"));
             if (con.getContentLengthLong() > max) throw new IOException("Keets media exceeds size limit");
             try (InputStream in = con.getInputStream()) { return read(in, max); }
         } finally { watchdog.cancel();con.disconnect(); }
+    }
+    /** The sidecar's own reason ({"error":"..."}, at most 4 KB), so the file sheet says why a
+     *  block failed instead of one text for every cause; the generic text when there is none. */
+    private static String sidecarError(HttpURLConnection con, String fallback) {
+        try (InputStream err = con.getErrorStream()) {
+            if (err == null) return fallback;
+            String msg = com.eurobuddha.maxima.core.util.Json.parse(new String(read(err, 4096), StandardCharsets.UTF_8)).get("error");
+            return msg == null || msg.isEmpty() ? fallback : msg;
+        } catch (Exception e) { return fallback; }
     }
     public static byte[] read(InputStream in, int max) throws IOException {
         if (in == null) throw new IOException("File unavailable");
