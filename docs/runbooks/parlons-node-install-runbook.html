@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parlons Node — Installation Runbook</title>
+<meta name="description" content="Install a Parlons Node 0.2.143: profiles, every parameter, fleet mode, verification, backup, update and troubleshooting.">
+<style>
+/* Parlons website. Layout: the app's charcoal top bar over its warm-grey ground; content sits on white
+   surfaces like chat cards; manuals add a contents rail. Colour beyond greys is the mark's orange
+   (actions) and blue (links), used sparingly. */
+:root{
+  --bg:#F5F4F1; --surface:#FFFFFF; --surface-2:#EFEEEB; --line:#E3E1DC;
+  --ink:#23262B; --sub:#676C73; --faint:#8E929A;
+  --bar:#2A2E33; --on-bar:#F1F2F3; --bar-sub:#B6B9C1;
+  --orange:#E5541B; --orange-ink:#FFFFFF; --orange-soft:#FDEDE5;
+  --blue:#2E62D9; --blue-soft:#E8EFFD;
+  --bubble-in:#FFFFFF; --bubble-out:#31353C; --bubble-out-ink:#FFFFFF; --bubble-out-sub:#B6B9C1; --tick-read:#4E86FF;
+  --code-bg:#1E2126; --code-ink:#E6E8EA;
+  --ok:#4F9B72; --warn:#B98A3C;
+  --shadow:0 18px 44px -26px rgba(35,38,43,.35); --shadow-sm:0 1px 3px rgba(35,38,43,.08);
+  --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-display:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --f-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --maxw:1120px; --prose:72ch;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16181B; --surface:#1E2126; --surface-2:#23272C; --line:#2E3238;
+  --ink:#E6E8EA; --sub:#9A9EA6; --faint:#7C818A;
+  --bar:#0F1113; --on-bar:#F1F2F3; --bar-sub:#9A9EA6;
+  --orange:#FF7A2E; --orange-ink:#16181B; --orange-soft:#33221A;
+  --blue:#8DB0FF; --blue-soft:#1C2740;
+  --bubble-in:#23272C; --bubble-out:#3A3F48; --bubble-out-ink:#F1F2F3; --bubble-out-sub:#ADB1B9; --tick-read:#8DB0FF;
+  --code-bg:#0F1113; --code-ink:#E6E8EA;
+  --ok:#5AAE80; --warn:#E6A23C;
+  --shadow:0 18px 44px -26px rgba(0,0,0,.7); --shadow-sm:0 1px 3px rgba(0,0,0,.4);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#16181B; --surface:#1E2126; --surface-2:#23272C; --line:#2E3238;
+  --ink:#E6E8EA; --sub:#9A9EA6; --faint:#7C818A;
+  --bar:#0F1113; --on-bar:#F1F2F3; --bar-sub:#9A9EA6;
+  --orange:#FF7A2E; --orange-ink:#16181B; --orange-soft:#33221A;
+  --blue:#8DB0FF; --blue-soft:#1C2740;
+  --bubble-in:#23272C; --bubble-out:#3A3F48; --bubble-out-ink:#F1F2F3; --bubble-out-sub:#ADB1B9; --tick-read:#8DB0FF;
+  --code-bg:#0F1113; --code-ink:#E6E8EA;
+  --ok:#5AAE80; --warn:#E6A23C;
+  --shadow:0 18px 44px -26px rgba(0,0,0,.7); --shadow-sm:0 1px 3px rgba(0,0,0,.4);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:calc(76px + env(safe-area-inset-top,0px))}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--bar)}
+img{max-width:100%;height:auto}
+a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:4px}
+h1,h2,h3,h4{margin:0;line-height:1.15;letter-spacing:-.02em;text-wrap:balance;font-weight:800}
+p{margin:0}
+.wrap{max-width:var(--maxw);margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+.label{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.serif{font-family:var(--f-display);font-style:italic;font-weight:400;letter-spacing:0}
+
+/* the app's top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:var(--bar);color:var(--on-bar)}
+.bar .wrap{display:flex;align-items:center;gap:20px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--on-bar);font-weight:800;font-size:20px;letter-spacing:-.03em;flex:none}
+.brand:hover{text-decoration:none}
+.brand svg{width:32px;height:32px;display:block}
+.brand small{display:block;font-size:11px;font-weight:600;letter-spacing:0;color:var(--bar-sub);margin-top:-3px}
+.bar nav{display:flex;gap:4px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+.bar nav::-webkit-scrollbar{display:none}
+.bar nav a{color:var(--bar-sub);font-weight:600;font-size:14.5px;padding:8px 12px;border-radius:100px;white-space:nowrap}
+.bar nav a:hover{color:var(--on-bar);background:rgba(255,255,255,.08);text-decoration:none}
+.bar nav a.on{color:var(--on-bar);background:rgba(255,255,255,.12)}
+@media (max-width:720px){.bar nav a.opt{display:none} .brand small{display:none}}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:100px;padding:13px 24px;font-weight:700;font-size:15.5px;border:1px solid transparent;white-space:nowrap;cursor:pointer}
+.btn:hover{text-decoration:none}
+.btn-go{background:var(--orange);color:var(--orange-ink)} .btn-go:hover{filter:brightness(1.06)}
+.btn-dark{background:var(--bar);color:var(--on-bar)} .btn-dark:hover{background:var(--ink);color:var(--bg)}
+.btn-line{background:var(--surface);color:var(--ink);border-color:var(--line)} .btn-line:hover{border-color:var(--ink)}
+
+footer.foot{margin-top:72px;background:var(--bar);color:var(--bar-sub);font-size:14px}
+footer.foot .wrap{padding-block:36px 44px;display:grid;gap:14px}
+footer.foot nav{display:flex;flex-wrap:wrap;gap:6px 20px}
+footer.foot a{color:var(--on-bar);font-weight:600}
+
+/* ---------- manual / guide pages ---------- */
+.doc{display:grid;grid-template-columns:260px minmax(0,1fr);gap:48px;align-items:start;padding-block:36px 0}
+@media (max-width:980px){.doc{grid-template-columns:minmax(0,1fr);gap:20px;padding-block:20px 0}}
+.toc{position:sticky;top:calc(84px + env(safe-area-inset-top,0px));max-height:calc(100vh - 104px);overflow:auto;font-size:14px;padding-right:6px}
+.toc .label{display:block;margin-bottom:10px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+.toc a{display:block;color:var(--sub);padding:5px 10px;border-radius:8px;line-height:1.35}
+.toc a:hover{background:var(--surface-2);color:var(--ink);text-decoration:none}
+.toc a.on{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:var(--shadow-sm)}
+.toc .part{margin-top:12px;padding:4px 10px;font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.toc-m{display:none}
+@media (max-width:980px){.toc{display:none} .toc-m{display:block;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
+  .toc-m summary{cursor:pointer;font-weight:700;padding:10px 0} .toc-m ol{list-style:none;padding:0 0 10px;margin:0;columns:2 220px;font-size:14.5px} .toc-m li{padding:3px 0;break-inside:avoid} .toc-m a{color:var(--sub)}}
+
+.doc-head{display:grid;gap:12px;padding-bottom:22px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.doc-head h1{font-size:clamp(34px,5vw,50px);letter-spacing:-.035em}
+.doc-head .lede{color:var(--sub);font-size:19px;max-width:60ch}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:13px;font-weight:700;padding:5px 11px;border-radius:100px;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+
+.prose{max-width:var(--prose);min-width:0}
+.prose > h1{font-size:30px;margin:56px 0 6px;padding-top:18px;border-top:3px solid var(--bar)}
+.prose h2{font-size:clamp(24px,3vw,30px);margin:52px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.prose h2 .n{color:var(--orange);margin-right:.35em;font-variant-numeric:tabular-nums}
+.prose h3{font-size:20px;margin:34px 0 10px}
+.prose h4{font-size:17px;margin:24px 0 8px}
+.prose p,.prose ul,.prose ol,.prose pre,.prose .tablewrap,.prose .note{margin:0 0 16px}
+.prose li{margin:6px 0} .prose li > p{margin:0 0 8px}
+.prose ul{padding-left:22px}
+.prose ul li::marker{color:var(--faint)}
+.prose b,.prose strong{font-weight:700}
+.prose code{font-family:var(--f-mono);font-size:.86em;background:var(--surface-2);padding:1.5px 5px;border-radius:5px;overflow-wrap:anywhere}
+.prose pre{background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.55;max-width:100%}
+.prose pre code{background:none;padding:0;color:inherit;font-size:inherit;overflow-wrap:normal}
+.prose hr{border:0;border-top:1px solid var(--line);margin:36px 0}
+.prose a code{color:var(--blue)}
+
+/* step-by-step: numbered steps in charcoal circles, like the app's action button */
+.prose ol{list-style:none;padding-left:0;counter-reset:step}
+.prose ol > li{counter-increment:step;position:relative;padding-left:44px;min-height:30px}
+.prose ol > li::before{content:counter(step);position:absolute;left:0;top:-1px;width:30px;height:30px;border-radius:50%;background:var(--bar);color:var(--on-bar);font-size:14px;font-weight:800;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.prose ol ol > li::before{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+.prose ol > li > ul,.prose ol > li > ol,.prose ol > li > pre{margin-top:8px}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.tablewrap table{border-collapse:collapse;width:100%;font-size:15px}
+.tablewrap th,.tablewrap td{border-bottom:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+.tablewrap th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;background:var(--surface-2)}
+.tablewrap tr:last-child td{border-bottom:0}
+.tablewrap td:first-child{font-weight:600}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:var(--shadow-sm)}
+.note > :last-child{margin-bottom:0}
+.note.warn{background:var(--orange-soft);border-color:transparent}
+
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:48px}
+.pager a{display:grid;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 18px;color:var(--ink)}
+.pager a:hover{border-color:var(--ink);text-decoration:none}
+.pager a span{font-size:12px;color:var(--faint);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.pager a.next{text-align:right}
+.top-link{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--bar);color:var(--on-bar);border-radius:100px;padding:10px 16px;font-size:13px;font-weight:700;box-shadow:var(--shadow)}
+.top-link:hover{text-decoration:none}
+
+/* manual cards (guide home and landing) */
+.manuals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:900px){.manuals{grid-template-columns:minmax(0,1fr)}}
+.manual{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;color:var(--ink);box-shadow:var(--shadow-sm)}
+.manual:hover{border-color:var(--ink);text-decoration:none}
+.manual h3{font-size:21px}
+.manual p{color:var(--sub);font-size:15px}
+.manual ul{margin:0;padding-left:18px;color:var(--sub);font-size:14px}
+.manual .go{margin-top:auto;font-weight:700;color:var(--blue);font-size:14.5px}
+
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+.prose.guide{max-width:860px;margin:0 auto;padding-top:36px}
+.prose .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:0 0 20px}
+.prose .cards a{display:grid;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;color:var(--ink);box-shadow:var(--shadow-sm)}
+.prose .cards a:hover{border-color:var(--ink);text-decoration:none}
+.prose .cards b{font-size:17px}
+.prose .cards span{color:var(--sub);font-size:14.5px;line-height:1.45}
+.prose .cards em{font-style:normal;color:var(--faint);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:6px}
+.prose li.task{list-style:none;margin-left:-22px;display:flex;gap:10px;align-items:baseline}
+.prose .box{flex:none;width:16px;height:16px;border:2px solid var(--sub);border-radius:4px;position:relative;top:3px}
+.prose .box.done{background:var(--ok);border-color:var(--ok)}
+.langs{position:relative;flex:none}
+.langs summary{list-style:none;cursor:pointer;color:var(--bar-sub);font-weight:700;font-size:13.5px;padding:7px 12px;border:1px solid rgba(255,255,255,.18);border-radius:100px;white-space:nowrap}
+.langs summary::-webkit-details-marker{display:none}
+.langs summary::after{content:" ▾"}
+.langs[open] summary,.langs summary:hover{color:var(--on-bar)}
+.langs div{position:absolute;right:0;top:calc(100% + 8px);background:var(--bar);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:6px;display:grid;min-width:150px;box-shadow:var(--shadow)}
+.langs div a{color:var(--bar-sub);padding:8px 12px;border-radius:9px;font-weight:600;font-size:14.5px}
+.langs div a:hover{color:var(--on-bar);background:rgba(255,255,255,.08);text-decoration:none}
+.langs div a.on{color:var(--on-bar);background:rgba(255,255,255,.12)}
+@media (max-width:720px){.bar .wrap{gap:10px}}
+
+/* Setup guides: readable navigation, shared by all translated routes. */
+.guide-back{display:inline-block;font-size:14px;font-weight:700;margin-bottom:24px}
+.guide-jumps{display:flex;flex-wrap:wrap;gap:8px 18px;margin:22px 0 30px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.guide-jumps a{font-size:13px;font-weight:700;line-height:1.5}
+.skip-link{position:fixed;top:8px;left:12px;z-index:100;background:var(--surface);color:var(--ink);padding:12px 20px;transform:translateY(-160%);border-radius:8px}
+.skip-link:focus{transform:translateY(0)}
+.label{color:var(--sub)}
+.bar nav{min-width:0}
+@media(max-width:540px){.bar .wrap{height:auto;min-height:64px;flex-wrap:wrap;gap:6px 12px;padding-block:10px}.bar .brand{margin-right:auto}.bar nav{order:3;flex-basis:100%;margin:0}.bar nav a{font-size:13px;padding:5px 10px}.langs{margin-left:auto}html{scroll-padding-top:120px}.prose.guide{padding-top:24px}.btn{white-space:normal}.prose .cards{grid-template-columns:minmax(0,1fr)}}
+
+/* Use the original Parlons application artwork across shared page chrome. */
+.brand img{display:block;width:38px;height:38px;border-radius:22%}
+::selection{background:var(--blue);color:var(--surface)}
+a{text-underline-offset:3px}
+
+/* standalone page: no top bar, no web fonts (system stack), a contents rail on wide screens */
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.doc{padding-top:28px}
+.doc-head .lede{font-size:17px}
+.prose h2 .n{font-variant-numeric:tabular-nums}
+.prose pre{white-space:pre}
+.prose code{overflow-wrap:anywhere}
+@media print{.toc,.toc-m,.top-link{display:none} .doc{display:block} .prose{max-width:none} .prose pre{white-space:pre-wrap;border:1px solid #ccc}}
+</style>
+</head>
+<body>
+<div class="wrap doc">
+  <aside class="toc" aria-label="Contents"><span class="label">Contents</span><ol><li><a href="#1-what-you-are-installing">What you are installing</a></li><li><a href="#2-choose-a-profile">Choose a profile</a></li><li><a href="#3-pre-flight-checklist">Pre-flight checklist</a></li><li><a href="#4-profile-a-plain-full-node-one-command">Profile A: plain full node (one command)</a></li><li><a href="#5-profile-b-wallet-gateway-node-with-megammr">Profile B: wallet gateway node with MegaMMR</a></li><li><a href="#6-profile-c-fleet-endpoint-every-service-in-one-jar">Profile C: fleet endpoint (every service in one jar)</a></li><li><a href="#7-install-by-hand-any-profile">Install by hand (any profile)</a></li><li><a href="#8-parameter-reference">Parameter reference</a></li><li><a href="#9-first-start-what-a-healthy-boot-looks-like">First start: what a healthy boot looks like</a></li><li><a href="#10-pair-your-phone">Pair your phone</a></li><li><a href="#11-back-up-the-seed-and-the-identity">Back up the seed and the identity</a></li><li><a href="#12-verify-from-outside">Verify from outside</a></li><li><a href="#13-optional-services">Optional services</a></li><li><a href="#14-update-roll-back-uninstall">Update, roll back, uninstall</a></li><li><a href="#15-troubleshooting">Troubleshooting</a></li><li><a href="#16-security-checklist">Security checklist</a></li><li><a href="#17-appendix-ports-files-checksums-exit-codes">Appendix: ports, files, checksums, exit codes</a></li></ol></aside>
+  <main class="prose">
+    <div class="doc-head">
+      <span class="label">Runbook</span>
+      <h1>Parlons Node — Installation Runbook</h1>
+      <p class="lede">Parlons Node 0.2.143 (plain and fleet jars). Pre-flight, three install profiles, every parameter, first-boot checks, pairing, backups, outside verification, updates and troubleshooting.</p>
+      <div class="chips"><span class="chip">node-v0.2.143</span><span class="chip">keets sidecar 1.3.0 (fleet jar)</span><span class="chip">Linux + systemd</span></div>
+    </div>
+    <details class="toc-m"><summary>Contents</summary><ol><li><a href="#1-what-you-are-installing">What you are installing</a></li><li><a href="#2-choose-a-profile">Choose a profile</a></li><li><a href="#3-pre-flight-checklist">Pre-flight checklist</a></li><li><a href="#4-profile-a-plain-full-node-one-command">Profile A: plain full node (one command)</a></li><li><a href="#5-profile-b-wallet-gateway-node-with-megammr">Profile B: wallet gateway node with MegaMMR</a></li><li><a href="#6-profile-c-fleet-endpoint-every-service-in-one-jar">Profile C: fleet endpoint (every service in one jar)</a></li><li><a href="#7-install-by-hand-any-profile">Install by hand (any profile)</a></li><li><a href="#8-parameter-reference">Parameter reference</a></li><li><a href="#9-first-start-what-a-healthy-boot-looks-like">First start: what a healthy boot looks like</a></li><li><a href="#10-pair-your-phone">Pair your phone</a></li><li><a href="#11-back-up-the-seed-and-the-identity">Back up the seed and the identity</a></li><li><a href="#12-verify-from-outside">Verify from outside</a></li><li><a href="#13-optional-services">Optional services</a></li><li><a href="#14-update-roll-back-uninstall">Update, roll back, uninstall</a></li><li><a href="#15-troubleshooting">Troubleshooting</a></li><li><a href="#16-security-checklist">Security checklist</a></li><li><a href="#17-appendix-ports-files-checksums-exit-codes">Appendix: ports, files, checksums, exit codes</a></li></ol></details>
+<p>For <strong>Parlons Node 0.2.143</strong> (release tag <code>node-v0.2.143</code>): the plain jar <code>parlons-node-0.2.143.jar</code> and the fleet jar <code>parlons-node-fleet-0.2.143.jar</code>. Every command, flag, port, default and file in this runbook comes from the installer <code>ops/get-parlons-node.sh</code>, the deploy script <code>ops/deploy-parlons-node.sh</code>, the node source (<code>node/</code>, <code>core/</code>, <code>server/</code>) and the Minima fork the jar embeds. Where the code has no value, this runbook says so.</p>
+<p>This is the <strong>install</strong> document: it takes a fresh Linux machine to a verified, paired, backed-up node. The <a href="https://parlons.info/guide/node.html" target="_blank" rel="noopener">Operator's Manual</a> is the reference for everything after that (every property, TLS fronting, the DEX cape, monitoring, troubleshooting in depth).</p>
+<p>Host names in examples (<code>node.example.com</code>, <code>203.0.113.10</code>) are placeholders.</p>
+<hr>
+<h2 id="1-what-you-are-installing"><span class="n">1</span>What you are installing</h2>
+<p>A Parlons Node is <strong>one Java process</strong> that runs:</p>
+<div class="tablewrap"><table><thead><tr><th>Component</th><th>What it does</th><th>Default state</th></tr></thead><tbody><tr><td>Full Minima node</td><td>Validates the chain, talks P2P on TCP 9001, holds the wallet</td><td>on</td></tr><tr><td>Maxima relay ("the cape")</td><td>Phones and other clients dial out to it on TCP 9501; part of the relay mesh</td><td>on</td></tr><tr><td>Wallet gateway</td><td>Allow-listed <code>POST /cmd</code> proxy on <code>127.0.0.1:9585</code> so phones can read balances and broadcast their own signed transactions through this node's MegaMMR</td><td>on, loopback</td></tr><tr><td>NFT hosting</td><td>Serves token image files at <code>/nft/…</code> on the gateway port</td><td>on, needs a public URL</td></tr><tr><td>Parlons account</td><td>The same account code as <code>parlons-cloud.jar</code>: pairing, chat, contacts, push, a local panel on <code>127.0.0.1:9587</code></td><td>on</td></tr><tr><td>Admin RPC</td><td>Every node command, loopback only, <code>127.0.0.1:&lt;p2p+4&gt;</code></td><td>off (fleet: on)</td></tr><tr><td>DEX relay cape</td><td>Dexicon's order-book relay on <code>127.0.0.1:9602</code></td><td>off</td></tr><tr><td>keets chat bridge</td><td>KeetChat interop through the keets sidecar</td><td>off (fleet: on)</td></tr><tr><td><strong>Fleet mode</strong> (fleet jar only)</td><td>Minima server role, keets transport, public HyperDHT bootstrap on UDP 49737 and a keets mailbox, from Node.js embedded in the jar</td><td>off (<code>-Dparlons.fleet=true</code>)</td></tr></tbody></table></div>
+<p><strong>One seed drives everything.</strong> On first boot the node's wallet seed is copied into <code>identity.txt</code>, and the relay identity (<code>Mx…</code>) and the account address (<code>MAX#…</code>) are derived from it. That seed is a spendable wallet. It is never printed to a log; you back it up in §11.</p>
+<p>Who needs a Parlons Node? Most people do not. An always-on <strong>account</strong> without the chain runs in 1 GB with <code>get-parlons-cloud.sh</code>. Run a Parlons Node when you want a full copy of the chain, a relay for the network, a wallet gateway for phones, or a fleet endpoint.</p>
+<hr>
+<h2 id="2-choose-a-profile"><span class="n">2</span>Choose a profile</h2>
+<p>Pick one before you start. The commands later in the runbook are per profile.</p>
+<div class="tablewrap"><table><thead><tr><th></th><th><strong>A: Plain full node</strong></th><th><strong>B: Wallet gateway node</strong></th><th><strong>C: Fleet endpoint</strong></th></tr></thead><tbody><tr><td>Jar</td><td><code>parlons-node-0.2.143.jar</code></td><td><code>parlons-node-0.2.143.jar</code></td><td><code>parlons-node-fleet-0.2.143.jar</code></td></tr><tr><td>MegaMMR</td><td>off (<code>--no-megammr</code>)</td><td><strong>on</strong> + snapshot import</td><td>on if the box has the RAM, else off</td></tr><tr><td>Install path</td><td>one-line installer</td><td>deploy script (recommended) or by hand</td><td>one-line installer <code>--fleet</code></td></tr><tr><td>RAM</td><td>2 GB (installer minimum: 1 GB)</td><td><strong>8 GB</strong> (3 GB heap)</td><td><strong>2 GB minimum</strong>, 4 GB+ comfortable, 8 GB for MegaMMR</td></tr><tr><td>CPU arch</td><td>any 64-bit Java</td><td>any 64-bit Java</td><td><strong>x86_64 or aarch64 only</strong> (embedded Node.js)</td></tr><tr><td>Needs a public IPv4</td><td>no (home box behind NAT works with port forwards)</td><td>yes, plus a DNS name and TLS</td><td><strong>yes, directly reachable</strong></td></tr><tr><td>Inbound ports</td><td>TCP 9001, TCP 9501</td><td>TCP 9001, 9501, 80, 443</td><td>TCP 9001, TCP+UDP 9501, <strong>UDP 49737</strong>, (80, 443 if TLS)</td></tr><tr><td>What it gives the network</td><td>a Minima peer and a relay</td><td>the above + a wallet gateway + NFT hosting (+ DEX cape)</td><td>the above + keets transport, DHT bootstrap node, keets mailbox</td></tr><tr><td>Java heap (<code>-Xmx</code>)</td><td>768m</td><td>3g</td><td>768m–2g without MegaMMR; 3g with</td></tr></tbody></table></div>
+<p>Notes on the choice:</p>
+<ul><li><strong>The installer sizes the node itself:</strong> with <strong>3.5 GB of RAM or more</strong> it turns MegaMMR on with a <strong>2 GB heap</strong>; below that, a plain node with a 768 MB heap. The fleet's own experience is that a MegaMMR node wants a <strong>3 GB heap</strong> (2 GB and 2.5 GB heaps looped on out-of-memory). So on a 4 GB box pass <code>--no-megammr</code> explicitly, and on an 8 GB box pass <code>--heap 3g</code>. Do not accept the installer's MegaMMR default on a 4 GB machine.</li><li><strong>MegaMMR is only useful once a snapshot is imported</strong> (§5, step 5). The initial sync does not fill it. Until the import, balances for existing addresses come back empty.</li><li><strong>Profile C is Linux x86_64/aarch64 only.</strong> A 32-bit Raspberry Pi OS cannot be a fleet box. A Mac refuses fleet mode with a clear message. Existing fleet boxes that already run the three separate keets services are not migrated by this runbook; it is for new boxes.</li><li>Mac or Windows: install Parlons Desktop instead. The jar is Linux-with-systemd on a server.</li></ul>
+<hr>
+<h2 id="3-pre-flight-checklist"><span class="n">3</span>Pre-flight checklist</h2>
+<p>Run these on the target machine as root (or with <code>sudo</code>) before you install anything. Each check says what must come back.</p>
+<ol><li><strong>Linux with systemd.</strong> Any mainstream distribution (Debian, Ubuntu, Fedora, Alpine, Arch). This must print <code>systemd</code>:
+<pre><code>ps -p 1 -o comm=</code></pre></li><li><strong>CPU architecture.</strong> For profile C this must print <code>x86_64</code> or <code>aarch64</code>:
+<pre><code>uname -m</code></pre></li><li><strong>RAM.</strong> Compare with the table in §2:
+<pre><code>free -m | awk &#x27;/Mem:/ {print $2 &quot; MB&quot;}&#x27;</code></pre>
+<p>The installer refuses under 900 MB, and under 1900 MB for <code>--fleet</code>.</p></li><li><strong>Disk.</strong> The chain grows. Budget for the chain, a 460 MB MegaMMR snapshot while importing, and any NFT files or relay blob shelf. Check free space where <code>/var/lib</code> lives:
+<pre><code>df -h /var/lib</code></pre></li><li><strong>Java.</strong> 11 or newer is required; <strong>21 or newer is recommended</strong> (the relay then uses virtual threads and its connection cap rises from 512 to 4096). The installer adds a headless JRE if <code>java</code> is missing. If Java is already there, check it and that the <code>jdk.httpserver</code> module is present (the gateway, admin RPC, panel and DEX cape need it):
+<pre><code>java -version
+java --list-modules | grep jdk.httpserver</code></pre>
+<p>The second command must print one line.</p></li><li><strong>Clock.</strong> A node with a wrong clock never attaches. This must show <code>synchronized: yes</code>:
+<pre><code>timedatectl | grep -E &#x27;synchronized|NTP&#x27;</code></pre></li><li><strong>Ports free.</strong> Nothing may already hold the node's ports. This must print nothing:
+<pre><code>ss -ltnp | grep -E &#x27;:(9001|9003|9004|9005|9501|9585|9587|9602) &#x27;
+ss -lunp | grep -E &#x27;:(9501|49737) &#x27;</code></pre>
+<p>If a stock Minima node holds 9001, plan to move the node (§8, <code>parlons.node.port</code>). If an old <code>maxima-relay.service</code> holds 9501, plan to replace it (§7, step 6).</p></li><li><strong>Public address and DNS</strong> (profiles B and C). The box must have a global IPv4 address, and for profile B a DNS name pointing at it. This must print a public address, not <code>10.x</code>, <code>172.16-31.x</code>, <code>192.168.x</code> or <code>100.64-127.x</code>:
+<pre><code>ip -4 -o addr show scope global | awk &#x27;{print $4}&#x27;</code></pre></li><li><strong>Provider firewall.</strong> Open the inbound ports for your profile (§2) in the cloud console (Hetzner, Vultr, AWS, …) or forward them on your home router. The installer only opens them in <code>ufw</code>/<code>firewalld</code> on the box; a provider firewall sits in front of that.</li><li><strong>Outbound access.</strong> The box must reach GitHub (the download), the rootnode <code>65.109.31.226:9001</code>, the mesh relays on 9501 and, for keets, UDP 49737 to the DHT bootstraps. On a default-deny-outbound box, allow those first.</li><li><strong>A terminal.</strong> Run the installer in an interactive SSH session. Without a TTY it skips the pairing-password and QR steps (you can run them later with <code>parlons-pair</code>).</li></ol>
+<hr>
+<h2 id="4-profile-a-plain-full-node-one-command"><span class="n">4</span>Profile A: plain full node (one command)</h2>
+<p>A full Minima node plus a relay plus your always-on account, without MegaMMR. 2 GB of RAM is plenty; the installer accepts 1 GB.</p>
+<h3 id="41-install">4.1 Install</h3>
+<ol><li>Open <strong>TCP 9001</strong> and <strong>TCP 9501</strong> inbound in the provider firewall or router (§3, step 9).</li><li>In an SSH session on the box, run the installer with <code>--no-megammr</code>:
+<pre><code>curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --no-megammr</code></pre>
+<p>Pass <code>--heap 1g</code> as well if the box has 4 GB or more and you want the node to have more room.</p></li><li>Watch the five steps:
+<ol><li><code>[1/5] Java</code> — installs <code>default-jre-headless</code> (apt), <code>java-21-openjdk-headless</code> (dnf), <code>openjdk21-jre-headless</code> (apk) or <code>jre-openjdk-headless</code> (pacman) if needed, plus <code>qrencode</code>.</li><li><code>[2/5] Newest Parlons Node release</code> — finds the newest <code>node-v…</code> release, downloads <code>parlons-node-&lt;ver&gt;.jar</code> and refuses it unless its sha256 matches the release's <code>SHA256SUMS</code>. It prints <code>sha256 verified: &lt;hash&gt;</code>. Compare with §17.3.</li><li><code>[3/5] Service (starts at boot)</code> — creates the <code>maxima</code> system user, <code>/var/lib/parlons-node</code> (mode 700), <code>/opt/maxima/parlons-node.jar</code> (a symlink to the versioned jar), <code>/usr/local/bin/parlons-pair</code> and the hardened unit <code>/etc/systemd/system/parlons-node.service</code>. It prints the sizing: <code>heap 768m (MemoryMax 1280M), MegaMMR false, syncing from 65.109.31.226:9001</code>.</li><li><code>[4/5] Firewall</code> — allows 9001/tcp and 9501/tcp in ufw or firewalld when one is active.</li><li><code>[5/5] Waiting for your account to come online</code> — up to 4 minutes, then prints <strong>your account address in full</strong> (<code>MAX#…</code>).</li></ol></li><li>When asked, type an <strong>admin pairing password</strong> twice. It protects every future invitation for your own devices. Then type it once more: the installer draws the <strong>QR code</strong> your phone scans (§10).</li><li>Note the two lines the installer prints last: <code>BACK UP YOUR SEED</code> and the manual link. Do §11 today.</li></ol>
+<h3 id="42-what-the-installer-wrote">4.2 What the installer wrote</h3>
+<p>The unit's <code>ExecStart</code> for profile A is exactly:</p>
+<pre><code>ExecStart=/usr/bin/java -Xmx768m \
+    -Dparlons.node.data=/var/lib/parlons-node \
+    -Dparlons.node.port=9001 \
+    -Dparlons.relay.port=9501 \
+    -Dparlons.node.megammr=false \
+    -Dparlons.node.rootnode=65.109.31.226:9001 \
+    -jar /opt/maxima/parlons-node.jar</code></pre>
+<p>(<code>/usr/bin/java</code> is whatever <code>readlink -f &quot;$(command -v java)&quot;</code> resolved to on your box.) Everything else in the unit is the hardening and the resource ceilings shown in §7. The admin RPC is <strong>off</strong>, the DEX cape is off, there is no keets sidecar, and the mesh uses the compiled-in bootstrap list.</p>
+<h3 id="43-check-it">4.3 Check it</h3>
+<p>Go to §9 (first start) and §12 (verify from outside).</p>
+<hr>
+<h2 id="5-profile-b-wallet-gateway-node-with-megammr"><span class="n">5</span>Profile B: wallet gateway node with MegaMMR</h2>
+<p>A node that phones can use as a wallet gateway. It needs <strong>8 GB of RAM</strong>, a <strong>3 GB heap</strong>, the <strong>admin RPC</strong> (for the MegaMMR import), a <strong>DNS name with TLS</strong> in front of the gateway, and a one-time <strong>MegaMMR snapshot import</strong>. The deploy script does the node part in one command; the TLS front is yours.</p>
+<h3 id="51-install-with-the-deploy-script-from-your-own-computer">5.1 Install with the deploy script (from your own computer)</h3>
+<p>The deploy script runs on your computer against a fresh box you reach over SSH as root with a key. Running it again later is the update path.</p>
+<ol><li>Clone the repository on your computer:
+<pre><code>git clone https://github.com/eurobuddha/maxima.git
+cd maxima</code></pre></li><li>Download the jar and the checksums into <code>dist/</code>, and verify. The hash must match §17.3:
+<pre><code>mkdir -p dist &amp;&amp; cd dist
+curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/parlons-node-0.2.143.jar
+curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/SHA256SUMS
+grep &#x27; parlons-node-0.2.143.jar$&#x27; SHA256SUMS | shasum -a 256 -c -
+cd ..</code></pre>
+<p>It must print <code>parlons-node-0.2.143.jar: OK</code>.</p></li><li>Check key-based root SSH (the script uses <code>BatchMode=yes</code> and cannot answer a password prompt):
+<pre><code>ssh -o BatchMode=yes root@node.example.com true &amp;&amp; echo ssh-ok</code></pre></li><li>Open <strong>TCP 9001, 9501, 80 and 443</strong> in the provider firewall.</li><li>Run the deploy. This is the full profile B command; every flag is explained in §8.4:
+<pre><code>ops/deploy-parlons-node.sh root@node.example.com \
+    --jar dist/parlons-node-0.2.143.jar \
+    --heap 3g \
+    --rootnode 65.109.31.226:9001 \
+    --rpc \
+    --megammr-seed https://eurobuddha.com/mega.mmr \
+    --public https://node.example.com/parlons-node \
+    --dex 9602 --dex-public https://node.example.com/dex-relay</code></pre>
+<p>Leave out the <code>--dex …</code> line if you do not want to carry Dexicon's order book. <strong>Never pass <code>--dex</code> without <code>--dex-public</code></strong>: without the public URL the DEX cape binds <code>0.0.0.0</code> and the script opens the port as plain HTTP to the internet.</p>
+<p>What the script does, in order: installs a headless JRE if needed, creates the <code>maxima</code> user and <code>/var/lib/parlons-node</code>, uploads the jar to <code>/opt/maxima/parlons-node-0.2.143.jar</code> and verifies its sha256 <strong>before</strong> flipping the <code>parlons-node.jar</code> symlink, installs <code>parlons-pair</code>, writes the unit, opens 9001 and 9501 in ufw/firewalld, starts the node, waits for the relay port, then (step 6c) downloads <code>mega.mmr</code> into the data directory, imports it over the loopback RPC, restarts, and proves <code>megammr.mmr</code> is larger than 1 MB. It ends with the account address, the <code>Mx…</code> identity and the gateway bearer token, all in full.</p></li><li>Set up the TLS front (§5.3). The public URLs are already in the unit from <code>--public</code> and <code>--dex-public</code>, so no unit edit is needed.</li><li>Pair your phone (§10), back up the seed (§11), verify from outside (§12).</li></ol>
+<h3 id="52-install-with-the-one-line-installer-instead">5.2 Install with the one-line installer instead</h3>
+<p>If you prefer to work on the box, the installer gets you most of the way; you then add three properties and import the MegaMMR by hand.</p>
+<ol><li>Open the ports (step 4 above) and run the installer with an explicit heap:
+<pre><code>curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --heap 3g</code></pre>
+<p>With 3.5 GB of RAM or more the installer turns MegaMMR on. <code>--heap 3g</code> gives it <code>MemoryMax=4096M</code>.</p></li><li>Edit the unit to turn on the admin RPC and name the public URL. Back it up first:
+<pre><code>cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-gateway
+nano /etc/systemd/system/parlons-node.service</code></pre>
+<p>Add these lines inside <code>ExecStart</code>, before <code>-jar</code> (each line ends with a backslash):</p>
+<pre><code>-Dparlons.node.rpc=true \
+-Dparlons.node.public=https://node.example.com/parlons-node \</code></pre></li><li>Reload and restart, then check the boot line says <code>admin rpc 127.0.0.1:9005 (loopback-bound)</code>:
+<pre><code>systemd-analyze verify /etc/systemd/system/parlons-node.service
+systemctl daemon-reload &amp;&amp; systemctl restart parlons-node
+sleep 25; journalctl -u parlons-node -b --no-pager | grep -E &#x27;Parlons Node|admin rpc&#x27; | grep -v seed</code></pre></li><li>Import the MegaMMR snapshot (§5.4).</li><li>Set up the TLS front (§5.3).</li></ol>
+<h3 id="53-the-tls-front">5.3 The TLS front</h3>
+<p>The gateway (<code>127.0.0.1:9585</code>) and the DEX cape (<code>127.0.0.1:9602</code>) speak plain HTTP on loopback. A web server on the box terminates TLS and forwards two paths:</p>
+<div class="tablewrap"><table><thead><tr><th>Public path</th><th>Forward to</th><th>Strip</th></tr></thead><tbody><tr><td><code>https://node.example.com/parlons-node/…</code></td><td><code>http://127.0.0.1:9585/…</code></td><td><code>/parlons-node</code></td></tr><tr><td><code>https://node.example.com/dex-relay/…</code></td><td><code>http://127.0.0.1:9602/…</code></td><td><code>/dex-relay</code></td></tr></tbody></table></div>
+<p>Never forward the admin RPC (9005), the panel (9587) or MDS.</p>
+<p>With <strong>Caddy</strong> (gets its own certificate):</p>
+<pre><code>node.example.com {
+    handle /dex-relay/* {
+        uri strip_prefix /dex-relay
+        reverse_proxy 127.0.0.1:9602
+    }
+    handle /parlons-node/* {
+        uri strip_prefix /parlons-node
+        reverse_proxy 127.0.0.1:9585
+    }
+    # a catch-all `handle { … }` for your own site goes LAST
+}</code></pre>
+<p>Use <code>handle</code> + <code>uri strip_prefix</code>, <strong>not</strong> <code>handle_path</code>: Caddy sorts <code>handle_path</code> after a catch-all <code>handle</code>, which then answers every DEX request with your web page.</p>
+<p>With <strong>nginx</strong>, inside the <code>server { listen 443 ssl; … }</code> block:</p>
+<pre><code>location /dex-relay/ {
+    proxy_pass http://127.0.0.1:9602/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_read_timeout 60s;
+}
+location /parlons-node/ {
+    proxy_pass http://127.0.0.1:9585/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    client_max_body_size 2m;
+}</code></pre>
+<p>The <code>X-Forwarded-For</code> line is required for the DEX block: without it every DEX client shares one rate-limit bucket. Apache's equivalent is in the manual (<a href="https://parlons.info/guide/node.html#11-tls-fronting-caddy-nginx-apache" target="_blank" rel="noopener">§11</a>).</p>
+<p>Then test from <strong>another machine</strong>:</p>
+<pre><code>curl -s https://node.example.com/dex-relay/dex/health          # {&quot;ok&quot;:true,&quot;version&quot;:&quot;0.1.5&quot;,...}
+curl -s -o /dev/null -w &#x27;%{http_code}\n&#x27; -X POST https://node.example.com/parlons-node/cmd   # 401</code></pre>
+<h3 id="54-import-the-megammr-snapshot-once">5.4 Import the MegaMMR snapshot (once)</h3>
+<p>The deploy script's <code>--rpc --megammr-seed</code> already did this. Do it by hand after the installer path, or whenever <code>megammr.mmr</code> is under 1 MB.</p>
+<ol><li>The admin RPC must answer:
+<pre><code>curl -s http://127.0.0.1:9005/status | head -c 200; echo</code></pre></li><li>Check the current size (under 1 MB = empty):
+<pre><code>stat -c %s /var/lib/parlons-node/1.1/databases/megammr.mmr</code></pre></li><li>Download the snapshot into the data directory (about 460 MB; <code>-c</code> resumes):
+<pre><code>cd /var/lib/parlons-node
+wget -c -O mega.mmr https://eurobuddha.com/mega.mmr
+chown maxima:maxima mega.mmr</code></pre></li><li>Import over loopback. It must reply <code>&quot;status&quot;:true</code> and ends with a node shutdown:
+<pre><code>curl -s -m 3600 &#x27;http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr&#x27;</code></pre></li><li>Bring the node back and check the file is now over 1 MB:
+<pre><code>systemctl restart parlons-node
+sleep 20; stat -c %s /var/lib/parlons-node/1.1/databases/megammr.mmr</code></pre></li><li>Query a funded address. The balance must not be empty:
+<pre><code>curl -s &#x27;http://127.0.0.1:9005/balance%20megammr:true%20address:&lt;a funded Mx or 0x address&gt;&#x27;</code></pre></li><li>Delete the download:
+<pre><code>rm -f /var/lib/parlons-node/mega.mmr</code></pre></li></ol>
+<p><strong>Order matters:</strong> if you also adopt an existing seed phrase (§13.6), do that <strong>before</strong> the import. A resync resets the chain databases and throws the imported MegaMMR away.</p>
+<h3 id="55-confirm-the-gateway-is-advertised">5.5 Confirm the gateway is advertised</h3>
+<p>Phones learn the gateway from the relay greeting only when <strong>MegaMMR is on</strong>, <strong><code>parlons.node.public</code> is set</strong> and <strong>the relay is on</strong>. Check:</p>
+<pre><code>journalctl -u parlons-node -b --no-pager | grep -E &#x27;wallet gateway (up|advertised|FAILED)&#x27;</code></pre>
+<p>You want <code>wallet gateway advertised to phones: https://node.example.com/parlons-node/cmd</code>. Then test the token (§12, step 4).</p>
+<hr>
+<h2 id="6-profile-c-fleet-endpoint-every-service-in-one-jar"><span class="n">6</span>Profile C: fleet endpoint (every service in one jar)</h2>
+<p>The fleet jar makes a <strong>fresh, directly reachable Linux box</strong> a full endpoint for every service with one install. On top of the node, cape, gateway and account it turns on:</p>
+<ul><li>the Minima <strong>server role</strong> (<code>-server</code>: the node accepts inbound P2P links),</li><li>the <strong>keets transport</strong> for the embedded node,</li><li>a public <strong>HyperDHT bootstrap node</strong> on <strong>UDP 49737</strong>,</li><li>a <strong>keets mailbox</strong> (store-and-forward for phones that are offline),</li><li>the <strong>admin RPC</strong> (loopback) and, when you give it a TLS URL, the <strong>DEX cape</strong>.</li></ul>
+<p>The keets sidecar runs <strong>inside the jar's own Node.js</strong> (v20.20.2, embedded for linux-x64 and linux-arm64, with keets sidecar 1.3.0), extracted once into <code>/var/lib/parlons-node/runtime/node-v20.20.2+sidecar-1.3.0/</code>. Nothing else is installed on the box.</p>
+<h3 id="61-requirements-that-differ-from-a-and-b">6.1 Requirements that differ from A and B</h3>
+<ul><li><strong>x86_64 or aarch64</strong> (<code>uname -m</code>). Anything else is refused: "A fleet box needs x86_64 or aarch64".</li><li><strong>2 GB of RAM minimum</strong> (the installer refuses under 1900 MB). The unit's <code>MemoryMax</code> is heap + 512 MB <strong>+ 1 GB</strong> for the sidecar. 4 GB is comfortable; 8 GB with <code>--heap 3g</code> for MegaMMR.</li><li><strong>A public IPv4 address on the box itself.</strong> The installer detects the box's global-scope address and refuses private, loopback and CGNAT (<code>100.64/10</code>) addresses. Behind NAT, pass <code>--public-host &lt;the address the world reaches you on&gt;</code> <strong>and</strong> forward every port below.</li><li><strong>Inbound ports:</strong> TCP 9001, TCP 9501, <strong>UDP 9501</strong> (STUN), <strong>UDP 49737</strong> (the DHT). The installer opens all four in ufw/firewalld; open them in the provider firewall too.</li><li>The unit gains <code>AF_NETLINK</code> (the sidecar's <code>udx-native</code> watches interfaces over netlink) and <code>TasksMax=2048</code>.</li></ul>
+<h3 id="62-install">6.2 Install</h3>
+<ol><li>Open <strong>TCP 9001, TCP 9501, UDP 9501, UDP 49737</strong> (and 80/443 if you will front a DEX cape) in the provider firewall.</li><li>In an SSH session on the box, run the installer with <code>--fleet</code>. Add <code>--no-megammr</code> on a box under 8 GB, <code>--heap 3g</code> on one with 8 GB or more:
+<pre><code>curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --fleet --no-megammr</code></pre>
+<p>If the box's address is not on one of its interfaces (NAT), name it:</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --fleet --public-host 203.0.113.10 --no-megammr</code></pre></li><li>The installer downloads <strong><code>parlons-node-fleet-0.2.143.jar</code></strong> (about 109 MB), verifies its sha256 against the release's <code>SHA256SUMS</code> (§17.3), and writes the unit with two extra properties:
+<pre><code>ExecStart=/usr/bin/java -Xmx768m \
+    -Dparlons.node.data=/var/lib/parlons-node \
+    -Dparlons.node.port=9001 \
+    -Dparlons.relay.port=9501 \
+    -Dparlons.node.megammr=false \
+    -Dparlons.node.rootnode=65.109.31.226:9001 \
+    -Dparlons.fleet=true -Dparlons.public.host=203.0.113.10 \
+    -jar /opt/maxima/parlons-node.jar</code></pre>
+<p>plus <code>RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK</code>, <code>TasksMax=2048</code> and the larger <code>MemoryMax</code>. <code>/opt/maxima/parlons-node.jar</code> is a symlink to the <strong>fleet</strong> jar.</p></li><li>Set the admin pairing password and scan the QR as in profile A (§10).</li><li>The installer then waits up to 2 minutes for the sidecar and prints the <strong>FLEET ENDPOINT</strong> banner (§6.4). Copy it somewhere safe; you need the mailbox pubkey for §6.5.</li></ol>
+<h3 id="63-what-fleet-mode-sets-so-you-know-what-you-are-running">6.3 What fleet mode sets (so you know what you are running)</h3>
+<p>With <code>-Dparlons.fleet=true</code> the node applies these before anything reads them. An explicit value you set yourself always wins; Minima flags you put in <code>parlons.node.args</code> win over fleet mode's.</p>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Fleet value</th><th>Why</th></tr></thead><tbody><tr><td><code>parlons.node.rpc</code></td><td><code>true</code> (if unset)</td><td>the operator's channel for <code>vault</code>, <code>megammr action:import</code>, <code>keets action:info</code></td></tr><tr><td><code>parlons.relay.host</code></td><td>the <code>parlons.public.host</code> value</td><td>the cape names itself at once instead of waiting to learn its address from peers</td></tr><tr><td><code>parlons.dex.port</code></td><td><code>9602</code> <strong>only if</strong> <code>parlons.dex.public</code> is set</td><td>a plain-http DEX URL would be refused by phones, so the cape stays off until you front it with TLS</td></tr><tr><td>Minima <code>-server</code> role</td><td>on (unless you passed <code>-isclient</code>, <code>-desktop</code> or <code>-mobile</code>)</td><td>accept inbound P2P links</td></tr><tr><td>Minima <code>-host</code></td><td>the public host</td><td>the node advertises the right address</td></tr><tr><td>Minima <code>-keets</code></td><td>on</td><td>the embedded node runs the keets transport</td></tr><tr><td>Minima <code>-keetssidecar</code> / <code>-keetsnode</code></td><td>the extracted <code>runtime/…/keets-sidecar/index.js</code> and <code>runtime/…/node/bin/node</code></td><td>the embedded Node.js, not a system one</td></tr><tr><td>Sidecar extra arguments</td><td><code>--serve --dht-port 49737 --mailbox-dir /var/lib/parlons-node/keets-mailbox --public-host &lt;ip&gt;</code></td><td>one sidecar process is transport + DHT bootstrap + mailbox</td></tr><tr><td><code>parlons.keets.dhtport</code></td><td><code>49737</code> (change it only if you must; every bootstrap list uses 49737)</td><td>the DHT's fixed UDP port</td></tr></tbody></table></div>
+<p>The embedded node also fetches the <strong>signed keets mailbox list</strong> at boot from <code>https://eurobuddha.com/keets/mailboxes.json</code>, checks its Ed25519 signature against the key baked into the fork (<code>2b176758f4c9eedcd514cb2accb73d4aa5332821339e41db2aa51da4707a1883</code>), rejects a list older than the one it has, caches it under the node's <code>keets/</code> folder and passes it to the sidecar. The log line is <code>[KEETS] mailbox list : N mailboxes</code>. (The plain jar does this too.)</p>
+<h3 id="64-the-fleet-endpoint-banner">6.4 The FLEET ENDPOINT banner</h3>
+<p>Once the sidecar has written its keys (<code>&lt;node data&gt;/keets/pubkey</code> and <code>/var/lib/parlons-node/keets-mailbox/pubkey</code>), the node logs:</p>
+<pre><code>[parlons-node] FLEET MODE: Minima server role on, keets transport + DHT bootstrap (udp 49737) + keets mailbox in one sidecar (node v20.20.2, sidecar 1.3.0, runtime /var/lib/parlons-node/runtime/node-v20.20.2+sidecar-1.3.0), public host 203.0.113.10
+[parlons-node] FLEET ENDPOINT
+[parlons-node]   keets pubkey    0x&lt;64 hex&gt;
+[parlons-node]   DHT bootstrap   203.0.113.10:49737   (add to GeneralParams.KEETS_BOOTSTRAP to seed first contact)
+[parlons-node]   keets mailbox   &lt;64 hex&gt;
+[parlons-node]   publish it:     node keets/tools/mailboxes-sign.js --key ~/.keets/mailbox-signing.key --in mailboxes.json --out mailboxes.json --add &lt;64 hex&gt;   then copy mailboxes.json to eurobuddha.com/keets/</code></pre>
+<p>Read it again any time:</p>
+<pre><code>journalctl -u parlons-node --no-pager | grep -A4 &#x27;FLEET ENDPOINT&#x27; | tail -5</code></pre>
+<h3 id="65-get-the-box-into-the-fleet-lists-one-message-to-the-list-maintainer">6.5 Get the box into the fleet lists (one message to the list maintainer)</h3>
+<p>The Minima P2P mesh and the relay mesh <strong>pick the box up by gossip</strong>; nothing to do. Two things need a human:</p>
+<ol><li><strong>The keets mailbox</strong> joins the fleet only when its pubkey is <strong>signed into the published list</strong>. Send the maintainer of <code>https://eurobuddha.com/keets/mailboxes.json</code> the <code>keets mailbox</code> line from the banner, in full. The maintainer runs the <code>publish it:</code> command the node printed (the signing key never leaves their machine) and publishes the new <code>mailboxes.json</code>. Every node re-fetches the list at boot, so the box becomes a mailbox for phones over the next restarts.</li><li><strong>The DHT bootstrap</strong> <code>203.0.113.10:49737</code> becomes a first-contact bootstrap for new installs only when it is added to the fork's compiled-in <code>KEETS_BOOTSTRAP</code> list at the next release. Until then the box is still a full routing node that others find through the DHT itself. Send the maintainer the <code>DHT bootstrap</code> line too.</li></ol>
+<p>Nothing in the banner is secret. The mailbox and keets <strong>private</strong> keys are in <code>keypair</code> files under <code>/var/lib/parlons-node/keets-mailbox/</code> and the node's <code>keets/</code> folder, owner <code>maxima</code>, and are never printed.</p>
+<h3 id="66-check-the-fleet-services">6.6 Check the fleet services</h3>
+<ol><li>All four public listeners are up (the DHT is UDP):
+<pre><code>ss -ltnp | grep -E &#x27;:(9001|9501) &#x27;
+ss -lunp | grep -E &#x27;:(9501|49737) &#x27;</code></pre></li><li>The keets transport is up and sees the mailbox list, over the admin RPC:
+<pre><code>curl -s http://127.0.0.1:9005/keets%20action:info</code></pre>
+<p>The reply carries the keets pubkey, the API port, the sidecar version and a <code>dht</code> block with <code>mailboxes</code> and <code>serve</code>.</p></li><li>From <strong>another machine</strong>, the DHT port answers (UDP, so use a DHT-aware check rather than <code>nc</code>): the simplest proof is a phone or desktop on the keets build whose <code>keets action:info</code> lists the new box among its DHT peers, or the maintainer's bootstrap check after the list update.</li><li>Check the heartbeat as in §9.</li></ol>
+<h3 id="67-add-a-tls-front-and-the-dex-cape-to-a-fleet-box-optional">6.7 Add a TLS front and the DEX cape to a fleet box (optional)</h3>
+<p>Fleet mode turns the DEX cape on <strong>only</strong> when it has a public URL:</p>
+<ol><li>Set up Caddy or nginx as in §5.3 for <code>/dex-relay/</code> (and <code>/parlons-node/</code> if you also want the gateway and NFT hosting public).</li><li>Add to the unit's <code>ExecStart</code> and restart (§7, step 7):
+<pre><code>-Dparlons.dex.public=https://node.example.com/dex-relay \
+-Dparlons.node.public=https://node.example.com/parlons-node \</code></pre>
+<p>Fleet mode then sets <code>parlons.dex.port=9602</code> and binds it to loopback.</p></li><li>Check <code>dex relay 0.1.5 up on 127.0.0.1:9602</code> and <code>dex relay announced in the mesh as https://…</code> in the log.</li></ol>
+<hr>
+<h2 id="7-install-by-hand-any-profile"><span class="n">7</span>Install by hand (any profile)</h2>
+<p>These steps do on the box what the installer and the deploy script do. Use them when you want to see and own every line. Run as root.</p>
+<ol><li>Install Java (11+, 21+ recommended) and <code>qrencode</code>:
+<pre><code>apt-get update &amp;&amp; apt-get install -y default-jre-headless qrencode</code></pre></li><li>Create the service user and directories:
+<pre><code>id maxima &gt;/dev/null 2&gt;&amp;1 || useradd --system --home /var/lib/maxima --shell /usr/sbin/nologin maxima
+mkdir -p /opt/maxima /var/lib/parlons-node
+chown maxima:maxima /var/lib/parlons-node
+chmod 700 /var/lib/parlons-node</code></pre></li><li>Download the jar for your profile and verify it. Plain jar:
+<pre><code>cd /opt/maxima
+curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/parlons-node-0.2.143.jar
+echo &#x27;ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar&#x27; | sha256sum -c -
+chmod 644 parlons-node-0.2.143.jar
+ln -sfn parlons-node-0.2.143.jar parlons-node.jar</code></pre>
+<p>Fleet jar:</p>
+<pre><code>cd /opt/maxima
+curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/parlons-node-fleet-0.2.143.jar
+echo &#x27;3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9  parlons-node-fleet-0.2.143.jar&#x27; | sha256sum -c -
+chmod 644 parlons-node-fleet-0.2.143.jar
+ln -sfn parlons-node-fleet-0.2.143.jar parlons-node.jar</code></pre>
+<p><code>sha256sum -c</code> must print <code>…: OK</code>. If not, delete the file and do not run it. Confirm the version without starting a node: <code>java -jar /opt/maxima/parlons-node.jar --version</code> prints <code>parlons-node 0.2.143</code>.</p></li><li>Install the pairing helper:
+<pre><code>curl -fsSL -o /usr/local/bin/parlons-pair https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/parlons-pair
+chmod 755 /usr/local/bin/parlons-pair</code></pre></li><li>Write <code>/etc/systemd/system/parlons-node.service</code>. This is the installer's unit with every optional property shown; delete the lines you do not want. <code>systemd</code> does not allow comments inside <code>ExecStart</code>, so the explanations sit above it.
+<pre><code>[Unit]
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
+Documentation=https://parlons.info/guide/node.html
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=maxima
+Group=maxima
+# -Xmx                 768m plain / 3g MegaMMR. MemoryMax below must sit ABOVE it.
+# parlons.node.data    data dir: seed, identity.txt, tokens, chain
+# parlons.node.port    Minima P2P (public). Derived: MDS +2/+3, admin RPC +4
+# parlons.node.rpc     loopback admin RPC (needed for vault, megammr import, keets info)
+# parlons.node.megammr keep the MegaMMR (wallet gateway needs it; 3g heap)
+# parlons.node.rootnode a Minima peer to discover the chain from (without it: no sync)
+# parlons.relay.port   Maxima cape, public TCP (+ UDP STUN on the same port); 0 = off; shared = rides 9001
+# parlons.relay.peers  mesh bootstrap list (omit = compiled-in fleet list)
+# parlons.gateway.*    wallet gateway + /nft on loopback behind TLS
+# parlons.node.public  public base URL of the gateway front (NFT URLs, gateway advert)
+# parlons.dex.*        DEX cape on loopback, announced as its TLS URL
+# parlons.fleet / parlons.public.host   FLEET JAR ONLY (section 6)
+ExecStart=/usr/bin/java -Xmx768m \
+    -Dparlons.node.data=/var/lib/parlons-node \
+    -Dparlons.node.port=9001 \
+    -Dparlons.node.rpc=false \
+    -Dparlons.node.megammr=false \
+    -Dparlons.node.rootnode=65.109.31.226:9001 \
+    -Dparlons.relay.port=9501 \
+    -Dparlons.relay.blob=0 \
+    -Dparlons.gateway.port=9585 \
+    -Dparlons.gateway.bind=127.0.0.1 \
+    -Dparlons.node.public=https://node.example.com/parlons-node \
+    -Dparlons.dex.port=9602 \
+    -Dparlons.dex.bind=127.0.0.1 \
+    -Dparlons.dex.public=https://node.example.com/dex-relay \
+    &quot;-Dparlons.node.args=&quot; \
+    -jar /opt/maxima/parlons-node.jar
+# always, not on-failure: `quit`, a megammr import and a resync end with exit 0 and the node must come back.
+# exit 3 = &quot;restart me&quot; (a wallet resync or identity import from a paired device).
+Restart=always
+RestartSec=10
+RestartForceExitStatus=3
+SuccessExitStatus=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/parlons-node
+UMask=0077
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged ~@resources ~@obsolete
+SystemCallErrorNumber=EPERM
+# fleet mode or any keets sidecar: add AF_NETLINK at the end of this line
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=169.254.0.0/16 fe80::/10
+# heap + 512M (fleet: + a further 1024M). 768m -&gt; 1280M; 3g -&gt; 3584M; fleet 768m -&gt; 2304M
+MemoryMax=1280M
+# fleet: 2048
+TasksMax=1024
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<p>For the <strong>fleet jar</strong>, add <code>-Dparlons.fleet=true -Dparlons.public.host=&lt;public ip&gt;</code> to <code>ExecStart</code>, append <code>AF_NETLINK</code> to <code>RestrictAddressFamilies</code>, set <code>TasksMax=2048</code> and raise <code>MemoryMax</code> by 1024M.</p></li><li>If the box still runs the old standalone relay on 9501, retire it (the unit stays on disk for a rollback):
+<pre><code>systemctl disable --now maxima-relay</code></pre></li><li>Open the ports on the host firewall (the provider firewall is separate):
+<pre><code>ufw allow OpenSSH
+ufw allow 9001/tcp
+ufw allow 9501/tcp
+# TLS front:            ufw allow 80/tcp &amp;&amp; ufw allow 443/tcp
+# fleet:                ufw allow 9501/udp &amp;&amp; ufw allow 49737/udp
+ufw enable &amp;&amp; ufw status numbered</code></pre>
+<p>firewalld: <code>firewall-cmd --permanent --add-port=9001/tcp --add-port=9501/tcp</code> (plus the others), then <code>firewall-cmd --reload</code>.</p></li><li>Check the unit, start the node:
+<pre><code>systemd-analyze verify /etc/systemd/system/parlons-node.service
+systemctl daemon-reload
+systemctl enable --now parlons-node</code></pre></li><li>Continue with §9.</li></ol>
+<hr>
+<h2 id="8-parameter-reference"><span class="n">8</span>Parameter reference</h2>
+<p>Every setting is a <strong>JVM system property</strong> (<code>-Dname=value</code>) placed <strong>before</strong> <code>-jar</code>. The jar takes no command-line options: the only arguments it accepts are <code>--version</code>/<code>-v</code> and <code>--help</code>/<code>-h</code>; anything else prints the help and exits with code 2.</p>
+<h3 id="81-node-and-chain">8.1 Node and chain</h3>
+<div class="tablewrap"><table><thead><tr><th>Property</th><th>Meaning</th><th>Default</th><th>Profile A / B / C</th></tr></thead><tbody><tr><td><code>parlons.node.data</code></td><td>Data directory. Precedence: this, then Minima <code>-data</code> (its parent), then <code>~/.parlons-node</code>.</td><td><code>~/.parlons-node</code></td><td><code>/var/lib/parlons-node</code> everywhere</td></tr><tr><td><code>parlons.node.port</code></td><td>Minima P2P port (public). Derived: MDS files <code>+2</code>, MDS commands <code>+3</code>, admin RPC <code>+4</code>.</td><td><code>9001</code></td><td><code>9001</code></td></tr><tr><td><code>parlons.node.rootnode</code></td><td>A Minima peer <code>host:port</code> to discover the chain from. <strong>This fork ships an empty peer list:</strong> without it the node never syncs.</td><td>empty</td><td><code>65.109.31.226:9001</code></td></tr><tr><td><code>parlons.node.connect</code></td><td>Fixed peer list; turns P2P discovery <strong>off</strong>.</td><td>empty</td><td>unset</td></tr><tr><td><code>parlons.node.megammr</code></td><td>Keep the full MegaMMR (wallet gateway needs it). Precedence: this, Minima <code>-megammr</code>, then <code>true</code>.</td><td><code>true</code></td><td>A <code>false</code> / B <code>true</code> / C per RAM</td></tr><tr><td><code>parlons.node.rpc</code></td><td>Loopback admin RPC on <code>127.0.0.1:&lt;p2p+4&gt;</code>. If it cannot bind the node exits 2.</td><td><code>false</code></td><td>A <code>false</code> / B <code>true</code> / C <code>true</code></td></tr><tr><td><code>parlons.node.args</code></td><td>Minima's own startup flags through Minima's parser (quoted as one argument). Env fallback <code>PARLONS_NODE_ARGS</code>. Refused flags: §8.8.</td><td>empty</td><td>empty</td></tr><tr><td><code>parlons.node.conf</code></td><td>A <code>key=value</code> file of Minima flags read <strong>before</strong> the args. Where <code>mdspassword=…</code> belongs (mode 600).</td><td>empty</td><td>unset</td></tr><tr><td><code>parlons.node.passphrase.file</code></td><td>Passphrase file of a password-locked node (unlock once at boot). Env alternative <code>PARLONS_NODE_PASSPHRASE</code>. No whitespace, <code>&quot;</code> or <code>;</code> in the value.</td><td>empty</td><td>unset</td></tr><tr><td><code>parlons.node.archive</code></td><td>Archive host used by a wallet <strong>resync</strong> requested from a paired device.</td><td>a compiled-in archive node (<code>NodeAccountWallet.java</code>); the deploy script's <code>--archive</code> default is <code>65.109.31.226:8001</code></td><td>unset</td></tr><tr><td><code>parlons.node.selftest.send</code></td><td><strong>Developer only.</strong> Sends real funds at boot. Never set it.</td><td>empty</td><td>unset</td></tr></tbody></table></div>
+<h3 id="82-relay-cape-gateway-dex-account-mds">8.2 Relay cape, gateway, DEX, account, MDS</h3>
+<div class="tablewrap"><table><thead><tr><th>Property</th><th>Meaning</th><th>Default</th><th>Profile notes</th></tr></thead><tbody><tr><td><code>parlons.relay.port</code></td><td>Relay port. A number = own listener; <code>0</code> = relay off; <code>shared</code> = rides the Minima P2P port (one public port).</td><td><code>9501</code></td><td><code>9501</code></td></tr><tr><td><code>parlons.relay.host</code></td><td>Public host/IP the cape names itself by. Unset = learned from peers (re-checked every 30 s for 30 min, then every 10 min). Never a bind address, private, loopback or CGNAT.</td><td>learned</td><td>C: set to <code>parlons.public.host</code></td></tr><tr><td><code>parlons.relay.peers</code></td><td>Mesh bootstrap list <code>host:port,…</code>. Unset = the compiled-in list (§17.4).</td><td>compiled-in</td><td>unset</td></tr><tr><td><code>parlons.relay.blob</code></td><td>Media blob shelf in MB (<code>0</code> = off).</td><td><code>0</code></td><td><code>0</code></td></tr><tr><td><code>parlons.relay.maxconn</code></td><td>Connection cap. <code>0</code> = 512 on platform threads, 4096 on virtual threads (JDK 21+).</td><td><code>0</code></td><td><code>0</code></td></tr><tr><td><code>parlons.gateway.port</code> / <code>parlons.gateway.bind</code></td><td>Wallet gateway <code>/cmd</code> and <code>/nft</code>. Keep loopback behind TLS.</td><td><code>9585</code> / <code>127.0.0.1</code></td><td>B: fronted by TLS</td></tr><tr><td><code>parlons.gateway.token</code></td><td>Bearer token; else <code>&lt;data&gt;/gateway-token.txt</code>, else generated (256-bit, mode 600).</td><td>from file</td><td>from file</td></tr><tr><td><code>parlons.gateway.rate.global</code> / <code>.perip</code></td><td><code>/cmd</code> rate (req/s; burst 2 s worth). <code>0</code> = off.</td><td><code>50</code> / <code>10</code></td><td>defaults</td></tr><tr><td><code>parlons.gateway.rate.nft.global</code> / <code>.perip</code></td><td><code>/nft</code> rates.</td><td><code>400</code> / <code>40</code></td><td>defaults</td></tr><tr><td><code>parlons.node.public</code></td><td>Public base URL of the gateway's TLS front, <strong>without</strong> <code>/cmd</code>. Sets NFT URLs; on a MegaMMR node with the relay on it also advertises the gateway to phones. Only a URL that really routes to this box's 9585.</td><td>empty</td><td>B: <code>https://node.example.com/parlons-node</code></td></tr><tr><td><code>parlons.dex.port</code></td><td>DEX cape port. <code>0</code> = off.</td><td><code>0</code></td><td>B optional <code>9602</code>; C auto <code>9602</code> when <code>parlons.dex.public</code> set</td></tr><tr><td><code>parlons.dex.bind</code></td><td>Explicit wins; else <code>127.0.0.1</code> when <code>parlons.dex.public</code> is set, else <strong><code>0.0.0.0</code></strong>.</td><td>see left</td><td><code>127.0.0.1</code></td></tr><tr><td><code>parlons.dex.public</code></td><td>Public URL announced in the mesh.</td><td>empty</td><td><code>https://node.example.com/dex-relay</code></td></tr><tr><td><code>parlons.account</code></td><td>Run the account (<code>false</code> = relay/gateway only).</td><td><code>true</code></td><td><code>true</code></td></tr><tr><td><code>parlons.account.name</code></td><td>Display name (first boot only).</td><td>empty</td><td>optional</td></tr><tr><td><code>parlons.account.relays</code></td><td>Extra relays the account attaches to (csv).</td><td>empty</td><td>unset</td></tr><tr><td><code>parlons.account.builtin</code></td><td><code>false</code> = don't seed from the compiled-in relay list.</td><td><code>true</code></td><td><code>true</code></td></tr><tr><td><code>parlons.account.direct</code></td><td>Account's direct (Tier-2) listener port. <code>0</code> = off.</td><td><code>0</code></td><td><code>0</code></td></tr><tr><td><code>parlons.panel.port</code></td><td>Local panel + JSON API on <code>127.0.0.1</code> only. <code>0</code> = off.</td><td><code>9587</code></td><td><code>9587</code></td></tr><tr><td><code>parlons.hosted.dir</code> / <code>parlons.hosted.limit</code></td><td>Hosted (guest) accounts directory and cap. Env <code>PARLONS_HOSTED_DIR</code>. Unset = managed hosting for a separate tenants service.</td><td>unset / <code>10</code></td><td>unset</td></tr><tr><td><code>parlons.restore</code></td><td>Restore a <code>.pbk</code> account bundle into a <strong>fresh</strong> data dir, then exit (interactive console).</td><td>empty</td><td>unset</td></tr><tr><td><code>parlons.mds</code> / <code>parlons.mds.bind</code></td><td>Serve MDS (MiniHUB) on <code>https://&lt;bind&gt;:&lt;p2p+2&gt;/</code>. Loopback unless told otherwise.</td><td>off / <code>127.0.0.1</code></td><td>unset</td></tr><tr><td><code>parlons.node.keetschat</code></td><td><code>off</code> hands the keets inbox to a host app (desktop apps). Keep <code>on</code> on a server.</td><td><code>on</code></td><td><code>on</code></td></tr></tbody></table></div>
+<h3 id="83-fleet-mode-fleet-jar-only">8.3 Fleet mode (fleet jar only)</h3>
+<div class="tablewrap"><table><thead><tr><th>Property</th><th>Meaning</th><th>Default</th></tr></thead><tbody><tr><td><code>parlons.fleet</code></td><td><code>true</code> turns fleet mode on (§6.3). The plain jar refuses: "this jar carries no fleet/VERSIONS".</td><td><code>false</code></td></tr><tr><td><code>parlons.public.host</code></td><td>The IPv4 the DHT, the cape and the Minima node name themselves by. The installer detects it or takes <code>--public-host</code>.</td><td>empty (the DHT learns it from its bootstraps; the cape from peers)</td></tr><tr><td><code>parlons.keets.dhtport</code></td><td>The DHT bootstrap's UDP port.</td><td><code>49737</code></td></tr></tbody></table></div>
+<p>Minima keets flags you may put in <code>parlons.node.args</code> on any jar (the fleet sets the first three itself): <code>-keets</code>, <code>-keetssidecar &lt;index.js&gt;</code>, <code>-keetsnode &lt;node binary&gt;</code>, <code>-keetsbootstrap host:port,…</code> (default list in §17.4), <code>-keetsconnect &lt;pubkeys&gt;</code>, <code>-keetsmaxconns N</code> (default 6), <code>-keetsmailboxurl &lt;url&gt;</code> (empty = the sidecar's built-in list), <code>-keetssidecarargs &quot;…&quot;</code> (extra sidecar arguments; fleet mode appends its own <code>--serve …</code>).</p>
+<p>Sidecar arguments fleet mode passes: <code>--serve</code> (DHT bootstrap + mailbox in the transport process), <code>--dht-port 49737</code>, <code>--mailbox-dir /var/lib/parlons-node/keets-mailbox</code>, <code>--public-host &lt;ip&gt;</code>. Other sidecar options exist (<code>--maxconns</code>, <code>--dht-mode routing|client</code>, <code>--bootstrap none</code> for a private DHT); a fleet box leaves them at their defaults.</p>
+<h3 id="84-script-flags--properties">8.4 Script flags → properties</h3>
+<p><strong>Installer</strong> <code>get-parlons-node.sh</code> (options go after <code>bash -s --</code>):</p>
+<div class="tablewrap"><table><thead><tr><th>Option</th><th>Effect</th></tr></thead><tbody><tr><td><em>(none)</em></td><td>Install, or update to the newest release and restart.</td></tr><tr><td><code>--update</code></td><td>Same as running it again.</td></tr><tr><td><code>--uninstall</code></td><td>Stop and remove the service, <code>parlons-pair</code> and the extracted fleet runtime. Data and seed are kept.</td></tr><tr><td><code>--no-megammr</code></td><td><code>-Dparlons.node.megammr=false</code>, heap 768m. Chosen for you under 3.5 GB RAM.</td></tr><tr><td><code>--heap &lt;size&gt;</code></td><td><code>-Xmx</code>; <code>MemoryMax</code> = heap + 512M (+ 1024M with <code>--fleet</code>). Must end in <code>m</code> or <code>g</code>.</td></tr><tr><td><code>--fleet</code></td><td>The fleet jar, <code>-Dparlons.fleet=true -Dparlons.public.host=&lt;detected&gt;</code>, <code>AF_NETLINK</code>, <code>TasksMax=2048</code>, opens 9501/udp and 49737/udp.</td></tr><tr><td><code>--public-host &lt;ip&gt;</code></td><td>With <code>--fleet</code>: the public IPv4 instead of the detected one.</td></tr></tbody></table></div>
+<p>Fixed by the installer: rootnode <code>65.109.31.226:9001</code>, P2P 9001, relay 9501, DHT 49737, data <code>/var/lib/parlons-node</code>, jars in <code>/opt/maxima</code>, RPC off (non-fleet), no DEX, no peers list.</p>
+<p><strong>Deploy script</strong> <code>ops/deploy-parlons-node.sh &lt;ssh-target&gt; …</code>:</p>
+<div class="tablewrap"><table><thead><tr><th>Flag</th><th>Becomes</th><th>Default</th></tr></thead><tbody><tr><td><code>--jar FILE</code></td><td>jar to upload</td><td>newest <code>dist/parlons-node-*.jar</code></td></tr><tr><td><code>--heap 3g</code></td><td><code>-Xmx</code></td><td><code>2g</code> (too small for MegaMMR: pass <code>3g</code>)</td></tr><tr><td><code>--memmax 3584M</code></td><td><code>MemoryMax</code></td><td>heap + 512M</td></tr><tr><td><code>--p2p-port N</code></td><td><code>-Dparlons.node.port</code></td><td><code>9001</code></td></tr><tr><td><code>--relay-port N</code></td><td><code>-Dparlons.relay.port</code></td><td><code>9501</code></td></tr><tr><td><code>--gateway-port N</code></td><td><code>-Dparlons.gateway.port</code></td><td><code>9585</code></td></tr><tr><td><code>--gateway-public</code></td><td><code>-Dparlons.gateway.bind=0.0.0.0</code> and opens the port (avoid; use TLS)</td><td>loopback</td></tr><tr><td><code>--public URL</code></td><td><code>-Dparlons.node.public</code></td><td>unset</td></tr><tr><td><code>--rootnode h:p</code></td><td><code>-Dparlons.node.rootnode</code></td><td><strong>unset (node will not sync)</strong></td></tr><tr><td><code>--no-megammr</code></td><td><code>-Dparlons.node.megammr=false</code></td><td>MegaMMR on</td></tr><tr><td><code>--rpc</code></td><td><code>-Dparlons.node.rpc=true</code></td><td>off</td></tr><tr><td><code>--peers h:p,…</code></td><td><code>-Dparlons.relay.peers</code></td><td>compiled-in list</td></tr><tr><td><code>--blobstore MB</code></td><td><code>-Dparlons.relay.blob</code></td><td><code>0</code></td></tr><tr><td><code>--dex PORT</code></td><td><code>-Dparlons.dex.port</code></td><td><code>0</code></td></tr><tr><td><code>--dex-public URL</code></td><td><code>-Dparlons.dex.bind=127.0.0.1 -Dparlons.dex.public=URL</code></td><td>unset</td></tr><tr><td><code>--passphrase-file F</code></td><td><code>-Dparlons.node.passphrase.file</code> (file on the box, mode 600)</td><td>unset</td></tr><tr><td><code>--node-args &quot;…&quot;</code></td><td><code>-Dparlons.node.args</code> (no double quotes inside)</td><td>empty</td></tr><tr><td><code>--keets</code></td><td>adds <code>-keets -keetssidecar /opt/maxima/keets-sidecar/index.js</code>, uploads <code>../keets/sidecar</code>, adds <code>AF_NETLINK</code>; needs <code>node</code> on the box</td><td>off</td></tr><tr><td><code>--seed-from F [--archive h:p]</code></td><td>one-time wallet resync to the 24-word phrase in F (needs <code>--rpc</code>), then pins <code>identity.txt</code></td><td>— / <code>65.109.31.226:8001</code></td></tr><tr><td><code>--megammr-seed URL</code></td><td>one-time MegaMMR import (needs <code>--rpc</code>), skipped when already populated</td><td>—</td></tr><tr><td><code>--replace-relay</code></td><td>stops and disables <code>maxima-relay.service</code> first</td><td>—</td></tr></tbody></table></div>
+<p>The deploy script has no fleet flag. A fleet box is installed with the installer's <code>--fleet</code>.</p>
+<h3 id="85-environment-variables">8.5 Environment variables</h3>
+<div class="tablewrap"><table><thead><tr><th>Variable</th><th>Meaning</th></tr></thead><tbody><tr><td><code>PARLONS_NODE_ARGS</code></td><td>Fallback for <code>parlons.node.args</code>.</td></tr><tr><td><code>PARLONS_NODE_PASSPHRASE</code></td><td>Passphrase of a locked node (use an <code>EnvironmentFile=</code> with mode 600).</td></tr><tr><td><code>PARLONS_HOSTED_DIR</code></td><td>Fallback for <code>parlons.hosted.dir</code>.</td></tr><tr><td><code>MAXIMA_STUN</code></td><td><code>false</code> turns off the UDP STUN responder on the relay port.</td></tr><tr><td><code>MAXIMA_POW_ENFORCE</code></td><td><code>true</code> enforces the relay's proof-of-work floor (default: count only).</td></tr></tbody></table></div>
+<h3 id="86-relay-level-properties-rarely-changed">8.6 Relay-level properties (rarely changed)</h3>
+<p><code>maxima.relay.maxpersource</code> (32 connections per source IP), <code>maxima.relay.shed</code> (384 soft client target), <code>maxima.relay.replicate</code> (3 copies of each directory entry), <code>maxima.relay.vthreads</code> (<code>true</code>). Fixed in code: protocol <code>1.0.48</code>, 600 messages/min per destination, DEX relay <code>0.1.5</code> with 200 req/s global and 20 req/s per IP.</p>
+<h3 id="87-precedence">8.7 Precedence</h3>
+<ol><li>Minima's own flags from <code>parlons.node.conf</code> (file first) then <code>parlons.node.args</code> go through Minima's parser.</li><li>Fleet mode fills what the operator left unset (§6.3).</li><li>Explicit <code>-Dparlons.node.*</code> properties are applied <strong>after</strong> and win on conflict.</li></ol>
+<p>The boot log shows what was applied: <code>minima flags: …</code> (with <code>mdspassword</code> masked) and the boot line with the ports.</p>
+<h3 id="88-minima-flags-the-node-refuses">8.8 Minima flags the node refuses</h3>
+<p>Put in <code>parlons.node.args</code> or the conf file, these stop the node with exit 2 before it touches the data directory:</p>
+<div class="tablewrap"><table><thead><tr><th>Flags</th><th>Why</th><th>Use instead</th></tr></thead><tbody><tr><td><code>-rpc -rpcenable -rpcpassword -rpccrlf</code></td><td>the stock RPC binds every interface with full admin</td><td><code>-Dparlons.node.rpc=true</code> (loopback only)</td></tr><tr><td><code>-seed -anyseed -dbpassword</code></td><td>a secret in argv is readable by every process</td><td><code>--seed-from</code> / <code>--passphrase-file</code></td></tr><tr><td><code>-clean -genesis -test -solo -testchainlength</code></td><td>wipe the data dir or leave mainnet</td><td>—</td></tr><tr><td><code>-daemon -noshutdownhook -jnlp -help</code></td><td>the node's JVM owns stdin, exit and the shutdown hook</td><td>—</td></tr></tbody></table></div>
+<p>An unknown Minima flag also exits 2.</p>
+<hr>
+<h2 id="9-first-start-what-a-healthy-boot-looks-like"><span class="n">9</span>First start: what a healthy boot looks like</h2>
+<ol><li>Service state. <code>-w</code> matters: <code>inactive</code> also contains "active":
+<pre><code>systemctl is-active parlons-node | grep -qw active &amp;&amp; echo running</code></pre></li><li>The boot line (version, data folder, ports). Always add <code>| grep -v seed</code> when you grep the journal:
+<pre><code>journalctl -u parlons-node -b --no-pager | grep -E &#x27;Parlons Node|minima flags|FLEET MODE|REFUSING&#x27; | grep -v seed</code></pre>
+<p>Expected:</p>
+<pre><code>[parlons-node] Parlons Node 0.2.143 — booting embedded Minima node &lt;ver&gt; at /var/lib/parlons-node/1.1 (p2p 9001, megammr false, admin rpc off)</code></pre>
+<p>with <code>admin rpc 127.0.0.1:9005 (loopback-bound)</code> on profiles B and C, and the <code>FLEET MODE:</code> line on C. A <code>REFUSING</code> line means a bad flag or a port clash: §15.</p></li><li>The identity and the cape (first boot pins the identity):
+<pre><code>journalctl -u parlons-node -b --no-pager | grep -E &#x27;identity:|Maxima cape|mesh:|own relay|account wallet|wallet gateway|account up|keets|mailbox list&#x27; | grep -v seed</code></pre>
+<p>Expected, in order:</p>
+<pre><code>[parlons-node] identity: pinned from the vault into identity.txt (wallet resyncs no longer change the identity)
+[parlons-node] mesh: 6 bootstrap peer(s) (default fleet list)
+[parlons-node] Maxima cape up on port 9501 — identity Mx… (derived from the node seed; one seed drives both)
+[parlons-node] account wallet = node wallet: 0x… (Mx…) — …
+[parlons-node] nft hosting: /var/lib/parlons-node/nft served at …
+[parlons-node] wallet gateway up on 127.0.0.1:9585/cmd (megammr=…, bearer token in /var/lib/parlons-node/gateway-token.txt)
+[parlons-node] account up: attached to N relay(s), 0 paired device(s) — pair the first one with the code in …</code></pre>
+<p>On a fleet box also <code>[KEETS] mailbox list : 6 mailboxes (…)</code>, <code>keets chat bridge up (KeetChat interop)</code>, <code>keets identity: 0x…</code> and the <code>FLEET ENDPOINT</code> banner. <code>own relay NOT advertised: public host unknown or private</code> on a home box behind NAT is normal until the node learns its address from peers (up to 30 minutes), or set <code>parlons.relay.host</code>.</p></li><li>The heartbeat, every 30 s:
+<pre><code>journalctl -u parlons-node -f | grep heartbeat</code></pre>
+<pre><code>[parlons-node] heartbeat: node block=&lt;n&gt; chainlen=&lt;n&gt; | cape=up:9501 | gateway=up:9585 | account=up:&lt;n&gt; hosts, &lt;n&gt; devices</code></pre>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Healthy</th></tr></thead><tbody><tr><td><code>block=</code></td><td>climbing, then at the chain tip (the first sync has no fixed duration)</td></tr><tr><td><code>cape=</code></td><td><code>up:9501</code></td></tr><tr><td><code>gateway=</code></td><td><code>up:9585</code></td></tr><tr><td><code>account=</code></td><td><code>up:</code> with 1 or more hosts</td></tr></tbody></table></div>
+<p><code>heartbeat: node not ready</code> for the first minute is normal.</p></li><li>Nothing bad in the log:
+<pre><code>journalctl -u parlons-node -b --no-pager | grep -E &#x27;Exception|FAILED|REFUSING|OutOfMemoryError|password-locked&#x27; | grep -v seed</code></pre>
+<p><code>Invalid SyncBlock as NO PARENT</code> during catch-up has been seen and recovers by itself as long as <code>block=</code> keeps climbing.</p></li><li>Memory and tasks against the ceilings:
+<pre><code>systemctl status parlons-node --no-pager | grep -E &#x27;Memory|Tasks&#x27;</code></pre></li></ol>
+<hr>
+<h2 id="10-pair-your-phone"><span class="n">10</span>Pair your phone</h2>
+<p>Run on the box in an interactive SSH terminal. The app side is in the <a href="https://parlons.info/guide/cloud.html" target="_blank" rel="noopener">Parlons Cloud Portal manual</a>.</p>
+<ol><li>Set the admin pairing password once (the installer already asked; skip if done):
+<pre><code>sudo parlons-pair --set-admin-password</code></pre></li><li>Show the account address and a one-time <strong>owner</strong> invitation, with a QR code when <code>qrencode</code> is installed:
+<pre><code>sudo parlons-pair --admin</code></pre></li><li>In <strong>Parlons Cloud</strong> on the phone: <strong>Scan pairing QR</strong>, then <strong>Connect &amp; pair</strong>. A valid code pairs immediately; a used code is never valid again.</li><li>The device count in the heartbeat goes up by one:
+<pre><code>journalctl -u parlons-node --since -2min --no-pager | grep heartbeat | tail -1</code></pre></li></ol>
+<p>Guest accounts (<code>sudo parlons-pair --guest &lt;name&gt;</code>) need the separate <code>parlons-tenants</code> service with <code>--panel-port 9597</code>; see the Cloud Portal manual, §21. <code>parlons-pair</code> reads <code>/var/lib/parlons-node</code> by default; pass <code>--data DIR</code> otherwise.</p>
+<hr>
+<h2 id="11-back-up-the-seed-and-the-identity"><span class="n">11</span>Back up the seed and the identity</h2>
+<div class="note"><p><strong>The seed is a wallet.</strong> The 24-word phrase, <code>identity.txt</code> and any adopted <code>seed.txt</code> can all spend funds. Never print them to a log, a ticket, a chat or a recorded terminal.</p></div>
+<p>There are two secrets with one origin: the <strong>wallet seed</strong> in the node's vault (<code>/var/lib/parlons-node/1.1/…</code>) and the <strong>identity phrase</strong> in <code>/var/lib/parlons-node/identity.txt</code> (mode 600), from which the <code>Mx…</code> identity and the <code>MAX#</code> are derived. On a fresh node they are the same phrase; after a wallet resync or an identity import they differ, so back up both.</p>
+<ol><li><strong>Wallet phrase.</strong> The admin RPC must be on (<code>-Dparlons.node.rpc=true</code>; profile A: add it temporarily, §7 step 5, or read it once via a paired device's backup feature). In an unrecorded session on the box:
+<pre><code>curl -s http://127.0.0.1:9005/vault</code></pre>
+<p>Write the 24-word <code>phrase</code> on paper or into offline storage. Clear the terminal scrollback.</p></li><li><strong>Identity and account files.</strong> Stop the node for a consistent copy, archive everything except the chain and NFT temp files, move the archive off the box, delete it there:
+<pre><code>systemctl stop parlons-node
+tar -C /var/lib/parlons-node -czf /root/parlons-node-backup.tgz --exclude=&#x27;./1.1&#x27; --exclude=&#x27;./nft/tmp&#x27; --exclude=&#x27;./runtime&#x27; .
+systemctl start parlons-node
+chmod 600 /root/parlons-node-backup.tgz</code></pre>
+<p>Then from your computer: <code>scp root@node.example.com:/root/parlons-node-backup.tgz .</code> and <code>ssh root@node.example.com rm /root/parlons-node-backup.tgz</code>. This archive holds <code>identity.txt</code>, the account (devices, contacts, chat), the relay state, the gateway token and, on a fleet box, the keets mailbox keypair. Treat it like the seed.</p></li><li><strong>The unit</strong> and your TLS config: <code>cp /etc/systemd/system/parlons-node.service /root/</code>.</li><li>From a paired device, make a portable <code>.pbk</code> account bundle too (Settings → <strong>Back up account…</strong>).</li></ol>
+<p>Never restore the archive onto a second box while the first one runs. One identity runs in one place.</p>
+<hr>
+<h2 id="12-verify-from-outside"><span class="n">12</span>Verify from outside</h2>
+<p><code>systemctl is-active</code> only proves the process runs. Test from <strong>another machine on the public internet</strong>, never from the box or its LAN (hairpin NAT lies both ways).</p>
+<ol><li>TCP reachability of the public ports:
+<pre><code>nc -z -w 8 node.example.com 9001 &amp;&amp; echo p2p-open
+nc -z -w 8 node.example.com 9501 &amp;&amp; echo relay-open</code></pre>
+<p>Refused at once = host answered, nothing listening (check the service). Timeout = a firewall drops packets (provider console or router). Open = the network path is fine.</p></li><li>The relay end to end, from a checkout of the repository with <code>:core</code> compiled:
+<pre><code>ops/verify-relay.sh node.example.com:9501</code></pre>
+<p>It attaches two real clients through the relay and makes them talk (greeting, attach, address, contact handshake, delivery both ways, receipt, group fan-out). Exit 0 only if everything passes.</p></li><li>DEX cape (if on): <code>curl -s https://node.example.com/dex-relay/dex/health</code> returns <code>{&quot;ok&quot;:true,&quot;version&quot;:&quot;0.1.5&quot;,…}</code>; <code>/dex/relays</code> lists this node's URL.</li><li>Gateway (profile B). On the box, <code>TOKEN=$(sudo cat /var/lib/parlons-node/gateway-token.txt)</code>; then from outside:
+<pre><code>curl -s -H &quot;Authorization: Bearer $TOKEN&quot; -H &#x27;Content-Type: application/json&#x27; -d &#x27;{&quot;command&quot;:&quot;block&quot;}&#x27; https://node.example.com/parlons-node/cmd</code></pre>
+<p>must return the node's JSON with <code>&quot;status&quot;:true</code>; the same without the header must return HTTP 401; <code>{&quot;command&quot;:&quot;vault&quot;}</code> with the header must return HTTP 403.</p></li><li><strong>Loopback-only ports must not answer.</strong> This must print nothing:
+<pre><code>for p in 9003 9004 9005 9585 9587 9602; do nc -z -w 5 node.example.com $p &amp;&amp; echo &quot;EXPOSED $p&quot;; done</code></pre></li><li>Fleet box: the mesh and the DHT pick the box up by themselves. Within about 10 minutes other relays list it; after the mailbox list is republished (§6.5), phones use it as a mailbox.</li></ol>
+<hr>
+<h2 id="13-optional-services"><span class="n">13</span>Optional services</h2>
+<p>Each is a unit edit (back up the unit, edit, <code>systemd-analyze verify</code>, <code>daemon-reload</code>, restart, check the boot log) unless noted. Full detail in the manual.</p>
+<h3 id="131-dex-relay-cape-dexicon-order-book">13.1 DEX relay cape (Dexicon order book)</h3>
+<pre><code>-Dparlons.dex.port=9602 \
+-Dparlons.dex.bind=127.0.0.1 \
+-Dparlons.dex.public=https://node.example.com/dex-relay \</code></pre>
+<p>Front <code>/dex-relay/</code> with TLS (§5.3). Boot log: <code>dex relay 0.1.5 up on 127.0.0.1:9602</code> and <code>dex relay announced in the mesh as …</code>. Check <code>ss -ltnp | grep &#x27;:9602 &#x27;</code> shows <code>127.0.0.1</code>.</p>
+<h3 id="132-nft-hosting">13.2 NFT hosting</h3>
+<p>Always on; it only needs <code>-Dparlons.node.public=https://node.example.com/parlons-node</code> and the <code>/parlons-node/</code> TLS route. Boot log: <code>nft hosting: … served at https://…/nft/&lt;file&gt;</code>. Files are content-addressed (<code>&lt;sha256&gt;.&lt;ext&gt;</code>, at most 32 MB), uploaded from paired devices only.</p>
+<h3 id="133-mesh-peers-and-the-blob-shelf">13.3 Mesh peers and the blob shelf</h3>
+<p><code>-Dparlons.relay.peers=host:port,…</code> to pin the mesh bootstrap list (default: the compiled-in six, §17.4); <code>-Dparlons.relay.blob=1024</code> for a 1 GB media shelf. Boot log: <code>mesh: N bootstrap peer(s)</code>, <code>blob shelf: 1024 MB</code>.</p>
+<h3 id="134-keets-chat-bridge-on-the-plain-jar">13.4 keets chat bridge on the plain jar</h3>
+<p>The fleet jar does this itself. On the plain jar: install Node.js on the box, copy a keets sidecar with its <code>node_modules</code> to <code>/opt/maxima/keets-sidecar</code> (the deploy script's <code>--keets</code> does both), then:</p>
+<pre><code>&quot;-Dparlons.node.args=-keets -keetssidecar /opt/maxima/keets-sidecar/index.js&quot; \</code></pre>
+<p>and <code>RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK</code>. No inbound port is needed (hyperswarm hole-punches). Boot log: <code>keets chat bridge up (KeetChat interop)</code> and <code>keets identity: 0x…</code>.</p>
+<h3 id="135-mds-minihub">13.5 MDS (MiniHUB)</h3>
+<pre><code>-Dparlons.mds=true \
+-Dparlons.mds.bind=127.0.0.1 \
+-Dparlons.node.conf=/var/lib/parlons-node/minima.conf \</code></pre>
+<p>with <code>mdspassword=&lt;password&gt;</code> in the conf file (owner <code>maxima</code>, mode 600; a conf file that cannot be read stops the node with exit 2). Reach it through an SSH tunnel to <code>127.0.0.1:9003</code>. Never bind it publicly.</p>
+<h3 id="136-adopt-an-existing-24-word-phrase-keep-a-relays-or-cloud-accounts-identity">13.6 Adopt an existing 24-word phrase (keep a relay's or cloud account's identity)</h3>
+<p>Deploy script: <code>--rpc --seed-from /path/on/box/seed.txt [--archive 65.109.31.226:8001]</code>. It resyncs the wallet to the phrase over the loopback RPC (the phrase travels as a POST body from a mode-600 temp file, never argv), restarts, compares the vault with the file <strong>without printing either</strong>, pins <code>identity.txt</code> and writes <code>.seed-adopted</code>. Result line to expect: <code>vault MATCHES … - identity preserved (and pinned in identity.txt)</code>. Do it <strong>before</strong> any MegaMMR import. Delete the phrase file from the box once you hold an offline copy.</p>
+<h3 id="137-password-locked-node">13.7 Password-locked node</h3>
+<p>Put the passphrase in <code>/var/lib/parlons-node/passphrase.txt</code> (owner <code>maxima</code>, mode 600; not under <code>/root</code> or <code>/home</code>, which <code>ProtectHome</code> hides; no whitespace, <code>&quot;</code> or <code>;</code>) and add <code>-Dparlons.node.passphrase.file=/var/lib/parlons-node/passphrase.txt</code>. The node unlocks once per boot. Until then the cape, gateway and account wait and the log says <code>node is password-locked but no passphrase provided</code>.</p>
+<h3 id="138-move-the-node-off-port-9001-a-stock-minima-node-on-the-box">13.8 Move the node off port 9001 (a stock Minima node on the box)</h3>
+<p><code>-Dparlons.node.port=9101</code> moves P2P to 9101 and the derived ports to 9103/9104/9105. Open the new P2P port and use 9105 in every <code>curl</code> to the admin RPC.</p>
+<h3 id="139-one-public-port-home-router">13.9 One public port (home router)</h3>
+<p><code>-Dparlons.relay.port=shared</code>: the relay rides the Minima P2P port and only 9001 needs forwarding. Tell users and mesh peers the relay address is <code>host:9001</code>.</p>
+<hr>
+<h2 id="14-update-roll-back-uninstall"><span class="n">14</span>Update, roll back, uninstall</h2>
+<h3 id="141-update-with-the-installer">14.1 Update with the installer</h3>
+<p>Running the installer again fetches the newest release, verifies it, flips the symlink and restarts. Pass the same options you installed with (<code>--fleet</code>, <code>--no-megammr</code>, <code>--heap</code>), because the unit is rewritten from them:</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --fleet --no-megammr</code></pre>
+<p>Hand-added properties (<code>parlons.node.public</code>, <code>parlons.dex.*</code>, <code>parlons.node.rpc</code>) are <strong>lost</strong> by an installer re-run: keep your <code>parlons-node.service.before-…</code> backups and re-apply them, or update by hand (next section). A fleet box re-extracts the runtime only when the embedded versions change.</p>
+<h3 id="142-update-by-hand-versioned-jars--symlink">14.2 Update by hand (versioned jars + symlink)</h3>
+<ol><li>Download and verify the new jar as in §7 step 3, under a <code>.part</code> name, then rename it.</li><li>Note the current target and back up the unit:
+<pre><code>readlink /opt/maxima/parlons-node.jar
+cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-&lt;new&gt;.jar</code></pre></li><li>Flip and restart:
+<pre><code>ln -sfn /opt/maxima/parlons-node-&lt;new&gt;.jar /opt/maxima/parlons-node.jar
+systemctl daemon-reload &amp;&amp; systemctl restart parlons-node
+sleep 25; systemctl is-active parlons-node
+journalctl -u parlons-node --since -40s --no-pager | grep -E &#x27;Parlons Node|dex relay|FLEET MODE|Exception&#x27; | grep -v seed</code></pre></li><li>Verify from outside (§12). Several boxes: <strong>one at a time</strong>.</li></ol>
+<p>With the deploy script: re-run it with the same flags and the new <code>--jar</code>; a flag you leave out goes back to its default.</p>
+<h3 id="143-roll-back">14.3 Roll back</h3>
+<pre><code>cd /opt/maxima &amp;&amp; ln -sfn parlons-node-&lt;old&gt;.jar parlons-node.jar
+cp /etc/systemd/system/parlons-node.service.before-&lt;what&gt; /etc/systemd/system/parlons-node.service   # if the unit changed
+systemctl daemon-reload &amp;&amp; systemctl restart parlons-node</code></pre>
+<p>Every jar stays in <code>/opt/maxima</code>, so a rollback is one <code>ln -sfn</code>. A box that used to run <code>maxima-relay.service</code> can go back with <code>systemctl disable --now parlons-node &amp;&amp; systemctl enable --now maxima-relay</code>.</p>
+<h3 id="144-uninstall">14.4 Uninstall</h3>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --uninstall</code></pre>
+<p>Stops and removes the service, <code>parlons-pair</code> and the fleet runtime directory. <strong>Keeps</strong> <code>/var/lib/parlons-node</code> (identity, wallet, chats) and the jars in <code>/opt/maxima</code>. To erase the node itself, after backing up the seed: <code>rm -rf /var/lib/parlons-node</code>.</p>
+<hr>
+<h2 id="15-troubleshooting"><span class="n">15</span>Troubleshooting</h2>
+<p>First sort out "can't connect" with <code>nc -z -w 8 &lt;host&gt; &lt;port&gt;</code> from outside: <strong>refused</strong> = nothing listening on the box; <strong>timeout</strong> = a firewall drops packets upstream (provider console, router) and nothing on the box fixes it; <strong>open</strong> = look at the application. The decisive test is <code>timeout 25 tcpdump -ni any &#x27;tcp port 9501&#x27; -c 5</code> on the box while you connect from outside.</p>
+<div class="tablewrap"><table><thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>The process exits at once and prints the help text</td><td>A command-line argument after <code>-jar</code></td><td>Every setting is a <code>-D</code> property before <code>-jar</code>.</td></tr><tr><td><code>REFUSING to start: these Minima flags are not allowed</code></td><td>A flag from §8.8 in <code>parlons.node.args</code> or the conf file</td><td>Remove it.</td></tr><tr><td><code>REFUSING to run: admin rpc on 127.0.0.1:9005 cannot start</code></td><td>Another Minima node on <code>p2p+4</code>, or a JRE without <code>jdk.httpserver</code></td><td>Move the P2P port (<code>parlons.node.port=9101</code>) or install a full JRE (<code>java --list-modules | grep jdk.httpserver</code>).</td></tr><tr><td><code>REFUSING to run in fleet mode: this jar carries no fleet/VERSIONS</code></td><td>The plain jar with <code>-Dparlons.fleet=true</code></td><td>Install with <code>--fleet</code> (the fleet jar).</td></tr><tr><td><code>REFUSING to run in fleet mode: no embedded Node.js runtime for &lt;arch&gt;</code></td><td>32-bit or unusual CPU</td><td>Fleet boxes are x86_64/aarch64 only.</td></tr><tr><td><code>Could not find this box&#x27;s public IPv4</code> (installer)</td><td>No global-scope address on an interface</td><td><code>--public-host &lt;ip&gt;</code> and forward the ports.</td></tr><tr><td><code>block=</code> stays at 0</td><td>No rootnode, or outbound to it blocked, or clock wrong</td><td>Check <code>parlons.node.rootnode</code>, <code>nc -z -w 8 65.109.31.226 9001</code>, <code>timedatectl</code>.</td></tr><tr><td><code>OutOfMemoryError</code> loop, service "failed"</td><td>Heap too small (MegaMMR with 2g)</td><td><code>-Xmx3g</code>, <code>MemoryMax</code> ≥ heap + 512M, <code>systemctl reset-failed parlons-node</code>, restart.</td></tr><tr><td><code>cape=down</code> / relay port clash</td><td><code>maxima-relay.service</code> holds 9501</td><td><code>systemctl disable --now maxima-relay</code>, restart the node.</td></tr><tr><td><code>own relay NOT advertised: public host unknown or private</code></td><td>Behind NAT, address not yet learned</td><td>Wait up to 30 min, or set <code>-Dparlons.relay.host=&lt;public host&gt;</code>.</td></tr><tr><td><code>dex relay: no public host known yet - NOT announced</code></td><td>No <code>parlons.dex.public</code></td><td>Set it (and front with TLS).</td></tr><tr><td>The DEX cape answers on the public IP</td><td><code>parlons.dex.bind</code> is <code>0.0.0.0</code></td><td>Set <code>127.0.0.1</code> and <code>parlons.dex.public</code>; close 9602 in the firewall.</td></tr><tr><td>Phones see empty balances</td><td>MegaMMR never imported</td><td>§5.4.</td></tr><tr><td>Gateway returns 503 <code>no MegaMMR</code></td><td><code>megammr=false</code></td><td>By design; phones fail over.</td></tr><tr><td>Gateway never advertised to phones</td><td>Needs MegaMMR on, <code>parlons.node.public</code>, relay on</td><td>§5.5.</td></tr><tr><td>Caddy serves your website at <code>/dex-relay/…</code></td><td><code>handle_path</code> sorted after a catch-all <code>handle</code></td><td>Use <code>handle</code> + <code>uri strip_prefix</code> (§5.3).</td></tr><tr><td>Every DEX client rate-limited together behind nginx</td><td>Missing <code>X-Forwarded-For</code></td><td>Add the <code>proxy_set_header</code> line (§5.3).</td></tr><tr><td>keets sidecar: every socket fails with <code>EPERM</code></td><td>No <code>AF_NETLINK</code> in the unit</td><td><code>RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK</code>, <code>daemon-reload</code>, restart.</td></tr><tr><td>Fleet: no <code>FLEET ENDPOINT</code> banner within 3 minutes</td><td>Sidecar did not start</td><td><code>journalctl -u parlons-node -b | grep -iE &#x27;keets|sidecar&#x27; | grep -v seed</code>; check <code>MemoryMax</code> (sidecar needs its 1 GB), <code>TasksMax=2048</code>, UDP 49737 free.</td></tr><tr><td>Fleet: <code>[KEETS] mailbox list</code> missing / falls back to defaults</td><td>No outbound HTTPS to eurobuddha.com at boot</td><td>Allow it; the sidecar's built-in list of six mailboxes is used meanwhile.</td></tr><tr><td>The service stays stopped after <code>quit</code>, an import or a resync</td><td>Old unit with <code>Restart=on-failure</code></td><td><code>sed -i &#x27;s/^Restart=on-failure$/Restart=always/&#x27;</code> the unit, <code>daemon-reload</code>.</td></tr><tr><td>The account never says "attached"</td><td>No outbound internet, or clock wrong</td><td><code>curl -sI https://github.com | head -1</code>; <code>timedatectl</code>.</td></tr><tr><td>Cape, gateway, account never start; log mentions a password lock</td><td>Locked vault</td><td>§13.7.</td></tr><tr><td>A stuck process</td><td>—</td><td><code>systemctl show -p MainPID parlons-node</code>, <code>kill &lt;pid&gt;</code>. <strong>Never</strong> <code>pkill -f parlons-node.jar</code> (matches your own SSH session).</td></tr></tbody></table></div>
+<p>Clear a tripped start limit with <code>systemctl reset-failed parlons-node</code> after fixing the cause.</p>
+<hr>
+<h2 id="16-security-checklist"><span class="n">16</span>Security checklist</h2>
+<ul><li class="task"><span class="box" aria-hidden="true"></span>The jar's SHA-256 was checked against §17.3 before it was activated.</li><li class="task"><span class="box" aria-hidden="true"></span>The service runs as the unprivileged <code>maxima</code> user with the hardened unit (§7).</li><li class="task"><span class="box" aria-hidden="true"></span><code>/var/lib/parlons-node</code> is mode 700; <code>identity.txt</code>, <code>gateway-token.txt</code>, <code>pair-code.txt</code>, <code>panel-ticket.txt</code> and <code>keets-mailbox/keypair</code> are mode 600, owner <code>maxima</code>.</li><li class="task"><span class="box" aria-hidden="true"></span>The wallet phrase and <code>identity.txt</code> are backed up offline and appear in <strong>no</strong> log, ticket or chat.</li><li class="task"><span class="box" aria-hidden="true"></span>Inbound: only the P2P port, the relay port (TCP, and UDP on a fleet box), UDP 49737 on a fleet box, and 80/443 for a TLS front.</li><li class="task"><span class="box" aria-hidden="true"></span>From outside, 9003, 9004, 9005, 9585, 9587 and 9602 do <strong>not</strong> answer (§12, step 5).</li><li class="task"><span class="box" aria-hidden="true"></span>Whenever <code>parlons.dex.port</code> is set, <code>parlons.dex.public</code> (or <code>parlons.dex.bind=127.0.0.1</code>) is set too.</li><li class="task"><span class="box" aria-hidden="true"></span><code>parlons.gateway.bind</code> is <code>127.0.0.1</code>; the admin RPC is never proxied; MDS is never bound publicly.</li><li class="task"><span class="box" aria-hidden="true"></span><code>-Xmx</code> is set and <code>MemoryMax</code> is above it (fleet: a further 1 GB).</li><li class="task"><span class="box" aria-hidden="true"></span><code>parlons.node.public</code> points at a URL that really routes to this box.</li><li class="task"><span class="box" aria-hidden="true"></span>No secrets on the command line: passphrases and <code>mdspassword</code> live in mode-600 files.</li><li class="task"><span class="box" aria-hidden="true"></span><code>parlons.node.selftest.send</code> is <strong>not</strong> set.</li><li class="task"><span class="box" aria-hidden="true"></span>One host runs this identity and this data directory. The archive from §11 is never restored onto a second live box.</li><li class="task"><span class="box" aria-hidden="true"></span>The provider firewall agrees with ufw/firewalld.</li><li class="task"><span class="box" aria-hidden="true"></span>An admin pairing password is set; old invitations are used or discarded.</li></ul>
+<hr>
+<h2 id="17-appendix-ports-files-checksums-exit-codes"><span class="n">17</span>Appendix: ports, files, checksums, exit codes</h2>
+<h3 id="171-ports">17.1 Ports</h3>
+<div class="tablewrap"><table><thead><tr><th>Port (default)</th><th>Proto</th><th>What</th><th>Bind</th><th>Exposure</th></tr></thead><tbody><tr><td><code>9001</code> (<code>parlons.node.port</code>)</td><td>TCP</td><td>Minima P2P</td><td>all</td><td><strong>Public</strong></td></tr><tr><td><code>9003</code> (<code>p2p+2</code>)</td><td>TCP/HTTPS</td><td>MDS files / MiniHUB (only with <code>parlons.mds=true</code>)</td><td><code>127.0.0.1</code></td><td>Loopback</td></tr><tr><td><code>9004</code> (<code>p2p+3</code>)</td><td>TCP</td><td>MDS commands</td><td>follows MDS</td><td>Loopback</td></tr><tr><td><code>9005</code> (<code>p2p+4</code>)</td><td>TCP/HTTP</td><td>Admin RPC (only with <code>parlons.node.rpc=true</code>)</td><td><code>127.0.0.1</code>, hard-coded</td><td><strong>Never expose, never proxy</strong></td></tr><tr><td><code>9501</code> (<code>parlons.relay.port</code>)</td><td>TCP</td><td>Maxima relay cape</td><td>all</td><td><strong>Public</strong></td></tr><tr><td><code>9501</code></td><td>UDP</td><td>STUN responder on the relay port</td><td>all</td><td>Optional; fleet opens it</td></tr><tr><td><code>9585</code> (<code>parlons.gateway.port</code>)</td><td>TCP/HTTP</td><td>Wallet gateway <code>/cmd</code> + <code>/nft</code></td><td><code>127.0.0.1</code></td><td>Loopback, behind TLS <code>/parlons-node/</code></td></tr><tr><td><code>9587</code> (<code>parlons.panel.port</code>)</td><td>TCP/HTTP</td><td>Account panel + API</td><td><code>127.0.0.1</code>, hard-coded</td><td>Loopback (SSH tunnel)</td></tr><tr><td><code>9602</code> (<code>parlons.dex.port</code>)</td><td>TCP/HTTP</td><td>DEX relay cape</td><td><code>127.0.0.1</code> with <code>parlons.dex.public</code>, else <code>0.0.0.0</code></td><td>Loopback, behind TLS <code>/dex-relay/</code></td></tr><tr><td><code>49737</code> (<code>parlons.keets.dhtport</code>)</td><td>UDP</td><td>HyperDHT bootstrap (fleet)</td><td>all</td><td><strong>Public</strong> on a fleet box</td></tr><tr><td><code>9006</code> (<code>p2p+5</code>)</td><td>TCP/HTTP</td><td>keets loopback API (token-gated, written to the node's <code>keets/apitoken</code>)</td><td><code>127.0.0.1</code></td><td>Loopback</td></tr></tbody></table></div>
+<h3 id="172-files">17.2 Files</h3>
+<div class="tablewrap"><table><thead><tr><th>Path</th><th>What</th><th>Secret</th></tr></thead><tbody><tr><td><code>/opt/maxima/parlons-node-&lt;ver&gt;.jar</code>, <code>parlons-node-fleet-&lt;ver&gt;.jar</code></td><td>The jars; every version is kept</td><td>no</td></tr><tr><td><code>/opt/maxima/parlons-node.jar</code></td><td>Symlink the unit runs; flip it to upgrade or roll back</td><td>no</td></tr><tr><td><code>/etc/systemd/system/parlons-node.service</code></td><td>The unit; keep <code>.before-&lt;what&gt;</code> backups</td><td>no</td></tr><tr><td><code>/usr/local/bin/parlons-pair</code></td><td>Pairing helper</td><td>no</td></tr><tr><td><code>/var/lib/parlons-node/</code></td><td>Data directory, mode 700, owner <code>maxima</code></td><td><strong>yes</strong></td></tr><tr><td><code>…/1.1/</code></td><td>The Minima node: databases, wallet, chain; <code>1.1/databases/megammr.mmr</code></td><td><strong>yes (wallet)</strong></td></tr><tr><td><code>…/1.1/keets/</code></td><td>keets identity (<code>pubkey</code>, keypair), <code>apitoken</code>, mailbox-list cache, media stores</td><td><strong>yes</strong></td></tr><tr><td><code>…/identity.txt</code></td><td>Pinned identity phrase or seed hex, mode 600</td><td><strong>yes (seed)</strong></td></tr><tr><td><code>…/gateway-token.txt</code></td><td>Gateway bearer token (read + relay only; advertised to phones)</td><td>low</td></tr><tr><td><code>…/account.txt</code>, <code>invite.txt</code>, <code>pair-code.txt</code>, <code>panel-ticket.txt</code></td><td>Account address; current one-time invite, code and panel link</td><td>invite/code/ticket until used</td></tr><tr><td><code>…/devices.json</code>, <code>cloud-settings.properties</code>, <code>node/</code>, <code>chat/</code>, <code>media/</code>, <code>private-files/</code>, <code>relay/</code>, <code>nft/</code></td><td>Account, chat, relay state, hosted NFT files</td><td>private</td></tr><tr><td><code>…/keets-mailbox/</code> (fleet)</td><td>Mailbox <code>keypair</code> + <code>pubkey</code></td><td><strong>yes (keypair)</strong></td></tr><tr><td><code>…/runtime/node-&lt;v&gt;+sidecar-&lt;v&gt;/</code> (fleet)</td><td>Extracted Node.js and keets sidecar; <code>.ok</code> marker; re-extracted when versions change</td><td>no</td></tr><tr><td><code>…/.seed-adopted</code></td><td>Marker written by <code>--seed-from</code></td><td>no</td></tr></tbody></table></div>
+<h3 id="173-release-checksums-node-v02143">17.3 Release checksums (node-v0.2.143)</h3>
+<pre><code>ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar
+3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9  parlons-node-fleet-0.2.143.jar</code></pre>
+<p>Source: <code>https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/SHA256SUMS</code>. Node releases are published with <code>--latest=false</code>, so GitHub's "Latest" badge never points at them; always pick a node release by its <code>node-v…</code> tag. The fleet jar embeds Node.js <strong>v20.20.2</strong> (linux-x64 sha256 <code>19e56f0825510207dd904f087fe52faa0a4eb6b2aab5f0ea7a33830d04888b8b</code>, linux-arm64 <code>47ef73d543ecf6eb19435f6c03a0ac4809b3bf0dd6b26c7c571efc2a6572a74d</code>, both from nodejs.org) and keets sidecar <strong>1.3.0</strong>.</p>
+<h3 id="174-compiled-in-lists-02143">17.4 Compiled-in lists (0.2.143)</h3>
+<p>Relay mesh bootstrap (<code>Bootstrap.RELAYS</code>, used when <code>parlons.relay.peers</code> is unset):</p>
+<pre><code>95.179.179.181:9501   sally        Amsterdam, NL
+65.109.31.226:9501    eurobuddha   Helsinki, FI
+45.77.246.226:9501    maxima       Singapore, SG
+78.141.237.9:9501     openproject  London, GB
+45.77.57.24:9501      vigilance    London, GB
+192.248.151.55:9501   megammr      London, GB</code></pre>
+<p>keets HyperDHT bootstraps (<code>KEETS_BOOTSTRAP</code>, overridable with <code>-keetsbootstrap</code>):</p>
+<pre><code>31.125.188.214:49737, 95.179.179.181:49737, 65.109.31.226:49737, 45.77.246.226:49737,
+78.141.237.9:49737, 45.77.57.24:49737, 192.248.151.55:49737,
+node1.hyperdht.org:49737, node2.hyperdht.org:49737, node3.hyperdht.org:49737</code></pre>
+<p>keets mailbox list: <code>https://eurobuddha.com/keets/mailboxes.json</code>, Ed25519 public key <code>2b176758f4c9eedcd514cb2accb73d4aa5332821339e41db2aa51da4707a1883</code>; the sidecar's built-in fallback is the six fleet mailboxes.</p>
+<p>Minima rootnode used by the installer: <code>65.109.31.226:9001</code>. Archive node used by the deploy script's <code>--seed-from</code>: <code>65.109.31.226:8001</code>. MegaMMR snapshot: <code>https://eurobuddha.com/mega.mmr</code>.</p>
+<h3 id="175-exit-codes">17.5 Exit codes</h3>
+<div class="tablewrap"><table><thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody><tr><td><code>0</code></td><td>Clean stop: <code>quit</code> over the admin RPC, or the embedded node shut itself down after a resync, restore or reset (systemd restarts it under <code>Restart=always</code>).</td></tr><tr><td><code>2</code></td><td>Refused to start: unknown CLI argument, refused or unknown Minima flag, unreadable conf file, admin RPC could not bind, or fleet mode on the wrong jar or platform.</td></tr><tr><td><code>3</code></td><td>Restart requested: a wallet resync or an identity import from a paired device (<code>RestartForceExitStatus=3</code>).</td></tr></tbody></table></div>
+<h3 id="176-glossary-short">17.6 Glossary (short)</h3>
+<p><strong>Cape</strong>: the Maxima relay inside the node. <strong>MegaMMR</strong>: Minima mode that keeps proofs for every coin, so the node can answer for any address. <strong>Rootnode</strong>: the Minima peer the node first discovers the network from. <strong>Mesh</strong>: the relays' network for directory lookups. <strong>keets</strong>: the peer-to-peer transport over HyperDHT that KeetChat and the bears use; a fleet box is a bootstrap and a mailbox for it. <strong>MAX#</strong>: an account's permanent, shareable address. <strong>Mx…</strong>: the Maxima public identity. <strong>MxUSD</strong>: the Minima dollar-pegged token, id <code>0x7D39745FBD29049BE29850B55A18BF550E4D442F930F86266E34193D89042A90</code>.</p>
+  </main>
+</div>
+<a class="top-link" href="#top" onclick="window.scrollTo(0,0);return false">Top</a>
+</body>
+</html>

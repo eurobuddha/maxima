@@ -117,21 +117,21 @@ For installation problems or moving an existing identity, use the [Parlons! manu
 
 The software you install for this complete Cloud setup is called **Parlons Node**. The Android **Parlons Cloud** app connects your phone to it. The future iPhone app will use this same approach; it is not available yet.
 
-**You need:** always-on Linux with systemd and sudo/root access; a 64-bit Raspberry Pi can be used. Plan RAM and growing chain storage using the [Node requirements](node.html#3-requirements). The manual recommends 2 GB RAM for a plain node or 8 GB for MegaMMR. The installer may enable MegaMMR on smaller machines, so select the mode deliberately.
+**You need:** always-on Linux with systemd and sudo/root access, 2 GB of RAM or more, an x86_64 or aarch64 CPU and a public IPv4 address (a VPS, or a 64-bit Raspberry Pi 4/5 behind a router with the ports forwarded). Plan RAM and growing chain storage with the [Node requirements](node.html#3-requirements): the MegaMMR wallet gateway wants 4 GB or more.
 
 ### Install, pair and check
 
-1. For a **plain full node without MegaMMR**, run this in the server's terminal:
+1. Run this in the server's terminal:
 
    ```
-   curl -fsSL {{NODE_INSTALL_SH}} | bash -s -- --no-megammr
+   curl -fsSL {{NODE_INSTALL}} | bash
    ```
 
-   For a wallet gateway with MegaMMR, follow the [full installation guide](node.html#5-three-ways-to-install) to size memory and configure it.
-2. The installer adds Java if needed, starts a system service and opens TCP 9001 and 9501 in supported active host firewalls. Check any provider firewall or home router too. Chain sync can take longer than account startup.
+   One command, one process, every service: a full **Minima** node, the **Parlons** relay and your always-on account, the **keets** transport with a public DHT bootstrap node and keets mailbox, and the **DEX** relay served over HTTPS. The box names itself `<a-b-c-d>.sslip.io` for the HTTPS parts; if you own a domain, point an A record at the box and add `--host node.example.com`. All options are in the [Node manual](node.html#5-three-ways-to-install).
+2. The installer adds Java and Caddy if needed, starts a system service and opens 9001/tcp, 9501/tcp+udp, 49737/udp and 80 + 443 in supported active host firewalls. Open the same ports in any provider firewall or home router. Chain sync can take longer than account startup.
 3. When asked, set an **admin pairing password**, then enter it to show your invitation QR. If you need it later, run `sudo parlons-pair --admin`.
 4. On your Android phone, follow [install and pair Parlons Cloud](start-pair.html). Scan the invitation, then tap **Connect & pair**.
-5. Check the server with `systemctl is-active parlons-node`. Read recent logs with `sudo journalctl -u parlons-node -n 50 --no-pager`.
+5. Check the server with `systemctl is-active parlons-node`. Read recent logs with `sudo journalctl -u parlons-node -n 50 --no-pager`. The last lines of the install name your DEX relay URL and print the box's keets mailbox key; send that key to the list maintainer so the box can hold mail for offline phones.
 6. Follow [seeds, identity and backups](node.html#20-seeds-identity-and-backups). The chat identity and node wallet phrase can differ; preserve both where applicable.
 
 Use **Node** in the paired app for account and device management. Node owners also get node tools; guests do not. For updates, monitoring and recovery, keep the [Node manual](node.html) handy.
@@ -214,6 +214,6 @@ Full instructions: [Parlons! manual](parlons.html), [Cloud manual](cloud.html), 
 | Parlons Desktop · Debian/Ubuntu x86-64 | [{{DESKTOP_VERSION}} · DEB]({{DESKTOP_DEB}}) |
 | Parlons Cloud Android, paired client | [{{PORTAL_VERSION}} · APK]({{PORTAL_APK}}) |
 | Parlons Cloud server | {{CLOUD_VERSION}} · use the host guide above |
-| Parlons Node | [{{NODE_VERSION}} · JAR]({{NODE_JAR}}) · use the Node guide above |
+| Parlons Node | [{{NODE_VERSION}} · fleet JAR]({{NODE_FLEET_JAR}}) · [plain JAR]({{NODE_JAR}}) · [checksums]({{NODE_SUMS}}) · or just `curl -fsSL {{NODE_INSTALL}} \| bash` |
 
 The apps and servers have separate version numbers. A bigger number does not mean a better choice. Release notes and checksums are on [GitHub]({{RELEASES}}).

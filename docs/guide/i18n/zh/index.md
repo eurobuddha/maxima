@@ -117,21 +117,21 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 
 完整 Cloud 方案安装的软件名为 **Parlons Node**。Android **Parlons Cloud** 应用将手机连接到它。未来 iPhone 应用也会使用这种方式，目前尚未提供。
 
-**准备：**保持在线、带 systemd 和 sudo/root 权限的 Linux；可使用 64 位树莓派。参照[节点要求](node.html#3-requirements)规划内存和不断增长的链存储。手册建议普通节点配 2 GB 内存，MegaMMR 配 8 GB。安装程序可能在较小机器上开启 MegaMMR，请主动选择模式。
+**准备：**保持在线、带 systemd 和 sudo/root 权限的 Linux，2 GB 及以上内存，x86_64 或 aarch64 CPU，以及公网 IPv4 地址（VPS，或路由器后面已转发端口的 64 位树莓派 4/5）。参照[节点要求](node.html#3-requirements)规划内存和不断增长的链存储：MegaMMR 钱包网关需要 4 GB 以上。
 
 ### 安装、配对和检查
 
-1. **不带 MegaMMR 的普通完整节点**，在服务器终端运行：
+1. 在服务器终端运行：
 
    ```
-   curl -fsSL {{NODE_INSTALL_SH}} | bash -s -- --no-megammr
+   curl -fsSL {{NODE_INSTALL}} | bash
    ```
 
-   若要带 MegaMMR 的钱包网关，请按[完整安装指南](node.html#5-three-ways-to-install)配置内存。
-2. 安装程序会按需添加 Java，启动系统服务，并在受支持且启用的主机防火墙上开放 TCP 9001、9501。还应检查云防火墙或家用路由器。区块链同步可能比账户启动更久。
+   一条命令、一个进程、全部服务：完整 **Minima** 节点、**Parlons** 中继和您的常驻账户、带公开 DHT 引导节点与邮箱的 **keets** 传输，以及通过 HTTPS 提供的 **DEX** 中继。HTTPS 部分机器以 `<a-b-c-d>.sslip.io` 自行命名；若您有域名，把 A 记录指向机器并加上 `--host node.example.com`。全部选项见 [Node 手册](node.html#5-three-ways-to-install)。
+2. 安装程序会按需添加 Java 和 Caddy，启动系统服务，并在受支持且启用的主机防火墙上开放 9001/tcp、9501/tcp+udp、49737/udp 以及 80 + 443。在云防火墙或家用路由器上也开放同样的端口。区块链同步可能比账户启动更久。
 3. 按提示设置**管理员配对密码**，再输入密码显示邀请二维码。以后可运行 `sudo parlons-pair --admin`。
 4. 在手机上按 [Cloud 配对指南](start-pair.html)扫描邀请，点击 **Connect & pair**。
-5. 用 `systemctl is-active parlons-node` 检查服务，用 `sudo journalctl -u parlons-node -n 50 --no-pager` 查看最近日志。
+5. 用 `systemctl is-active parlons-node` 检查服务，用 `sudo journalctl -u parlons-node -n 50 --no-pager` 查看最近日志。安装的最后几行给出您的 DEX 中继 URL 并打印机器的 keets 邮箱密钥；把该密钥发给列表维护者，机器才能为离线手机保存邮件。
 6. 按[助记词、身份与备份](node.html#20-seeds-identity-and-backups)备份。聊天身份和节点钱包助记词可能不同，需要时两者都保存。
 
 使用手机的 **Node** 管理账户和设备。节点所有者拥有节点工具，访客没有。更新、监控和恢复见 [Node 手册](node.html)。
@@ -214,6 +214,6 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 | Parlons Desktop · Debian/Ubuntu x86-64 | [{{DESKTOP_VERSION}} · DEB]({{DESKTOP_DEB}}) |
 | Parlons Cloud Android · 配对客户端 | [{{PORTAL_VERSION}} · APK]({{PORTAL_APK}}) |
 | Parlons Cloud 服务器 | {{CLOUD_VERSION}} · 参照上方托管指南 |
-| Parlons Node | [{{NODE_VERSION}} · JAR]({{NODE_JAR}}) · 参照 Node 指南 |
+| Parlons Node | [{{NODE_VERSION}} · fleet JAR]({{NODE_FLEET_JAR}}) · [普通 JAR]({{NODE_JAR}}) · [校验和]({{NODE_SUMS}}) · 或直接 `curl -fsSL {{NODE_INSTALL}} \| bash` |
 
 应用与服务器各有版本号，数字更大不代表更适合您。发布说明和校验和见 [GitHub]({{RELEASES}})。

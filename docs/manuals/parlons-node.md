@@ -1,7 +1,11 @@
 # Parlons Node — Operator's Manual
 
-For `parlons-node.jar` **0.2.138** (release tag `node-v0.2.138`), which carries DEX relay
-**0.1.5**. Every flag, port, default and endpoint in this manual comes from the source in the
+For Parlons Node **0.2.143** (release tag `node-v0.2.143`), which carries DEX relay
+**0.1.5**. The release ships two jars: `parlons-node-0.2.143.jar`, the plain node, and
+`parlons-node-fleet-0.2.143.jar`, the same node with a Node.js runtime and the keets sidecar
+embedded, so one jar also runs the keets transport, a public HyperDHT bootstrap node and a keets
+mailbox ([§18](#18-the-keets-sidecar-keetchat-bridge)). The one-line installer picks the fleet jar
+whenever the box can run it. Every flag, port, default and endpoint in this manual comes from the source in the
 `eurobuddha/maxima` repository (`node/`, `server/`, `core/`, `account/`, `dexrelay/`) and the
 deploy script `ops/deploy-parlons-node.sh`. If a value is not in the code, this manual says so
 and does not guess it.
@@ -157,6 +161,7 @@ relay network, and give phones a wallet gateway.
 |---|---|---|
 | Node with MegaMMR (the default; needed to be a wallet gateway) | 8 GB | 3 GB minimum |
 | Node without MegaMMR (`-Dparlons.node.megammr=false`) | 2 GB | 768 MB |
+| Fleet jar (any of the above + the keets sidecar: Node.js, DHT, mailbox) | + 1 GB, 2 GB minimum; x86_64 or aarch64 only | as above (`MemoryMax` + 1 GB) |
 
 These figures come from the fleet notes in `cloud/NODE-SETUP.md`. They were learned the hard way: MegaMMR nodes at 2 GB and 2.5 GB heap looped on out-of-memory errors,
 and one at 3 GB crashed.
@@ -227,35 +232,39 @@ pick a node release by its tag.
 1. Download the jar and the checksum file:
 
    ```bash
-   VER=0.2.138
+   VER=0.2.143
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
-2. Check the SHA-256 hash. The hash of `parlons-node-0.2.138.jar` is:
+   For the fleet jar (keets transport, DHT bootstrap and mailbox included), fetch
+   `parlons-node-fleet-$VER.jar` from the same release instead. Its SHA-256 is
+   `3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9`.
+
+2. Check the SHA-256 hash. The hash of `parlons-node-0.2.143.jar` is:
 
    ```
-   597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af
+   ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc
    ```
 
    ```bash
-   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
+   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   It must print `parlons-node-0.2.138.jar: OK`. If it does not, delete the file and do not run it.
+   It must print `parlons-node-0.2.143.jar: OK`. If it does not, delete the file and do not run it.
 
 3. Confirm the version. This does not start a node:
 
    ```bash
-   java -jar parlons-node-0.2.138.jar --version
-   # parlons-node 0.2.138
+   java -jar parlons-node-0.2.143.jar --version
+   # parlons-node 0.2.143
    ```
 
 4. Print the built-in help, which lists the main properties. This does not start a node either:
 
    ```bash
-   java -jar parlons-node-0.2.138.jar --help
+   java -jar parlons-node-0.2.143.jar --help
    ```
 
 ### How to build the jar from source instead
@@ -298,46 +307,63 @@ pick a node release by its tag.
 
 ### A. The one-line installer (start here)
 
-On the Linux machine itself (a VPS, a Raspberry Pi with a 64-bit OS, a home server), as root or a user with `sudo`:
+On the Linux machine itself (a VPS, a Raspberry Pi 4/5 with a 64-bit OS, a home server), as root or a user with `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash
+curl -fsSL {{NODE_INSTALL}} | bash
 ```
+
+That one command gives the network a complete endpoint. By default the box runs, in one process:
+
+- a **full Minima node** in the server role (P2P 9001/tcp), with MegaMMR when the box has 3.5 GB of RAM or more;
+- the **Parlons relay** (Maxima cape, 9501/tcp+udp) and your always-on **Parlons account**;
+- the **keets transport**, a public **HyperDHT bootstrap node** (49737/udp) and a **keets mailbox**, from the Node.js runtime and sidecar embedded in the fleet jar;
+- the **DEX relay cape** (Dexicon order book) and the **wallet gateway**, served over HTTPS by Caddy at `https://<name>/dex-relay` and `https://<name>/parlons-node`. The name is the one you pass with `--host`; without it the box uses `<a-b-c-d>.sslip.io`, a free name that resolves to its own public address, so nothing has to be registered.
 
 What it does, in order:
 
-1. Installs Java 11+ and `qrencode` (apt, dnf, apk or pacman) if they are missing.
-2. Finds the newest `node-v…` release on GitHub, downloads `parlons-node-<ver>.jar` and refuses it unless its sha256 matches the release's `SHA256SUMS`.
-3. Creates the `maxima` user and `/var/lib/parlons-node` (mode 700), installs `/usr/local/bin/parlons-pair`, and writes the same hardened `parlons-node.service` as the deploy script ([§7](#7-the-systemd-unit-annotated)).
-4. Sizes the node to the machine: with 3.5 GB of RAM or more it runs MegaMMR with a 2 GB heap; below that, a plain full node with a 768 MB heap. It syncs from `65.109.31.226:9001`.
-5. Opens TCP 9001 (Minima) and 9501 (the relay) in ufw or firewalld when one is active.
+1. Installs Java 11+ and `qrencode` (apt, dnf, apk or pacman) if they are missing, and Caddy for the HTTPS front (unless another web server already holds ports 80/443, in which case it tells you which two paths to front yourself, [§11](#11-tls-fronting-caddy-nginx-apache)).
+2. Finds the newest `node-v…` release on GitHub, downloads `parlons-node-fleet-<ver>.jar` and refuses it unless its sha256 matches the release's `SHA256SUMS`.
+3. Creates the `maxima` user and `/var/lib/parlons-node` (mode 700), installs `/usr/local/bin/parlons-pair`, and writes the hardened `parlons-node.service` ([§7](#7-the-systemd-unit-annotated)) with `-Dparlons.fleet=true`, `-Dparlons.public.host=<your public IPv4>`, `-Dparlons.dex.public=https://<name>/dex-relay` and `-Dparlons.node.public=https://<name>/parlons-node`.
+4. Sizes the node to the machine: with 3.5 GB of RAM or more it runs MegaMMR with a 2 GB heap; below that, a plain full node with a 768 MB heap. `MemoryMax` is the heap plus 1.5 GB for the sidecar. It syncs from `65.109.31.226:9001`.
+5. Opens 9001/tcp, 9501/tcp+udp, 49737/udp and 80 + 443 in ufw or firewalld when one is active.
 6. Starts the node, waits for your account address and prints it in full.
 7. Asks you to set the admin pairing password (first install only), then asks for it once more and draws the QR code your phone scans in Parlons Cloud.
+8. Prints the box's keets public key, its DHT bootstrap address and its mailbox key, with the command the list maintainer runs to sign the mailbox into the published list.
+
+The full set needs an x86_64 or aarch64 CPU, 2 GB of RAM and a public IPv4 address. On a box that lacks one of those the installer says why and falls back to the plain jar (`parlons-node-<ver>.jar`: Minima node, Parlons relay and account, no keets, no DEX), which runs in 1 GB on any CPU.
 
 Options (put them after `bash -s --`):
 
 | Option | Effect |
 |---|---|
+| `--host node.example.com` | Serve the DEX relay and the wallet gateway at your own name instead of the sslip.io one. Point the name's A record at the box first; Caddy fetches the certificate itself. |
+| `--public-host 1.2.3.4` | The public IPv4 the DHT and the relay announce. Default: the box's global-scope address. Behind a home router, pass your public address here and forward the ports. |
+| `--basic` | The plain jar on purpose: no keets transport, DHT, mailbox or DEX. |
+| `--fleet` | Insist on the full jar; fail instead of falling back. |
 | `--update` | Fetch the newest release and restart. Running the install command again does the same. |
 | `--uninstall` | Stop and remove the service and `parlons-pair`. `/var/lib/parlons-node` (identity, wallet, chats) is kept. |
-| `--no-megammr` | A plain full node (1 GB RAM is enough). Chosen for you on machines under 3.5 GB. |
+| `--no-megammr` | A plain full node without the MegaMMR (1 GB RAM is enough). Chosen for you on machines under 3.5 GB. |
 | `--heap <size>` | A different Java heap, for example `--heap 3g`. |
 
-For example: `curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --no-megammr`
+For example, with your own domain: `curl -fsSL {{NODE_INSTALL}} | bash -s -- --host node.example.com`
 
-The installer leaves the admin RPC off and sets no relay mesh peers, DEX relay, TLS front or keets sidecar. For any of those, use the deploy script (B) or edit the unit ([§7](#7-the-systemd-unit-annotated)). On a Mac or Windows PC, install Parlons Desktop instead. If the machine cannot run a node at all, the account-only `get-parlons-cloud.sh` runs in 1 GB ([Parlons Cloud Portal manual](parlons-cloud-portal.md)).
+The installer sets no relay mesh peers (the compiled-in bootstrap list is used) and no blob shelf. For those, use the deploy script (B) or edit the unit ([§7](#7-the-systemd-unit-annotated)). On a Mac or Windows PC, install Parlons Desktop instead. If the machine cannot run a node at all, the account-only `get-parlons-cloud.sh` runs in 1 GB ([Parlons Cloud Portal manual](parlons-cloud-portal.md)).
 
 #### How to install with the one-line installer
 
-1. Open TCP 9001 and 9501 in your cloud provider's firewall, or forward them on your home router. The account works without them; relaying for others and serving blocks needs them.
-2. Run the command above in an SSH session or a terminal on the machine. Do not run it from a script with no terminal: it then skips the password and QR steps.
-3. When asked, type an admin pairing password twice. Keep it; every new invitation for your own devices needs it.
-4. When asked again, type the password once. The QR code and the complete invite appear.
-5. In Parlons Cloud on your phone, tap **Scan pairing QR** and scan it.
-6. Watch the chain sync: `journalctl -u parlons-node -f | grep heartbeat`.
-7. Back up the seed ([§20](#20-seeds-identity-and-backups)).
+1. Open 9001/tcp, 9501/tcp and 9501/udp, 49737/udp, and 80 + 443/tcp in your cloud provider's firewall, or forward them on your home router. The account works without them; relaying for others, serving blocks, the DHT and the DEX relay need them.
+2. If you have a domain, point an A record at the box now, so Caddy can fetch the certificate at the end of the install. Otherwise skip this: the sslip.io name needs nothing.
+3. Run the command above in an SSH session or a terminal on the machine. Do not run it from a script with no terminal: it then skips the password and QR steps.
+4. When asked, type an admin pairing password twice. Keep it; every new invitation for your own devices needs it.
+5. When asked again, type the password once. The QR code and the complete invite appear.
+6. In Parlons Cloud on your phone, tap **Scan pairing QR** and scan it.
+7. Read the last lines. They name the DEX relay URL and the wallet gateway URL, and print the box's keets public key, DHT bootstrap address and mailbox key. Send the mailbox line to the list maintainer; until it is signed into the published list, the box relays and bootstraps but does not hold mail for offline phones.
+8. Watch the chain sync: `journalctl -u parlons-node -f | grep heartbeat`.
+9. Check the DEX relay from another machine: `curl -s https://<name>/dex-relay/dex/health` must answer. The certificate can take a minute after the first start.
+10. Back up the seed ([§20](#20-seeds-identity-and-backups)).
 
-If step 3 or 4 was skipped, run `sudo parlons-pair --set-admin-password` once and then `sudo parlons-pair --admin`.
+If step 4 or 5 was skipped, run `sudo parlons-pair --set-admin-password` once and then `sudo parlons-pair --admin`.
 
 ### B. The deploy script (from your own computer)
 
@@ -360,7 +386,7 @@ same operation.
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.138.jar dist/
+   mv ~/Downloads/parlons-node-0.2.143.jar dist/
    ```
 
 3. Check that key-based SSH as root works. The script uses `BatchMode=yes`, so it cannot answer a
@@ -376,7 +402,7 @@ same operation.
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.138.jar \
+       --jar dist/parlons-node-0.2.143.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -475,11 +501,11 @@ These steps do on the box what the deploy script does. Run them as root.
 3. Copy the verified jar into `/opt/maxima` and point the symlink at it:
 
    ```bash
-   cp parlons-node-0.2.138.jar /opt/maxima/
+   cp parlons-node-0.2.143.jar /opt/maxima/
    cd /opt/maxima
-   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.138.jar
-   ln -sfn parlons-node-0.2.138.jar parlons-node.jar
+   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.143.jar
+   ln -sfn parlons-node-0.2.143.jar parlons-node.jar
    ```
 
 4. Optional: install the pairing helper from a checkout of the repository:
@@ -525,7 +551,7 @@ These steps do on the box what the deploy script does. Run them as root.
 3. Find the boot line. It names the version, the data folder and the ports:
 
    ```
-   [parlons-node] Parlons Node 0.2.138 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.143 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Watch the chain sync. Every 30 s a heartbeat line prints the block height:
@@ -567,7 +593,7 @@ explanations are in the comment block above `ExecStart`.
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.138)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -917,6 +943,8 @@ boot log shows the applied flags as `minima flags: …`, with the `mdspassword` 
 | `9585` (`parlons.gateway.port`) | TCP/HTTP | Wallet gateway `/cmd` and `/nft` | `127.0.0.1` | Loopback, behind a TLS front at `/parlons-node/`. |
 | `9587` (`parlons.panel.port`) | TCP/HTTP | Account panel and API | `127.0.0.1`, hard-coded | Loopback. Reach it with an SSH tunnel. |
 | `9602` (`parlons.dex.port`, off by default) | TCP/HTTP | DEX relay cape | `127.0.0.1` when `parlons.dex.public` is set, **else `0.0.0.0`**; `parlons.dex.bind` overrides | Loopback, behind a TLS front at `/dex-relay/`. |
+| `49737` (`parlons.keets.dhtport`, fleet jar only) | UDP | keets HyperDHT bootstrap node | all | **Public.** Open it in the firewall. |
+| `p2p+5` (`9006`, with `-keets`) | TCP/HTTP | keets loopback API (token in `<data>/keets/apitoken`) | `127.0.0.1`, hard-coded | Never expose. |
 
 Port conflicts to know about:
 
@@ -1820,6 +1848,10 @@ Dexicon. It runs **inside** the node; it is not a separate service. It is untrus
 
 ### How to turn on the DEX relay cape
 
+The one-line installer ([§5 A](#5-three-ways-to-install)) already does all of this: it sets
+`parlons.dex.public` to `https://<name>/dex-relay` (fleet mode then opens the cape on loopback
+9602) and fronts it with Caddy. The steps below are for a node installed another way.
+
 1. Add the three properties to the unit, then restart ([§7](#how-to-change-the-unit)):
 
    ```
@@ -2084,6 +2116,18 @@ identity. The previous identity is kept in `account-history/<import-id>/previous
 
 When the embedded Minima node runs keets, the account's chat engine gains the keets transport,
 and the node becomes the **single reader** of its keets inbox.
+
+**The fleet jar does all of this by itself.** `parlons-node-fleet-<ver>.jar` carries a Node.js
+runtime and the sidecar inside it. Started with `-Dparlons.fleet=true` (what the one-line installer
+writes), it extracts them to `<data>/runtime/` on first start, turns on the Minima server role and
+`-keets`, and runs the sidecar in **serve** mode: one JavaScript process that is the box's keets
+transport, its public HyperDHT bootstrap node (`49737/udp`, `-Dparlons.keets.dhtport`) and its
+keets mailbox (`<data>/keets-mailbox`). `-Dparlons.public.host=<ip>` names the box. The boot log
+prints a `FLEET ENDPOINT` banner with the keets public key, the DHT bootstrap address and the
+mailbox key, plus the `mailboxes-sign.js` command the list maintainer runs; the mailbox only holds
+mail for offline phones once it is signed into the published list. Minima flags you set in
+`parlons.node.args` win over what fleet mode would set. The rest of this section is the by-hand
+route with the plain jar and an external sidecar.
 
 - Turn it on with Minima flags in `parlons.node.args`:
   `-keets -keetssidecar /opt/maxima/keets-sidecar/index.js`. The desktop apps also pass
@@ -2467,7 +2511,7 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 2. Copy it to the box under a temporary name:
 
    ```bash
-   B=parlons-node-0.2.138.jar
+   B=parlons-node-0.2.143.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2475,9 +2519,9 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 
    ```bash
    cd /opt/maxima
-   echo '597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.138.jar.part parlons-node-0.2.138.jar
-   chmod 644 parlons-node-0.2.138.jar
+   echo 'ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.143.jar.part parlons-node-0.2.143.jar
+   chmod 644 parlons-node-0.2.143.jar
    ```
 
 4. Note the jar the symlink points at now. You need it to roll back:
@@ -2489,19 +2533,19 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 5. Back up the unit:
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.138.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.143.jar
    ```
 
 6. Update the version in the unit's `Description` line (optional; it is only a label):
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.138)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.143)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. Point the symlink at the new jar:
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.138.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.143.jar /opt/maxima/parlons-node.jar
    ```
 
 8. Restart:
@@ -2518,7 +2562,7 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   The boot line must show `Parlons Node 0.2.138`, and a DEX cape must show `dex relay 0.1.5 up`.
+   The boot line must show `Parlons Node 0.2.143`, and a DEX cape must show `dex relay 0.1.5 up`.
 10. Verify from outside ([§23](#23-verifying-from-outside)).
 
 If you run several boxes, upgrade **one box at a time**, and verify each one before you start the next.
@@ -2529,7 +2573,7 @@ If you run several boxes, upgrade **one box at a time**, and verify each one bef
 2. Re-run the script with the **same flags** you used before, and the new jar:
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.138.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.143.jar <your usual flags>
    ```
 
    The script uploads and checks the jar, flips the symlink, and rewrites the unit from its flags.

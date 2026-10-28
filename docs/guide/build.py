@@ -33,8 +33,12 @@ LINKS = {
     "DESKTOP_MSI": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.118/MaximaNode-1.5.118.msi",
     "DESKTOP_DEB": "https://github.com/eurobuddha/maxima/releases/download/desktop-v1.5.118/maximanode_1.5.118_amd64.deb",
     "CLOUD_VERSION": "0.11.127",
-    "NODE_VERSION": "0.2.141",
-    "NODE_JAR": "https://github.com/eurobuddha/maxima/releases/download/node-v0.2.141/parlons-node-0.2.141.jar",
+    "NODE_VERSION": "0.2.143",
+    "NODE_JAR": "https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/parlons-node-0.2.143.jar",
+    "NODE_FLEET_JAR": "https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/parlons-node-fleet-0.2.143.jar",
+    "NODE_SUMS": "https://github.com/eurobuddha/maxima/releases/download/node-v0.2.143/SHA256SUMS",
+    # the one-line installer, served by the site itself (a copy of ops/get-parlons-node.sh, see main())
+    "NODE_INSTALL": "https://parlons.info/install.sh",
     "RELEASES": "https://github.com/eurobuddha/maxima/releases",
     "REPO": "https://github.com/eurobuddha/maxima",
     "ISSUES": "https://github.com/eurobuddha/maxima/issues",
@@ -515,6 +519,8 @@ def main():
     shutil.copytree(os.path.join(HERE, "site", "img"), os.path.join(adir, "img"))
     shutil.copy(os.path.join(HERE, "site", "site.css"), os.path.join(adir, "site.css"))
     shutil.copy(os.path.join(HERE, "site", "landing.css"), os.path.join(adir, "landing.css"))
+    # https://parlons.info/install.sh = ops/get-parlons-node.sh, byte for byte (the Node one-liner)
+    shutil.copy(os.path.join(DOCS, "..", "ops", "get-parlons-node.sh"), os.path.join(out_dir, "install.sh"))
 
     anchors = {}
     for name, src, navlabel, kind in PAGES:

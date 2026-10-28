@@ -1,9 +1,7 @@
 # Parlons Node — 运维手册
 
-适用于 `parlons-node.jar` **0.2.138**（发布标签 `node-v0.2.138`），其中包含 DEX 中继
-**0.1.5**。本手册中的每个参数、端口、默认值和端点都来自 `eurobuddha/maxima` 仓库的源代码
-（`node/`、`server/`、`core/`、`account/`、`dexrelay/`）以及部署脚本 `ops/deploy-parlons-node.sh`。
-如果某个值不在代码中，本手册会直接说明，而不会猜测。
+适用于 Parlons Node **0.2.143**（发布标签 `node-v0.2.143`），其内含 DEX 中继
+**0.1.5**。该发布提供两个 jar：`parlons-node-0.2.143.jar` 是普通节点；`parlons-node-fleet-0.2.143.jar` 是同一节点并内嵌 Node.js 运行时和 keets 附属进程，因此一个 jar 还能运行 keets 传输、公开的 HyperDHT 引导节点和 keets 邮箱（[§18](#18-the-keets-sidecar-keetchat-bridge)）。只要机器能运行，一行命令安装程序就会选择 fleet jar。
 
 示例中的主机名（`node.example.com`、`peer1.example.net` 等）都是
 占位符，请换成你自己的。
@@ -156,6 +154,7 @@ Parlons Node 是一个 Java 进程，其中包含：
 |---|---|---|
 | 带 MegaMMR 的节点（默认；作为钱包网关所必需） | 8 GB | 至少 3 GB |
 | 不带 MegaMMR 的节点（`-Dparlons.node.megammr=false`） | 2 GB | 768 MB |
+| Fleet jar（以上任一 + keets 附属进程：Node.js、DHT、邮箱） | 再加 1 GB，至少 2 GB；仅限 x86_64 或 aarch64 | 同上（`MemoryMax` + 1 GB） |
 
 这些数字来自 `cloud/NODE-SETUP.md` 中的节点群笔记，是吃过亏才总结出来的：堆为 2 GB 和 2.5 GB 的 MegaMMR 节点陷入内存不足的循环，
 而一个 3 GB 的节点崩溃了。
@@ -226,35 +225,39 @@ Parlons Node 是一个 Java 进程，其中包含：
 1. 下载 jar 和校验和文件：
 
    ```bash
-   VER=0.2.138
+   VER=0.2.143
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
-2. 检查 SHA-256 哈希。`parlons-node-0.2.138.jar` 的哈希是：
+   如需 fleet jar（内含 keets 传输、DHT 引导节点和邮箱），改为从同一发布下载
+   `parlons-node-fleet-$VER.jar`。其 SHA-256 为
+   `3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9`。
+
+2. 检查 SHA-256 哈希。`parlons-node-0.2.143.jar` 的哈希是：
 
    ```
-   597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af
+   ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc
    ```
 
    ```bash
-   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
+   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   它必须输出 `parlons-node-0.2.138.jar: OK`。如果不是，请删除该文件，不要运行它。
+   它必须输出 `parlons-node-0.2.143.jar: OK`。如果不是，请删除该文件，不要运行它。
 
 3. 确认版本。这不会启动节点：
 
    ```bash
-   java -jar parlons-node-0.2.138.jar --version
-   # parlons-node 0.2.138
+   java -jar parlons-node-0.2.143.jar --version
+   # parlons-node 0.2.143
    ```
 
 4. 打印内置帮助，其中列出了主要属性。这同样不会启动节点：
 
    ```bash
-   java -jar parlons-node-0.2.138.jar --help
+   java -jar parlons-node-0.2.143.jar --help
    ```
 
 ### 如何改为从源代码构建 jar
@@ -297,46 +300,63 @@ Parlons Node 是一个 Java 进程，其中包含：
 
 ### A. 一行命令安装程序（从这里开始）
 
-在 Linux 机器本身上（VPS、装有 64 位系统的 Raspberry Pi、家用服务器），以 root 或有 `sudo` 权限的用户运行：
+在 Linux 机器本身（VPS、装有 64 位系统的树莓派 4/5、家用服务器）上，以 root 或可用 `sudo` 的用户运行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash
+curl -fsSL {{NODE_INSTALL}} | bash
 ```
 
-它依次执行以下操作：
+这一条命令就为网络提供一个完整的端点。默认情况下，这台机器在一个进程中运行：
 
-1. 如果缺少 Java 11+ 和 `qrencode`，就安装它们（apt、dnf、apk 或 pacman）。
-2. 在 GitHub 上找到最新的 `node-v…` 版本，下载 `parlons-node-<ver>.jar`，只有当它的 sha256 与该版本的 `SHA256SUMS` 一致时才接受。
-3. 创建 `maxima` 用户和 `/var/lib/parlons-node`（权限 700），安装 `/usr/local/bin/parlons-pair`，并写入与部署脚本相同的加固版 `parlons-node.service`（[§7](#7-the-systemd-unit-annotated)）。
-4. 根据机器配置确定节点规模：内存为 3.5 GB 或以上时，以 2 GB 堆运行 MegaMMR；低于此值时，以 768 MB 堆运行普通完整节点。它从 `65.109.31.226:9001` 同步。
-5. 如果 ufw 或 firewalld 处于启用状态，就在其中开放 TCP 9001（Minima）和 9501（中继）。
-6. 启动节点，等待你的账户地址出现，并完整打印出来。
-7. 请你设置管理员配对密码（仅首次安装），然后再请你输入一次，并绘制出供手机在 Parlons Cloud 中扫描的二维码。
+- 一个服务器角色的**完整 Minima 节点**（P2P 9001/tcp），内存达到 3.5 GB 时启用 MegaMMR；
+- **Parlons 中继**（Maxima cape，9501/tcp+udp）和您常驻在线的 **Parlons 账户**；
+- **keets 传输**、一个公开的 **HyperDHT 引导节点**（49737/udp）和一个 **keets 邮箱**，由 fleet jar 内嵌的 Node.js 运行时和附属进程提供；
+- **DEX 中继 cape**（Dexicon 订单簿）和**钱包网关**，由 Caddy 通过 HTTPS 在 `https://<名称>/dex-relay` 与 `https://<名称>/parlons-node` 提供。名称即 `--host` 传入的域名；不传时机器使用 `<a-b-c-d>.sslip.io`，这是一个解析到自身公网地址的免费名称，无需注册任何东西。
+
+它依次做这些事：
+
+1. 缺少时安装 Java 11+ 和 `qrencode`（apt、dnf、apk 或 pacman），并安装 Caddy 作为 HTTPS 前端（若已有其他 Web 服务器占用 80/443，则告诉您需要自行代理的两个路径，见[§11](#11-tls-fronting-caddy-nginx-apache)）。
+2. 在 GitHub 上找到最新的 `node-v…` 发布，下载 `parlons-node-fleet-<ver>.jar`，sha256 与发布的 `SHA256SUMS` 不符则拒绝。
+3. 创建 `maxima` 用户和 `/var/lib/parlons-node`（权限 700），安装 `/usr/local/bin/parlons-pair`，写入加固的 `parlons-node.service`（[§7](#7-the-systemd-unit-annotated)），其中含 `-Dparlons.fleet=true`、`-Dparlons.public.host=<您的公网 IPv4>`、`-Dparlons.dex.public=https://<名称>/dex-relay` 和 `-Dparlons.node.public=https://<名称>/parlons-node`。
+4. 按机器调整节点：内存 3.5 GB 及以上时以 2 GB 堆运行 MegaMMR；低于此值则以 768 MB 堆运行普通完整节点。`MemoryMax` 为堆加 1.5 GB（留给附属进程）。从 `65.109.31.226:9001` 同步。
+5. 在启用的 ufw 或 firewalld 中开放 9001/tcp、9501/tcp+udp、49737/udp 以及 80 + 443。
+6. 启动节点，等待账户地址并完整打印。
+7. 要求设置管理员配对密码（仅首次安装），再请输入一次，然后绘制手机在 Parlons Cloud 中扫描的二维码。
+8. 打印机器的 keets 公钥、DHT 引导地址和邮箱密钥，以及列表维护者用来把邮箱签入已发布列表的命令。
+
+完整方案需要 x86_64 或 aarch64 CPU、2 GB 内存和公网 IPv4 地址。机器缺少其中任一项时，安装程序会说明原因并退回普通 jar（`parlons-node-<ver>.jar`：Minima 节点、Parlons 中继和账户，无 keets、无 DEX），它可在任何 CPU 上以 1 GB 内存运行。
 
 选项（放在 `bash -s --` 之后）：
 
 | 选项 | 作用 |
 |---|---|
-| `--update` | 获取最新版本并重启。再次运行安装命令效果相同。 |
-| `--uninstall` | 停止并删除服务和 `parlons-pair`。`/var/lib/parlons-node`（身份、钱包、聊天）会被保留。 |
-| `--no-megammr` | 普通完整节点（1 GB 内存即可）。在内存低于 3.5 GB 的机器上会自动选择。 |
-| `--heap <size>` | 使用不同的 Java 堆，例如 `--heap 3g`。 |
+| `--host node.example.com` | 用您自己的域名而非 sslip.io 名称提供 DEX 中继和钱包网关。先把该域名的 A 记录指向此机器；Caddy 会自行获取证书。 |
+| `--public-host 1.2.3.4` | DHT 和中继对外通告的公网 IPv4。默认为机器的全局地址。在家用路由器后面时，填写您的公网地址并转发端口。 |
+| `--basic` | 有意使用普通 jar：无 keets 传输、DHT、邮箱或 DEX。 |
+| `--fleet` | 坚持使用完整 jar；失败而不是退回。 |
+| `--update` | 获取最新发布并重启。再次运行安装命令效果相同。 |
+| `--uninstall` | 停止并移除服务和 `parlons-pair`。保留 `/var/lib/parlons-node`（身份、钱包、聊天）。 |
+| `--no-megammr` | 不带 MegaMMR 的普通完整节点（1 GB 内存足够）。内存低于 3.5 GB 的机器会自动选择。 |
+| `--heap <大小>` | 不同的 Java 堆，例如 `--heap 3g`。 |
 
-例如：`curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --no-megammr`
+例如，使用自己的域名：`curl -fsSL {{NODE_INSTALL}} | bash -s -- --host node.example.com`
 
-安装程序不会开启管理 RPC，也不会设置中继网格对等节点、DEX 中继、TLS 前端或 keets 附属进程。如需其中任何一项，请使用部署脚本（B）或编辑单元文件（[§7](#7-the-systemd-unit-annotated)）。在 Mac 或 Windows 电脑上，请改为安装 Parlons Desktop。如果机器根本无法运行节点，仅含账户的 `get-parlons-cloud.sh` 只需 1 GB 内存即可运行（[Parlons Cloud 门户手册](parlons-cloud-portal.md)）。
+安装程序不设置中继网状对等节点（使用内置引导列表），也不设置 blob 存储。如有需要，使用部署脚本（B）或编辑单元文件（[§7](#7-the-systemd-unit-annotated)）。Mac 或 Windows 电脑请改装 Parlons Desktop。若机器完全无法运行节点，仅账户的 `get-parlons-cloud.sh` 可在 1 GB 内运行（[Parlons Cloud Portal 手册](parlons-cloud-portal.md)）。
 
 #### 如何用一行命令安装程序安装
 
-1. 在云服务商的防火墙中开放 TCP 9001 和 9501，或在家用路由器上转发这两个端口。没有它们账户也能工作；但要为他人中继和提供区块，就需要它们。
-2. 在 SSH 会话或机器上的终端中运行上面的命令。不要在没有终端的脚本中运行它：那样会跳过密码和二维码步骤。
-3. 出现提示时，输入两次管理员配对密码。请妥善保存；以后为你自己的设备生成每个新邀请都需要它。
-4. 再次出现提示时，输入一次密码。随后会显示二维码和完整的邀请。
-5. 在手机上的 Parlons Cloud 中，点按 **扫描配对二维码** 并扫描它。
-6. 观察区块链同步：`journalctl -u parlons-node -f | grep heartbeat`。
-7. 备份助记词（[§20](#20-seeds-identity-and-backups)）。
+1. 在云服务商的防火墙中开放 9001/tcp、9501/tcp 和 9501/udp、49737/udp 以及 80 + 443/tcp，或在家用路由器上转发它们。账户没有它们也能工作；为他人中继、提供区块、DHT 和 DEX 中继需要开放它们。
+2. 若有域名，现在就把 A 记录指向此机器，以便安装结束时 Caddy 获取证书。否则跳过：sslip.io 名称无需任何操作。
+3. 在 SSH 会话或机器的终端中运行上面的命令。不要在没有终端的脚本中运行：那样会跳过密码和二维码步骤。
+4. 按提示输入两次管理员配对密码。请保存好；为自己设备生成的每个新邀请都需要它。
+5. 再次提示时输入一次密码。二维码和完整邀请随即出现。
+6. 在手机的 Parlons Cloud 中点击 **Scan pairing QR** 并扫描。
+7. 阅读最后几行。它们给出 DEX 中继 URL 和钱包网关 URL，并打印机器的 keets 公钥、DHT 引导地址和邮箱密钥。把邮箱那一行发给列表维护者；在签入已发布列表之前，机器会中继和引导，但不会为离线手机保存邮件。
+8. 观察链同步：`journalctl -u parlons-node -f | grep heartbeat`。
+9. 从另一台机器检查 DEX 中继：`curl -s https://<名称>/dex-relay/dex/health` 必须有响应。首次启动后证书可能需要一分钟。
+10. 备份助记词（[§20](#20-seeds-identity-and-backups)）。
 
-如果第 3 步或第 4 步被跳过，请先运行一次 `sudo parlons-pair --set-admin-password`，然后运行 `sudo parlons-pair --admin`。
+若跳过了第 4 或第 5 步，先运行一次 `sudo parlons-pair --set-admin-password`，再运行 `sudo parlons-pair --admin`。
 
 ### B. 部署脚本（从你自己的电脑运行）
 
@@ -359,7 +379,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.138.jar dist/
+   mv ~/Downloads/parlons-node-0.2.143.jar dist/
    ```
 
 3. 检查以 root 身份基于密钥的 SSH 是否可用。脚本使用 `BatchMode=yes`，所以无法应答
@@ -374,7 +394,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.138.jar \
+       --jar dist/parlons-node-0.2.143.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -473,11 +493,11 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. 把校验过的 jar 复制到 `/opt/maxima`，并把符号链接指向它：
 
    ```bash
-   cp parlons-node-0.2.138.jar /opt/maxima/
+   cp parlons-node-0.2.143.jar /opt/maxima/
    cd /opt/maxima
-   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.138.jar
-   ln -sfn parlons-node-0.2.138.jar parlons-node.jar
+   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.143.jar
+   ln -sfn parlons-node-0.2.143.jar parlons-node.jar
    ```
 
 4. 可选：从仓库检出副本安装配对辅助工具：
@@ -522,7 +542,7 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. 找到启动行。它列出了版本、数据文件夹和端口：
 
    ```
-   [parlons-node] Parlons Node 0.2.138 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.143 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. 观察区块链同步。每 30 秒会有一行心跳日志打印区块高度：
@@ -564,7 +584,7 @@ systemd 不允许在行尾或续行的 `ExecStart` 内部写注释，所以
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.138)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -837,6 +857,8 @@ WantedBy=multi-user.target
 | 属性 | 含义 | 默认值 | 示例 |
 |---|---|---|---|
 | `parlons.dex.port` | DEX 中继 cape 的端口。`0` = 关闭。 | `0` | `9602` |
+| `49737`（`parlons.keets.dhtport`，仅 fleet jar） | UDP | keets HyperDHT 引导节点 | 全部 | **公开。**在防火墙中开放。 |
+| `p2p+5`（`9006`，带 `-keets` 时） | TCP/HTTP | keets 回环 API（令牌在 `<data>/keets/apitoken`） | `127.0.0.1`，硬编码 | 绝不暴露。 |
 | `parlons.dex.bind` | 它监听的网络接口。显式设置的值优先。如果未设置，当设置了 `parlons.dex.public` 时，cape 绑定 `127.0.0.1`，否则绑定 `0.0.0.0`。请保持在回环地址上，并用 TLS 作前端。 | 有 `parlons.dex.public` 时为 `127.0.0.1`，否则为 `0.0.0.0` | `127.0.0.1` |
 | `parlons.dex.public` | 在网格中通告的公开基础 URL。如果未设置，节点一旦得知自己的公网主机，就通告 `http://<public host>:<port>`。 | 空 | `https://node.example.com/dex-relay` |
 
@@ -1812,6 +1834,8 @@ DEX 中继 cape（`dexrelay/`，版本 `0.1.5`，无依赖）是 Dexicon 的订�
 
 ### 如何开启 DEX 中继 cape
 
+一行命令安装程序（[§5 A](#5-three-ways-to-install)）已经完成了这一切：它把 `parlons.dex.public` 设为 `https://<名称>/dex-relay`（fleet 模式随即在回环 9602 上开启该 cape），并用 Caddy 做前端。下面的步骤适用于以其他方式安装的节点。
+
 1. 把这三个属性加入单元文件，然后重启（[§7](#how-to-change-the-unit)）：
 
    ```
@@ -2075,6 +2099,8 @@ Parlons Cloud 应用与它配对。用 `-Dparlons.account=false` 关闭它。
 
 当内嵌的 Minima 节点运行 keets 时，账户的聊天引擎会获得 keets 传输方式，
 节点也会成为其 keets 收件箱的**唯一读取者**。
+
+**Fleet jar 自行完成这一切。**`parlons-node-fleet-<ver>.jar` 内含 Node.js 运行时和附属进程。以 `-Dparlons.fleet=true`（一行命令安装程序写入的设置）启动时，它首次启动会把它们解压到 `<data>/runtime/`，开启 Minima 服务器角色和 `-keets`，并以 **serve** 模式运行附属进程：一个 JavaScript 进程，同时是机器的 keets 传输、公开的 HyperDHT 引导节点（`49737/udp`，`-Dparlons.keets.dhtport`）和 keets 邮箱（`<data>/keets-mailbox`）。`-Dparlons.public.host=<ip>` 为机器命名。启动日志打印 `FLEET ENDPOINT` 横幅，含 keets 公钥、DHT 引导地址和邮箱密钥，以及列表维护者运行的 `mailboxes-sign.js` 命令；邮箱只有在签入已发布列表后才会为离线手机保存邮件。您在 `parlons.node.args` 中设置的 Minima 参数优先于 fleet 模式的设置。本节其余部分是使用普通 jar 和外部附属进程的手动方式。
 
 - 在 `parlons.node.args` 中用 Minima 参数开启它：
   `-keets -keetssidecar /opt/maxima/keets-sidecar/index.js`。桌面应用还会传入
@@ -2457,7 +2483,7 @@ systemctl restart parlons-node
 2. 以临时文件名把它复制到服务器上：
 
    ```bash
-   B=parlons-node-0.2.138.jar
+   B=parlons-node-0.2.143.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2465,9 +2491,9 @@ systemctl restart parlons-node
 
    ```bash
    cd /opt/maxima
-   echo '597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.138.jar.part parlons-node-0.2.138.jar
-   chmod 644 parlons-node-0.2.138.jar
+   echo 'ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.143.jar.part parlons-node-0.2.143.jar
+   chmod 644 parlons-node-0.2.143.jar
    ```
 
 4. 记下符号链接当前指向的 jar。回滚时需要它：
@@ -2479,19 +2505,19 @@ systemctl restart parlons-node
 5. 备份单元文件：
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.138.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.143.jar
    ```
 
 6. 更新单元文件 `Description` 行中的版本号（可选；它只是一个标签）：
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.138)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.143)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. 把符号链接指向新的 jar：
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.138.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.143.jar /opt/maxima/parlons-node.jar
    ```
 
 8. 重启：
@@ -2508,7 +2534,7 @@ systemctl restart parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   启动行必须显示 `Parlons Node 0.2.138`，DEX cape 必须显示 `dex relay 0.1.5 up`。
+   启动行必须显示 `Parlons Node 0.2.143`，DEX cape 必须显示 `dex relay 0.1.5 up`。
 10. 从外部验证（[§23](#23-verifying-from-outside)）。
 
 如果你运行多台服务器，请**一次升级一台**，每台验证通过后再开始下一台。
@@ -2519,7 +2545,7 @@ systemctl restart parlons-node
 2. 用与之前**相同的参数**和新的 jar 重新运行脚本：
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.138.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.143.jar <your usual flags>
    ```
 
    脚本会上传并检查 jar，切换符号链接，并根据参数重写单元文件。

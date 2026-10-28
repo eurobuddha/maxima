@@ -1,10 +1,7 @@
 # Parlons Node — руководство оператора
 
-Для `parlons-node.jar` **0.2.138** (тег релиза `node-v0.2.138`), в состав которого входит DEX-ретранслятор
-**0.1.5**. Каждый флаг, порт, значение по умолчанию и адрес API в этом руководстве взяты из исходного кода
-репозитория `eurobuddha/maxima` (`node/`, `server/`, `core/`, `account/`, `dexrelay/`) и
-скрипта развёртывания `ops/deploy-parlons-node.sh`. Если какого-то значения в коде нет, руководство так и говорит
-и не пытается его угадать.
+Для Parlons Node **0.2.143** (тег выпуска `node-v0.2.143`), который несёт DEX-ретранслятор
+**0.1.5**. В выпуске два jar: `parlons-node-0.2.143.jar` — обычный узел, и `parlons-node-fleet-0.2.143.jar` — тот же узел со встроенными средой Node.js и вспомогательным процессом keets, так что один jar ещё и запускает транспорт keets, публичный узел начальной загрузки HyperDHT и почтовый ящик keets ([§18](#18-the-keets-sidecar-keetchat-bridge)). Установщик одной командой выбирает fleet-jar всегда, когда машина его тянет.
 
 Имена хостов в примерах (`node.example.com`, `peer1.example.net` и т. д.) —
 условные. Замените их своими.
@@ -157,6 +154,7 @@ Parlons Node — это один Java-процесс, который содер�
 |---|---|---|
 | Узел с MegaMMR (по умолчанию; нужен, чтобы быть шлюзом кошелька) | 8 ГБ | минимум 3 ГБ |
 | Узел без MegaMMR (`-Dparlons.node.megammr=false`) | 2 ГБ | 768 МБ |
+| Fleet-jar (любой из вариантов выше + вспомогательный процесс keets: Node.js, DHT, почтовый ящик) | + 1 ГБ, минимум 2 ГБ; только x86_64 или aarch64 | как выше (`MemoryMax` + 1 ГБ) |
 
 Эти цифры взяты из заметок по парку серверов в `cloud/NODE-SETUP.md`. Они получены на горьком опыте: узлы MegaMMR с кучей 2 ГБ и 2,5 ГБ зацикливались на ошибках нехватки памяти,
 а один с 3 ГБ упал.
@@ -227,35 +225,39 @@ Parlons Node — это один Java-процесс, который содер�
 1. Скачайте jar-файл и файл контрольных сумм:
 
    ```bash
-   VER=0.2.138
+   VER=0.2.143
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
-2. Проверьте хеш SHA-256. Хеш `parlons-node-0.2.138.jar`:
+   Для fleet-jar (с транспортом keets, узлом начальной загрузки DHT и почтовым ящиком) скачайте из
+   того же выпуска `parlons-node-fleet-$VER.jar`. Его SHA-256:
+   `3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9`.
+
+2. Проверьте хеш SHA-256. Хеш `parlons-node-0.2.143.jar`:
 
    ```
-   597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af
+   ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc
    ```
 
    ```bash
-   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
+   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   Команда должна вывести `parlons-node-0.2.138.jar: OK`. Если это не так, удалите файл и не запускайте его.
+   Команда должна вывести `parlons-node-0.2.143.jar: OK`. Если это не так, удалите файл и не запускайте его.
 
 3. Проверьте версию. Это не запускает узел:
 
    ```bash
-   java -jar parlons-node-0.2.138.jar --version
-   # parlons-node 0.2.138
+   java -jar parlons-node-0.2.143.jar --version
+   # parlons-node 0.2.143
    ```
 
 4. Выведите встроенную справку со списком основных свойств. Это тоже не запускает узел:
 
    ```bash
-   java -jar parlons-node-0.2.138.jar --help
+   java -jar parlons-node-0.2.143.jar --help
    ```
 
 ### Как вместо этого собрать jar-файл из исходного кода
@@ -298,46 +300,63 @@ Parlons Node — это один Java-процесс, который содер�
 
 ### A. Установщик одной командой (начните с него)
 
-На самой Linux-машине (VPS, Raspberry Pi с 64-битной ОС, домашний сервер) от имени root или пользователя с `sudo`:
+На самой Linux-машине (VPS, Raspberry Pi 4/5 с 64-битной ОС, домашний сервер), от root или пользователя с `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash
+curl -fsSL {{NODE_INSTALL}} | bash
 ```
+
+Одна команда даёт сети полноценную точку присутствия. По умолчанию машина запускает в одном процессе:
+
+- **полный узел Minima** в роли сервера (P2P 9001/tcp), с MegaMMR при 3,5 ГБ ОЗУ и больше;
+- **ретранслятор Parlons** (кейп Maxima, 9501/tcp+udp) и ваш постоянно доступный **аккаунт Parlons**;
+- **транспорт keets**, публичный **узел начальной загрузки HyperDHT** (49737/udp) и **почтовый ящик keets** — из среды Node.js и вспомогательного процесса, встроенных в fleet-jar;
+- **DEX-кейп ретранслятора** (книга ордеров Dexicon) и **шлюз кошелька**, которые Caddy отдаёт по HTTPS на `https://<имя>/dex-relay` и `https://<имя>/parlons-node`. Имя — то, что вы передали через `--host`; без него машина использует `<a-b-c-d>.sslip.io`, бесплатное имя, которое разрешается в её собственный публичный адрес, так что регистрировать ничего не нужно.
 
 Что он делает, по порядку:
 
-1. Устанавливает Java 11+ и `qrencode` (через apt, dnf, apk или pacman), если их нет.
-2. Находит самый новый релиз `node-v…` на GitHub, скачивает `parlons-node-<ver>.jar` и отвергает его, если его sha256 не совпадает с `SHA256SUMS` релиза.
-3. Создаёт пользователя `maxima` и каталог `/var/lib/parlons-node` (права 700), устанавливает `/usr/local/bin/parlons-pair` и записывает тот же защищённый `parlons-node.service`, что и скрипт развёртывания ([§7](#7-the-systemd-unit-annotated)).
-4. Подбирает параметры узла под машину: при 3,5 ГБ ОЗУ или больше он запускает MegaMMR с кучей 2 ГБ; при меньшем объёме — обычный полный узел с кучей 768 МБ. Синхронизация идёт с `65.109.31.226:9001`.
-5. Открывает TCP 9001 (Minima) и 9501 (ретранслятор) в ufw или firewalld, если один из них активен.
-6. Запускает узел, дожидается адреса вашего аккаунта и выводит его полностью.
-7. Просит задать пароль администратора для подключения устройств (только при первой установке), затем просит ввести его ещё раз и рисует QR-код, который ваш телефон сканирует в Parlons Cloud.
+1. Ставит Java 11+ и `qrencode` (apt, dnf, apk или pacman), если их нет, и Caddy для HTTPS-фронта (если порты 80/443 уже занимает другой веб-сервер, он сообщает, какие два пути проксировать самостоятельно, [§11](#11-tls-fronting-caddy-nginx-apache)).
+2. Находит на GitHub новейший выпуск `node-v…`, скачивает `parlons-node-fleet-<ver>.jar` и отвергает его, если sha256 не совпадает с `SHA256SUMS` выпуска.
+3. Создаёт пользователя `maxima` и `/var/lib/parlons-node` (права 700), ставит `/usr/local/bin/parlons-pair` и записывает защищённый `parlons-node.service` ([§7](#7-the-systemd-unit-annotated)) с `-Dparlons.fleet=true`, `-Dparlons.public.host=<ваш публичный IPv4>`, `-Dparlons.dex.public=https://<имя>/dex-relay` и `-Dparlons.node.public=https://<имя>/parlons-node`.
+4. Подбирает узел под машину: при 3,5 ГБ ОЗУ и больше — MegaMMR с кучей 2 ГБ; меньше — обычный полный узел с кучей 768 МБ. `MemoryMax` — куча плюс 1,5 ГБ на вспомогательный процесс. Синхронизация с `65.109.31.226:9001`.
+5. Открывает 9001/tcp, 9501/tcp+udp, 49737/udp и 80 + 443 в ufw или firewalld, если один из них активен.
+6. Запускает узел, ждёт адрес аккаунта и печатает его полностью.
+7. Просит задать пароль администратора для сопряжения (только при первой установке), затем ввести его ещё раз и рисует QR-код, который телефон сканирует в Parlons Cloud.
+8. Печатает публичный ключ keets машины, адрес её узла начальной загрузки DHT и ключ почтового ящика вместе с командой, которой сопровождающий списка подписывает ящик в опубликованный список.
 
-Параметры (укажите их после `bash -s --`):
+Полному набору нужны процессор x86_64 или aarch64, 2 ГБ ОЗУ и публичный IPv4-адрес. Если чего-то нет, установщик объясняет почему и откатывается к обычному jar (`parlons-node-<ver>.jar`: узел Minima, ретранслятор Parlons и аккаунт, без keets и без DEX), которому хватает 1 ГБ на любом процессоре.
+
+Параметры (ставьте их после `bash -s --`):
 
 | Параметр | Действие |
 |---|---|
-| `--update` | Скачать самый новый релиз и перезапустить. Повторный запуск команды установки делает то же самое. |
+| `--host node.example.com` | Отдавать DEX-ретранслятор и шлюз кошелька под вашим именем вместо sslip.io. Сначала направьте A-запись имени на машину; Caddy сам получит сертификат. |
+| `--public-host 1.2.3.4` | Публичный IPv4, который объявляют DHT и ретранслятор. По умолчанию — глобальный адрес машины. За домашним роутером укажите свой публичный адрес и пробросьте порты. |
+| `--basic` | Намеренно обычный jar: без транспорта keets, DHT, почтового ящика и DEX. |
+| `--fleet` | Настаивать на полном jar; завершиться ошибкой вместо отката. |
+| `--update` | Скачать новейший выпуск и перезапустить. Повторный запуск команды установки делает то же самое. |
 | `--uninstall` | Остановить и удалить службу и `parlons-pair`. `/var/lib/parlons-node` (личность, кошелёк, чаты) сохраняется. |
-| `--no-megammr` | Обычный полный узел (достаточно 1 ГБ ОЗУ). Выбирается автоматически на машинах с менее чем 3,5 ГБ. |
-| `--heap <size>` | Другой размер кучи Java, например `--heap 3g`. |
+| `--no-megammr` | Обычный полный узел без MegaMMR (хватит 1 ГБ ОЗУ). Выбирается автоматически на машинах с менее чем 3,5 ГБ. |
+| `--heap <размер>` | Другая куча Java, например `--heap 3g`. |
 
-Например: `curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parlons-node.sh | bash -s -- --no-megammr`
+Например, со своим доменом: `curl -fsSL {{NODE_INSTALL}} | bash -s -- --host node.example.com`
 
-Установщик оставляет административный RPC выключенным и не задаёт пиров mesh-сети, DEX-ретранслятор, TLS-прокси или вспомогательный процесс keets. Для любого из них используйте скрипт развёртывания (B) или отредактируйте юнит ([§7](#7-the-systemd-unit-annotated)). На Mac или ПК с Windows установите вместо этого Parlons Desktop. Если машина вообще не может запустить узел, скрипт `get-parlons-cloud.sh`, который ставит только аккаунт, работает на 1 ГБ ([Руководство по порталу Parlons Cloud](parlons-cloud-portal.md)).
+Установщик не задаёт пиров сетки ретрансляторов (используется встроенный список начальной загрузки) и полку blob. Для этого возьмите скрипт развёртывания (B) или отредактируйте юнит ([§7](#7-the-systemd-unit-annotated)). На Mac или Windows установите Parlons Desktop. Если машина вовсе не тянет узел, аккаунт без блокчейна — `get-parlons-cloud.sh` — работает в 1 ГБ ([руководство Parlons Cloud Portal](parlons-cloud-portal.md)).
 
 #### Как установить с помощью установщика одной командой
 
-1. Откройте TCP 9001 и 9501 в файрволе вашего облачного провайдера или пробросьте их на домашнем роутере. Аккаунт работает и без них, но для ретрансляции чужого трафика и раздачи блоков они нужны.
-2. Выполните приведённую выше команду в SSH-сессии или в терминале на самой машине. Не запускайте её из скрипта без терминала: тогда она пропустит шаги с паролем и QR-кодом.
-3. Когда попросят, дважды введите пароль администратора для подключения устройств. Сохраните его: он нужен для каждого нового приглашения для ваших собственных устройств.
-4. Когда попросят снова, введите пароль один раз. Появятся QR-код и полное приглашение.
-5. В Parlons Cloud на телефоне нажмите **Сканировать QR-код подключения** и отсканируйте его.
-6. Следите за синхронизацией цепочки: `journalctl -u parlons-node -f | grep heartbeat`.
-7. Сделайте резервную копию сид-фразы ([§20](#20-seeds-identity-and-backups)).
+1. Откройте 9001/tcp, 9501/tcp и 9501/udp, 49737/udp, а также 80 + 443/tcp в файрволе облачного провайдера или пробросьте их на домашнем роутере. Аккаунт работает и без них; ретрансляция для других, раздача блоков, DHT и DEX-ретранслятор требуют их.
+2. Если у вас есть домен, направьте A-запись на машину сейчас, чтобы Caddy получил сертификат в конце установки. Иначе пропустите: имени sslip.io ничего не нужно.
+3. Выполните команду выше в SSH-сессии или терминале машины. Не запускайте её из скрипта без терминала: тогда шаги с паролем и QR будут пропущены.
+4. По запросу дважды введите пароль администратора для сопряжения. Сохраните его: он нужен для каждого нового приглашения ваших устройств.
+5. По повторному запросу введите пароль один раз. Появятся QR-код и полное приглашение.
+6. В Parlons Cloud на телефоне нажмите **Scan pairing QR** и отсканируйте его.
+7. Прочтите последние строки. Они называют URL DEX-ретранслятора и шлюза кошелька и печатают публичный ключ keets машины, адрес начальной загрузки DHT и ключ почтового ящика. Отправьте строку с ящиком сопровождающему списка; пока ящик не подписан в опубликованный список, машина ретранслирует и выполняет начальную загрузку, но не хранит почту для телефонов офлайн.
+8. Следите за синхронизацией цепочки: `journalctl -u parlons-node -f | grep heartbeat`.
+9. Проверьте DEX-ретранслятор с другой машины: `curl -s https://<имя>/dex-relay/dex/health` должен ответить. После первого запуска сертификат может появиться через минуту.
+10. Сделайте резервную копию сид-фразы ([§20](#20-seeds-identity-and-backups)).
 
-Если шаг 3 или 4 был пропущен, один раз выполните `sudo parlons-pair --set-admin-password`, а затем `sudo parlons-pair --admin`.
+Если шаг 4 или 5 был пропущен, выполните один раз `sudo parlons-pair --set-admin-password`, затем `sudo parlons-pair --admin`.
 
 ### B. Скрипт развёртывания (со своего компьютера)
 
@@ -360,7 +379,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.138.jar dist/
+   mv ~/Downloads/parlons-node-0.2.143.jar dist/
    ```
 
 3. Убедитесь, что вход по SSH-ключу от имени root работает. Скрипт использует `BatchMode=yes`, поэтому не может ответить
@@ -376,7 +395,7 @@ curl -fsSL https://raw.githubusercontent.com/eurobuddha/maxima/main/ops/get-parl
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.138.jar \
+       --jar dist/parlons-node-0.2.143.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -475,11 +494,11 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. Скопируйте проверенный jar-файл в `/opt/maxima` и направьте на него символическую ссылку:
 
    ```bash
-   cp parlons-node-0.2.138.jar /opt/maxima/
+   cp parlons-node-0.2.143.jar /opt/maxima/
    cd /opt/maxima
-   echo "597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.138.jar
-   ln -sfn parlons-node-0.2.138.jar parlons-node.jar
+   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.143.jar
+   ln -sfn parlons-node-0.2.143.jar parlons-node.jar
    ```
 
 4. Необязательно: установите помощник подключения из клона репозитория:
@@ -525,7 +544,7 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. Найдите строку запуска. В ней указаны версия, каталог данных и порты:
 
    ```
-   [parlons-node] Parlons Node 0.2.138 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.143 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Следите за синхронизацией цепочки. Каждые 30 с строка heartbeat выводит высоту блока:
@@ -567,7 +586,7 @@ systemd не допускает комментариев в конце стро�
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.138)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -840,6 +859,8 @@ WantedBy=multi-user.target
 | Свойство | Значение | По умолчанию | Пример |
 |---|---|---|---|
 | `parlons.dex.port` | Порт DEX-кейпа ретранслятора. `0` = выключено. | `0` | `9602` |
+| `49737` (`parlons.keets.dhtport`, только fleet-jar) | UDP | узел начальной загрузки keets HyperDHT | все | **Публичный.** Откройте его в файрволе. |
+| `p2p+5` (`9006`, с `-keets`) | TCP/HTTP | loopback-API keets (токен в `<data>/keets/apitoken`) | `127.0.0.1`, жёстко задано | Никогда не открывать наружу. |
 | `parlons.dex.bind` | Интерфейс, на котором он слушает. Явно заданное значение имеет приоритет. Если не задано, кейп слушает `127.0.0.1`, когда задан `parlons.dex.public`, иначе `0.0.0.0`. Держите его на loopback и ставьте перед ним TLS-прокси. | `127.0.0.1` с `parlons.dex.public`, иначе `0.0.0.0` | `127.0.0.1` |
 | `parlons.dex.public` | Публичный базовый URL, объявляемый в mesh-сети. Если не задан, узел объявляет `http://<public host>:<port>`, как только узнаёт свой публичный хост. | пусто | `https://node.example.com/dex-relay` |
 
@@ -1820,6 +1841,8 @@ Dexicon. Он работает **внутри** узла; это не отдел
 
 ### Как включить DEX-кейп ретранслятора
 
+Установщик одной командой ([§5 A](#5-three-ways-to-install)) уже делает всё это: он задаёт `parlons.dex.public` = `https://<имя>/dex-relay` (режим fleet затем включает кейп на loopback 9602) и ставит перед ним Caddy. Шаги ниже — для узла, установленного иначе.
+
 1. Добавьте три свойства в юнит, затем перезапустите узел ([§7](#how-to-change-the-unit)):
 
    ```
@@ -2084,6 +2107,8 @@ Dexicon. Он работает **внутри** узла; это не отдел
 
 Когда встроенный узел Minima запускает keets, чат-движок аккаунта получает транспорт keets,
 а узел становится **единственным читателем** своих входящих keets.
+
+**Fleet-jar делает всё это сам.** `parlons-node-fleet-<ver>.jar` несёт внутри среду Node.js и вспомогательный процесс. Запущенный с `-Dparlons.fleet=true` (это записывает установщик одной командой), он при первом старте распаковывает их в `<data>/runtime/`, включает роль сервера Minima и `-keets` и запускает вспомогательный процесс в режиме **serve**: один JavaScript-процесс, который одновременно является транспортом keets машины, её публичным узлом начальной загрузки HyperDHT (`49737/udp`, `-Dparlons.keets.dhtport`) и её почтовым ящиком keets (`<data>/keets-mailbox`). `-Dparlons.public.host=<ip>` даёт машине имя. В журнале загрузки печатается баннер `FLEET ENDPOINT` с публичным ключом keets, адресом начальной загрузки DHT и ключом почтового ящика, а также команда `mailboxes-sign.js`, которую выполняет сопровождающий списка; почтовый ящик хранит почту для телефонов офлайн только после подписи в опубликованный список. Флаги Minima, заданные вами в `parlons.node.args`, имеют приоритет над тем, что выставил бы режим fleet. Остальная часть раздела — ручной путь с обычным jar и внешним вспомогательным процессом.
 
 - Включается флагами Minima в `parlons.node.args`:
   `-keets -keetssidecar /opt/maxima/keets-sidecar/index.js`. Настольные приложения также передают
@@ -2467,7 +2492,7 @@ systemctl restart parlons-node
 2. Скопируйте его на сервер под временным именем:
 
    ```bash
-   B=parlons-node-0.2.138.jar
+   B=parlons-node-0.2.143.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2475,9 +2500,9 @@ systemctl restart parlons-node
 
    ```bash
    cd /opt/maxima
-   echo '597a77225514b8ceddf1036a6016abc6d4b826e7711210c7f55de01857c9b4af  parlons-node-0.2.138.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.138.jar.part parlons-node-0.2.138.jar
-   chmod 644 parlons-node-0.2.138.jar
+   echo 'ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.143.jar.part parlons-node-0.2.143.jar
+   chmod 644 parlons-node-0.2.143.jar
    ```
 
 4. Запишите, на какой jar-файл сейчас указывает символическая ссылка. Это нужно для отката:
@@ -2489,19 +2514,19 @@ systemctl restart parlons-node
 5. Сохраните резервную копию юнита:
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.138.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.143.jar
    ```
 
 6. Обновите версию в строке `Description` юнита (необязательно; это только подпись):
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.138)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.143)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. Направьте символическую ссылку на новый jar-файл:
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.138.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.143.jar /opt/maxima/parlons-node.jar
    ```
 
 8. Перезапустите узел:
@@ -2518,7 +2543,7 @@ systemctl restart parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   Строка запуска должна показывать `Parlons Node 0.2.138`, а DEX-кейп — `dex relay 0.1.5 up`.
+   Строка запуска должна показывать `Parlons Node 0.2.143`, а DEX-кейп — `dex relay 0.1.5 up`.
 10. Проверьте узел извне ([§23](#23-verifying-from-outside)).
 
 Если у вас несколько серверов, обновляйте **по одному серверу за раз** и проверяйте каждый, прежде чем браться за следующий.
@@ -2529,7 +2554,7 @@ systemctl restart parlons-node
 2. Запустите скрипт повторно с **теми же флагами**, что и раньше, и новым jar-файлом:
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.138.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.143.jar <your usual flags>
    ```
 
    Скрипт загружает и проверяет jar-файл, переключает символическую ссылку и перезаписывает юнит по своим флагам.
