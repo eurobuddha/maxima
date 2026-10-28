@@ -164,6 +164,6 @@ tasks.register('fleetJar', Jar) {
 }
 
 // Artifact and boot metadata have one release version.
-version = "0.2.143"
+version = "0.2.144"
 tasks.named("fatJar") { archiveVersion = project.version }
 tasks.named("fleetJar") { archiveVersion = project.version }
