@@ -1,5 +1,21 @@
 # Handover — Parlons Node fleet, 2026-10-22 (for the next agent adding work to the nodes)
 
+## 28 October 2026 — Parlons Node 0.2.144 on all six account nodes (file-transfer repair)
+
+openproject, pi-old, vigilance, megammr, hetzner and sally moved 0.2.140 -> **0.2.144** one at a time
+(jar sha256 c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5; maxima a77fa4b0). It brings the
+file-transfer repair (failed-block reasons, FileDelivery re-send backoff) and the core **changes line**:
+0.2.124-0.2.141 embedded the keets core (Minima 1.1.2.3, no MiniDapp System); 0.2.142+ embeds minima-core
+`mds-keets` (Minima 1.1.2.4 with MDS + keets), the line the fleet ran up to 0.2.123. Every box: 11/11
+`ops/verify-relay.sh`, DEX health 0.1.5, `keets` command up, chain tip in step with the others within a block;
+megammr's MegaMMR enabled; sally's tenant panel 200. Rollback pointer `/opt/maxima/node-before-0.2.144.txt`,
+unit backups `parlons-node.service.before-parlons-node-0.2.144.jar`. The keets sidecar is still the patched 1.2.0
+(not touched).
+Expected after a restart: a burst of `Invalid SyncBlock as NO PARENT!` / `Received IBD with cascade even though we
+have one` (peers re-sending IBDs). hetzner logged 860 after its 26 Oct restart; this is not a fault.
+Admin RPC is p2p+4 per box: 9005 on sally/openproject/pi-old, **9105** on hetzner/megammr/vigilance. On
+vigilance, 9005 is a different, classic 1.0.48 node.
+
 ## 26 October 2026 — keets sidecar dead-link patch (all six account-node hosts)
 
 Every account node (sally, hetzner, megammr, vigilance, pi-old, openproject) runs keets sidecar
