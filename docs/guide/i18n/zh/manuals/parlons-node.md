@@ -1,7 +1,7 @@
 # Parlons Node — 运维手册
 
-适用于 Parlons Node **0.2.143**（发布标签 `node-v0.2.143`），其内含 DEX 中继
-**0.1.5**。该发布提供两个 jar：`parlons-node-0.2.143.jar` 是普通节点；`parlons-node-fleet-0.2.143.jar` 是同一节点并内嵌 Node.js 运行时和 keets 附属进程，因此一个 jar 还能运行 keets 传输、公开的 HyperDHT 引导节点和 keets 邮箱（[§18](#18-the-keets-sidecar-keetchat-bridge)）。只要机器能运行，一行命令安装程序就会选择 fleet jar。
+适用于 Parlons Node **0.2.144**（发布标签 `node-v0.2.144`），其内含 DEX 中继
+**0.1.5**。该发布提供两个 jar：`parlons-node-0.2.144.jar` 是普通节点；`parlons-node-fleet-0.2.144.jar` 是同一节点并内嵌 Node.js 运行时和 keets 附属进程，因此一个 jar 还能运行 keets 传输、公开的 HyperDHT 引导节点和 keets 邮箱（[§18](#18-the-keets-sidecar-keetchat-bridge)）。只要机器能运行，一行命令安装程序就会选择 fleet jar。
 
 示例中的主机名（`node.example.com`、`peer1.example.net` 等）都是
 占位符，请换成你自己的。
@@ -225,39 +225,39 @@ Parlons Node 是一个 Java 进程，其中包含：
 1. 下载 jar 和校验和文件：
 
    ```bash
-   VER=0.2.143
+   VER=0.2.144
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
    如需 fleet jar（内含 keets 传输、DHT 引导节点和邮箱），改为从同一发布下载
    `parlons-node-fleet-$VER.jar`。其 SHA-256 为
-   `3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9`。
+   `3dfd655e2c2e3541f471252b3ddbd058c9040ba5814b2bbbbba40674771bf166`。
 
-2. 检查 SHA-256 哈希。`parlons-node-0.2.143.jar` 的哈希是：
+2. 检查 SHA-256 哈希。`parlons-node-0.2.144.jar` 的哈希是：
 
    ```
-   ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc
+   c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5
    ```
 
    ```bash
-   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
+   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   它必须输出 `parlons-node-0.2.143.jar: OK`。如果不是，请删除该文件，不要运行它。
+   它必须输出 `parlons-node-0.2.144.jar: OK`。如果不是，请删除该文件，不要运行它。
 
 3. 确认版本。这不会启动节点：
 
    ```bash
-   java -jar parlons-node-0.2.143.jar --version
-   # parlons-node 0.2.143
+   java -jar parlons-node-0.2.144.jar --version
+   # parlons-node 0.2.144
    ```
 
 4. 打印内置帮助，其中列出了主要属性。这同样不会启动节点：
 
    ```bash
-   java -jar parlons-node-0.2.143.jar --help
+   java -jar parlons-node-0.2.144.jar --help
    ```
 
 ### 如何改为从源代码构建 jar
@@ -379,7 +379,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.143.jar dist/
+   mv ~/Downloads/parlons-node-0.2.144.jar dist/
    ```
 
 3. 检查以 root 身份基于密钥的 SSH 是否可用。脚本使用 `BatchMode=yes`，所以无法应答
@@ -394,7 +394,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.143.jar \
+       --jar dist/parlons-node-0.2.144.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -493,11 +493,11 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. 把校验过的 jar 复制到 `/opt/maxima`，并把符号链接指向它：
 
    ```bash
-   cp parlons-node-0.2.143.jar /opt/maxima/
+   cp parlons-node-0.2.144.jar /opt/maxima/
    cd /opt/maxima
-   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.143.jar
-   ln -sfn parlons-node-0.2.143.jar parlons-node.jar
+   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.144.jar
+   ln -sfn parlons-node-0.2.144.jar parlons-node.jar
    ```
 
 4. 可选：从仓库检出副本安装配对辅助工具：
@@ -542,7 +542,7 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. 找到启动行。它列出了版本、数据文件夹和端口：
 
    ```
-   [parlons-node] Parlons Node 0.2.143 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.144 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. 观察区块链同步。每 30 秒会有一行心跳日志打印区块高度：
@@ -584,7 +584,7 @@ systemd 不允许在行尾或续行的 `ExecStart` 内部写注释，所以
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.144)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -2483,7 +2483,7 @@ systemctl restart parlons-node
 2. 以临时文件名把它复制到服务器上：
 
    ```bash
-   B=parlons-node-0.2.143.jar
+   B=parlons-node-0.2.144.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2491,9 +2491,9 @@ systemctl restart parlons-node
 
    ```bash
    cd /opt/maxima
-   echo 'ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.143.jar.part parlons-node-0.2.143.jar
-   chmod 644 parlons-node-0.2.143.jar
+   echo 'c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.144.jar.part parlons-node-0.2.144.jar
+   chmod 644 parlons-node-0.2.144.jar
    ```
 
 4. 记下符号链接当前指向的 jar。回滚时需要它：
@@ -2505,19 +2505,19 @@ systemctl restart parlons-node
 5. 备份单元文件：
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.143.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.144.jar
    ```
 
 6. 更新单元文件 `Description` 行中的版本号（可选；它只是一个标签）：
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.143)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.144)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. 把符号链接指向新的 jar：
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.143.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.144.jar /opt/maxima/parlons-node.jar
    ```
 
 8. 重启：
@@ -2534,7 +2534,7 @@ systemctl restart parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   启动行必须显示 `Parlons Node 0.2.143`，DEX cape 必须显示 `dex relay 0.1.5 up`。
+   启动行必须显示 `Parlons Node 0.2.144`，DEX cape 必须显示 `dex relay 0.1.5 up`。
 10. 从外部验证（[§23](#23-verifying-from-outside)）。
 
 如果你运行多台服务器，请**一次升级一台**，每台验证通过后再开始下一台。
@@ -2545,7 +2545,7 @@ systemctl restart parlons-node
 2. 用与之前**相同的参数**和新的 jar 重新运行脚本：
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.143.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.144.jar <your usual flags>
    ```
 
    脚本会上传并检查 jar，切换符号链接，并根据参数重写单元文件。

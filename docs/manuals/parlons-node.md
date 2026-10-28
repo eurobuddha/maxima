@@ -1,8 +1,8 @@
 # Parlons Node — Operator's Manual
 
-For Parlons Node **0.2.143** (release tag `node-v0.2.143`), which carries DEX relay
-**0.1.5**. The release ships two jars: `parlons-node-0.2.143.jar`, the plain node, and
-`parlons-node-fleet-0.2.143.jar`, the same node with a Node.js runtime and the keets sidecar
+For Parlons Node **0.2.144** (release tag `node-v0.2.144`), which carries DEX relay
+**0.1.5**. The release ships two jars: `parlons-node-0.2.144.jar`, the plain node, and
+`parlons-node-fleet-0.2.144.jar`, the same node with a Node.js runtime and the keets sidecar
 embedded, so one jar also runs the keets transport, a public HyperDHT bootstrap node and a keets
 mailbox ([§18](#18-the-keets-sidecar-keetchat-bridge)). The one-line installer picks the fleet jar
 whenever the box can run it. Every flag, port, default and endpoint in this manual comes from the source in the
@@ -232,39 +232,39 @@ pick a node release by its tag.
 1. Download the jar and the checksum file:
 
    ```bash
-   VER=0.2.143
+   VER=0.2.144
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
    For the fleet jar (keets transport, DHT bootstrap and mailbox included), fetch
    `parlons-node-fleet-$VER.jar` from the same release instead. Its SHA-256 is
-   `3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9`.
+   `3dfd655e2c2e3541f471252b3ddbd058c9040ba5814b2bbbbba40674771bf166`.
 
-2. Check the SHA-256 hash. The hash of `parlons-node-0.2.143.jar` is:
+2. Check the SHA-256 hash. The hash of `parlons-node-0.2.144.jar` is:
 
    ```
-   ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc
+   c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5
    ```
 
    ```bash
-   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
+   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   It must print `parlons-node-0.2.143.jar: OK`. If it does not, delete the file and do not run it.
+   It must print `parlons-node-0.2.144.jar: OK`. If it does not, delete the file and do not run it.
 
 3. Confirm the version. This does not start a node:
 
    ```bash
-   java -jar parlons-node-0.2.143.jar --version
-   # parlons-node 0.2.143
+   java -jar parlons-node-0.2.144.jar --version
+   # parlons-node 0.2.144
    ```
 
 4. Print the built-in help, which lists the main properties. This does not start a node either:
 
    ```bash
-   java -jar parlons-node-0.2.143.jar --help
+   java -jar parlons-node-0.2.144.jar --help
    ```
 
 ### How to build the jar from source instead
@@ -386,7 +386,7 @@ same operation.
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.143.jar dist/
+   mv ~/Downloads/parlons-node-0.2.144.jar dist/
    ```
 
 3. Check that key-based SSH as root works. The script uses `BatchMode=yes`, so it cannot answer a
@@ -402,7 +402,7 @@ same operation.
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.143.jar \
+       --jar dist/parlons-node-0.2.144.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -501,11 +501,11 @@ These steps do on the box what the deploy script does. Run them as root.
 3. Copy the verified jar into `/opt/maxima` and point the symlink at it:
 
    ```bash
-   cp parlons-node-0.2.143.jar /opt/maxima/
+   cp parlons-node-0.2.144.jar /opt/maxima/
    cd /opt/maxima
-   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.143.jar
-   ln -sfn parlons-node-0.2.143.jar parlons-node.jar
+   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.144.jar
+   ln -sfn parlons-node-0.2.144.jar parlons-node.jar
    ```
 
 4. Optional: install the pairing helper from a checkout of the repository:
@@ -551,7 +551,7 @@ These steps do on the box what the deploy script does. Run them as root.
 3. Find the boot line. It names the version, the data folder and the ports:
 
    ```
-   [parlons-node] Parlons Node 0.2.143 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.144 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Watch the chain sync. Every 30 s a heartbeat line prints the block height:
@@ -593,7 +593,7 @@ explanations are in the comment block above `ExecStart`.
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.144)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -2511,7 +2511,7 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 2. Copy it to the box under a temporary name:
 
    ```bash
-   B=parlons-node-0.2.143.jar
+   B=parlons-node-0.2.144.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2519,9 +2519,9 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 
    ```bash
    cd /opt/maxima
-   echo 'ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.143.jar.part parlons-node-0.2.143.jar
-   chmod 644 parlons-node-0.2.143.jar
+   echo 'c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.144.jar.part parlons-node-0.2.144.jar
+   chmod 644 parlons-node-0.2.144.jar
    ```
 
 4. Note the jar the symlink points at now. You need it to roll back:
@@ -2533,19 +2533,19 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 5. Back up the unit:
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.143.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.144.jar
    ```
 
 6. Update the version in the unit's `Description` line (optional; it is only a label):
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.143)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.144)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. Point the symlink at the new jar:
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.143.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.144.jar /opt/maxima/parlons-node.jar
    ```
 
 8. Restart:
@@ -2562,7 +2562,7 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   The boot line must show `Parlons Node 0.2.143`, and a DEX cape must show `dex relay 0.1.5 up`.
+   The boot line must show `Parlons Node 0.2.144`, and a DEX cape must show `dex relay 0.1.5 up`.
 10. Verify from outside ([§23](#23-verifying-from-outside)).
 
 If you run several boxes, upgrade **one box at a time**, and verify each one before you start the next.
@@ -2573,7 +2573,7 @@ If you run several boxes, upgrade **one box at a time**, and verify each one bef
 2. Re-run the script with the **same flags** you used before, and the new jar:
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.143.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.144.jar <your usual flags>
    ```
 
    The script uploads and checks the jar, flips the symlink, and rewrites the unit from its flags.

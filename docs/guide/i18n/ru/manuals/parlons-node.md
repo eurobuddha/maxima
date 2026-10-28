@@ -1,7 +1,7 @@
 # Parlons Node — руководство оператора
 
-Для Parlons Node **0.2.143** (тег выпуска `node-v0.2.143`), который несёт DEX-ретранслятор
-**0.1.5**. В выпуске два jar: `parlons-node-0.2.143.jar` — обычный узел, и `parlons-node-fleet-0.2.143.jar` — тот же узел со встроенными средой Node.js и вспомогательным процессом keets, так что один jar ещё и запускает транспорт keets, публичный узел начальной загрузки HyperDHT и почтовый ящик keets ([§18](#18-the-keets-sidecar-keetchat-bridge)). Установщик одной командой выбирает fleet-jar всегда, когда машина его тянет.
+Для Parlons Node **0.2.144** (тег выпуска `node-v0.2.144`), который несёт DEX-ретранслятор
+**0.1.5**. В выпуске два jar: `parlons-node-0.2.144.jar` — обычный узел, и `parlons-node-fleet-0.2.144.jar` — тот же узел со встроенными средой Node.js и вспомогательным процессом keets, так что один jar ещё и запускает транспорт keets, публичный узел начальной загрузки HyperDHT и почтовый ящик keets ([§18](#18-the-keets-sidecar-keetchat-bridge)). Установщик одной командой выбирает fleet-jar всегда, когда машина его тянет.
 
 Имена хостов в примерах (`node.example.com`, `peer1.example.net` и т. д.) —
 условные. Замените их своими.
@@ -225,39 +225,39 @@ Parlons Node — это один Java-процесс, который содер�
 1. Скачайте jar-файл и файл контрольных сумм:
 
    ```bash
-   VER=0.2.143
+   VER=0.2.144
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
 
    Для fleet-jar (с транспортом keets, узлом начальной загрузки DHT и почтовым ящиком) скачайте из
    того же выпуска `parlons-node-fleet-$VER.jar`. Его SHA-256:
-   `3f48a0cdfc6ae668aef19b53f0f0c986267c6a390e2601ddf3caf686afb5e2b9`.
+   `3dfd655e2c2e3541f471252b3ddbd058c9040ba5814b2bbbbba40674771bf166`.
 
-2. Проверьте хеш SHA-256. Хеш `parlons-node-0.2.143.jar`:
+2. Проверьте хеш SHA-256. Хеш `parlons-node-0.2.144.jar`:
 
    ```
-   ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc
+   c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5
    ```
 
    ```bash
-   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
+   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   Команда должна вывести `parlons-node-0.2.143.jar: OK`. Если это не так, удалите файл и не запускайте его.
+   Команда должна вывести `parlons-node-0.2.144.jar: OK`. Если это не так, удалите файл и не запускайте его.
 
 3. Проверьте версию. Это не запускает узел:
 
    ```bash
-   java -jar parlons-node-0.2.143.jar --version
-   # parlons-node 0.2.143
+   java -jar parlons-node-0.2.144.jar --version
+   # parlons-node 0.2.144
    ```
 
 4. Выведите встроенную справку со списком основных свойств. Это тоже не запускает узел:
 
    ```bash
-   java -jar parlons-node-0.2.143.jar --help
+   java -jar parlons-node-0.2.144.jar --help
    ```
 
 ### Как вместо этого собрать jar-файл из исходного кода
@@ -379,7 +379,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.143.jar dist/
+   mv ~/Downloads/parlons-node-0.2.144.jar dist/
    ```
 
 3. Убедитесь, что вход по SSH-ключу от имени root работает. Скрипт использует `BatchMode=yes`, поэтому не может ответить
@@ -395,7 +395,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.143.jar \
+       --jar dist/parlons-node-0.2.144.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -494,11 +494,11 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. Скопируйте проверенный jar-файл в `/opt/maxima` и направьте на него символическую ссылку:
 
    ```bash
-   cp parlons-node-0.2.143.jar /opt/maxima/
+   cp parlons-node-0.2.144.jar /opt/maxima/
    cd /opt/maxima
-   echo "ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.143.jar
-   ln -sfn parlons-node-0.2.143.jar parlons-node.jar
+   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.144.jar
+   ln -sfn parlons-node-0.2.144.jar parlons-node.jar
    ```
 
 4. Необязательно: установите помощник подключения из клона репозитория:
@@ -544,7 +544,7 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. Найдите строку запуска. В ней указаны версия, каталог данных и порты:
 
    ```
-   [parlons-node] Parlons Node 0.2.143 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.144 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Следите за синхронизацией цепочки. Каждые 30 с строка heartbeat выводит высоту блока:
@@ -586,7 +586,7 @@ systemd не допускает комментариев в конце стро�
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.143)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.144)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -2492,7 +2492,7 @@ systemctl restart parlons-node
 2. Скопируйте его на сервер под временным именем:
 
    ```bash
-   B=parlons-node-0.2.143.jar
+   B=parlons-node-0.2.144.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2500,9 +2500,9 @@ systemctl restart parlons-node
 
    ```bash
    cd /opt/maxima
-   echo 'ff72041f98c1dc483dea6f5479628060170524851565acc1b7f9f9955c4ae3dc  parlons-node-0.2.143.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.143.jar.part parlons-node-0.2.143.jar
-   chmod 644 parlons-node-0.2.143.jar
+   echo 'c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.144.jar.part parlons-node-0.2.144.jar
+   chmod 644 parlons-node-0.2.144.jar
    ```
 
 4. Запишите, на какой jar-файл сейчас указывает символическая ссылка. Это нужно для отката:
@@ -2514,19 +2514,19 @@ systemctl restart parlons-node
 5. Сохраните резервную копию юнита:
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.143.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.144.jar
    ```
 
 6. Обновите версию в строке `Description` юнита (необязательно; это только подпись):
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.143)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.144)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. Направьте символическую ссылку на новый jar-файл:
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.143.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.144.jar /opt/maxima/parlons-node.jar
    ```
 
 8. Перезапустите узел:
@@ -2543,7 +2543,7 @@ systemctl restart parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   Строка запуска должна показывать `Parlons Node 0.2.143`, а DEX-кейп — `dex relay 0.1.5 up`.
+   Строка запуска должна показывать `Parlons Node 0.2.144`, а DEX-кейп — `dex relay 0.1.5 up`.
 10. Проверьте узел извне ([§23](#23-verifying-from-outside)).
 
 Если у вас несколько серверов, обновляйте **по одному серверу за раз** и проверяйте каждый, прежде чем браться за следующий.
@@ -2554,7 +2554,7 @@ systemctl restart parlons-node
 2. Запустите скрипт повторно с **теми же флагами**, что и раньше, и новым jar-файлом:
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.143.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.144.jar <your usual flags>
    ```
 
    Скрипт загружает и проверяет jar-файл, переключает символическую ссылку и перезаписывает юнит по своим флагам.
