@@ -241,3 +241,17 @@ choosing a destination:
 | Availability | best-effort (your phone + relay replicas) | always-on |
 | Cost / trust | free, no central host | you run or pay a host |
 | Best for | photos, short clips, DMs | large video/audio, archival |
+
+## Licence
+
+Original eurobuddha code and documentation are available under the
+[MIT License](LICENSE), except for separately licensed material. You may use,
+modify and include that code in your own builds, including commercial and
+closed-source products, while retaining the copyright and licence notice.
+MIT does not require you to publish your modifications and provides no warranty.
+
+Vendored Minima code and bundled dependencies retain their own licences.
+See [third-party notices and licence scope](THIRD-PARTY-NOTICES.txt) before
+redistributing a complete application or host binary; those distributions
+are not necessarily MIT-only. For embedding the shared communication engine,
+start with `:core`, which has no runtime dependencies.

@@ -1,0 +1,51 @@
+Maxima / Parlons — licence scope and third-party material
+
+Original eurobuddha code and documentation are licensed under the MIT License
+in LICENSE, except where separate terms apply. That grant covers the rights
+held by eurobuddha; it does not replace other authors' licences or notices.
+
+Minima-derived code
+------------------
+This repository includes code extracted or adapted from Minima, notably in
+minima-common/src/main/java/org/minima/, maxjar/src/main/java/org/minima/
+and app/src/main/java/org/minima/. Minima-derived portions retain the
+Apache License 2.0 and their upstream attribution. Original integration code
+is distinct from the upstream portions; the MIT grant does not remove the
+Apache obligations for those upstream portions or their modifications.
+
+Upstream: https://github.com/minima-global/Minima
+Licence: https://github.com/minima-global/Minima/blob/master/LICENSE
+Apache 2.0 text included in this repository:
+files/src/main/resources/com/eurobuddha/maxima/files/APACHE-2.0.txt
+
+The :node host also bundles node/libs/minima-node.jar. Preserve the licences
+and notices applicable to that binary and its included components.
+
+Existing component notices
+--------------------------
+Private file-transfer libraries and their notices:
+files/src/main/resources/com/eurobuddha/maxima/files/THIRD-PARTY-NOTICES.txt
+
+Noto Sans SC fonts (SIL Open Font License):
+account/src/main/resources/panel/fonts/NotoSansSC-LICENSE.txt
+desktop/src/main/resources/fonts/NotoSansSC-LICENSE.txt
+
+Dependencies and assembled distributions
+---------------------------------------
+Dependencies, bundled JARs/AARs, runtimes and the Keets sidecar retain their
+own licences. Consult each component's distributed licence and the Gradle
+build files for the components selected by a particular build. This file is
+a scope guide, not an exhaustive dependency or binary-compliance inventory.
+
+In particular, node/build.gradle declares MySQL Connector/J 8.0.26. Its
+Community distribution uses GPLv2 with the Universal FOSS Exception, under
+Oracle's distribution terms. The MIT grant for eurobuddha's code does not
+make an assembled binary containing that connector MIT-only, or establish
+permission to include that combination in a proprietary distribution.
+https://www.mysql.com/about/legal/licensing/oem/
+https://downloads.mysql.com/docs/licenses/connector-j-8.0-gpl-en.pdf
+
+For lightweight embedding, :core is the shared Java library and declares no
+runtime dependencies. Other modules add their own dependencies. Preserve
+LICENSE, applicable upstream notices, and any additional licence obligations
+for the actual source and binaries you redistribute.
