@@ -4323,4 +4323,12 @@
     <string name="l10n_files_downloaded_sharing" formatted="false">"Downloaded and verified · sharing"</string>
     <string name="l10n_files_confirmation_unavailable" formatted="false">"Download confirmation unavailable"</string>
     <string name="l10n_files_awaiting_download" formatted="false">"Waiting for verified download"</string>
+    <!-- Arguments: name -->
+    <string name="l10n_share_to">"Send to %1$s"</string>
+    <string name="l10n_share_choose" formatted="false">"Share to Parlons! — choose a conversation"</string>
+    <string name="l10n_share_setup" formatted="false">"Set up Parlons first, then share your files again."</string>
+    <string name="l10n_share_invalid" formatted="false">"Cannot read these files. Share up to 32 files, each no larger than 100 MB, and grant file access."</string>
+    <string name="l10n_share_connect" formatted="false">"Connecting to load your contacts…"</string>
+    <string name="l10n_share_no_contacts" formatted="false">"Add a contact in Parlons, then share your files again."</string>
+    <string name="l10n_share_photo_too_large" formatted="false">"Photo exceeds preview limit. Send it as a file."</string>
 </resources>

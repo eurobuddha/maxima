@@ -4279,4 +4279,12 @@
     <string name="l10n_files_downloaded_sharing" formatted="false">"已下载并验证 · 正在分享"</string>
     <string name="l10n_files_confirmation_unavailable" formatted="false">"暂无下载确认"</string>
     <string name="l10n_files_awaiting_download" formatted="false">"等待下载验证"</string>
+    <!-- Arguments: name -->
+    <string name="l10n_share_to">"发送给 %1$s"</string>
+    <string name="l10n_share_choose" formatted="false">"分享到 Parlons! — 选择聊天"</string>
+    <string name="l10n_share_setup" formatted="false">"请先设置 Parlons，然后重新分享文件。"</string>
+    <string name="l10n_share_invalid" formatted="false">"无法读取这些文件。最多可分享 32 个文件，每个不超过 100 MB，并请授予文件访问权限。"</string>
+    <string name="l10n_share_connect" formatted="false">"正在连接以加载联系人…"</string>
+    <string name="l10n_share_no_contacts" formatted="false">"请在 Parlons 中添加联系人，然后重新分享文件。"</string>
+    <string name="l10n_share_photo_too_large" formatted="false">"照片超出预览大小限制。请作为文件发送。"</string>
 </resources>

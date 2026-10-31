@@ -3230,5 +3230,11 @@
   "Downloaded and verified · sharing stopped": "files.downloadedStopped",
   "Downloaded and verified · sharing": "files.downloadedSharing",
   "Download confirmation unavailable": "files.confirmationUnavailable",
-  "Waiting for verified download": "files.awaitingDownload"
+  "Waiting for verified download": "files.awaitingDownload",
+  "Share to Parlons! — choose a conversation": "share.choose",
+  "Set up Parlons first, then share your files again.": "share.setup",
+  "Cannot read these files. Share up to 32 files, each no larger than 100 MB, and grant file access.": "share.invalid",
+  "Connecting to load your contacts…": "share.connect",
+  "Add a contact in Parlons, then share your files again.": "share.noContacts",
+  "Photo exceeds preview limit. Send it as a file.": "share.photoTooLarge"
 }

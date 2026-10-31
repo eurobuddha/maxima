@@ -272,6 +272,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         });
         mConvPane.add(buildInputBar(), BorderLayout.SOUTH);
 
+        ChatDropSupport.installTree(mConvPane, () -> mOpen != null && (!mNarrow || !mShowList), this::dropFiles);
         applyLayout();   // default two-pane; onWidth() adjusts on first resize
     }
 
@@ -734,6 +735,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             mThread.add(k.vgap(last ? 6 : 1));   // roomy between clusters, tight within
         }
         mThread.add(Box.createVerticalGlue());
+        ChatDropSupport.installTree(mThread, () -> mOpen != null && (!mNarrow || !mShowList), this::dropFiles);
         mThread.revalidate();
         mThread.repaint();
         javax.swing.SwingUtilities.invokeLater(() -> {
@@ -773,6 +775,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 }
             }
         }
+        ChatDropSupport.installTree(mThread, () -> mOpen != null && (!mNarrow || !mShowList), this::dropFiles);
         mThread.revalidate();
     }
 
@@ -1992,6 +1995,44 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
     }
 
+    private void dropFiles(java.util.List<java.io.File> files) {
+        final String conversation = mOpen;
+        final boolean group = mOpenGroup;
+        final String recipient = titleFor(conversation, group);
+        // Finish the OS drag before opening a modal confirmation. Keep its recipient.
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            if (!isDisplayable()) return;
+            if (files.size() > 32) { attachmentError(new java.io.IOException(Language.text("share.invalid"))); return; }
+            if (files.size() == 1 && files.get(0).isFile() && files.get(0).length() <= 32L * 1024 * 1024
+                    && files.get(0).getName().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(png|jpe?g|gif|bmp)")) {
+                java.awt.datatransfer.Transferable image = new java.awt.datatransfer.Transferable() {
+                    public java.awt.datatransfer.DataFlavor[] getTransferDataFlavors() { return new java.awt.datatransfer.DataFlavor[]{java.awt.datatransfer.DataFlavor.javaFileListFlavor}; }
+                    public boolean isDataFlavorSupported(java.awt.datatransfer.DataFlavor f) { return java.awt.datatransfer.DataFlavor.javaFileListFlavor.equals(f); }
+                    public Object getTransferData(java.awt.datatransfer.DataFlavor f) throws java.awt.datatransfer.UnsupportedFlavorException {
+                        if (!isDataFlavorSupported(f)) throw new java.awt.datatransfer.UnsupportedFlavorException(f);
+                        return files;
+                    }
+                };
+                pasteImage(image, conversation, group);
+                return;
+            }
+            StringBuilder names = new StringBuilder();
+            for (java.io.File file : files) {
+                if (!file.isFile() || !file.canRead() || file.length() > com.eurobuddha.maxima.core.chat.ChatFile.TRANSFER_MAX_BYTES) {
+                    attachmentError(new java.io.IOException("Choose a local file up to 100 MB")); return;
+                }
+                names.append(file.getName()).append("\n");
+            }
+            JTextArea summary = new JTextArea(names.toString(), Math.min(10, files.size()), 36);
+            summary.setEditable(false);
+            if (javax.swing.JOptionPane.showOptionDialog(this, new JScrollPane(summary),
+                    Language.text("share.to", "name", recipient), javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                    javax.swing.JOptionPane.PLAIN_MESSAGE, null,
+                    new String[]{Language.text("chat.send"), Language.text("common.cancel")}, Language.text("chat.send")) != 0) return;
+            PrivateFileDialog.sendAll(this, node, files, conversation, group);
+        });
+    }
+
     private void attachFile() {
         if (mOpen == null) return;
         final String conversation = mOpen;
@@ -2016,6 +2057,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         final String conversation = mOpen;
         final boolean group = mOpenGroup;
         if (conversation == null || mShowList) return;
+        pasteImage(contents, conversation, group);
+    }
+
+    private void pasteImage(java.awt.datatransfer.Transferable contents, String conversation, boolean group) {
         final String recipient = titleFor(conversation, group);
         new Thread(() -> {
             try {

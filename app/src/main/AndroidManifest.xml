@@ -71,6 +71,15 @@
         android:localeConfig="@xml/parlons_locales"
         android:theme="@style/Theme.Maxima">
 
+        <activity android:name=".ShareActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
         <activity android:configChanges="locale|layoutDirection|screenLayout"
             android:name=".MainActivity"
             android:exported="true"

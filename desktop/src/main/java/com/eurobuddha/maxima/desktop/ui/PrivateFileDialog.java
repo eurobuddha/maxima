@@ -17,16 +17,23 @@ final class PrivateFileDialog {
     static void choose(Component parent,DesktopNode node,String peer,boolean group){
         JFileChooser picker=Language.fileChooser();picker.setDialogTitle(Language.text("desktopFiles.choose"));
         if(picker.showOpenDialog(parent)!=JFileChooser.APPROVE_OPTION)return;
-        File source=picker.getSelectedFile();
-        new Thread(()->{String id=UUID.randomUUID().toString().replace("-","");FileCommands commands=null;
-            try{commands=node.files();String mime=Files.probeContentType(source.toPath());
+        send(parent,node,picker.getSelectedFile(),peer,group);
+    }
+    static void send(Component parent,DesktopNode node,File source,String peer,boolean group){
+        sendAll(parent,node,java.util.Collections.singletonList(source),peer,group);
+    }
+    static void sendAll(Component parent,DesktopNode node,java.util.List<File> sources,String peer,boolean group){
+        new Thread(()->{for(File source:sources){String id=UUID.randomUUID().toString().replace("-","");FileCommands commands=null;
+            try{if(!source.isFile() || !source.canRead())throw new IOException("Cannot open file");
+                if(source.length()>ChatFile.TRANSFER_MAX_BYTES)throw new IOException("Choose a local file up to 100 MB");
+                commands=node.files();String mime=Files.probeContentType(source.toPath());
                 call(commands,"begin","id",id,"name",source.getName(),"mime",mime==null?"application/octet-stream":mime,"size",Long.toString(source.length()),"peer",peer,"group",Boolean.toString(group));
                 SwingUtilities.invokeLater(()->show(parent,node,id,null,peer,group));
                 try(InputStream in=Files.newInputStream(source.toPath())){byte[] buffer=new byte[48*1024];int n;long offset=0;
                     while((n=in.read(buffer))!=-1){if(n==0)continue;call(commands,"append","id",id,"offset",Long.toString(offset),"data",Base64.getEncoder().encodeToString(Arrays.copyOf(buffer,n)));offset+=n;}}
                 call(commands,"finish","id",id);
             }catch(Exception e){if(commands!=null)try{call(commands,"cancelUpload","id",id);}catch(Exception ignored){}error(parent,e);}
-        },"private-file-send").start();
+        }},"private-file-send").start();
     }
     static void showBody(Component parent,DesktopNode node,String body,String peer,boolean group){try{ChatFile f=ChatFile.fromBody(body);show(parent,node,f.id,f,peer,group);}catch(Exception e){error(parent,e);}}
     static void list(Component parent,DesktopNode node){new Thread(()->{try{

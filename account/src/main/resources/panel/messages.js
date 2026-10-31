@@ -3867,7 +3867,14 @@ window.ParlonsMessages = {
     "files.downloadedStopped": "Downloaded and verified · sharing stopped",
     "files.downloadedSharing": "Downloaded and verified · sharing",
     "files.confirmationUnavailable": "Download confirmation unavailable",
-    "files.awaitingDownload": "Waiting for verified download"
+    "files.awaitingDownload": "Waiting for verified download",
+    "share.to": "Send to {name}",
+    "share.choose": "Share to Parlons! — choose a conversation",
+    "share.setup": "Set up Parlons first, then share your files again.",
+    "share.invalid": "Cannot read these files. Share up to 32 files, each no larger than 100 MB, and grant file access.",
+    "share.connect": "Connecting to load your contacts…",
+    "share.noContacts": "Add a contact in Parlons, then share your files again.",
+    "share.photoTooLarge": "Photo exceeds preview limit. Send it as a file."
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -7692,7 +7699,14 @@ window.ParlonsMessages = {
     "files.downloadedStopped": "已下载并验证 · 已停止分享",
     "files.downloadedSharing": "已下载并验证 · 正在分享",
     "files.confirmationUnavailable": "暂无下载确认",
-    "files.awaitingDownload": "等待下载验证"
+    "files.awaitingDownload": "等待下载验证",
+    "share.to": "发送给 {name}",
+    "share.choose": "分享到 Parlons! — 选择聊天",
+    "share.setup": "请先设置 Parlons，然后重新分享文件。",
+    "share.invalid": "无法读取这些文件。最多可分享 32 个文件，每个不超过 100 MB，并请授予文件访问权限。",
+    "share.connect": "正在连接以加载联系人…",
+    "share.noContacts": "请在 Parlons 中添加联系人，然后重新分享文件。",
+    "share.photoTooLarge": "照片超出预览大小限制。请作为文件发送。"
   },
   "ru": {
     "language.title": "Язык",
@@ -11649,7 +11663,14 @@ window.ParlonsMessages = {
     "files.downloadedStopped": "Загружено и проверено · раздача остановлена",
     "files.downloadedSharing": "Загружено и проверено · раздача",
     "files.confirmationUnavailable": "Подтверждение загрузки недоступно",
-    "files.awaitingDownload": "Ожидание проверенной загрузки"
+    "files.awaitingDownload": "Ожидание проверенной загрузки",
+    "share.to": "Отправить: {name}",
+    "share.choose": "Поделиться в Parlons! — выберите чат",
+    "share.setup": "Сначала настройте Parlons, затем поделитесь файлами снова.",
+    "share.invalid": "Не удалось прочитать файлы. Можно отправить до 32 файлов, каждый не больше 100 МБ. Разрешите доступ к файлам.",
+    "share.connect": "Подключение для загрузки контактов…",
+    "share.noContacts": "Добавьте контакт в Parlons, затем поделитесь файлами снова.",
+    "share.photoTooLarge": "Фото превышает лимит предпросмотра. Отправьте его как файл."
   },
   "uk": {
     "language.title": "Мова",
@@ -15606,6 +15627,13 @@ window.ParlonsMessages = {
     "files.downloadedStopped": "Завантажено й перевірено · роздачу зупинено",
     "files.downloadedSharing": "Завантажено й перевірено · роздається",
     "files.confirmationUnavailable": "Підтвердження завантаження недоступне",
-    "files.awaitingDownload": "Очікування перевіреного завантаження"
+    "files.awaitingDownload": "Очікування перевіреного завантаження",
+    "share.to": "Надіслати: {name}",
+    "share.choose": "Поділитися в Parlons! — виберіть чат",
+    "share.setup": "Спочатку налаштуйте Parlons, потім поділіться файлами знову.",
+    "share.invalid": "Не вдалося прочитати файли. Можна надіслати до 32 файлів, кожен не більше 100 МБ. Надайте доступ до файлів.",
+    "share.connect": "Підключення для завантаження контактів…",
+    "share.noContacts": "Додайте контакт у Parlons, потім поділіться файлами знову.",
+    "share.photoTooLarge": "Фото перевищує ліміт попереднього перегляду. Надішліть його як файл."
   }
 };

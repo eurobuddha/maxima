@@ -22,7 +22,7 @@ function harness(fetch) {
   const context = vm.createContext({ fetch, document: { body: element(), createElement: () => ({content: {firstElementChild: element()}}), getElementById: node, querySelectorAll: () => [], addEventListener() {}, documentElement: element() },
     window: { icon: () => '', addEventListener() {} }, confirm: () => true, localStorage: { getItem: () => null },
     setTimeout() {}, clearTimeout() {}, Event: class { constructor(type) { this.type = type; } }, URL, Uint8Array, crypto: require('node:crypto').webcrypto, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'), renders });
-  const expose = `globalThis.panel = { S, api, toast, retryCard, showSendErr, summaryPreview, i18n: I, draftKeydown, renderAdminPassword, renderHostedAccounts, linkText, bubbleHtml, chatPhotos, copyableMessage, insertEmoji, findMessage, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile,
+  const expose = `globalThis.panel = { S, api, toast, retryCard, showSendErr, summaryPreview, i18n: I, draftKeydown, renderAdminPassword, renderHostedAccounts, linkText, bubbleHtml, chatPhotos, copyableMessage, insertEmoji, findMessage, refreshPill, loadOlder, reloadOpenTail, loadSummaries, sendFile, wireChatDrop, setConfirm(fn) { globalThis.confirm = fn; }, setFileSender(fn) { sendFile = fn; },
     wireSwitch: typeof wireSwitch === 'function' ? wireSwitch : null,
     select(peer, group = false) { ++openSeq; S.open = peer; S.openIsGroup = group; S.msgs = [{id: peer, time: 100}]; olderBusy = false; olderDone = false; },
     get seq() { return openSeq; }, get busy() { return olderBusy; }, get done() { return olderDone; } };
@@ -284,4 +284,29 @@ test('summary paging retains every typed row and keeps the existing list on a la
   assert.equal(broken.p.S.summaries,existing);
   const stuck = harness(async () => reply({summaries:[],more:true,next:0}));
   await assert.rejects(stuck.p.loadSummaries());
+});
+
+
+test('file drops retain their recipient across an asynchronous batch and preserve text drops', async () => {
+  const h = harness(() => { throw Error('No network'); }), pane = element(), calls = [], first = deferred();
+  h.p.select('alice'); h.p.wireChatDrop(pane);
+  h.p.setFileSender(async (file, photo, target) => { calls.push({file, photo, target}); if (calls.length === 1) await first.promise; });
+  let prevented = 0;
+  await pane.ondrop({dataTransfer:{types:['text/plain']}, preventDefault(){prevented++;}});
+  assert.equal(prevented, 0);
+  const image = {name:'photo.png', type:'image/png', size:20};
+  const pdf = {name:'document.pdf', type:'application/pdf', size:100*1024*1024};
+  const sending = pane.ondrop({dataTransfer:{types:['Files'], files:[image,pdf]}, preventDefault(){prevented++;}});
+  h.p.select('bob'); first.resolve(); await sending;
+  assert.equal(prevented, 1); assert.equal(calls.length, 2);
+  assert.equal(calls[0].photo, true); assert.equal(calls[1].photo, false);
+  assert.equal(calls[0].target.peer, 'alice'); assert.equal(calls[1].target.peer, 'alice');
+});
+
+test('drop cancellation, oversize files and no selected conversation send nothing', async () => {
+  const h = harness(() => { throw Error('No network'); }), pane = element();
+  h.p.wireChatDrop(pane); h.p.setFileSender(() => assert.fail('Must not send'));
+  const drop = size => pane.ondrop({dataTransfer:{types:['Files'],files:[{name:'file',type:'application/pdf',size}]},preventDefault(){}});
+  await drop(20); h.p.select('alice'); await drop(100*1024*1024+1);
+  h.p.setConfirm(() => false); await drop(20);
 });

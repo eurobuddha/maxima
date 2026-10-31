@@ -3317,6 +3317,12 @@ public final class SystemMessages {
             case "Downloaded and verified · sharing": return R.string.l10n_files_downloaded_sharing;
             case "Download confirmation unavailable": return R.string.l10n_files_confirmation_unavailable;
             case "Waiting for verified download": return R.string.l10n_files_awaiting_download;
+            case "Share to Parlons! — choose a conversation": return R.string.l10n_share_choose;
+            case "Set up Parlons first, then share your files again.": return R.string.l10n_share_setup;
+            case "Cannot read these files. Share up to 32 files, each no larger than 100 MB, and grant file access.": return R.string.l10n_share_invalid;
+            case "Connecting to load your contacts…": return R.string.l10n_share_connect;
+            case "Add a contact in Parlons, then share your files again.": return R.string.l10n_share_no_contacts;
+            case "Photo exceeds preview limit. Send it as a file.": return R.string.l10n_share_photo_too_large;
             default: return 0;
         }
     }

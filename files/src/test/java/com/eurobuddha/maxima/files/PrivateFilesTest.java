@@ -82,34 +82,47 @@ public class PrivateFilesTest {
         Map<String,String> status;
         do {
             status=f.call("action","status","id",id);
-            if(failed ? "Failed".equals(status.get("status")) : status.containsKey("fileId") && "true".equals(status.get("ready")))return status;
+            if(failed ? "Failed".equals(status.get("status")) : status.containsKey("fileId") && ("true".equals(status.get("ready")) || "Queued".equals(status.get("status"))))return status;
             Thread.sleep(25);
         }while(System.currentTimeMillis()<until);
         throw new AssertionError("Upload did not reach expected state: "+status);
     }
-    @Test(timeout=30000) public void failedPreparationRetainsUploadAndResumesAfterCapacityIsFreed()throws Exception {
+    @Test(timeout=45000) public void fullBatchQueuesWithoutLosingIdempotencyOrExceedingFourActive()throws Exception {
         try(Fixture f=new Fixture()) {
-            List<String> active=new ArrayList<>();
-            for(int i=0;i<4;i++)active.add(f.files.send(new ByteArrayInputStream(new byte[]{1}),1,"active.txt","text/plain",f.peer.publicKeyHex(),false));
-            String id=FileCrypto.randomHex(16);
-            f.call("action","begin","id",id,"size","3","name","retry.txt","peer",f.peer.publicKeyHex());
-            f.call("action","append","id",id,"offset","0","data","YWJj");
-            f.call("action","finish","id",id);
-            assertTrue(awaitUpload(f,id,true).get("error").contains("4 active"));
-            Path staged=f.root.resolve("files/uploads").resolve(id);
-            assertArrayEquals(new byte[]{97,98,99},Files.readAllBytes(staged));
-            assertTrue("Failed preparations remain accessible after closing the sheet",f.call("action","list").get("transfers").contains(id));
-            f.files.pause(active.get(0));
-            f.call("action","resume","id",id);
-            f.call("action","finish","id",id); // lost-reply retry must not send twice
-            Map<String,String> ready=awaitUpload(f,id,false);
-            String fileId=ready.get("fileId");
-            assertFalse(Files.exists(staged));assertEquals(5,f.files.list().size());
-            try(InputStream in=f.files.open(fileId)){assertArrayEquals(new byte[]{97,98,99},in.readAllBytes());}
-            f.call("action","finish","id",id);
-            f.call("action","resume","id",id);
-            assertEquals(fileId,f.call("action","status","id",id).get("fileId"));
-            assertEquals(5,f.files.list().size());
+            List<String> ids=new ArrayList<>(), fileIds=new ArrayList<>();
+            for(int i=0;i<32;i++){
+                String id=FileCrypto.randomHex(16);ids.add(id);
+                f.call("action","begin","id",id,"size","3","name","batch.txt","peer",f.peer.publicKeyHex());
+                f.call("action","append","id",id,"offset","0","data","YWJj");
+                f.call("action","finish","id",id);
+            }
+            for(String id:ids){
+                Map<String,String> state=awaitUpload(f,id,false);fileIds.add(state.get("fileId"));
+                assertEquals("",state.get("error"));
+            }
+            assertEquals(32,new HashSet<>(fileIds).size());
+            assertEquals(28,f.files.list().stream().filter(t->"Queued".equals(t.get("status"))).count());
+            // Completed receipts must not occupy the eight importing slots; retries keep the same offer.
+            for(int i=0;i<ids.size();i++){
+                assertEquals("3",f.call("action","begin","id",ids.get(i),"size","3","name","batch.txt","peer",f.peer.publicKeyHex()).get("offset"));
+                assertEquals(fileIds.get(i),f.call("action","finish","id",ids.get(i)).get("fileId"));
+            }
+            String cancelled=fileIds.get(31);f.files.pause(cancelled);
+            f.files.pause(fileIds.get(0));
+            long until=System.currentTimeMillis()+15000;
+            while(f.files.list().stream().filter(t->"Queued".equals(t.get("status"))).count()!=26 && System.currentTimeMillis()<until)Thread.sleep(50);
+            assertEquals(26,f.files.list().stream().filter(t->"Queued".equals(t.get("status"))).count());
+            assertEquals("true",f.files.status(cancelled).get("paused"));
+            assertEquals(4,f.files.list().stream().filter(t->"false".equals(t.get("paused"))&&!"Queued".equals(t.get("status"))).count());
+            try(InputStream in=f.files.open(fileIds.get(0))){assertArrayEquals(new byte[]{97,98,99},in.readAllBytes());}
+            assertEquals(32,f.files.list().size());
+        }
+    }
+    @Test public void unfinishedByteImportsStillHaveEightSlotLimit()throws Exception {
+        try(Fixture f=new Fixture()){
+            for(int i=0;i<8;i++)f.call("action","begin","id",FileCrypto.randomHex(16),"size","1","name","pending","peer",f.peer.publicKeyHex());
+            try{f.call("action","begin","id",FileCrypto.randomHex(16),"size","1","name","ninth","peer",f.peer.publicKeyHex());fail("Unbounded active imports");}
+            catch(IOException expected){assertTrue(expected.getMessage().contains("Finish or cancel"));}
         }
     }
     @Test(timeout=15000) public void removingFailedPreparationDeletesRetainedInput()throws Exception {

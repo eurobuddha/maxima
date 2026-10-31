@@ -282,3 +282,6 @@ button:disabled { cursor: default; opacity: .55; }
 .hosted-account-row { flex-wrap: wrap; }
 .hosted-account-row .mid { flex-basis: 100%; }
 .hosted-account-row .btn { flex: 1 1 auto; white-space: normal; }
+
+/* Keep the target visible while a file is held over this conversation. */
+#chatpane.file-drop { outline: 3px solid var(--accent, #ff5722); outline-offset: -5px; }

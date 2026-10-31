@@ -4411,4 +4411,12 @@
     <string name="l10n_files_downloaded_sharing" formatted="false">"Загружено и проверено · раздача"</string>
     <string name="l10n_files_confirmation_unavailable" formatted="false">"Подтверждение загрузки недоступно"</string>
     <string name="l10n_files_awaiting_download" formatted="false">"Ожидание проверенной загрузки"</string>
+    <!-- Arguments: name -->
+    <string name="l10n_share_to">"Отправить: %1$s"</string>
+    <string name="l10n_share_choose" formatted="false">"Поделиться в Parlons! — выберите чат"</string>
+    <string name="l10n_share_setup" formatted="false">"Сначала настройте Parlons, затем поделитесь файлами снова."</string>
+    <string name="l10n_share_invalid" formatted="false">"Не удалось прочитать файлы. Можно отправить до 32 файлов, каждый не больше 100 МБ. Разрешите доступ к файлам."</string>
+    <string name="l10n_share_connect" formatted="false">"Подключение для загрузки контактов…"</string>
+    <string name="l10n_share_no_contacts" formatted="false">"Добавьте контакт в Parlons, затем поделитесь файлами снова."</string>
+    <string name="l10n_share_photo_too_large" formatted="false">"Фото превышает лимит предпросмотра. Отправьте его как файл."</string>
 </resources>

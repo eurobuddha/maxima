@@ -106,6 +106,8 @@ public final class CloudChatActivity extends AppCompatActivity {
         }
     };
 
+    private com.eurobuddha.maxima.app.chat.ChatShareIntake mSharedFiles;
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -122,6 +124,10 @@ public final class CloudChatActivity extends AppCompatActivity {
             mName = mPeer;
         }
         setContentView(R.layout.activity_chat);
+        mFileUi=com.eurobuddha.maxima.app.chat.PrivateFileUi.restore(this,mPeer);
+        mSharedFiles = new com.eurobuddha.maxima.app.chat.ChatShareIntake(this,b,mName,
+            () -> CloudSession.remoteOrNull()!=null,uri -> readScaledJpeg(uri,600),
+            this::sendPhoto,uri -> fileUi().upload(uri));
 
         // Edge-to-edge insets (targetSdk 35): extend the dark app bar up into the status bar and
         // keep the composer above the nav bar / keyboard — mirrors the app's ChatActivity so the
@@ -444,7 +450,7 @@ public final class CloudChatActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if (mFileUi != null) mFileUi.close();
+        if (mFileUi != null) mFileUi.detach();
         if (mPhotoViewer != null) mPhotoViewer.dismiss();
         super.onDestroy();
     }
@@ -1327,7 +1333,7 @@ public final class CloudChatActivity extends AppCompatActivity {
     private com.eurobuddha.maxima.app.chat.PrivateFileUi mFileUi;
     private com.eurobuddha.maxima.app.chat.PrivateFileUi fileUi() {
         if (mFileUi == null) {
-            mFileUi = new com.eurobuddha.maxima.app.chat.PrivateFileUi(this, params -> {
+            mFileUi = com.eurobuddha.maxima.app.chat.PrivateFileUi.obtain(this, params -> {
                 final com.eurobuddha.maxima.cloud.ParlonsRemote remote = CloudSession.remoteOrNull();
                 if (remote == null) throw new java.io.IOException("Connect to your account first");
                 org.minima.utils.json.JSONObject input = new org.minima.utils.json.JSONObject(); input.putAll(params);
@@ -1468,6 +1474,7 @@ public final class CloudChatActivity extends AppCompatActivity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
+        if (mSharedFiles != null) mSharedFiles.save(out);
         // The camera app can push us through a config change / process death; without persisting
         // the capture uri, a returning photo (onActivityResult) is dropped as mCaptureUri==null.
         if (mCaptureUri != null) {
@@ -1604,13 +1611,7 @@ public final class CloudChatActivity extends AppCompatActivity {
     }
 
     private static byte[] readAll(java.io.InputStream in) throws java.io.IOException {
-        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
-        byte[] buf = new byte[16384];
-        int n;
-        while ((n = in.read(buf)) > 0) {
-            bos.write(buf, 0, n);
-        }
-        return bos.toByteArray();
+        return com.eurobuddha.maxima.app.chat.PhotoInput.read(in);
     }
 
     private static android.graphics.Bitmap applyExifOrientation(

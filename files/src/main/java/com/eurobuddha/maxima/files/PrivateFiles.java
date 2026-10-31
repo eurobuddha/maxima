@@ -223,6 +223,10 @@ public final class PrivateFiles implements AutoCloseable {
             }
         },error->failed(t,generation,error));
         save(t);
+        }catch(PrivateTorrent.CapacityException full){
+            // Keep the prepared offer and let the existing restoration loop start it when a slot opens.
+            // Pausing explicitly clears restorePending; paused=false persists queue intent on restart.
+            pauseEngine(t);t.restorePending=true;t.paused=false;t.status="Queued";t.error="";save(t);
         }catch(Exception e){failed(t,generation,message(e));throw e;}
     }
     private void startKeets(Transfer t,int generation)throws Exception {
@@ -307,8 +311,9 @@ public final class PrivateFiles implements AutoCloseable {
     /** Wait for asynchronous Android chat loading; explicit Pause cancels pending restoration. */
     private synchronized void resumeRestored(){
         if(closed || !chat.isLoaded())return;
-        for(Transfer t:transfers.values())if(t.restorePending){
-            try{start(t);}catch(Exception ignored){/* start records a visible, persisted failure. */}
+        boolean full=false;
+        for(Transfer t:transfers.values())if(t.restorePending && (!full || t.file.isKeets())){
+            try{start(t);full|=t.restorePending;}catch(Exception ignored){/* start records a visible, persisted failure. */}
         }
     }
     private void introduce(Transfer t,String sources,String token){

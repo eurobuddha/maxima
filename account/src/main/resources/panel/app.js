@@ -379,6 +379,7 @@
       panel.querySelector('.private-list').onclick = () => { closeSheet(); privateFiles.list(); };
     }));
     $('attachFile').addEventListener('change', () => { const f = $('attachFile').files[0]; if (f) sendFile(f, false); $('attachFile').value = ''; });
+    wireChatDrop(pane);
     $('draft').focus();
     subtitle(peer);
     try {
@@ -700,8 +701,28 @@
     S.msgs.sort((a, b) => Number(a.time) - Number(b.time));
     renderMsgs(true);
   }
-  async function sendFile(file, asPhoto) {
-    const peer = S.open, seq = openSeq, isGroup = S.openIsGroup; if (!peer) return;
+  function wireChatDrop(pane) {
+    const isFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    pane.ondragover = e => {
+      if (!isFiles(e)) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = S.open ? 'copy' : 'none';
+      pane.classList.toggle('file-drop', !!S.open);
+    };
+    pane.ondragleave = e => { if (!pane.contains(e.relatedTarget)) pane.classList.toggle('file-drop', false); };
+    pane.ondrop = async e => {
+      if (!isFiles(e)) return;
+      e.preventDefault(); pane.classList.toggle('file-drop', false);
+      const target = { peer: S.open, seq: openSeq, isGroup: S.openIsGroup };
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!target.peer || !files.length) return;
+      if (files.length > 32 || files.some(f => f.size > 100 * 1024 * 1024)) { toast(tr('share.invalid'), 'err'); return; }
+      if (!confirm(tr('share.to', { name: S.openName || target.peer }) + '\n\n' + files.map(f => f.name).join('\n'))) return;
+      for (const file of files) await sendFile(file, file.type.startsWith('image/') && file.size <= 32 * 1024 * 1024, target);
+    };
+  }
+
+  async function sendFile(file, asPhoto, target = { peer: S.open, seq: openSeq, isGroup: S.openIsGroup }) {
+    const { peer, seq, isGroup } = target; if (!peer) return;
     if (!asPhoto) { await privateFiles.send(file, peer, isGroup); return; }
     let blob = file, mime = file.type || 'application/octet-stream';
     if (asPhoto || mime.startsWith('image/')) {

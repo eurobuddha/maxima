@@ -41,6 +41,9 @@ public final class PrivateTorrent implements AutoCloseable {
     private final boolean testLoopback;
     private final int port;
 
+    static final class CapacityException extends IOException {
+        CapacityException(){super("Pause another transfer first (4 active transfers maximum)");}
+    }
     public PrivateTorrent(int port) throws Exception { this(port, false); }
     PrivateTorrent(int port, boolean testLoopback) throws Exception {
         this.testLoopback = testLoopback;
@@ -98,7 +101,7 @@ public final class PrivateTorrent implements AutoCloseable {
             if(clients.containsKey(file.id)) return;
             Run prior=runs.get(file.id);
             if(prior!=null && prior.stopped.getCount()!=0)throw new IOException("Transfer is still stopping; retry shortly");
-            if(clients.size()>=4)throw new IOException("Pause another transfer first (4 active transfers maximum)");
+            if(clients.size()>=4)throw new CapacityException();
             Torrent torrent=validate(file);
             run=new Run();runs.put(file.id,run);
             stoppingEvents.put(torrent.getTorrentId(),run);

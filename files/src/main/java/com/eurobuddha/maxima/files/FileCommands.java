@@ -13,7 +13,7 @@ public final class FileCommands implements AutoCloseable {
     private final PrivateFiles files;
     private final Path staging;
     private final Map<String,Upload> uploads=new ConcurrentHashMap<>();
-    private final ExecutorService work=new ThreadPoolExecutor(1,1,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(4),
+    private final ExecutorService work=new ThreadPoolExecutor(1,1,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(32),
             r->{Thread t=new Thread(r,"private-file-import");t.setDaemon(true);return t;},new ThreadPoolExecutor.AbortPolicy());
     private volatile boolean closed;
     private static final class Upload {
@@ -46,7 +46,11 @@ public final class FileCommands implements AutoCloseable {
                     new ChatFile(id,u.name,u.mime,u.size,zero,"0000000000000000",zero,"");
                     if(u.size<0 || u.size>ChatFile.TRANSFER_MAX_BYTES || u.name==null || u.name.isEmpty() || u.name.length()>240 || u.peer==null)throw new IOException("Choose a file up to 100 MB");
                     long pending=uploads.values().stream().filter(x->x.fileId.isEmpty()).mapToLong(x->x.size).sum();
-                    if(uploads.size()>=8 || pending+u.size>ChatFile.MAX_BYTES || staging.toFile().getUsableSpace()<u.size*3+32*1024*1024)
+                    // Completed receipts remain available for idempotent retries, but use no import slot.
+                    // One batch may queue 32 preparations; at most eight unfinished byte streams.
+                    long imports=uploads.values().stream().filter(x->x.fileId.isEmpty()&&!x.finishing).count();
+                    long preparing=uploads.values().stream().filter(x->x.fileId.isEmpty()).count();
+                    if(imports>=8 || preparing>=32 || uploads.size()>=256 || pending+u.size>ChatFile.MAX_BYTES || staging.toFile().getUsableSpace()<u.size*3+32*1024*1024)
                         throw new IOException("Finish or cancel another upload first");
                     Files.createFile(u.path);try{Files.setPosixFilePermissions(u.path,java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));}catch(UnsupportedOperationException ignored){}
                     uploads.put(id,u);return result("id",id,"offset","0");

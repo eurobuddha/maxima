@@ -127,6 +127,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
         mHandler.postDelayed(mRender, 80);
     }
 
+    private ChatShareIntake mSharedFiles;
     private final LockGate mLock = new LockGate(this);
 
     @Override
@@ -140,6 +141,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             return;
         }
 
+        mSharedFiles = sharedFiles(savedInstanceState);
         View root = findViewById(R.id.chat_root);
         final View appbar = findViewById(R.id.chat_appbar);
         final View composer = findViewById(R.id.chat_composer);
@@ -280,6 +282,17 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
             public void onTextChanged(CharSequence c, int a, int b, int d) {
             }
         });
+    }
+
+    private ChatShareIntake sharedFiles(Bundle saved) {
+        mFileUi=PrivateFileUi.restore(this,mConversation);
+        com.eurobuddha.maxima.core.ChatPort port = MaximaService.port();
+        Contact contact = port == null ? null : port.contact(mConversation);
+        Group group = MaximaService.chat() == null ? null : MaximaService.chat().group(mConversation);
+        String recipient = group != null ? group.name : contact != null ? contact.name : mConversation;
+        return new ChatShareIntake(this, saved, recipient,
+            () -> MaximaService.chat()!=null && MaximaService.port()!=null,
+            uri -> readScaledJpeg(uri,600), this::sendPhoto, uri -> fileUi().upload(uri));
     }
 
     private static final int PICK_PHOTO = 71;
@@ -610,7 +623,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     private PrivateFileUi mFileUi;
     private PrivateFileUi fileUi() {
         if (mFileUi == null) {
-            mFileUi = new PrivateFileUi(this, params -> {
+            mFileUi = PrivateFileUi.obtain(this, params -> {
                 final com.eurobuddha.maxima.files.FileCommands commands = MaximaService.files();
                 if (commands == null) throw new java.io.IOException("Private files require the Parlons engine");
                 return commands.call(params);
@@ -1381,13 +1394,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     }
 
     private static byte[] readAll(java.io.InputStream in) throws Exception {
-        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) > 0) {
-            bos.write(buf, 0, n);
-        }
-        return bos.toByteArray();
+        return com.eurobuddha.maxima.app.chat.PhotoInput.read(in);
     }
 
     /**
@@ -1400,11 +1407,14 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     @Override
     protected void onNewIntent(android.content.Intent zIntent) {
         super.onNewIntent(zIntent);
+        if (mSharedFiles != null) mSharedFiles.close();
+        if (mFileUi != null) { mFileUi.detach(); mFileUi = null; }
         setIntent(zIntent);
         String previous = mConversation;
         if (!adopt(zIntent)) {
             return;
         }
+        mSharedFiles = sharedFiles(null);
         if (!previous.equals(mConversation)) {
             ChatEngine chat = MaximaService.chat();
             if (chat != null) {
@@ -1497,6 +1507,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
     @Override
     protected void onSaveInstanceState(android.os.Bundle zOut) {
         super.onSaveInstanceState(zOut);
+        if (mSharedFiles != null) mSharedFiles.save(zOut);
         if (mCaptureUri != null) {
             zOut.putString("capture_uri", mCaptureUri.toString());
         }
@@ -1513,7 +1524,7 @@ public final class ChatActivity extends AppCompatActivity implements ChatEngine.
 
     @Override
     protected void onDestroy() {
-        if (mFileUi != null) mFileUi.close();
+        if (mFileUi != null) mFileUi.detach();
         if (mPhotoViewer != null) mPhotoViewer.dismiss();
         super.onDestroy();
         // Rotation/OS-kill of the record dialog would otherwise leak the

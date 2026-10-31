@@ -23068,5 +23068,47 @@
     "zh-Hans": "等待下载验证",
     "ru": "Ожидание проверенной загрузки",
     "uk": "Очікування перевіреного завантаження"
+  },
+  "share.to": {
+    "en": "Send to {name}",
+    "zh-Hans": "发送给 {name}",
+    "ru": "Отправить: {name}",
+    "uk": "Надіслати: {name}"
+  },
+  "share.choose": {
+    "en": "Share to Parlons! — choose a conversation",
+    "zh-Hans": "分享到 Parlons! — 选择聊天",
+    "ru": "Поделиться в Parlons! — выберите чат",
+    "uk": "Поділитися в Parlons! — виберіть чат"
+  },
+  "share.setup": {
+    "en": "Set up Parlons first, then share your files again.",
+    "zh-Hans": "请先设置 Parlons，然后重新分享文件。",
+    "ru": "Сначала настройте Parlons, затем поделитесь файлами снова.",
+    "uk": "Спочатку налаштуйте Parlons, потім поділіться файлами знову."
+  },
+  "share.invalid": {
+    "en": "Cannot read these files. Share up to 32 files, each no larger than 100 MB, and grant file access.",
+    "zh-Hans": "无法读取这些文件。最多可分享 32 个文件，每个不超过 100 MB，并请授予文件访问权限。",
+    "ru": "Не удалось прочитать файлы. Можно отправить до 32 файлов, каждый не больше 100 МБ. Разрешите доступ к файлам.",
+    "uk": "Не вдалося прочитати файли. Можна надіслати до 32 файлів, кожен не більше 100 МБ. Надайте доступ до файлів."
+  },
+  "share.connect": {
+    "en": "Connecting to load your contacts…",
+    "zh-Hans": "正在连接以加载联系人…",
+    "ru": "Подключение для загрузки контактов…",
+    "uk": "Підключення для завантаження контактів…"
+  },
+  "share.noContacts": {
+    "en": "Add a contact in Parlons, then share your files again.",
+    "zh-Hans": "请在 Parlons 中添加联系人，然后重新分享文件。",
+    "ru": "Добавьте контакт в Parlons, затем поделитесь файлами снова.",
+    "uk": "Додайте контакт у Parlons, потім поділіться файлами знову."
+  },
+  "share.photoTooLarge": {
+    "en": "Photo exceeds preview limit. Send it as a file.",
+    "zh-Hans": "照片超出预览大小限制。请作为文件发送。",
+    "ru": "Фото превышает лимит предпросмотра. Отправьте его как файл.",
+    "uk": "Фото перевищує ліміт попереднього перегляду. Надішліть його як файл."
   }
 }
