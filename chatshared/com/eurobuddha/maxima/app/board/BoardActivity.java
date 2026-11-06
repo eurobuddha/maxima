@@ -88,6 +88,29 @@ public final class BoardActivity extends AppCompatActivity {
         super.onCreate(zSaved);
         setContentView(R.layout.activity_chat);
         mBoardId = String.valueOf(getIntent().getStringExtra(EXTRA_BOARD));
+        // Same edge-to-edge handling as the chat screen: the dark app bar extends up into the
+        // status bar and the composer stays above the nav bar / keyboard.
+        final View root = findViewById(R.id.chat_root);
+        final View appbar = findViewById(R.id.chat_appbar);
+        final View composer = findViewById(R.id.chat_composer);
+        final int barTop = appbar.getPaddingTop();
+        final int compBottom = composer.getPaddingBottom();
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            androidx.core.graphics.Insets ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, 0, bars.right, 0);
+            appbar.setPadding(appbar.getPaddingLeft(), barTop + bars.top,
+                    appbar.getPaddingRight(), appbar.getPaddingBottom());
+            composer.setPadding(composer.getPaddingLeft(), composer.getPaddingTop(),
+                    composer.getPaddingRight(), compBottom + Math.max(bars.bottom, ime.bottom));
+            return androidx.core.view.WindowInsetsCompat.CONSUMED;
+        });
+        getWindow().setStatusBarColor(getColor(R.color.ux_header));
+        androidx.core.view.WindowInsetsControllerCompat wic =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), root);
+        if (wic != null) {
+            wic.setAppearanceLightStatusBars(false);
+        }
         mList = findViewById(R.id.messages);
         mEmpty = findViewById(R.id.chat_empty);
         mTitle = findViewById(R.id.chat_title);
