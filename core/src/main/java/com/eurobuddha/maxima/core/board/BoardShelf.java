@@ -67,6 +67,9 @@ public final class BoardShelf {
         long lastRead = System.currentTimeMillis();
         /** Monotonic use stamp for LRU eviction - wall-clock ms ties within a burst. */
         long lru;
+        /** Newest seq ever dropped from this board (expire / shed / per-board cap). A cursor at or
+         *  below it may have missed posts: that is the ONE exact signal for {@code reset}. */
+        long prunedUpTo;
     }
 
     private final Map<String, Board> mBoards = new HashMap<>();
@@ -117,7 +120,9 @@ public final class BoardShelf {
 
     private void load() {
         List<Map.Entry<String, Integer>> all = new ArrayList<>(mStore.listBytes(C_POSTS).entrySet());
-        all.sort(Comparator.comparingLong(e -> seqOf(e.getKey())));
+        // Newest first for ADMISSION (a cap that shrank across a restart must keep the newest
+        // posts, not the oldest); each board's items are sorted ascending once loaded.
+        all.sort(Comparator.comparingLong((Map.Entry<String, Integer> e) -> seqOf(e.getKey())).reversed());
         long now = System.currentTimeMillis();
         for (Map.Entry<String, Integer> e : all) {
             String key = e.getKey();
@@ -154,6 +159,9 @@ public final class BoardShelf {
             } catch (NumberFormatException ex) {
                 System.err.println("[boards] bad record " + key + ": " + ex);
             }
+        }
+        for (Board b : mBoards.values()) {
+            b.items.sort(Comparator.comparingLong(it -> it.seq));
         }
     }
 
@@ -274,9 +282,11 @@ public final class BoardShelf {
         expire(boardHex, b, now);
         b.lastRead = now;
         b.lru = ++mUseClock;
-        long oldest = b.items.isEmpty() ? b.lastSeq : b.items.get(0).seq;
-        // The next post after the cursor is retained, or the cursor is current: exact deltas.
-        boolean reset = zCursor < oldest - 1 && !(zCursor >= b.lastSeq);
+        // A cursor may have missed posts when it sits BELOW something this board dropped, or below
+        // everything this board has ever held (the board was wiped and re-created after the
+        // reader's cursor). A cursor AT the newest dropped post, or at any retained post, is exact.
+        long oldest = b.items.isEmpty() ? b.lastSeq + 1 : b.items.get(0).seq;
+        boolean reset = zCursor > 0 && zCursor < Math.max(b.prunedUpTo, oldest - 1);
         List<byte[]> out = new ArrayList<>();
         long cursor = zCursor;
         int bytes = 0;
@@ -378,6 +388,7 @@ public final class BoardShelf {
 
     /** Book-keeping for one post leaving (caller removes it from the list). */
     private void drop(String zBoard, Board zB, Item zItem) {
+        zB.prunedUpTo = Math.max(zB.prunedUpTo, zItem.seq);
         zB.bytes -= zItem.size;
         zB.ids.remove(zItem.id);
         mTotalBytes -= zItem.size;
@@ -407,6 +418,24 @@ public final class BoardShelf {
             }
         }
     }
+
+    private static final String C_META = "boardmeta";
+
+    /** Small durable key/values beside the posts (a mirror's per-peer cursors survive a restart). */
+    public synchronized String meta(String zKey) {
+        String v = mStore == Store.MEMORY_ONLY ? mMemoryMeta.get(zKey) : mStore.all(C_META).get(zKey);
+        return v == null ? "" : v;
+    }
+
+    public synchronized void setMeta(String zKey, String zValue) {
+        if (mStore == Store.MEMORY_ONLY) {
+            mMemoryMeta.put(zKey, zValue);
+        } else {
+            mStore.put(C_META, zKey, zValue);
+        }
+    }
+
+    private final Map<String, String> mMemoryMeta = new HashMap<>();
 
     /** Every board held here, as 32-byte ids (what a peer relay is asked about when mirroring). */
     public synchronized List<byte[]> boards() {

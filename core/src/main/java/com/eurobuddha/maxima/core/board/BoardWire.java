@@ -22,15 +22,20 @@ import java.util.List;
  * blob-shelf pattern - no new frame types, no new port: it rides the relay port every client is
  * already attached to):
  *
- *   put     payload = one signed envelope ({@link BoardPost#sign}). The relay re-verifies it and
- *           requires the envelope's signer to be the message's {@code from} (the pseudonym key the
- *           sender addressed the relay with), stores it idempotently by board|id, and acks
+ *   put     payload = one signed envelope ({@link BoardPost#sign}). The relay re-verifies the
+ *           envelope's own signature (the message's {@code from} may differ: members re-seed each
+ *           other's posts), stores it idempotently by board|id, and acks
  *           OK / FAIL (quota, rate) / TOOBIG / UNKNOWN (not a pool relay, or boards disabled).
  *   since   payload = {@link SinceRequest}: up to {@link #MAX_BOARDS_PER_CALL} (board, cursor)
  *           pairs. Reply: {@link SinceReply} in the ping body - per board the posts after the
  *           cursor, the new cursor, and {@code reset} when the cursor predates what is retained.
  *           Unauthenticated like blob GET: a board id is only ever learned from an invite, and
  *           the bytes are ciphertext.
+ *
+ * Both travel signed by a PSEUDONYM (the board's for puts, the device's reader key for pulls) on
+ * a FRESH socket, never down the attached link the relay already knows as our identity: a relay
+ * learns that some key posts to or reads a board, not which MAX# does. (The source IP is the
+ * residual correlation, as for every relay-addressed call.)
  */
 public final class BoardWire {
     public static final String APP_PUT = "**maxima_board_put**";
@@ -187,7 +192,7 @@ public final class BoardWire {
                               byte[] zRaw) {
         try {
             MaximaSender.Result r = zNode.sendRawAs(zPseudonym, zRelayAddr, APP_PUT, zRaw,
-                    CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+                    CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, true);
             return r.isOk();
         } catch (Exception e) {
             return false;
@@ -195,10 +200,11 @@ public final class BoardWire {
     }
 
     /** Ask a relay for everything after the cursors; null when it did not answer. */
-    public static SinceReply since(MaximaNode zNode, String zRelayAddr, SinceRequest zReq) {
+    public static SinceReply since(MaximaNode zNode, String zRelayAddr, java.security.KeyPair zReader,
+                                   SinceRequest zReq) {
         try {
-            MaximaSender.Result r = zNode.sendRaw(zRelayAddr, APP_SINCE, zReq.toBytes(),
-                    CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+            MaximaSender.Result r = zNode.sendRawAs(zReader, zRelayAddr, APP_SINCE, zReq.toBytes(),
+                    CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, true);
             if (r.hasPayload()) {
                 return SinceReply.fromBytes(r.replyData.getBytes());
             }

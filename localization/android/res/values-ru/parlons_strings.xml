@@ -4477,4 +4477,5 @@
         <item quantity="many">"%1$d новых записей"</item>
         <item quantity="other">"%1$d новой записи"</item>
     </plurals>
+    <string name="l10n_board_removed_you" formatted="false">"Администратор удалил вас с этой доски. Старые записи видны, писать нельзя."</string>
 </resources>

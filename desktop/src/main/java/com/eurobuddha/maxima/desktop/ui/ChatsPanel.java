@@ -413,7 +413,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         StringBuilder sig = new StringBuilder(mQuery).append('#');
         List<com.eurobuddha.maxima.core.board.BoardEngine.Board> boards = boardRows();
         for (com.eurobuddha.maxima.core.board.BoardEngine.Board b : boards) {
-            sig.append('B').append(b.id).append(b.name).append(b.lastActivity).append(b.joining)
+            sig.append('B').append(b.id).append(b.name).append(b.lastActivity).append(b.joining).append(b.removed)
                     .append(node.boards().unread(b)).append('|');
         }
         for (ChatEngine.Summary s : sums) {
@@ -2431,6 +2431,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private String boardSub(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
         if (b.joining) return Language.text("board.waiting");
+        if (b.removed) return Language.text("board.removedYou");
         return Language.text(b.open ? "board.openMembers" : "board.inviteMembers", "count", b.memberCount());
     }
 
@@ -2452,10 +2453,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         Language.font(name, t.semibold(13.5f), name.getText());
         name.setForeground(t.text);
         name.setAlignmentX(Component.LEFT_ALIGNMENT);
-        List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> lastPost = be.posts(b.id, 1);
-        JLabel last = Language.render(new JLabel(), () -> lastPost.isEmpty() ? boardSub(b)
-                : clip(lastPost.get(0).mine ? Language.text("chat.youPrefix", "message", previewBody(lastPost.get(0).body()))
-                : b.nameOf(lastPost.get(0).from) + ": " + previewBody(lastPost.get(0).body()), 42));
+        JLabel last = Language.render(new JLabel(), () -> b.lastText.isEmpty() ? boardSub(b) : clip(previewBody(b.lastText), 42));
         Language.font(last, t.font(12f), last.getText());
         last.setForeground(t.subtext);
         last.setAlignmentX(Component.LEFT_ALIGNMENT);

@@ -18,6 +18,8 @@ public interface BoardSource {
         public boolean admin;
         public boolean canPost;
         public boolean joining;
+        /** An admin put us out of an invite-only board: read-only. */
+        public boolean removed;
         public int members;
         public long lastActivity;
         public int unread;
@@ -66,6 +68,11 @@ public interface BoardSource {
 
     /** The media mesh this host reads board images through; null until it is up. */
     com.eurobuddha.maxima.core.media.MediaService media();
+
+    /** How often an open board screen re-reads its posts: fast in-process, slower over a cloud RPC. */
+    default long pollMs() {
+        return 8000;
+    }
 
     List<KnockRow> knocks(String zId) throws Exception;
 

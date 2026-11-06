@@ -42,8 +42,10 @@ final class BoardMirror {
     private final MaximaIdentity mIdentity;
     private final BoardShelf mShelf;
     private final String mVersion;
-    /** "host:port|0xboard" to the newest cursor that peer gave us. */
+    /** "host:port|0xboard" to the newest cursor that peer gave us; mirrored into the shelf's meta
+     *  store so a restart does not re-pull every board from every peer onto a full shelf. */
     private final Map<String, Long> mCursors = new ConcurrentHashMap<>();
+    private static final String META_PREFIX = "mirror|";
     /** host:port to {Mx…@host:port, learnedAt}. */
     private final Map<String, Object[]> mAddresses = new ConcurrentHashMap<>();
     /** Round-robin start into the board list, so a relay with more boards than one pull covers
@@ -54,6 +56,28 @@ final class BoardMirror {
         mIdentity = zIdentity;
         mShelf = zShelf;
         mVersion = zVersion;
+    }
+
+    private long cursor(String zKey) {
+        Long c = mCursors.get(zKey);
+        if (c == null) {
+            try {
+                String v = mShelf.meta(META_PREFIX + zKey);
+                c = v.isEmpty() ? 0L : Long.parseLong(v);
+            } catch (Exception e) {
+                c = 0L;
+            }
+            mCursors.put(zKey, c);
+        }
+        return c;
+    }
+
+    private void cursor(String zKey, long zCursor) {
+        mCursors.put(zKey, zCursor);
+        try {
+            mShelf.setMeta(META_PREFIX + zKey, Long.toString(zCursor));
+        } catch (Exception ignored) {
+        }
     }
 
     /** Pull from one peer. Returns the number of posts newly shelved (0 on any failure). */
@@ -95,8 +119,7 @@ final class BoardMirror {
             BoardWire.SinceRequest req = new BoardWire.SinceRequest();
             for (int i = from; i < Math.min(boards.size(), from + BOARDS_PER_CALL); i++) {
                 byte[] b = boards.get(i);
-                Long cur = mCursors.get(zHostPort + "|" + new MiniData(b).to0xString());
-                req.add(b, cur == null ? 0L : cur);
+                req.add(b, cursor(zHostPort + "|" + new MiniData(b).to0xString()));
             }
             BoardWire.SinceReply reply;
             try {
@@ -115,13 +138,21 @@ final class BoardMirror {
             } catch (Exception e) {
                 return stored;
             }
+            long tooOld = System.currentTimeMillis() - BoardShelf.DEFAULT_TTL_MS;
             for (BoardWire.Slice slice : reply.slices) {
                 for (byte[] raw : slice.raws) {
+                    try {   // a peer's stale copy must not re-enter a shelf that already expired it
+                        if (com.eurobuddha.maxima.core.board.BoardPost.verify(raw).post.mTs.getAsLong() < tooOld) {
+                            continue;
+                        }
+                    } catch (IllegalArgumentException bad) {
+                        continue;
+                    }
                     if (mShelf.put(raw) == BoardShelf.Result.STORED) {
                         stored++;
                     }
                 }
-                mCursors.put(zHostPort + "|" + slice.board.to0xString(), slice.cursor);
+                cursor(zHostPort + "|" + slice.board.to0xString(), slice.cursor);
             }
         }
         return stored;
@@ -163,7 +194,7 @@ final class BoardMirror {
         return null;
     }
 
-    /** For tests and diagnostics: every cursor, "host:port|0xboard" to cursor. */
+    /** For tests and diagnostics: every cursor loaded so far, "host:port|0xboard" to cursor. */
     Map<String, Long> cursors() {
         return new java.util.HashMap<>(mCursors);
     }

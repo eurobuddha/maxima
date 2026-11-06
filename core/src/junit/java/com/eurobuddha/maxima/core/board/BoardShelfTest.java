@@ -39,7 +39,7 @@ public class BoardShelfTest {
 
         BoardWire.Slice first = s.since(board, 0, BoardWire.MAX_REPLY_BYTES);
         assertEquals(2, first.raws.size());
-        assertTrue("cursor 0 predates everything", first.reset);
+        assertFalse("cursor 0 is a first read, nothing was dropped", first.reset);
         BoardWire.Slice none = s.since(board, first.cursor, BoardWire.MAX_REPLY_BYTES);
         assertEquals(0, none.raws.size());
         assertFalse(none.reset);
@@ -76,7 +76,12 @@ public class BoardShelfTest {
         BoardWire.Slice all = s.since(board, 0, BoardWire.MAX_REPLY_BYTES);
         assertEquals(3, all.raws.size());
         assertEquals("oldest kept is #3", 3, BoardPost.verify(all.raws.get(0)).post.mBlob.getBytes()[0]);
-        assertTrue(all.reset);
+        assertFalse("a first read is not a gap", all.reset);
+        // A cursor BELOW the newest dropped post has missed posts; one AT it has not (it had that
+        // post, and everything after it is still here). Seqs are consecutive within a burst.
+        BoardWire.Slice firstKept = s.since(board, 0, 1);   // one post: its cursor is #3's seq
+        assertFalse(s.since(board, firstKept.cursor - 1, BoardWire.MAX_REPLY_BYTES).reset);   // at #2
+        assertTrue(s.since(board, firstKept.cursor - 2, BoardWire.MAX_REPLY_BYTES).reset);    // at #1
     }
 
     @Test
@@ -114,6 +119,23 @@ public class BoardShelfTest {
         assertEquals(1, s.count(b1));
         assertEquals(2, s.count(b3));
         assertEquals(2, s.boardCount());
+    }
+
+    @Test
+    public void resetOnlyWhenTheCursorPredatesSomethingDropped() {
+        BoardShelf s = new BoardShelf(2, 1 << 20, 10, 1L << 40, 1000, 1L << 40);   // 2 posts per board
+        byte[] b = BoardKeys.newBoardId();
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b, BoardKeys.newPostId(), 1, 1, null, new byte[1]).sign(pseudonym).raw));
+        long first = s.since(b, 0, 1 << 20).cursor;
+        assertFalse("a fresh board has dropped nothing", s.since(b, 0, 1 << 20).reset);
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b, BoardKeys.newPostId(), 2, 1, null, new byte[1]).sign(pseudonym).raw));
+        long second = s.since(b, first, 1 << 20).cursor;
+        assertFalse(s.since(b, first, 1 << 20).reset);
+        // third post: the per-board cap drops the first
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b, BoardKeys.newPostId(), 3, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertTrue("cursor at the dropped post may have missed something", s.since(b, first - 1, 1 << 20).reset);
+        assertFalse("cursor at a retained post is exact", s.since(b, second, 1 << 20).reset);
+        assertFalse("cursor 0 is a first read, not a gap", s.since(b, 0, 1 << 20).reset);
     }
 
     @Test

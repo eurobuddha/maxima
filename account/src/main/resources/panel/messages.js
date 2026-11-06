@@ -3926,7 +3926,8 @@ window.ParlonsMessages = {
     "board.newPosts": {
       "one": "{count} new post",
       "other": "{count} new posts"
-    }
+    },
+    "board.removedYou": "An admin removed you from this board. You can read what you had; you cannot post."
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -7809,7 +7810,8 @@ window.ParlonsMessages = {
     "board.admin": "管理员",
     "board.newPosts": {
       "other": "{count} 条新帖子"
-    }
+    },
+    "board.removedYou": "管理员已将你移出此布告板。你可以查看已有内容，但不能发帖。"
   },
   "ru": {
     "language.title": "Язык",
@@ -11827,7 +11829,8 @@ window.ParlonsMessages = {
       "few": "{count} новые записи",
       "many": "{count} новых записей",
       "other": "{count} новой записи"
-    }
+    },
+    "board.removedYou": "Администратор удалил вас с этой доски. Старые записи видны, писать нельзя."
   },
   "uk": {
     "language.title": "Мова",
@@ -15845,6 +15848,7 @@ window.ParlonsMessages = {
       "few": "{count} нові дописи",
       "many": "{count} нових дописів",
       "other": "{count} нового допису"
-    }
+    },
+    "board.removedYou": "Адміністратор вилучив вас із цієї дошки. Старі дописи видно, дописувати не можна."
   }
 };

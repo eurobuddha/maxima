@@ -153,7 +153,7 @@ public final class BoardActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
         load(true);
-        mUi.postDelayed(mPoll, POLL_MS);
+        mUi.postDelayed(mPoll, source() == null ? POLL_MS : source().pollMs());
     }
 
     @Override
@@ -182,6 +182,7 @@ public final class BoardActivity extends AppCompatActivity {
     // ---- loading ----
 
     private void load(boolean zScroll) {
+        mImageFailed.clear();   // a transient mesh miss gets another go on the next read
         BoardSource s = source();
         if (s == null) {
             Language.setText(mEmpty, Language.msg(R.string.l10n_native_chat_starting));
@@ -238,6 +239,9 @@ public final class BoardActivity extends AppCompatActivity {
         if (b.joining) {
             return Language.msg(R.string.l10n_board_waiting);
         }
+        if (b.removed) {
+            return Language.msg(R.string.l10n_board_removed_you);
+        }
         return Language.msg(b.open ? R.string.l10n_board_open_members : R.string.l10n_board_invite_members, b.members);
     }
 
@@ -249,7 +253,7 @@ public final class BoardActivity extends AppCompatActivity {
             if (mReplyTo == null) {
                 Language.setText(mSubtitle, subtitle(b));
             }
-            boolean can = b.canPost && !b.joining;
+            boolean can = b.canPost && !b.joining && !b.removed;
             mInput.setEnabled(can);
             findViewById(R.id.btn_chat_send).setEnabled(can);
         }

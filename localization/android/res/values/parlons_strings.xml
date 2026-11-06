@@ -4387,4 +4387,5 @@
         <item quantity="one">"%1$d new post"</item>
         <item quantity="other">"%1$d new posts"</item>
     </plurals>
+    <string name="l10n_board_removed_you" formatted="false">"An admin removed you from this board. You can read what you had; you cannot post."</string>
 </resources>

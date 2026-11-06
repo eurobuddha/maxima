@@ -137,20 +137,20 @@ public class BoardRelayTest {
                 assertTrue("idempotent", BoardWire.put(node, r.mls, pseudonym, raw));
                 assertEquals(1, r.shelf.count(board));
 
-                BoardWire.SinceReply reply = BoardWire.since(node, r.mls, new BoardWire.SinceRequest().add(board, 0));
+                BoardWire.SinceReply reply = BoardWire.since(node, r.mls, BoardKeys.reader(me), new BoardWire.SinceRequest().add(board, 0));
                 assertNotNull(reply);
                 assertEquals(1, reply.slices.size());
                 assertEquals(1, reply.slices.get(0).raws.size());
                 assertEquals(BoardPost.verify(raw).post.idHex(), BoardPost.verify(reply.slices.get(0).raws.get(0)).post.idHex());
                 long cursor = reply.slices.get(0).cursor;
-                BoardWire.SinceReply none = BoardWire.since(node, r.mls, new BoardWire.SinceRequest().add(board, cursor));
+                BoardWire.SinceReply none = BoardWire.since(node, r.mls, BoardKeys.reader(me), new BoardWire.SinceRequest().add(board, cursor));
                 assertNotNull(none);
                 assertEquals(0, none.slices.get(0).raws.size());
 
                 // a non-pool relay says "not offered"
                 r.server.setBoardShelf(null);
                 assertFalse(BoardWire.put(node, r.mls, pseudonym, raw));
-                assertNull(BoardWire.since(node, r.mls, new BoardWire.SinceRequest().add(board, 0)));
+                assertNull(BoardWire.since(node, r.mls, BoardKeys.reader(me), new BoardWire.SinceRequest().add(board, 0)));
             } finally {
                 node.stop();
             }
@@ -193,10 +193,11 @@ public class BoardRelayTest {
                 // a relay that forgot everything is re-seeded by a member
                 a.shelf.setStore(Store.MEMORY_ONLY);
                 assertEquals(0, a.shelf.count(ab.idBytes));
-                                boolean reseeded = sync(alice, () -> a.shelf.count(ab.idBytes) >= 4, 10);
+                                boolean reseeded = sync(alice, () -> a.shelf.count(ab.idBytes) >= 3, 10);   // alice's own: roster, hello, post
                 assertTrue("reseed: relay has " + a.shelf.count(ab.idBytes) + " alice entries " + alice.boards.posts(ab.id, 0).size()
                         + " pending " + alice.boards.board(ab.id).pending + " relays " + alice.boards.board(ab.id).relays
                         + " cursors " + alice.boards.board(ab.id).cursors, reseeded);
+                assertTrue("bob gives back his own (hello + reply)", sync(bob, () -> a.shelf.count(ab.idBytes) >= 5, 10));
 
                 // A media body (control-character marker, empty caption) must not be trimmed away.
                 String media = com.eurobuddha.maxima.core.chat.ChatMedia.wrap("image/jpeg", "data:image/jpeg;base64,/9j/4A==", "");
@@ -258,6 +259,47 @@ public class BoardRelayTest {
         }
     }
 
+    /** Membership must not live only in the pruned log: after thousands of posts and a restart, an
+     *  invite-only board still knows its roster, and the old knock is not a fresh request. */
+    @Test public void rosterSurvivesPruneAndRestart() throws Exception {
+        java.io.File dir = java.nio.file.Files.createTempDirectory("boards-prune").toFile();
+        int keep = BoardEngine.sPruneAt;
+        BoardEngine.sPruneAt = 30;
+        try (Relay a = new Relay()) {
+            List<String> seeds = Collections.singletonList(a.host);
+            try (Member admin = new Member(seeds); Member carol = new Member(seeds)) {
+                assertTrue(waitFor(() -> admin.node.poolMlsAddresses().size() == 1 && carol.node.poolMlsAddresses().size() == 1, 10));
+                com.eurobuddha.maxima.core.store.FileStore store = new com.eurobuddha.maxima.core.store.FileStore(dir);
+                admin.boards.setStore(store);
+                BoardEngine.Board ab = admin.boards.create("Prune me", false);
+                String link = admin.boards.link(ab.id);
+                BoardEngine.Board cb = carol.boards.join(link);
+                assertTrue(sync(admin, () -> admin.boards.knocks(ab.id).size() == 1, 15));
+                String carolFp = admin.boards.knocks(ab.id).get(0).fp;
+                admin.boards.approve(ab.id, carolFp);
+                assertTrue(sync(carol, () -> carol.boards.board(cb.id).canPost(), 15));
+                for (int i = 0; i < 200; i++) {
+                    admin.boards.post(ab.id, "post " + i, null);
+                }
+                assertTrue("text pruned (prune runs 100 over the threshold)", admin.boards.posts(ab.id, 0).size() <= BoardEngine.sPruneAt + 101);
+                assertTrue(admin.boards.board(ab.id).rosterView().contains(carolFp));
+                assertEquals("no stale knock", 0, admin.boards.knocks(ab.id).size());
+                admin.boards.flush();
+
+                BoardEngine again = new BoardEngine(admin.node);
+                again.setStore(new com.eurobuddha.maxima.core.store.FileStore(dir));
+                BoardEngine.Board reloaded = again.board(ab.id);
+                assertNotNull(reloaded);
+                assertTrue("roster survived the restart", reloaded.rosterView().contains(carolFp));
+                assertEquals(0, again.knocks(ab.id).size());
+                assertTrue(reloaded.iAmAdmin());
+                again.stop();
+            }
+        } finally {
+            BoardEngine.sPruneAt = keep;
+        }
+    }
+
     /** Phase 3: a pool relay pulls, from a peer, the boards it already hosts - and only those. */
     @Test public void peerRelayMirrorsTheBoardsItHosts() throws Exception {
         try (Relay a = new Relay(); Relay b = new Relay()) {
@@ -266,9 +308,9 @@ public class BoardRelayTest {
             byte[] other = BoardKeys.newBoardId();
             KeyPair pseudonym = BoardKeys.pseudonym(me, board);
             KeyPair pseudonym2 = BoardKeys.pseudonym(me, other);
-            byte[] p1 = new BoardPost(board, BoardKeys.newPostId(), 1, 1, null, new byte[] {1}).sign(pseudonym).raw;
-            byte[] p2 = new BoardPost(board, BoardKeys.newPostId(), 2, 1, null, new byte[] {2}).sign(pseudonym).raw;
-            byte[] o1 = new BoardPost(other, BoardKeys.newPostId(), 1, 1, null, new byte[] {3}).sign(pseudonym2).raw;
+            byte[] p1 = new BoardPost(board, BoardKeys.newPostId(), System.currentTimeMillis(), 1, null, new byte[] {1}).sign(pseudonym).raw;
+            byte[] p2 = new BoardPost(board, BoardKeys.newPostId(), System.currentTimeMillis(), 1, null, new byte[] {2}).sign(pseudonym).raw;
+            byte[] o1 = new BoardPost(other, BoardKeys.newPostId(), System.currentTimeMillis(), 1, null, new byte[] {3}).sign(pseudonym2).raw;
             assertEquals(BoardShelf.Result.STORED, a.shelf.put(p1));
             assertEquals(BoardShelf.Result.STORED, a.shelf.put(o1));     // a board b does not host
             assertEquals(BoardShelf.Result.STORED, b.shelf.put(p2));
@@ -281,7 +323,7 @@ public class BoardRelayTest {
 
             // The cursor moves: a second pull is free, a new post on a comes over.
             assertEquals(0, b.server.mirrorFrom(a.host));
-            byte[] p3 = new BoardPost(board, BoardKeys.newPostId(), 3, 1, null, new byte[] {4}).sign(pseudonym).raw;
+            byte[] p3 = new BoardPost(board, BoardKeys.newPostId(), System.currentTimeMillis(), 1, null, new byte[] {4}).sign(pseudonym).raw;
             assertEquals(BoardShelf.Result.STORED, a.shelf.put(p3));
             assertEquals(1, b.server.mirrorFrom(a.host));
             assertEquals(3, b.shelf.count(board));

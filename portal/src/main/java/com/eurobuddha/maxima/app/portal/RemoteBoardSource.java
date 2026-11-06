@@ -90,6 +90,7 @@ public final class RemoteBoardSource implements BoardSource {
         r.admin = bool(b, "admin");
         r.canPost = bool(b, "canPost");
         r.joining = bool(b, "joining");
+        r.removed = bool(b, "removed");
         r.members = (int) lng(b, "members");
         r.lastActivity = lng(b, "lastActivity");
         r.unread = (int) lng(b, "unread");
@@ -168,6 +169,12 @@ public final class RemoteBoardSource implements BoardSource {
     @Override
     public com.eurobuddha.maxima.core.media.MediaService media() {
         return CloudSession.media(mApp);
+    }
+
+    /** Every read is a 500-post RPC over the cloud lane: 30 s, and the board push event wakes the screen. */
+    @Override
+    public long pollMs() {
+        return 30000;
     }
 
     @Override

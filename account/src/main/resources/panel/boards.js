@@ -37,6 +37,7 @@
     }
     function subtitle(b) {
       if (b.joining) return tr('board.waiting');
+      if (b.removed) return tr('board.removedYou');
       return tr(b.open ? 'board.openMembers' : 'board.inviteMembers', { count: Number(b.members || 0) });
     }
 
@@ -157,7 +158,7 @@
       const who = p.mine ? tr('chat.you') : (p.name || p.from);
       const m = parseMedia(p.body || '');
       let inner;
-      if (m && m.mime.startsWith('image/') && mediaUrl(m)) {
+      if (m && m.mime.startsWith('image/') && mediaUrl(m) && (!m.ref.startsWith('data:') || m.ref.startsWith('data:image/'))) {
         const u = mediaUrl(m);
         inner = '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer"><img class="pic" loading="lazy" src="' + esc(u) + '" alt=""></a>' + (m.caption ? '<div class="body">' + linkText(m.caption) + '</div>' : '');
       } else if (m) {

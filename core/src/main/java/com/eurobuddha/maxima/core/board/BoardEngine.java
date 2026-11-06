@@ -61,9 +61,9 @@ public final class BoardEngine {
     /** Pages pulled per relay per tick before giving the rest to the next tick. */
     private static final int PAGES_PER_TICK = 4;
     /** Posts re-seeded onto a relay that reset us, per tick. */
-    private static final int RESEED_PER_TICK = 200;
+    private static final int RESEED_PER_TICK = 50;
     /** Sealed keys per rekey envelope (~200 B each, under the 64K post). */
-    private static final int REKEY_PER_POST = 250;
+    private static final int REKEY_CHUNK_CHARS = 40_000;
 
     static final String C_BOARDS = "boards";
     private static final String LOG_PREFIX = "boardlog_";
@@ -87,12 +87,25 @@ public final class BoardEngine {
         public final Set<String> pending = new LinkedHashSet<>();
         /** Knocked on an invite-only board, no welcome yet. */
         public boolean joining;
+        /** An admin's roster dropped us (invite-only): read-only until an admin lets us back in. */
+        public boolean removed;
+        /** Admin clock of the newest roster applied: an older roster arriving later is ignored. */
+        public long rosterTs;
+        /** When the current epoch began: older-epoch text after this is from someone put out. */
+        public long rekeyTs;
+        /** Newest readable text post (list previews, without a sort of the whole log). */
+        public String lastText = "";
 
-        // derived from posts
+        // membership state: derived from control posts, PERSISTED (control posts are kept out of the
+        // prune too, but a 2,000-member roster must not depend on replaying a log)
         final Set<String> roster = new LinkedHashSet<>();
         final Map<String, String> names = new HashMap<>();
         final Map<String, String> ders = new HashMap<>();
         final Map<String, String> cards = new HashMap<>();
+        /** Members an admin here put out (so their old knock is not listed as a fresh request). */
+        final Set<String> removedFps = new HashSet<>();
+        /** Multi-part rosters in flight: rs -> part index -> members. */
+        final Map<Long, Map<Integer, List<String>>> rosterParts = new HashMap<>();
         final List<Entry> entries = new ArrayList<>();
         final Set<String> ids = new HashSet<>();
         KeyPair pseudonym;
@@ -109,7 +122,7 @@ public final class BoardEngine {
         }
 
         public boolean canPost() {
-            return !joining && keys.containsKey(epoch);
+            return !joining && !removed && keys.containsKey(epoch);
         }
 
         public String myFingerprint() {
@@ -296,7 +309,40 @@ public final class BoardEngine {
                 .put("cursors", cursors.toString())
                 .put("pending", String.join(",", b.pending))
                 .put("joining", b.joining ? "1" : "0")
+                .put("removed", b.removed ? "1" : "0")
+                .put("rosterTs", Long.toString(b.rosterTs))
+                .put("rekeyTs", Long.toString(b.rekeyTs))
+                .put("lastText", b.lastText)
+                .put("roster", String.join(",", b.roster))
+                .put("removedFps", String.join(",", b.removedFps))
+                .put("names", pairs(b.names))
+                .put("ders", pairs(b.ders))
+                .put("cards", pairs(b.cards))
                 .done();
+    }
+
+    /** fp=value pairs, values hex/URL-safe-encoded so a name with a comma or '=' round-trips. */
+    private static String pairs(Map<String, String> m) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(e.getKey()).append('=').append(new MiniData(e.getValue().getBytes(StandardCharsets.UTF_8)).to0xString());
+        }
+        return sb.toString();
+    }
+
+    private static void unpairs(String s, Map<String, String> into) {
+        for (String p : csv(s)) {
+            int eq = p.indexOf('=');
+            if (eq > 0) {
+                try {
+                    into.put(p.substring(0, eq), new String(new MiniData(p.substring(eq + 1)).getBytes(), StandardCharsets.UTF_8));
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     private static Board fromJson(String zId, String zJson) {
@@ -329,6 +375,15 @@ public final class BoardEngine {
         }
         b.pending.addAll(csv(val(m, "pending")));
         b.joining = "1".equals(val(m, "joining"));
+        b.removed = "1".equals(val(m, "removed"));
+        b.rosterTs = num(m, "rosterTs");
+        b.rekeyTs = num(m, "rekeyTs");
+        b.lastText = val(m, "lastText");
+        b.roster.addAll(csv(val(m, "roster")));
+        b.removedFps.addAll(csv(val(m, "removedFps")));
+        unpairs(val(m, "names"), b.names);
+        unpairs(val(m, "ders"), b.ders);
+        unpairs(val(m, "cards"), b.cards);
         return b;
     }
 
@@ -359,24 +414,40 @@ public final class BoardEngine {
         mStore.put(C_BOARDS, b.id, toJson(b));
     }
 
+    /** Test hook: prune threshold (text posts kept per board). */
+    public static int sPruneAt = MAX_LOCAL_POSTS;
+
     private void appendRaw(Board b, byte[] zRaw) {
         mStore.append(logName(b), new MiniData(zRaw).to0xString());
-        if (b.entries.size() > MAX_LOCAL_POSTS + 100) {
+        if (b.entries.size() > sPruneAt + 100) {
             prune(b);
         }
     }
 
-    /** Oldest first, never a post still waiting to be published. */
+    /** True for a post the prune may drop: text and opaque posts, never the control posts
+     *  (hello / roster / rekey / knock / welcome) the membership is rebuilt from. */
+    private static boolean prunable(Entry e) {
+        return e.isText() || e.kind.isEmpty();
+    }
+
+    /** Oldest text first, never a post still waiting to be published, never a control post. */
     private void prune(Board b) {
         b.entries.sort(Comparator.comparingLong(e -> e.ts));
-        while (b.entries.size() > MAX_LOCAL_POSTS) {
+        int texts = 0;
+        for (Entry e : b.entries) {
+            if (prunable(e)) {
+                texts++;
+            }
+        }
+        while (texts > sPruneAt) {
             Entry victim = null;
             for (Entry e : b.entries) {
-                if (!b.pending.contains(e.id)) {
+                if (prunable(e) && !b.pending.contains(e.id)) {
                     victim = e;
                     break;
                 }
             }
+            texts--;
             if (victim == null) {
                 break;
             }
@@ -477,6 +548,12 @@ public final class BoardEngine {
         if (mBoards.size() >= MAX_BOARDS) {
             throw new IllegalStateException("too many boards");
         }
+        try {   // a malformed admin key would otherwise leave a half-joined board that never knocks
+            java.security.KeyFactory.getInstance("RSA").generatePublic(
+                    new java.security.spec.X509EncodedKeySpec(new MiniData(l.adminHex).getBytes()));
+        } catch (Exception e) {
+            throw new IllegalArgumentException("bad admin key in link");
+        }
         b = new Board(l.boardId);
         b.name = l.name;
         b.open = l.hasKey();
@@ -576,17 +653,35 @@ public final class BoardEngine {
         publishSealed(b, new Json.Writer().put("k", "hello").put("n", name).put("a", addr).done(), null);
     }
 
+    /** Members per roster part: 65 chars each, so a part stays well under the 64 KB envelope. */
+    static final int ROSTER_PER_POST = 600;
+
+    /** The roster in as many parts as it takes, all stamped with one admin clock {@code rs}:
+     *  readers apply a roster only when its rs is newer than the one they hold, and a multi-part
+     *  roster only once every part is in. */
     private void postRoster(Board b) {
-        publishSealed(b, new Json.Writer().put("k", "roster").put("n", b.name)
-                .put("a", String.join(",", b.admins)).put("m", String.join(",", b.roster)).done(), null);
+        long rs = Math.max(System.currentTimeMillis(), b.rosterTs + 1);
+        List<String> members = new ArrayList<>(b.roster);
+        int parts = Math.max(1, (members.size() + ROSTER_PER_POST - 1) / ROSTER_PER_POST);
+        for (int p = 0; p < parts; p++) {
+            List<String> part = members.subList(p * ROSTER_PER_POST, Math.min(members.size(), (p + 1) * ROSTER_PER_POST));
+            publishSealed(b, new Json.Writer().put("k", "roster").put("n", b.name)
+                    .put("a", String.join(",", b.admins)).put("m", String.join(",", part))
+                    .put("rs", Long.toString(rs)).put("p", Integer.toString(p)).put("of", Integer.toString(parts)).done(), null);
+        }
+        b.rosterTs = rs;
+        persist(b);
     }
 
+    /** One knock per admin (sealed to each), so any admin can let us in. */
     private void postKnock(Board b) {
         String name = mCardName.isEmpty() ? safe(mNode.name()) : mCardName;
         String addr = mCardAddress.isEmpty() ? safe(mNode.permanentAddress()) : mCardAddress;
         String plain = new Json.Writer().put("k", "knock").put("n", name).put("a", addr).done();
-        byte[] adminDer = new MiniData(b.admins.get(0)).getBytes();
-        publishTo(b, Codec.serialise(MaximaCrypto.encrypt(plain.getBytes(StandardCharsets.UTF_8), adminDer)), 0, null);
+        for (String admin : b.admins) {
+            byte[] adminDer = new MiniData(admin).getBytes();
+            publishTo(b, Codec.serialise(MaximaCrypto.encrypt(plain.getBytes(StandardCharsets.UTF_8), adminDer)), 0, null);
+        }
     }
 
     /** Seal under the current epoch key and publish. */
@@ -674,7 +769,7 @@ public final class BoardEngine {
         Set<String> seen = new HashSet<>();
         for (int i = b.entries.size() - 1; i >= 0; i--) {
             Entry e = b.entries.get(i);
-            if ("knock".equals(e.kind) && !b.roster.contains(e.from) && seen.add(e.from)) {
+            if ("knock".equals(e.kind) && !b.roster.contains(e.from) && !b.removedFps.contains(e.from) && seen.add(e.from)) {
                 out.add(new Knock(e.from, val(e.fields, "n"), val(e.fields, "a"), e.ts));
             }
         }
@@ -693,6 +788,7 @@ public final class BoardEngine {
         publishTo(b, Codec.serialise(MaximaCrypto.encrypt(plain.getBytes(StandardCharsets.UTF_8),
                 new MiniData(der).getBytes())), 0, null);
         b.roster.add(zFp);
+        b.removedFps.remove(zFp);
         postRoster(b);
     }
 
@@ -705,6 +801,7 @@ public final class BoardEngine {
         Board b = requireAdmin(zId);
         b.roster.remove(zFp);
         b.names.remove(zFp);
+        b.removedFps.add(zFp);
         postRoster(b);
         rekey(b);
         postRoster(b);
@@ -753,13 +850,26 @@ public final class BoardEngine {
             byte[] sealed = Codec.serialise(MaximaCrypto.encrypt(key, new MiniData(der).getBytes()));
             slots.add(fp + ":" + new MiniData(sealed).to0xString());
         }
-        for (int i = 0; i < slots.size(); i += REKEY_PER_POST) {
-            List<String> chunk = slots.subList(i, Math.min(slots.size(), i + REKEY_PER_POST));
+        // Chunk by BYTES: a slot is ~480 chars (fp + sealed key), the envelope ceiling is 64 KB.
+        List<String> chunk = new ArrayList<>();
+        int chars = 0;
+        for (String slot : slots) {
+            if (!chunk.isEmpty() && chars + slot.length() + 1 > REKEY_CHUNK_CHARS) {
+                publishSealed(b, new Json.Writer().put("k", "rekey").put("e", Integer.toString(next))
+                        .put("x", String.join(",", chunk)).done(), null);
+                chunk.clear();
+                chars = 0;
+            }
+            chunk.add(slot);
+            chars += slot.length() + 1;
+        }
+        if (!chunk.isEmpty()) {
             publishSealed(b, new Json.Writer().put("k", "rekey").put("e", Integer.toString(next))
                     .put("x", String.join(",", chunk)).done(), null);
         }
         b.keys.put(next, key);
         b.epoch = next;
+        b.rekeyTs = System.currentTimeMillis();
         persist(b);
     }
 
@@ -773,7 +883,7 @@ public final class BoardEngine {
             return out;
         }
         for (Entry e : b.entries) {
-            if (e.isText() && b.isMember(e.from)) {
+            if (e.isText() && b.isMember(e.from) && !(e.epoch < b.epoch && e.ts > b.rekeyTs && b.rekeyTs > 0)) {
                 out.add(e);
             }
         }
@@ -798,7 +908,12 @@ public final class BoardEngine {
         if (epoch == 0) {
             // Sealed to ONE pseudonym: a knock (to an admin) or a welcome (to a knocker). Ours
             // opens; everyone else's stays opaque. Signed-then-sealed, so verify came first.
+            // Only an admin (knocks) or a joiner (welcome) pays the RSA decrypt: for anyone else
+            // these are noise, and 2,000 members must not each decrypt every knock.
             try {
+                if (!b.iAmAdmin() && !b.joining) {
+                    throw new IllegalStateException("not for us");
+                }
                 plain = MaximaCrypto.decrypt(CryptoPackage.fromBytes(s.post.mBlob.getBytes()),
                         b.pseudonym.getPrivate());
             } catch (Exception notForUs) {
@@ -821,6 +936,9 @@ public final class BoardEngine {
         if (e.ts > b.lastActivity && (e.isText() || "hello".equals(kind))) {
             b.lastActivity = e.ts;
         }
+        if (e.isText() && b.isMember(e.from)) {
+            b.lastText = e.body();
+        }
         boolean isAdmin = b.admins.contains(s.signerHex);
         switch (kind) {
             case "hello":
@@ -829,6 +947,31 @@ public final class BoardEngine {
                 break;
             case "roster":
                 if (isAdmin) {
+                    long rs = num(fields, "rs");
+                    if (rs == 0) {
+                        rs = e.ts;   // a roster from before parts existed
+                    }
+                    if (rs < b.rosterTs) {
+                        break;   // older than what we hold: relays, reseeds and reloads deliver out of order
+                    }
+                    int of = Math.max(1, (int) num(fields, "of"));
+                    int part = (int) num(fields, "p");
+                    List<String> members;
+                    if (of == 1) {
+                        members = csv(val(fields, "m"));
+                    } else {
+                        Map<Integer, List<String>> parts = b.rosterParts.computeIfAbsent(rs, x -> new HashMap<>());
+                        parts.put(part, csv(val(fields, "m")));
+                        if (parts.size() < of) {
+                            break;   // wait for the rest of this roster
+                        }
+                        members = new ArrayList<>();
+                        for (int i = 0; i < of; i++) {
+                            members.addAll(parts.getOrDefault(i, Collections.emptyList()));
+                        }
+                        final long done = rs;
+                        b.rosterParts.keySet().removeIf(k -> k <= done);
+                    }
                     String n = val(fields, "n");
                     if (!n.isEmpty()) {
                         b.name = n;
@@ -838,8 +981,18 @@ public final class BoardEngine {
                         b.admins.clear();
                         b.admins.addAll(admins);
                     }
+                    boolean wasIn = b.roster.contains(b.myFp) || b.iAmAdmin() || !b.open && !b.joining && b.rosterTs > 0;
                     b.roster.clear();
-                    b.roster.addAll(csv(val(fields, "m")));
+                    b.roster.addAll(members);
+                    b.rosterTs = rs;
+                    if (!b.open && !b.iAmAdmin() && !mine) {
+                        boolean in = b.roster.contains(b.myFp);
+                        if (in) {
+                            b.removed = false;
+                        } else if (wasIn && !b.joining) {
+                            b.removed = true;   // put out: read what we can, post nothing
+                        }
+                    }
                 }
                 break;
             case "rekey":
@@ -852,10 +1005,11 @@ public final class BoardEngine {
                                 byte[] key = MaximaCrypto.decrypt(
                                         CryptoPackage.fromBytes(new MiniData(slot.substring(c + 1)).getBytes()),
                                         b.pseudonym.getPrivate());
-                                if (key.length == BoardKeys.KEY_BYTES && next > 0) {
+                                if (key.length == BoardKeys.KEY_BYTES && next > 0 && next <= b.epoch + 1000) {
                                     b.keys.put(next, key);
                                     if (next > b.epoch) {
                                         b.epoch = next;
+                                        b.rekeyTs = e.ts;
                                     }
                                     reopen(b);
                                 }
@@ -866,10 +1020,12 @@ public final class BoardEngine {
                 }
                 break;
             case "welcome":
-                if (!mine && b.joining) {
+                // Only an admin can let us in: anyone with the link could otherwise seal a bogus
+                // key to a knocker and strand them with joining=false under garbage.
+                if (isAdmin && !mine && b.joining) {
                     int ep = (int) num(fields, "e");
                     String k = val(fields, "key");
-                    if (ep > 0 && k.length() == 2 + BoardKeys.KEY_BYTES * 2) {
+                    if (ep > 0 && ep <= b.epoch + 1000 && k.length() == 2 + BoardKeys.KEY_BYTES * 2) {
                         b.keys.put(ep, new MiniData(k).getBytes());
                         b.epoch = Math.max(b.epoch, ep);
                         b.joining = false;
@@ -910,11 +1066,19 @@ public final class BoardEngine {
 
     /** Drive from the host's heartbeat: pull every board from a couple of relays, publish
      *  anything pending, re-seed a relay that forgot. Network work runs on the engine's lane. */
+    private final java.util.concurrent.atomic.AtomicBoolean mTickQueued = new java.util.concurrent.atomic.AtomicBoolean();
+
     public void tick() {
-        if (!mLoaded) {
-            return;
+        if (!mLoaded || !mTickQueued.compareAndSet(false, true)) {
+            return;   // one pass in flight or queued is enough: a slow relay must not stack them up
         }
-        mExec.execute(this::pullAll);
+        mExec.execute(() -> {
+            try {
+                pullAll();
+            } finally {
+                mTickQueued.set(false);
+            }
+        });
     }
 
     private void pullAll() {
@@ -955,6 +1119,17 @@ public final class BoardEngine {
         }
     }
 
+    /** One reader pseudonym per device for pulls: a relay sees a key that reads these boards,
+     *  never the MAX# identity (puts use the per-board pseudonym). */
+    private KeyPair mReader;
+
+    private synchronized KeyPair reader() {
+        if (mReader == null) {
+            mReader = BoardKeys.reader(mNode.identity());
+        }
+        return mReader;
+    }
+
     private void pull(Board b) {
         List<String> relays;
         synchronized (this) {
@@ -977,7 +1152,7 @@ public final class BoardEngine {
                     req.add(b.idBytes, c == null ? 0 : c);
                 }
             }
-            BoardWire.SinceReply reply = BoardWire.since(mNode, zRelay, req);
+            BoardWire.SinceReply reply = BoardWire.since(mNode, zRelay, reader(), req);
             if (reply == null) {
                 return;
             }
@@ -1027,14 +1202,26 @@ public final class BoardEngine {
         }
     }
 
-    /** The relay has less than we do: give it back what it lacks (idempotent puts). */
+    private final Map<String, Long> mReseedAt = new HashMap<>();
+    private static final long RESEED_BACKOFF_MS = 10 * 60 * 1000L;
+
+    /** The relay has less than we do: give it back OUR OWN posts it lacks (idempotent puts),
+     *  a bounded batch, not more than once per ten minutes per board and relay - so a relay
+     *  that pruned does not get 2,000 members re-seeding everything on every heartbeat. */
     private void reseed(Board b, String zRelay, Set<String> zRelayHas) {
         List<byte[]> raws = new ArrayList<>();
         KeyPair pseudonym;
         synchronized (this) {
+            String key = b.id + "|" + zRelay;
+            long now = System.currentTimeMillis();
+            Long last = mReseedAt.get(key);
+            if (last != null && now - last < RESEED_BACKOFF_MS) {
+                return;
+            }
+            mReseedAt.put(key, now);
             pseudonym = b.pseudonym;
             for (Entry e : b.entries) {
-                if (!zRelayHas.contains(e.id)) {
+                if (e.mine && !zRelayHas.contains(e.id)) {
                     raws.add(e.raw);
                     if (raws.size() >= RESEED_PER_TICK) {
                         break;

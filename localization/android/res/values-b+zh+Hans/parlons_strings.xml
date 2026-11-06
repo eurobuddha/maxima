@@ -4342,4 +4342,5 @@
     <plurals name="l10n_board_new_posts">
         <item quantity="other">"%1$d 条新帖子"</item>
     </plurals>
+    <string name="l10n_board_removed_you" formatted="false">"管理员已将你移出此布告板。你可以查看已有内容，但不能发帖。"</string>
 </resources>

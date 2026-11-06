@@ -2013,6 +2013,17 @@ public final class MaximaNode implements ChatPort {
                                          String zApplication, byte[] zData,
                                          int zConnectTimeoutMs, int zReadTimeoutMs)
             throws Exception {
+        return sendRawAs(zFrom, zAddress, zApplication, zData, zConnectTimeoutMs, zReadTimeoutMs, false);
+    }
+
+    /**
+     * As above; {@code zFresh} forces a fresh socket even to a relay we are attached to, so a
+     * message signed by a pseudonym does not travel down a link the relay already knows as us.
+     */
+    public MaximaSender.Result sendRawAs(java.security.KeyPair zFrom, String zAddress,
+                                         String zApplication, byte[] zData,
+                                         int zConnectTimeoutMs, int zReadTimeoutMs, boolean zFresh)
+            throws Exception {
         int at = zAddress.indexOf('@');
         int colon = at < 0 ? -1 : zAddress.indexOf(':', at + 1);
         // Guard a bare / hostless address (e.g. classic slave mode advertises
@@ -2034,7 +2045,7 @@ public final class MaximaNode implements ChatPort {
 
         // Over the attached link when this host is one of our relays; a fresh socket otherwise.
         return MaximaSender.send(host, port, built.unit, built.msgid,
-                zConnectTimeoutMs, zReadTimeoutMs, mPool.attachedSender());
+                zConnectTimeoutMs, zReadTimeoutMs, zFresh ? null : mPool.attachedSender());
     }
 
     /** A directory client that sends over our attached relay links where it can. */

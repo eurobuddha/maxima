@@ -2290,6 +2290,7 @@ public final class ParlonsControl implements AutoCloseable {
         o.put("admin", b.iAmAdmin());
         o.put("canPost", b.canPost());
         o.put("joining", b.joining);
+        o.put("removed", b.removed);
         o.put("members", b.memberCount());
         o.put("epoch", b.epoch);
         o.put("lastActivity", b.lastActivity);

@@ -4477,4 +4477,5 @@
         <item quantity="many">"%1$d нових дописів"</item>
         <item quantity="other">"%1$d нового допису"</item>
     </plurals>
+    <string name="l10n_board_removed_you" formatted="false">"Адміністратор вилучив вас із цієї дошки. Старі дописи видно, дописувати не можна."</string>
 </resources>

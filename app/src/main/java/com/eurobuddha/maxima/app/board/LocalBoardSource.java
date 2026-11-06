@@ -22,6 +22,7 @@ public final class LocalBoardSource implements BoardSource {
         r.admin = b.iAmAdmin();
         r.canPost = b.canPost();
         r.joining = b.joining;
+        r.removed = b.removed;
         r.members = b.memberCount();
         r.lastActivity = b.lastActivity;
         r.unread = mEngine.unread(b);

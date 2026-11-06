@@ -39,6 +39,12 @@ public final class BoardKeys {
                 CTX_BOARD_PREFIX + new MiniData(zBoardId).to0xString());
     }
 
+    /** The one reader pseudonym per identity, used to sign pulls: relays see a reader key, never
+     *  the identity, and cannot tie it to the per-board posting pseudonyms. */
+    public static KeyPair reader(MaximaIdentity zIdentity) {
+        return DeterministicRsa.derive(zIdentity.seed().getBytes(), CTX_BOARD_PREFIX + "reader");
+    }
+
     public static byte[] newBoardId() {
         return MaximaCrypto.randomBytes(BoardPost.BOARD_BYTES);
     }
