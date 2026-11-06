@@ -6,7 +6,8 @@
 # "update the fleet" is the same operation as "install the fleet" - which is the
 # only way a fleet stays consistent.
 #
-#   ops/deploy-relay.sh <ssh-target> [--port N] [--jar FILE] [--heap 128m]
+#   ops/deploy-relay.sh <ssh-target> [--port N] [--jar FILE] [--heap 128m] [--peers h:p,…]
+#       [--dex-port 9602 --dex-public https://host/dex-relay]   (DEX relay cape on loopback for a TLS front)
 #   ops/deploy-relay.sh hetzner --port 9501
 #
 # What it does, in order:
@@ -35,6 +36,8 @@ BLOB=1024   # media shelf in MB (0 = off). Conservative default for a shared VPS
 PEERS=""
 MAXCONN=""
 REPLICATE=""
+DEX_PORT=""   # Decks DEX relay cape port (loopback-bound; a TLS front publishes --dex-public)
+DEX_PUBLIC=""
 SHED=""    # comma-separated fleet host:ports for the Phase-B MLS mesh (this box forwards
             # resolve misses to them; trust is the publisher's signed proof). Exclude self.
 JAR=""
@@ -50,6 +53,8 @@ while [ $# -gt 0 ]; do
         --maxconn) MAXCONN="$2"; shift 2 ;;
         --shed) SHED="$2"; shift 2 ;;
         --replicate) REPLICATE="$2"; shift 2 ;;
+        --dex-port) DEX_PORT="$2"; shift 2 ;;
+        --dex-public) DEX_PUBLIC="$2"; shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -138,7 +143,7 @@ Group=maxima
 # -Xmx is deliberate: the working set is a routing table and a mailbox of small
 # records, and an unbounded default heap on a 1 GB VPS is how you lose the box.
 ExecStart=/usr/bin/java -Xmx$HEAP -jar /opt/maxima/maxima-server.jar \\
-    --port $PORT --data /var/lib/maxima --blobstore $BLOB${PEERS:+ --peers $PEERS}${MAXCONN:+ --maxconn $MAXCONN}${SHED:+ --shed $SHED}${REPLICATE:+ --replicate $REPLICATE}
+    --port $PORT --data /var/lib/maxima --blobstore $BLOB${PEERS:+ --peers $PEERS}${MAXCONN:+ --maxconn $MAXCONN}${SHED:+ --shed $SHED}${REPLICATE:+ --replicate $REPLICATE}${DEX_PORT:+ --dex-port $DEX_PORT --dex-bind 127.0.0.1}${DEX_PUBLIC:+ --dex-public $DEX_PUBLIC}
 # on-failure (not always) so the StartLimit gate above can actually trip.
 Restart=on-failure
 RestartSec=10
