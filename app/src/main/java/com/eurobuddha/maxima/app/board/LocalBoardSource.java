@@ -92,6 +92,17 @@ public final class LocalBoardSource implements BoardSource {
     }
 
     @Override
+    public PostRow postImage(String zId, byte[] zJpeg, String zCaption, String zRe) throws Exception {
+        BoardEngine.Board b = mEngine.board(zId);
+        return b == null ? null : post(b, mEngine.postMedia(zId, zJpeg, "image/jpeg", zCaption, zRe));
+    }
+
+    @Override
+    public com.eurobuddha.maxima.core.media.MediaService media() {
+        return com.eurobuddha.maxima.app.MaximaService.media();
+    }
+
+    @Override
     public List<KnockRow> knocks(String zId) {
         List<KnockRow> out = new ArrayList<>();
         for (BoardEngine.Knock k : mEngine.knocks(zId)) {

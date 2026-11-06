@@ -3,7 +3,7 @@
 (function (root) {
   'use strict';
   const POLL_MS = 15000;
-  function create({ api, sheet, closeSheet, esc, toast, el, go, ic, avatar, drawQr, listTime, label, $, copy }) {
+  function create({ api, sheet, closeSheet, esc, toast, el, go, ic, avatar, drawQr, listTime, label, $, copy, linkText, parseMedia, mediaUrl, b64 }) {
     const I = root.ParlonsI18n, tr = I.t;
     const S = { boards: [], open: null, board: null, posts: [], replyTo: null, timer: null, seq: 0 };
 
@@ -101,13 +101,15 @@
         + '<button class="ibtn narrow" id="bMore" aria-label="Board details" data-i18n-aria-label="board.details">' + ic('more') + '</button></div>'));
       pane.appendChild(el('<div class="msgs" id="bPosts"><div class="emptyPage" role="status"><span data-i18n="board.loading">Loading the board…</span></div></div>'));
       pane.appendChild(el('<div class="rpill" id="bReply" hidden><span id="bReplyTo"></span><button class="ibtn" id="bReplyX" aria-label="Cancel reply" data-i18n-aria-label="board.cancelReply">' + ic('close') + '</button></div>'));
-      pane.appendChild(el('<div class="composer"><div class="ipill"><textarea id="bDraft" aria-label="Post" data-i18n-aria-label="board.post" rows="1" placeholder="Write a post" data-i18n-placeholder="board.placeholder"></textarea></div>'
+      pane.appendChild(el('<div class="composer"><button class="ibtn" id="bPhoto" title="Photo" data-i18n-title="desktopChat.photoPick">' + ic('plus') + '</button><input type="file" id="bFile" accept="image/*" hidden><div class="ipill"><textarea id="bDraft" aria-label="Post" data-i18n-aria-label="board.post" rows="1" placeholder="Write a post" data-i18n-placeholder="board.placeholder"></textarea></div>'
         + '<button class="sendbtn" id="bSend" title="Post" data-i18n-title="board.post">' + ic('send') + '</button></div><div class="senderr" id="bErr" hidden></div>'));
       I.apply(pane);
       $('back').addEventListener('click', () => go('#chats'));
       $('bMore').addEventListener('click', infoSheet);
       $('bSend').addEventListener('click', send);
       $('bReplyX').addEventListener('click', () => setReply(null));
+      $('bPhoto').addEventListener('click', () => $('bFile').click());
+      $('bFile').addEventListener('change', () => { const f = $('bFile').files && $('bFile').files[0]; $('bFile').value = ''; if (f) sendPhoto(f); });
       $('bDraft').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
       $('bDraft').addEventListener('input', () => { const t = $('bDraft'); t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; });
       await refresh(seq, true);
@@ -153,8 +155,18 @@
     }
     function bubble(p, isReply) {
       const who = p.mine ? tr('chat.you') : (p.name || p.from);
+      const m = parseMedia(p.body || '');
+      let inner;
+      if (m && m.mime.startsWith('image/') && mediaUrl(m)) {
+        const u = mediaUrl(m);
+        inner = '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer"><img class="pic" loading="lazy" src="' + esc(u) + '" alt=""></a>' + (m.caption ? '<div class="body">' + linkText(m.caption) + '</div>' : '');
+      } else if (m) {
+        inner = '<div class="body">📎 ' + esc(m.mime) + (m.caption ? ' ' + linkText(m.caption) : '') + '</div>';
+      } else {
+        inner = '<div class="body">' + linkText(p.body || '') + '</div>';
+      }
       const row = el('<div class="mrow' + (p.mine ? ' mine' : '') + '"><div class="bubble">' + (p.mine ? '' : '<div class="sname">' + esc(who) + '</div>')
-        + '<div class="body">' + esc(p.body || '') + '</div><div class="meta">' + esc(listTime(p.ts)) + (isReply ? '' : ' · <button class="linkbtn breply">' + esc(tr('board.reply')) + '</button>') + '</div></div></div>');
+        + inner + '<div class="meta">' + esc(listTime(p.ts)) + (isReply ? '' : ' · <button class="linkbtn breply">' + esc(tr('board.reply')) + '</button>') + '</div></div></div>');
       const rb = row.querySelector('.breply'); if (rb) rb.addEventListener('click', () => setReply(p));
       return row;
     }
@@ -162,7 +174,7 @@
       S.replyTo = p;
       const pill = $('bReply'); if (!pill) return;
       pill.hidden = !p;
-      if (p) { $('bReplyTo').textContent = tr('board.replyingTo', { name: p.mine ? tr('chat.you') : (p.name || p.from) }) + ': ' + (p.body || '').slice(0, 80); $('bDraft').focus(); }
+      if (p) { const m = parseMedia(p.body || ''); $('bReplyTo').textContent = tr('board.replyingTo', { name: p.mine ? tr('chat.you') : (p.name || p.from) }) + ': ' + (m ? '📷 ' + (m.caption || '') : (p.body || '')).slice(0, 80); $('bDraft').focus(); }
     }
     function setComposer(on) { const d = $('bDraft'), s = $('bSend'); if (d) d.disabled = !on; if (s) s.disabled = !on; }
     async function send() {
@@ -175,6 +187,38 @@
         if (S.open === id && r.post) { S.posts.push(r.post); render(true); }
         load().then(() => draw());
       } catch (e) { showErr(e.message); d.value = body; }
+    }
+
+    // A photo on a board: shrunk HERE (1280 px long edge, JPEG 0.82) so the board stays lean,
+    // uploaded in chunks to the account, which publishes it once and posts the ref.
+    async function sendPhoto(file) {
+      const id = S.open, re = S.replyTo ? S.replyTo.id : '';
+      if (!id) return;
+      let blob = file, mime = file.type || 'image/jpeg';
+      try {
+        const bmp = await createImageBitmap(file);
+        const max = 1280, scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+        const photo = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82)); bmp.close();
+        if (photo) { blob = photo; mime = 'image/jpeg'; }
+      } catch (e) { showErr(tr('files.readFailed')); return; }
+      if (blob.size > 16 * 1024 * 1024) { showErr(tr('files.tooLarge')); return; }
+      let bytes;
+      try { bytes = new Uint8Array(await blob.arrayBuffer()); } catch (e) { showErr(tr('files.readFailed')); return; }
+      setReply(null);
+      const tid = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), CH = 48 * 1024;
+      try {
+        for (let off = 0; off < bytes.length; off += CH) {
+          const last = off + CH >= bytes.length;
+          const p = { tid, off, data: b64(bytes.subarray(off, Math.min(bytes.length, off + CH))), last };
+          if (last) { p.board = id; p.re = re; p.mime = mime; p.caption = ''; }
+          await api('media.up', p);
+        }
+        toast(tr('board.post'));
+        setTimeout(() => refresh(S.seq, true), 4000);
+        setTimeout(() => refresh(S.seq, true), 15000);
+      } catch (e) { showErr(e.message); }
     }
 
     // ---------- details: link + QR, knocks, members, rename, leave ----------

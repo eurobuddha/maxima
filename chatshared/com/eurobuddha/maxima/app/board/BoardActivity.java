@@ -128,9 +128,11 @@ public final class BoardActivity extends AppCompatActivity {
         Language.description(sendBtn, Language.msg(R.string.l10n_chat_send));
         sendBtn.setOnClickListener(v -> send());
         for (int id : new int[] {R.id.btn_chat_video, R.id.btn_chat_call, R.id.btn_chat_theme,
-                R.id.btn_chat_emoji, R.id.btn_chat_attach, R.id.btn_chat_camera, R.id.btn_scroll_bottom}) {
+                R.id.btn_chat_emoji, R.id.btn_scroll_bottom}) {
             BoardFlows.gone(findViewById(android.R.id.content), id);
         }
+        findViewById(R.id.btn_chat_attach).setOnClickListener(v -> pickPhoto());
+        findViewById(R.id.btn_chat_camera).setOnClickListener(v -> takePhoto());
         Language.hint(mInput, Language.msg(R.string.l10n_board_placeholder));
         mSubtitle.setOnClickListener(v -> {
             if (mReplyTo != null) {
@@ -363,7 +365,9 @@ public final class BoardActivity extends AppCompatActivity {
                         setReply(zPost);
                     } else {
                         ClipboardManager cm = getSystemService(ClipboardManager.class);
-                        cm.setPrimaryClip(ClipData.newPlainText("post", zPost.body));
+                        String text = com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(zPost.body)
+                                ? com.eurobuddha.maxima.core.chat.ChatMedia.caption(zPost.body) : zPost.body;
+                        cm.setPrimaryClip(ClipData.newPlainText("post", text));
                         toast(Language.text(this, R.string.l10n_common_copied));
                     }
                 })
@@ -519,6 +523,240 @@ public final class BoardActivity extends AppCompatActivity {
         });
     }
 
+    // ---- photos: shrunk on this device, published once, read by every member ----
+
+    private static final int PICK_PHOTO = 71;
+    private static final int TAKE_PHOTO = 72;
+    private android.net.Uri mCaptureUri;
+    private com.eurobuddha.maxima.app.chat.ChatImageViewer mPhotoViewer;
+    private final android.util.LruCache<String, android.graphics.Bitmap> mImageCache =
+            new android.util.LruCache<String, android.graphics.Bitmap>(
+                    (int) Math.min(Integer.MAX_VALUE, Runtime.getRuntime().maxMemory() / 8)) {
+                @Override
+                protected int sizeOf(String k, android.graphics.Bitmap b) {
+                    return b.getByteCount();
+                }
+            };
+    private final java.util.Set<String> mImageFetching = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    private final java.util.Set<String> mImageFailed = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    private void pickPhoto() {
+        if (mBoard == null || !mBoard.canPost || mBoard.joining) {
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+        i.setType("image/*");
+        startActivityForResult(Intent.createChooser(i, Language.text(this, R.string.l10n_android_chat_send_photo)), PICK_PHOTO);
+    }
+
+    /** Capture into our own cache via the app's payloads FileProvider (same as the chat screen). */
+    private void takePhoto() {
+        if (mBoard == null || !mBoard.canPost || mBoard.joining) {
+            return;
+        }
+        try {
+            java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "board-capture.jpg");
+            mCaptureUri = androidx.core.content.FileProvider.getUriForFile(this, getPackageName() + ".payloads", f);
+            Intent i = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, mCaptureUri);
+            i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            for (android.content.pm.ResolveInfo ri : getPackageManager()
+                    .queryIntentActivities(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)) {
+                grantUriPermission(ri.activityInfo.packageName, mCaptureUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            }
+            startActivityForResult(i, TAKE_PHOTO);
+        } catch (Exception e) {
+            toast(Language.text(this, R.string.l10n_android_chat_no_camera));
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req == TAKE_PHOTO && res == RESULT_OK && mCaptureUri != null) {
+            promptCaption(mCaptureUri);
+        } else if (req == PICK_PHOTO && res == RESULT_OK && data != null && data.getData() != null) {
+            promptCaption(data.getData());
+        }
+    }
+
+    private void promptCaption(final android.net.Uri uri) {
+        mIo.execute(() -> {
+            android.graphics.Bitmap preview = null;
+            try {
+                byte[] jpeg = BoardImages.readScaledJpeg(getContentResolver(), uri, 600);
+                preview = android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
+            } catch (Exception ignored) {
+                // no preview: still let them caption and send
+            }
+            final android.graphics.Bitmap thumb = preview;
+            runOnUiThread(() -> {
+                if (isFinishing()) {
+                    return;
+                }
+                android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+                box.setOrientation(android.widget.LinearLayout.VERTICAL);
+                box.setPadding(Ui.dp(this, 18), Ui.dp(this, 14), Ui.dp(this, 18), 0);
+                if (thumb != null) {
+                    android.widget.ImageView iv = new android.widget.ImageView(this);
+                    iv.setImageBitmap(thumb);
+                    iv.setAdjustViewBounds(true);
+                    iv.setMaxHeight(Ui.dp(this, 240));
+                    iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                    android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+                    lp.bottomMargin = Ui.dp(this, 12);
+                    iv.setLayoutParams(lp);
+                    box.addView(iv);
+                }
+                final EditText cap = new EditText(this);
+                Language.hint(cap, Language.msg(R.string.l10n_android_chat_caption));
+                cap.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                        | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+                cap.setMaxLines(4);
+                box.addView(cap);
+                new LanguageDialog(this)
+                        .setTitle(Language.msg(R.string.l10n_android_chat_send_photo))
+                        .setView(box)
+                        .setPositiveButton(Language.msg(R.string.l10n_board_post), (d, w) -> sendPhoto(uri, cap.getText().toString().trim()))
+                        .setNegativeButton(Language.msg(R.string.l10n_common_cancel), null)
+                        .show();
+            });
+        });
+    }
+
+    private void sendPhoto(final android.net.Uri uri, final String caption) {
+        final BoardSource s = source();
+        if (s == null) {
+            toast(Language.text(this, R.string.l10n_native_chat_starting));
+            return;
+        }
+        final String re = mReplyTo == null ? "" : mReplyTo.id;
+        setReply(null);
+        toast(Language.text(this, R.string.l10n_android_chat_sending_photo));
+        mIo.execute(() -> {
+            try {
+                byte[] jpeg = BoardImages.readScaledJpeg(getContentResolver(), uri, BoardImages.MAX_EDGE_PX);
+                final BoardSource.PostRow p = s.postImage(mBoardId, jpeg, caption, re);
+                runOnUiThread(() -> {
+                    if (isFinishing()) {
+                        return;
+                    }
+                    if (p != null) {
+                        mPosts.add(p);
+                        render(true);
+                    } else {   // published on the account's own lane: pick it up shortly
+                        mUi.postDelayed(() -> load(true), 4000);
+                        mUi.postDelayed(() -> load(true), 15000);
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast(Language.text(this, R.string.l10n_native_chat_operation_failed, String.valueOf(e.getMessage()))));
+            }
+        });
+    }
+
+    /** Cache hit, else fetch + decode off the UI thread and redraw. */
+    private void bindImage(android.widget.ImageView view, String body, String id) {
+        android.graphics.Bitmap cached = mImageCache.get(id);
+        if (cached != null) {
+            view.setImageBitmap(cached);
+            view.setOnClickListener(v -> openImage(id));
+            return;
+        }
+        view.setImageResource(R.drawable.ic_photo);
+        view.setOnClickListener(null);
+        if (mImageFailed.contains(id) || !mImageFetching.add(id)) {
+            return;
+        }
+        final String ref = com.eurobuddha.maxima.core.chat.ChatMedia.ref(body);
+        final BoardSource s = source();
+        mIo.execute(() -> {
+            try {
+                android.graphics.Bitmap bmp = BoardImages.decodeBounded(
+                        BoardImages.fetchMediaBytes(s == null ? null : s.media(), ref));
+                if (bmp != null) {
+                    mImageCache.put(id, bmp);
+                    runOnUiThread(() -> render(false));
+                    return;
+                }
+                mImageFailed.add(id);
+            } catch (Exception e) {
+                mImageFailed.add(id);
+            } finally {
+                mImageFetching.remove(id);
+            }
+        });
+    }
+
+    private void openImage(String id) {
+        List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> photos = new ArrayList<>();
+        for (BoardSource.PostRow p : mPosts) {
+            photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(p.id, p.body, p.ts));
+        }
+        com.eurobuddha.maxima.core.chat.ChatImages gallery = new com.eurobuddha.maxima.core.chat.ChatImages(photos, id);
+        if (gallery.current() == null) {
+            return;
+        }
+        if (mPhotoViewer != null) {
+            mPhotoViewer.dismiss();
+        }
+        final BoardSource s = source();
+        mPhotoViewer = new com.eurobuddha.maxima.app.chat.ChatImageViewer(this, gallery, mImageCache,
+                photo -> BoardImages.decodeBounded(BoardImages.fetchMediaBytes(s == null ? null : s.media(),
+                        com.eurobuddha.maxima.core.chat.ChatMedia.ref(photo.body))),
+                this::saveImage, this::shareImage);
+        mPhotoViewer.show();
+    }
+
+    private void saveImage(final android.graphics.Bitmap b) {
+        if (b == null) {
+            return;
+        }
+        mIo.execute(() -> {
+            try {
+                android.content.ContentValues cv = new android.content.ContentValues();
+                cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "parlons-board-" + System.currentTimeMillis() + ".jpg");
+                cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                android.net.Uri uri = getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+                try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os);
+                }
+                runOnUiThread(() -> toast(Language.text(this, R.string.l10n_android_chat_saved)));
+            } catch (Exception e) {
+                runOnUiThread(() -> toast(Language.text(this, R.string.l10n_android_chat_save_failed)));
+            }
+        });
+    }
+
+    private void shareImage(final android.graphics.Bitmap b) {
+        if (b == null) {
+            return;
+        }
+        mIo.execute(() -> {
+            try {
+                java.io.File dir = new java.io.File(getCacheDir(), "maximapayloads");
+                dir.mkdirs();
+                java.io.File f = new java.io.File(dir, "board-share.jpg");
+                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os);
+                }
+                final android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(this, getPackageName() + ".payloads", f);
+                runOnUiThread(() -> {
+                    Intent i = new Intent(Intent.ACTION_SEND);
+                    i.setType("image/jpeg");
+                    i.putExtra(Intent.EXTRA_STREAM, uri);
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(i, Language.text(this, R.string.l10n_android_chat_share_photo)));
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast(Language.text(this, R.string.l10n_android_chat_share_failed)));
+            }
+        });
+    }
+
     // ---- rows ----
 
     private final class VH extends RecyclerView.ViewHolder {
@@ -527,6 +765,7 @@ public final class BoardActivity extends AppCompatActivity {
         final TextView who;
         final TextView body;
         final TextView meta;
+        final android.widget.ImageView image;
 
         VH(View v) {
             super(v);
@@ -535,7 +774,7 @@ public final class BoardActivity extends AppCompatActivity {
             who = v.findViewById(R.id.bubble_sender);
             body = v.findViewById(R.id.bubble_body);
             meta = v.findViewById(R.id.bubble_meta);
-            BoardFlows.gone(v, R.id.bubble_image);
+            image = v.findViewById(R.id.bubble_image);
             BoardFlows.gone(v, R.id.bubble_audio);
         }
     }
@@ -570,8 +809,22 @@ public final class BoardActivity extends AppCompatActivity {
             } else {
                 h.who.setVisibility(View.GONE);
             }
-            h.body.setVisibility(View.VISIBLE);
-            Language.setText(h.body, p.body);
+            com.eurobuddha.maxima.app.chat.ChatLinkText.reset(h.body);
+            if (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(p.body)) {
+                String cap = com.eurobuddha.maxima.core.chat.ChatMedia.caption(p.body);
+                Language.setText(h.body, cap);
+                h.body.setVisibility(cap.isEmpty() ? View.GONE : View.VISIBLE);
+                h.image.setVisibility(View.VISIBLE);
+                bindImage(h.image, p.body, p.id);
+            } else {
+                h.image.setVisibility(View.GONE);
+                h.image.setImageDrawable(null);
+                h.body.setVisibility(View.VISIBLE);
+                Language.setText(h.body, p.body);
+            }
+            if (h.body.getVisibility() == View.VISIBLE) {
+                com.eurobuddha.maxima.app.chat.ChatLinkText.bind(h.body, h.body.getText().toString(), () -> postMenu(p));
+            }
             h.meta.setVisibility(View.VISIBLE);
             h.meta.setText(Language.shortStamp(p.ts));
             h.bubble.setOnLongClickListener(v -> {

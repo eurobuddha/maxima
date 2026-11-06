@@ -197,6 +197,14 @@ public class BoardRelayTest {
                 assertTrue("reseed: relay has " + a.shelf.count(ab.idBytes) + " alice entries " + alice.boards.posts(ab.id, 0).size()
                         + " pending " + alice.boards.board(ab.id).pending + " relays " + alice.boards.board(ab.id).relays
                         + " cursors " + alice.boards.board(ab.id).cursors, reseeded);
+
+                // A media body (control-character marker, empty caption) must not be trimmed away.
+                String media = com.eurobuddha.maxima.core.chat.ChatMedia.wrap("image/jpeg", "data:image/jpeg;base64,/9j/4A==", "");
+                alice.boards.post(ab.id, media, null);
+                assertTrue(sync(bob, () -> bob.boards.posts(bb.id, 0).size() == 3, 10));
+                String got = bob.boards.posts(bb.id, 0).get(2).body();
+                assertTrue(com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(got));
+                assertEquals("image/jpeg", com.eurobuddha.maxima.core.chat.ChatMedia.mime(got));
             }
         }
     }

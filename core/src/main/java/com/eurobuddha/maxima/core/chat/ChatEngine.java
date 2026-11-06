@@ -855,14 +855,21 @@ public final class ChatEngine {
     /** Publish bytes and return an mx1: ref (RFC4648 url-safe base64 manifest,
      *  matching android.util.Base64 URL_SAFE that the app UI decodes with). */
     private String publishRef(byte[] zBytes, String zMime) throws Exception {
+        return publishRef(mMedia, zBytes, zMime);
+    }
+
+    /** Publish bytes through a media service and return the ref a media body carries (boards use
+     *  the same path, so one upload serves every reader). */
+    public static String publishRef(com.eurobuddha.maxima.core.media.MediaService zMedia,
+                                    byte[] zBytes, String zMime) throws Exception {
         // Local-only media (the jar engine): there is no shelf a receiver could
         // fetch from, so the image itself RIDES IN the message as a data-URL.
         // Receivers decode it directly; nothing to fetch, nothing to ghost.
-        if (mMedia.isLocalOnly()) {
+        if (zMedia.isLocalOnly()) {
             return "data:" + zMime + ";base64,"
                     + java.util.Base64.getEncoder().encodeToString(zBytes);
         }
-        com.eurobuddha.maxima.core.media.MediaManifest mf = mMedia.publish(zBytes, zMime);
+        com.eurobuddha.maxima.core.media.MediaManifest mf = zMedia.publish(zBytes, zMime);
         return "mx1:" + java.util.Base64.getUrlEncoder()
                 .encodeToString(mf.encode().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }

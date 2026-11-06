@@ -202,8 +202,10 @@ public final class BoardShelf {
             if (isNew && mBoards.size() >= mMaxBoards && !evictLruUnless(boardHex)) {
                 return Result.QUOTA;
             }
+            // Relay full: boards SHRINK, they do not vanish. Shed the oldest posts of the
+            // least-recently-read boards first; a board leaves only once it is empty.
             while (mTotalBytes + len > mMaxTotalBytes || mTotalItems + 1 > mMaxTotalItems) {
-                if (!evictLruUnless(boardHex)) {
+                if (!shedLruUnless(boardHex)) {
                     break;
                 }
             }
@@ -331,7 +333,30 @@ public final class BoardShelf {
         return mTotalBytes + zNeed <= mMaxTotalBytes && mTotalItems + 1 <= mMaxTotalItems;
     }
 
-    /** Drop the least-recently-read board other than zKeep. */
+    /** Drop ONE oldest post from the least-recently-read board other than zKeep; a board that
+     *  empties this way is forgotten. False when no other board holds anything. */
+    private boolean shedLruUnless(String zKeep) {
+        String victim = null;
+        long oldest = Long.MAX_VALUE;
+        for (Map.Entry<String, Board> e : mBoards.entrySet()) {
+            if (!e.getKey().equals(zKeep) && !e.getValue().items.isEmpty() && e.getValue().lru < oldest) {
+                oldest = e.getValue().lru;
+                victim = e.getKey();
+            }
+        }
+        if (victim == null) {
+            return false;
+        }
+        Board b = mBoards.get(victim);
+        drop(victim, b, b.items.remove(0));
+        if (b.items.isEmpty()) {
+            mBoards.remove(victim);
+        }
+        return true;
+    }
+
+    /** Drop the least-recently-read board other than zKeep (only for the board-COUNT cap: a
+     *  new board needs a whole slot, and a count cannot be shrunk). */
     private boolean evictLruUnless(String zKeep) {
         String victim = null;
         long oldest = Long.MAX_VALUE;

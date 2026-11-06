@@ -1574,21 +1574,30 @@ public final class ParlonsControl implements AutoCloseable {
             }
             mUploads.remove(tid);
             final String peer = str(in, "peer");
+            final String board = str(in, "board");   // a board post instead of a chat message
+            final String re = str(in, "re");
             final String mime = str(in, "mime");
             final String caption = str(in, "caption");
             final boolean group = bool(in, "group");
             final byte[] media = up.buf.toByteArray();
-            if (peer.isEmpty() || mime.isEmpty() || media.length == 0) {
-                return bytes(err("peer, mime and data required"));
+            if ((peer.isEmpty() && board.isEmpty()) || mime.isEmpty() || media.length == 0) {
+                return bytes(err("peer or board, mime and data required"));
             }
-            if (!group && mNode.contact(peer) == null) {
+            if (!board.isEmpty()) {
+                com.eurobuddha.maxima.core.board.BoardEngine boards = mBoards;
+                if (boards == null || boards.board(board) == null) {
+                    return bytes(err("no such board"));
+                }
+            } else if (!group && mNode.contact(peer) == null) {
                 return bytes(err("unknown contact " + peer));
             }
             // publish + replicate can take up to ~55s — the media lane, never the pump thread.
             // The result reaches the device through the conversation state (+ push).
             mMediaExec.execute(() -> {
                 try {
-                    if (group) {
+                    if (!board.isEmpty()) {
+                        mBoards.postMedia(board, media, mime, caption, re);
+                    } else if (group) {
                         mChat.sendGroupMedia(peer, media, mime, caption);
                     } else {
                         mChat.sendMedia(mNode.contact(peer), media, mime, caption);
@@ -2677,7 +2686,8 @@ public final class ParlonsControl implements AutoCloseable {
         java.util.List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> last = boards.posts(b.id, 1);
         if (!last.isEmpty()) {
             ev.put("sname", b.nameOf(last.get(0).from));
-            ev.put("body", safe(last.get(0).body()));
+            String lb = safe(last.get(0).body());
+            ev.put("body", com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(lb) ? com.eurobuddha.maxima.core.chat.ChatMedia.preview(lb) : lb);
             ev.put("time", last.get(0).ts);
         }
         push(ev);

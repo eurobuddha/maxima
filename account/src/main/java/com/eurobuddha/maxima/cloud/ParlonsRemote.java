@@ -355,6 +355,22 @@ public final class ParlonsRemote {
      */
     public JSONObject sendMedia(String zPeer, boolean zGroup, byte[] zBytes, String zMime,
                                 String zCaption) throws Exception {
+        JSONObject target = new JSONObject();
+        target.put("peer", zPeer);
+        target.put("group", zGroup);
+        return uploadMedia(target, zBytes, zMime, zCaption);
+    }
+
+    /** Post an image to a board through the account (the node publishes once, every member reads). */
+    public JSONObject boardMedia(String zBoard, String zRe, byte[] zBytes, String zMime,
+                                 String zCaption) throws Exception {
+        JSONObject target = new JSONObject();
+        target.put("board", zBoard);
+        target.put("re", zRe == null ? "" : zRe);
+        return uploadMedia(target, zBytes, zMime, zCaption);
+    }
+
+    private JSONObject uploadMedia(JSONObject zTarget, byte[] zBytes, String zMime, String zCaption) throws Exception {
         String tid = java.util.UUID.randomUUID().toString();
         int off = 0;
         JSONObject last = new JSONObject();
@@ -369,8 +385,9 @@ public final class ParlonsRemote {
             boolean isLast = off + n >= zBytes.length;
             p.put("last", isLast);
             if (isLast) {
-                p.put("peer", zPeer);
-                p.put("group", zGroup);
+                for (Object k : zTarget.keySet()) {
+                    p.put(k, zTarget.get(k));
+                }
                 p.put("mime", zMime);
                 p.put("caption", zCaption == null ? "" : zCaption);
             }

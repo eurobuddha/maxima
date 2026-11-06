@@ -96,6 +96,27 @@ public class BoardShelfTest {
     }
 
     @Test
+    public void relayFullShedsOldestPostsOfLeastReadBoardsNotWholeBoards() {
+        BoardShelf s = new BoardShelf(100, 1 << 20, 10, 1L << 40, 3, 1L << 40);   // 3 posts in all
+        byte[] b1 = BoardKeys.newBoardId();
+        byte[] b2 = BoardKeys.newBoardId();
+        byte[] b3 = BoardKeys.newBoardId();
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b1, BoardKeys.newPostId(), 1, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b1, BoardKeys.newPostId(), 2, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b2, BoardKeys.newPostId(), 3, 1, null, new byte[1]).sign(pseudonym).raw));
+        s.since(b1, 0, 1 << 20);   // b1 read now: b2 is the least-recently-read
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b3, BoardKeys.newPostId(), 4, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertEquals("b2 shed its only post and left", 0, s.count(b2));
+        assertEquals(2, s.count(b1));
+        assertEquals(1, s.count(b3));
+        // Next in line is b1 (b3 was just posted to): it loses its OLDEST post, keeps the newer.
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b3, BoardKeys.newPostId(), 5, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertEquals(1, s.count(b1));
+        assertEquals(2, s.count(b3));
+        assertEquals(2, s.boardCount());
+    }
+
+    @Test
     public void survivesRestartOnDisk() {
         File dir = tmp("reload");
         BoardShelf s = new BoardShelf();

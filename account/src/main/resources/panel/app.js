@@ -236,7 +236,7 @@
   }
 
   const privateFiles = window.ParlonsFiles.create({ api, sheet, closeSheet, esc, toast });
-  const boards = window.ParlonsBoards.create({ api, sheet, closeSheet, esc, toast, el, go, ic, avatar, drawQr, listTime, label, $, copy });
+  const boards = window.ParlonsBoards.create({ api, sheet, closeSheet, esc, toast, el, go, ic, avatar, drawQr, listTime, label, $, copy, linkText, parseMedia, mediaUrl, b64 });
 
   // ---------- routing ----------
   function go(hash) { location.hash = hash; }

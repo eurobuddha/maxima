@@ -1782,10 +1782,16 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     /** Reuse the conversation store and encrypted loader for every page, without loading all bitmaps. */
     private void openImage(String id) {
-        if (mOpen == null) return;
+        if (mOpen == null && mBoard == null) return;
         java.util.List<com.eurobuddha.maxima.core.chat.ChatImages.Photo> photos = new java.util.ArrayList<>();
-        for (ChatEngine.Entry e : node.chat().conversation(mOpen)) {
-            photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(e.id, e.body, e.time));
+        if (mBoard != null) {
+            for (com.eurobuddha.maxima.core.board.BoardEngine.Entry e : node.boards().posts(mBoard, 0)) {
+                photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(e.id, e.body(), e.ts));
+            }
+        } else {
+            for (ChatEngine.Entry e : node.chat().conversation(mOpen)) {
+                photos.add(new com.eurobuddha.maxima.core.chat.ChatImages.Photo(e.id, e.body, e.time));
+            }
         }
         ImageViewer.open(javax.swing.SwingUtilities.getWindowAncestor(this),
                 new com.eurobuddha.maxima.core.chat.ChatImages(photos, id), photo -> {
@@ -1809,7 +1815,15 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     /** Attach sheet: Photo, and (1:1 only) Send payment — mirrors the phone. */
     private void showAttachMenu(Component anchor) {
-        if (mOpen == null) return;   // boards are text-only for now (mBoard set means mOpen is null)
+        if (mBoard != null) {   // a board takes photos (shrunk here, published once) and nothing else yet
+            javax.swing.JPopupMenu bm = new javax.swing.JPopupMenu();
+            javax.swing.JMenuItem bphoto = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.photoPick"));
+            bphoto.addActionListener(e -> attachFile());
+            bm.add(bphoto);
+            bm.show(anchor, 0, -bm.getPreferredSize().height);
+            return;
+        }
+        if (mOpen == null) return;
         javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
         javax.swing.JMenuItem photo = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.photoPick"));
         photo.addActionListener(e -> attachFile());
@@ -2083,7 +2097,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     }
 
     private void attachFile() {
-        if (mOpen == null) return;
+        final String board = mBoard;
+        if (mOpen == null && board == null) return;
         final String conversation = mOpen;
         final boolean group = mOpenGroup;
         javax.swing.JFileChooser fc = Language.fileChooser();
@@ -2095,9 +2110,22 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                 byte[] bytes = java.nio.file.Files.readAllBytes(f.toPath());
                 String mime = java.nio.file.Files.probeContentType(f.toPath());
                 if (mime == null) mime = "application/octet-stream";
-                sendAttachment(conversation, group, bytes, mime, "");
+                if (board != null) sendBoardAttachment(board, bytes, mime, "");
+                else sendAttachment(conversation, group, bytes, mime, "");
             } catch (Exception ex) { attachmentError(ex); }
         }, "chat-attach").start();
+    }
+
+    /** A photo on a board: shrunk here (DesktopImagePrep), published ONCE to the media mesh,
+     *  then one sealed post carries the ref for every member. Only images are accepted. */
+    private void sendBoardAttachment(String board, byte[] bytes, String mime, String caption) throws Exception {
+        if (!mime.startsWith("image/")) throw new IllegalArgumentException(Language.text("desktopChat.photoTitle"));
+        DesktopImagePrep.Result prepared = DesktopImagePrep.prepare(bytes, mime);
+        bytes = prepared.bytes;
+        if (prepared.jpeg) mime = "image/jpeg";
+        com.eurobuddha.maxima.core.board.BoardEngine.Entry re = mReplyTo;
+        node.boards().postMedia(board, bytes, mime, caption, re == null ? "" : re.id);
+        javax.swing.SwingUtilities.invokeLater(() -> { setReply(null); mThreadSig = ""; mLastSig = ""; refresh(); });
     }
 
     private void pasteImage(java.awt.datatransfer.Transferable contents) {
@@ -2105,12 +2133,24 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         // never redirect an attachment to somebody else.
         final String conversation = mOpen;
         final boolean group = mOpenGroup;
-        if (conversation == null || mShowList) return;
+        final String board = mBoard;
+        if (mShowList) return;
+        if (board != null) {
+            com.eurobuddha.maxima.core.board.BoardEngine.Board b = node.boards() == null ? null : node.boards().board(board);
+            if (b != null) pasteImage(contents, boardTitle(b), (png, mime, text) -> sendBoardAttachment(board, png, mime, text));
+            return;
+        }
+        if (conversation == null) return;
         pasteImage(contents, conversation, group);
     }
 
+    private interface MediaSink { void send(byte[] bytes, String mime, String caption) throws Exception; }
+
     private void pasteImage(java.awt.datatransfer.Transferable contents, String conversation, boolean group) {
-        final String recipient = titleFor(conversation, group);
+        pasteImage(contents, titleFor(conversation, group), (png, mime, text) -> sendAttachment(conversation, group, png, mime, text));
+    }
+
+    private void pasteImage(java.awt.datatransfer.Transferable contents, String recipient, MediaSink sink) {
         new Thread(() -> {
             try {
                 java.awt.image.BufferedImage image = ImagePasteSupport.readImage(contents);
@@ -2137,7 +2177,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
                     if (choice != 0) return;
                     final String text = caption.getText();
                     new Thread(() -> {
-                        try { sendAttachment(conversation, group, png, "image/png", text); }
+                        try { sink.send(png, "image/png", text); }
                         catch (Exception ex) { attachmentError(ex); }
                     }, "chat-paste-send").start();
                 });
@@ -2414,8 +2454,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         name.setAlignmentX(Component.LEFT_ALIGNMENT);
         List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> lastPost = be.posts(b.id, 1);
         JLabel last = Language.render(new JLabel(), () -> lastPost.isEmpty() ? boardSub(b)
-                : clip(lastPost.get(0).mine ? Language.text("chat.youPrefix", "message", lastPost.get(0).body())
-                : b.nameOf(lastPost.get(0).from) + ": " + lastPost.get(0).body(), 42));
+                : clip(lastPost.get(0).mine ? Language.text("chat.youPrefix", "message", previewBody(lastPost.get(0).body()))
+                : b.nameOf(lastPost.get(0).from) + ": " + previewBody(lastPost.get(0).body()), 42));
         Language.font(last, t.font(12f), last.getText());
         last.setForeground(t.subtext);
         last.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -2578,7 +2618,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             who.setAlignmentX(Component.LEFT_ALIGNMENT);
             bub.add(who);
         }
-        bub.add(linkedText(e.body(), fg));
+        if (ChatMedia.isMedia(e.body())) addMediaTo(bub, e.body(), e.id, fg);
+        else bub.add(linkedText(e.body(), fg));
         JLabel meta = Language.render(new JLabel(), () -> time(e.ts));
         meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10)
                 .deriveFont(10f * t.textPercent() / 100f));

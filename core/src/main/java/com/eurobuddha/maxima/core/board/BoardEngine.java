@@ -526,7 +526,8 @@ public final class BoardEngine {
         if (!b.canPost()) {
             throw new IllegalStateException(b.joining ? "waiting for an admin to let you in" : "no board key");
         }
-        String body = zBody == null ? "" : zBody.trim();
+        // A media body starts with a control-character marker: trimming would strip it.
+        String body = zBody == null ? "" : com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(zBody) ? zBody : zBody.trim();
         if (body.isEmpty()) {
             throw new IllegalArgumentException("empty post");
         }
@@ -538,6 +539,35 @@ public final class BoardEngine {
             }
         }
         return publishSealed(b, new Json.Writer().put("k", "text").put("b", body).done(), re);
+    }
+
+    /** The media mesh this engine publishes images through (null = no image posts here). */
+    public void setMediaService(com.eurobuddha.maxima.core.media.MediaService zMedia) {
+        mMedia = zMedia;
+    }
+
+    private volatile com.eurobuddha.maxima.core.media.MediaService mMedia;
+
+    /**
+     * Post an image (or any media): ONE upload to the media mesh, then a normal post whose body
+     * carries the manifest ref, sealed under the board key like any text. Blocks on the publish
+     * (encrypt + replicate, up to ~55 s): call off the UI thread. The caller shrinks the image
+     * first; the mesh ceiling is 16 MB but a board should stay lean.
+     */
+    public Entry postMedia(String zId, byte[] zBytes, String zMime, String zCaption, String zRe) throws Exception {
+        com.eurobuddha.maxima.core.media.MediaService media = mMedia;
+        if (media == null) {
+            throw new IllegalStateException("media service not set");
+        }
+        Board b = board(zId);
+        if (b == null) {
+            throw new IllegalArgumentException("no such board");
+        }
+        if (!b.canPost()) {
+            throw new IllegalStateException(b.joining ? "waiting for an admin to let you in" : "no board key");
+        }
+        String ref = com.eurobuddha.maxima.core.chat.ChatEngine.publishRef(media, zBytes, zMime);
+        return post(zId, com.eurobuddha.maxima.core.chat.ChatMedia.wrap(zMime, ref, zCaption == null ? "" : zCaption), zRe);
     }
 
     private void postHello(Board b) {

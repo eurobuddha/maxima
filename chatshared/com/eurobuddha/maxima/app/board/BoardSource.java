@@ -60,6 +60,13 @@ public interface BoardSource {
 
     PostRow post(String zId, String zBody, String zRe) throws Exception;
 
+    /** Post an already-shrunk JPEG. Null when the host publishes asynchronously (the portal's
+     *  cloud account): the screen reloads to pick the post up. */
+    PostRow postImage(String zId, byte[] zJpeg, String zCaption, String zRe) throws Exception;
+
+    /** The media mesh this host reads board images through; null until it is up. */
+    com.eurobuddha.maxima.core.media.MediaService media();
+
     List<KnockRow> knocks(String zId) throws Exception;
 
     void approve(String zId, String zFp) throws Exception;

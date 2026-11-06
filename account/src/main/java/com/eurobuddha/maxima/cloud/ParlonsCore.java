@@ -153,6 +153,7 @@ public final class ParlonsCore {
         // the portable backup carries them too.
         mBoards = new com.eurobuddha.maxima.core.board.BoardEngine(mNode);
         mBoards.setStore(mChatStore);
+        mBoards.setMediaService(mMedia);
         try {
             mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, zDataDir.resolve("private-files"), true);
             mPrivateFiles.setExtraSources(() -> {

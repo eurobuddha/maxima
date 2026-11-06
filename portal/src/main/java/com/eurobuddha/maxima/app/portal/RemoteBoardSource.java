@@ -160,6 +160,17 @@ public final class RemoteBoardSource implements BoardSource {
     }
 
     @Override
+    public PostRow postImage(String zId, byte[] zJpeg, String zCaption, String zRe) throws Exception {
+        call(r -> r.boardMedia(zId, zRe, zJpeg, "image/jpeg", zCaption));
+        return null;   // the account publishes on its own lane; the screen reloads to see it
+    }
+
+    @Override
+    public com.eurobuddha.maxima.core.media.MediaService media() {
+        return CloudSession.media(mApp);
+    }
+
+    @Override
     public List<KnockRow> knocks(String zId) throws Exception {
         JSONObject res = call(r -> r.boardKnocks(zId));
         List<KnockRow> out = new ArrayList<>();

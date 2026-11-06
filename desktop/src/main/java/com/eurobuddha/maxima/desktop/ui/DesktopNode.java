@@ -173,6 +173,7 @@ public final class DesktopNode {
             // Boards share the chat store, as the cloud account does.
             mBoards = new com.eurobuddha.maxima.core.board.BoardEngine(mNode);
             mBoards.setStore(chatStore);
+            mBoards.setMediaService(mMedia);
             mNode.setLogListener(DesktopEventLog::add);
             DesktopEventLog.add("ENGINE: built-in");
         }

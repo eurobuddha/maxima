@@ -213,7 +213,9 @@ public final class ChatNotifier {
         createChannel(zCtx);
         List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> last = zBoards.posts(zBoard.id, 1);
         String title = zBoard.name.isEmpty() ? Language.text(zCtx, R.string.l10n_board_untitled) : zBoard.name;
-        CharSequence line = last.isEmpty() ? "" : zBoard.nameOf(last.get(0).from) + ": " + last.get(0).body();
+        String lb = last.isEmpty() ? "" : last.get(0).body();
+        CharSequence line = last.isEmpty() ? "" : zBoard.nameOf(last.get(0).from) + ": "
+                + (com.eurobuddha.maxima.core.chat.ChatMedia.isMedia(lb) ? com.eurobuddha.maxima.core.chat.ChatMedia.preview(lb) : lb);
         Intent open = new Intent(zCtx, com.eurobuddha.maxima.app.board.BoardActivity.class);
         open.putExtra(com.eurobuddha.maxima.app.board.BoardActivity.EXTRA_BOARD, zBoard.id);
         open.setAction("board:" + zBoard.id);
