@@ -58,6 +58,7 @@ public final class DesktopNode {
     private final ChatPort mPort;             // the active engine
     private final ChatEngine mChat;
     private final MediaService mMedia;
+    private final com.eurobuddha.maxima.core.board.BoardEngine mBoards;   // built-in only (null in classic mode)
     private RelayGossipClient mGossip;        // built-in only
     private final MaximaIdentity mIdentity;
     private final Path mDataDir;
@@ -147,6 +148,7 @@ public final class DesktopNode {
             mChat.setStore(new FileStore(new File(base, "chat")));
             mChat.setMediaService(mMedia);
             mChat.setListener(fanout());
+            mBoards = null;   // boards ride the relay fleet, which classic does not speak
             jar.setContactsChanged(() -> { DesktopEventLog.add("contacts changed (classic)"); fireChanged(); });
             DesktopEventLog.add("ENGINE: classic Maxima (jar)");
         } else {
@@ -164,9 +166,13 @@ public final class DesktopNode {
             mNode.setLocalBlobs(blobs);
             mPort = mNode;
             mChat = new ChatEngine(mNode);
-            mChat.setStore(FileStore.coalescing(new File(base, "chat"), 2000));   // flushed before any mailbox ack
+            FileStore chatStore = FileStore.coalescing(new File(base, "chat"), 2000);   // flushed before any mailbox ack
+            mChat.setStore(chatStore);
             mChat.setMediaService(mMedia);
             mChat.setListener(fanout());
+            // Boards share the chat store, as the cloud account does.
+            mBoards = new com.eurobuddha.maxima.core.board.BoardEngine(mNode);
+            mBoards.setStore(chatStore);
             mNode.setLogListener(DesktopEventLog::add);
             DesktopEventLog.add("ENGINE: built-in");
         }
@@ -262,6 +268,8 @@ public final class DesktopNode {
     public DesktopJarEngine jarEngine() { return mJarEngine; }
     public ChatEngine chat()       { return mChat; }
     public MediaService media()    { return mMedia; }
+    /** Boards (post once, read by many on the relay fleet); null on the classic engine. */
+    public com.eurobuddha.maxima.core.board.BoardEngine boards() { return mBoards; }
     public MaximaIdentity identity() { return mIdentity; }
     public DesktopRelayStore relayStore() { return mRelayStore; }
     private com.eurobuddha.maxima.files.PrivateFiles mPrivateFiles;
@@ -488,6 +496,7 @@ public final class DesktopNode {
         }
         mMaint.scheduleWithFixedDelay(() -> {
             try { mChat.resendUndelivered(); } catch (Exception ignored) { }
+            try { if (mBoards != null) mBoards.tick(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
     }
 
@@ -562,6 +571,7 @@ public final class DesktopNode {
         }
         try { if (mReach != null) mReach.shutdown(); } catch (Exception ignored) { }
         try { stopRelay(); } catch (Exception ignored) { }
+        try { if (mBoards != null) mBoards.stop(); } catch (Exception ignored) { }
         try { mChat.close(); } catch (Exception ignored) { }
         try {
             if (mJar && mJarEngine != null) {

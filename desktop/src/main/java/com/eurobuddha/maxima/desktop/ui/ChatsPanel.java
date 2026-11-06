@@ -86,6 +86,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     private String mOpen;
     private boolean mOpenGroup;
+    /** The open board (mOpen is null then). Boards share the pane, not the chat engine. */
+    private String mBoard;
+    private com.eurobuddha.maxima.core.board.BoardEngine.Entry mReplyTo;
+    private long mBoardPulled;
     private boolean mNarrow;
     private boolean mLaidOut;
     private boolean mShowList = true;   // narrow-mode: list vs conversation
@@ -304,7 +308,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         removeAll();
         if (mNarrow) {
             mBack.setVisible(true);
-            add(mShowList || mOpen == null ? mListPane : mConvPane, BorderLayout.CENTER);
+            add(mShowList || (mOpen == null && mBoard == null) ? mListPane : mConvPane, BorderLayout.CENTER);
         } else {
             mBack.setVisible(false);
             mListPane.setPreferredSize(new Dimension(320, 10));
@@ -407,6 +411,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             }
         }
         StringBuilder sig = new StringBuilder(mQuery).append('#');
+        List<com.eurobuddha.maxima.core.board.BoardEngine.Board> boards = boardRows();
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Board b : boards) {
+            sig.append('B').append(b.id).append(b.name).append(b.lastActivity).append(b.joining)
+                    .append(node.boards().unread(b)).append('|');
+        }
         for (ChatEngine.Summary s : sums) {
             sig.append(s.conversation).append(s.lastTime).append(s.unread).append('|');
         }
@@ -415,9 +424,11 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (!sig.toString().equals(mLastSig)) {
             mLastSig = sig.toString();
             mHits = hits;
-            rebuildList(sums);
+            rebuildList(sums, boards);
         }
-        if (mOpen != null) {
+        if (mBoard != null) {
+            refreshBoard();
+        } else if (mOpen != null) {
             List<ChatEngine.Entry> conv = ce.conversation(mOpen);
             // The engine returns messages in HashMap order ("every reader sorts
             // explicitly"). Sort chronologically like the phone, else photos/voice
@@ -436,10 +447,15 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         }
     }
 
-    private void rebuildList(List<ChatEngine.Summary> sums) {
+    private void rebuildList(List<ChatEngine.Summary> sums,
+                             List<com.eurobuddha.maxima.core.board.BoardEngine.Board> boards) {
         mList.removeAll();
         boolean searching = !mQuery.trim().isEmpty();
-        if (sums.isEmpty() && mHits.isEmpty()) {
+        if (!boards.isEmpty()) {   // boards sit above the chats, as on the phone
+            mList.add(sectionLabel(Language.msg("board.title")));
+            for (com.eurobuddha.maxima.core.board.BoardEngine.Board b : boards) mList.add(boardRow(b));
+        }
+        if (sums.isEmpty() && mHits.isEmpty() && boards.isEmpty()) {
             JPanel empty = new JPanel();
             empty.setOpaque(false);
             empty.setBorder(new EmptyBorder(40, 20, 20, 20));
@@ -449,7 +465,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             mList.add(empty);
         }
         if (!sums.isEmpty()) {
-            if (searching) mList.add(sectionLabel(Language.msg("nav.chats")));
+            if (searching || !boards.isEmpty()) mList.add(sectionLabel(Language.msg("nav.chats")));
             for (ChatEngine.Summary s : sums) mList.add(row(s));
         }
         if (!mHits.isEmpty()) {
@@ -693,6 +709,8 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private void open(String conversation, boolean group) {
         mOpen = conversation;
         mOpenGroup = group;
+        mBoard = null;
+        mReplyTo = null;
         mShowList = false;
         node.chat().markRead(conversation);
         Language.render(mThreadTitle, () -> titleFor(conversation, group));
@@ -751,7 +769,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         if (mScrollFab == null) return;
         javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
         boolean atBottom = v.getValue() + v.getVisibleAmount() >= v.getMaximum() - 48;
-        mScrollFab.setVisible(!atBottom && mOpen != null && !mShowList);
+        mScrollFab.setVisible(!atBottom && (mOpen != null || mBoard != null) && !mShowList);
     }
 
     private void jumpToLatest() {
@@ -1291,6 +1309,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     private void sendCurrent() {
         if (mComposing) return;
         String txt = mInput.getText().trim();
+        if (mBoard != null) { postToBoard(txt); return; }
         if (txt.isEmpty() || mOpen == null) return;
         final String conversation = mOpen;
         final boolean group = mOpenGroup;
@@ -1315,6 +1334,14 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(t.card);
         JDialogRef ref = new JDialogRef();
+        if (node.boards() != null) {   // boards need no contacts: a link is enough
+            body.add(sheetRow(Language.msg("board.new"), () -> { if (ref.d != null) ref.d.dispose(); newBoard(); }));
+            body.add(sheetRow(Language.msg("board.joinTitle"), () -> { if (ref.d != null) ref.d.dispose(); joinBoard(); }));
+            JPanel sep = new JPanel();
+            sep.setBackground(t.divider);
+            sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+            body.add(sep);
+        }
         if (cs.isEmpty()) {
             body.add(k.sub(Language.msg("desktopChat.addContacts")));
         } else {
@@ -1376,12 +1403,30 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
         wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
         wrap.add(sp, BorderLayout.CENTER);
         d.setContentPane(wrap);
-        d.setSize(340, Math.min(520, 120 + cs.size() * 58));
+        d.setSize(340, Math.min(520, 120 + (cs.size() + (node.boards() != null ? 2 : 0)) * 58));
         d.setLocationRelativeTo(this);
         d.setVisible(true);
     }
 
     private static final class JDialogRef { JDialog d; }
+
+    /** One tappable line in the new-chat sheet (the phone's overflow items). */
+    private JComponent sheetRow(CharSequence zLabel, Runnable zAction) {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(9, 8, 9, 8));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 56));
+        row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        row.add(new Icons.Btn(Icons.CONTACTS, t.accent, DKit.alpha(t.accent, 30), 38, 22, 1.8f), BorderLayout.WEST);
+        JLabel l = Language.bind(new JLabel(), zLabel);
+        Language.font(l, t.semibold(13.5f), l.getText());
+        l.setForeground(t.text);
+        row.add(l, BorderLayout.CENTER);
+        row.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) { zAction.run(); }
+        });
+        return row;
+    }
 
     /** Create a group — the phone's newGroup flow: pick members + name, then
      *  chat.createGroup fans the roster out (a network op, off the EDT). We are
@@ -1477,6 +1522,10 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
     /** Tap the conversation title: group roster (+ Edit members for the admin),
      *  or a contact's full key + addresses — the phone's showInfo. */
     private void showConversationInfo() {
+        if (mBoard != null) {
+            if (mReplyTo != null) setReply(null); else showBoardInfo();
+            return;
+        }
         if (mOpen == null) return;
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
@@ -1760,7 +1809,7 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
 
     /** Attach sheet: Photo, and (1:1 only) Send payment — mirrors the phone. */
     private void showAttachMenu(Component anchor) {
-        if (mOpen == null) return;
+        if (mOpen == null) return;   // boards are text-only for now (mBoard set means mOpen is null)
         javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
         javax.swing.JMenuItem photo = Language.bind(new javax.swing.JMenuItem(), Language.msg("desktopChat.photoPick"));
         photo.addActionListener(e -> attachFile());
@@ -2321,5 +2370,603 @@ public final class ChatsPanel extends JPanel implements MaximaWindow.Tab, Maxima
             g2.drawLine(cx, cy + 3, cx + 5, cy - 2);
             g2.dispose();
         }
+    }
+
+    // ---- boards: post once, read by many (core/board/BoardEngine) ----
+
+    private List<com.eurobuddha.maxima.core.board.BoardEngine.Board> boardRows() {
+        List<com.eurobuddha.maxima.core.board.BoardEngine.Board> out = new java.util.ArrayList<>();
+        com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        if (be == null) return out;
+        String q = mQuery.trim();
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Board b : be.boards()) {
+            if (q.isEmpty() || com.eurobuddha.maxima.app.i18n.SearchText.indexOf(boardTitle(b), q) >= 0) out.add(b);
+        }
+        return out;
+    }
+
+    private String boardTitle(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
+        return b.name.isEmpty() ? Language.text("board.untitled") : b.name;
+    }
+
+    private String boardSub(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
+        if (b.joining) return Language.text("board.waiting");
+        return Language.text(b.open ? "board.openMembers" : "board.inviteMembers", "count", b.memberCount());
+    }
+
+    private JComponent boardRow(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
+        com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        String title = boardTitle(b);
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(true);
+        row.setBackground(b.id.equals(mBoard) && !mShowList ? t.selected : t.card);
+        row.setBorder(new EmptyBorder(11, 16, 11, 16));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
+        row.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        row.add(k.avatar(b.id, title, 42), BorderLayout.WEST);
+
+        JPanel mid = new JPanel();
+        mid.setOpaque(false);
+        mid.setLayout(new BoxLayout(mid, BoxLayout.Y_AXIS));
+        JLabel name = new JLabel(title);
+        Language.font(name, t.semibold(13.5f), name.getText());
+        name.setForeground(t.text);
+        name.setAlignmentX(Component.LEFT_ALIGNMENT);
+        List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> lastPost = be.posts(b.id, 1);
+        JLabel last = Language.render(new JLabel(), () -> lastPost.isEmpty() ? boardSub(b)
+                : clip(lastPost.get(0).mine ? Language.text("chat.youPrefix", "message", lastPost.get(0).body())
+                : b.nameOf(lastPost.get(0).from) + ": " + lastPost.get(0).body(), 42));
+        Language.font(last, t.font(12f), last.getText());
+        last.setForeground(t.subtext);
+        last.setAlignmentX(Component.LEFT_ALIGNMENT);
+        mid.add(name);
+        mid.add(last);
+        row.add(mid, BorderLayout.CENTER);
+
+        JPanel right = new JPanel();
+        right.setOpaque(false);
+        right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
+        JLabel time = Language.render(new JLabel(), () -> shortTime(b.lastActivity));
+        Language.font(time, t.font(10.5f));
+        time.setForeground(t.subtext);
+        time.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        right.add(time);
+        int unread = be.unread(b);
+        if (unread > 0) {
+            right.add(Box.createRigidArea(new Dimension(0, 4)));
+            right.add(unreadBadge(unread));
+        }
+        row.add(right, BorderLayout.EAST);
+        row.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e)) openBoard(b.id);
+            }
+        });
+        return row;
+    }
+
+    /** Open a board in the conversation pane (also from a created/joined board). */
+    public void openBoard(String zId) {
+        com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        if (be == null || be.board(zId) == null) return;
+        mOpen = null;
+        mOpenGroup = false;
+        mBoard = zId;
+        mReplyTo = null;
+        mShowList = false;
+        be.markRead(zId);
+        Language.render(mThreadTitle, () -> boardTitle(be.board(zId)));
+        Language.render(mThreadSub, () -> boardSub(be.board(zId)));
+        mLastSig = "";
+        mThreadSig = "";
+        mBoardPulled = 0;
+        if (mNarrow) applyLayout();
+        refresh();
+        mInput.requestFocusInWindow();
+    }
+
+    private void refreshBoard() {
+        com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        com.eurobuddha.maxima.core.board.BoardEngine.Board b = be == null ? null : be.board(mBoard);
+        if (b == null) {   // left, or gone
+            mBoard = null;
+            mShowList = true;
+            Language.bind(mThreadTitle, Language.msg("desktopChat.pickConversation"));
+            mThreadSub.setText(" ");
+            mThread.removeAll();
+            mThread.revalidate();
+            mThread.repaint();
+            applyLayout();
+            return;
+        }
+        // The screen-open board pulls faster than the 45 s heartbeat (phone: 8 s).
+        long now = System.currentTimeMillis();
+        if (now - mBoardPulled > 10_000) {
+            mBoardPulled = now;
+            be.tick();
+        }
+        List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> posts = be.posts(mBoard, 500);
+        StringBuilder ts = new StringBuilder("board|").append(b.epoch).append(b.joining).append(b.canPost()).append('|');
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Entry e : posts) ts.append(e.id).append('|');
+        if (!ts.toString().equals(mThreadSig)) {
+            mThreadSig = ts.toString();
+            be.markRead(mBoard);
+            rebuildBoardThread(b, posts);
+        }
+    }
+
+    private void rebuildBoardThread(com.eurobuddha.maxima.core.board.BoardEngine.Board b,
+                                    List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> posts) {
+        javax.swing.JScrollBar vbar = mThreadScroll.getVerticalScrollBar();
+        final boolean atBottom = vbar.getValue() + vbar.getVisibleAmount() >= vbar.getMaximum() - 48;
+        final int keepVal = vbar.getValue();
+        mThread.removeAll();
+        boolean can = b.canPost() && !b.joining;
+        mInput.setEnabled(can);
+        if (b.joining || posts.isEmpty()) {
+            JLabel empty = Language.bind(new JLabel(), Language.msg(b.joining ? "board.waitingLong" : "board.noPosts"));
+            Language.font(empty, t.font(13f), empty.getText());
+            empty.setForeground(t.subtext);
+            empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+            mThread.add(empty);
+        }
+        // Threading as on the phone: top-level posts in time order, each followed by its replies.
+        java.util.Map<String, List<com.eurobuddha.maxima.core.board.BoardEngine.Entry>> replies = new java.util.HashMap<>();
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Entry p : posts) ids.add(p.id);
+        List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> tops = new java.util.ArrayList<>();
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Entry p : posts) {
+            if (!p.re.isEmpty() && ids.contains(p.re)) {
+                replies.computeIfAbsent(p.re, x -> new java.util.ArrayList<>()).add(p);
+            } else tops.add(p);
+        }
+        String lastDay = null;
+        String lastSender = null;
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Entry p : tops) {
+            String day = dayKey(p.ts);
+            if (!day.equals(lastDay)) {
+                mThread.add(dateSeparator(p.ts));
+                mThread.add(k.vgap(4));
+                lastDay = day;
+                lastSender = null;
+            }
+            boolean first = !p.from.equals(lastSender);
+            lastSender = p.from;
+            List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> rs = replies.get(p.id);
+            mThread.add(boardBubble(b, p, false, first, can));
+            mThread.add(k.vgap(rs == null ? 6 : 2));
+            if (rs != null) {
+                for (com.eurobuddha.maxima.core.board.BoardEngine.Entry r : rs) {
+                    mThread.add(boardBubble(b, r, true, true, can));
+                    mThread.add(k.vgap(2));
+                }
+                mThread.add(k.vgap(6));
+                lastSender = null;
+            }
+        }
+        mThread.add(Box.createVerticalGlue());
+        mThread.revalidate();
+        mThread.repaint();
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            javax.swing.JScrollBar v = mThreadScroll.getVerticalScrollBar();
+            v.setValue(atBottom ? v.getMaximum() : Math.min(keepVal, v.getMaximum()));
+            updateScrollFab();
+        });
+    }
+
+    private JComponent boardBubble(com.eurobuddha.maxima.core.board.BoardEngine.Board b,
+                                   com.eurobuddha.maxima.core.board.BoardEngine.Entry e,
+                                   boolean reply, boolean first, boolean canReply) {
+        boolean mine = e.mine;
+        JPanel line = new JPanel();
+        line.setOpaque(false);
+        line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
+        line.setAlignmentX(Component.LEFT_ALIGNMENT);
+        if (reply) line.setBorder(new EmptyBorder(0, mine ? 0 : 28, 0, mine ? 28 : 0));   // indented under its parent
+        Color fg = mine ? t.bubbleOutText : t.bubbleInText;
+        Color bg = mine ? t.bubbleOut : t.bubbleIn;
+        int R = 8, tail = 3;
+        Bubble bub = !first ? new Bubble(bg, R, R, R, R)
+                : mine ? new Bubble(bg, R, tail, R, R) : new Bubble(bg, tail, R, R, R);
+        bub.setLayout(new BoxLayout(bub, BoxLayout.Y_AXIS));
+        bub.setBorder(new EmptyBorder(8, 13, 7, 13));
+        if (!mine && first) {
+            // RULE 1: an unnamed member shows as their full fingerprint, never shortened.
+            JLabel who = new JLabel((reply ? "↳ " : "") + b.nameOf(e.from));
+            Language.font(who, t.semibold(11f), who.getText());
+            who.setForeground(DKit.alpha(fg, 200));
+            who.setAlignmentX(Component.LEFT_ALIGNMENT);
+            bub.add(who);
+        }
+        bub.add(linkedText(e.body(), fg));
+        JLabel meta = Language.render(new JLabel(), () -> time(e.ts));
+        meta.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10)
+                .deriveFont(10f * t.textPercent() / 100f));
+        meta.setForeground(DKit.alpha(fg, 160));
+        meta.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bub.add(meta);
+        installBoardMenu(bub, e, canReply);
+        fitBubble(bub, bubbleMax());
+        if (mine) {
+            line.add(Box.createHorizontalGlue());
+            line.add(bub);
+        } else {
+            line.add(bub);
+            line.add(Box.createHorizontalGlue());
+        }
+        return line;
+    }
+
+    /** Right-click a post: reply to it, copy it. */
+    private void installBoardMenu(Component c, com.eurobuddha.maxima.core.board.BoardEngine.Entry e, boolean canReply) {
+        c.addMouseListener(new MouseAdapter() {
+            private void popup(MouseEvent ev) {
+                if (!ev.isPopupTrigger()) return;
+                javax.swing.JPopupMenu m = new javax.swing.JPopupMenu();
+                if (canReply) {
+                    javax.swing.JMenuItem reply = Language.bind(new javax.swing.JMenuItem(), Language.msg("board.reply"));
+                    reply.addActionListener(a -> setReply(e));
+                    m.add(reply);
+                }
+                javax.swing.JMenuItem copy = Language.bind(new javax.swing.JMenuItem(), Language.msg("chat.copyMessage"));
+                copy.addActionListener(a -> clip(e.body()));
+                m.add(copy);
+                m.show(c, ev.getX(), ev.getY());
+            }
+            public void mousePressed(MouseEvent ev) { popup(ev); }
+            public void mouseReleased(MouseEvent ev) { popup(ev); }
+        });
+        if (c instanceof java.awt.Container)
+            for (Component child : ((java.awt.Container) c).getComponents()) installBoardMenu(child, e, canReply);
+    }
+
+    private void setReply(com.eurobuddha.maxima.core.board.BoardEngine.Entry zPost) {
+        mReplyTo = zPost;
+        com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        com.eurobuddha.maxima.core.board.BoardEngine.Board b = be == null || mBoard == null ? null : be.board(mBoard);
+        if (b == null) return;
+        if (zPost == null) {
+            Language.render(mThreadSub, () -> boardSub(b));
+        } else {
+            String who = zPost.mine ? Language.text("chat.you") : b.nameOf(zPost.from);
+            Language.render(mThreadSub, () -> Language.text("board.replyingTo", "name", who) + " · " + Language.text("board.cancelReply"));
+            mInput.requestFocusInWindow();
+        }
+    }
+
+    private void postToBoard(String zBody) {
+        com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        if (zBody.isEmpty() || be == null || mBoard == null) return;
+        final String board = mBoard;
+        final String re = mReplyTo == null ? "" : mReplyTo.id;
+        mInput.setText("");
+        setReply(null);
+        new Thread(() -> {
+            try {
+                be.post(board, zBody, re);
+                javax.swing.SwingUtilities.invokeLater(() -> { mThreadSig = ""; mLastSig = ""; refresh(); });
+            } catch (Exception ex) {
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    mInput.setText(zBody);
+                    info(Language.text("nativeChat.operationFailed", "error", Language.system(ex.getMessage())));
+                });
+            }
+        }, "board-post").start();
+    }
+
+    /** Title tap on a board: members, knocks (admin), link, rename (admin), leave. */
+    private void showBoardInfo() {
+        final com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        final com.eurobuddha.maxima.core.board.BoardEngine.Board b = be == null || mBoard == null ? null : be.board(mBoard);
+        if (b == null) return;
+        final String id = b.id;
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        JLabel sub = k.sub(boardSub(b));
+        sub.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(sub);
+        if (b.iAmAdmin()) {
+            JLabel adm = k.sub(Language.msg("board.admin"));
+            adm.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(adm);
+        }
+        body.add(k.vgap(10));
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                boardTitle(b), java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        if (b.iAmAdmin()) {
+            List<com.eurobuddha.maxima.core.board.BoardEngine.Knock> knocks = be.knocks(id);
+            if (!knocks.isEmpty()) {
+                JLabel h = k.sub(Language.msg("board.knocks"));
+                h.setAlignmentX(Component.LEFT_ALIGNMENT);
+                body.add(h);
+                for (com.eurobuddha.maxima.core.board.BoardEngine.Knock kn : knocks) {
+                    JPanel row = new JPanel(new BorderLayout(8, 0));
+                    row.setOpaque(false);
+                    row.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+                    // RULE 1: an unnamed knocker shows as the full fingerprint.
+                    JLabel who = new JLabel(kn.name.isEmpty() ? kn.fp : kn.name);
+                    Language.font(who, t.font(13f), who.getText());
+                    who.setForeground(t.text);
+                    row.add(who, BorderLayout.CENTER);
+                    DKit.HoverButton ok = k.primaryButton(Language.msg("board.approve"));
+                    ok.onClick(() -> { d.dispose(); boardAct(() -> be.approve(id, kn.fp), "board.approved"); });
+                    row.add(ok, BorderLayout.EAST);
+                    body.add(row);
+                }
+                body.add(k.vgap(10));
+            }
+        }
+        JLabel mh = k.sub(Language.msg("board.members"));
+        mh.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(mh);
+        java.util.Set<String> fps = new java.util.LinkedHashSet<>(b.rosterView());
+        for (com.eurobuddha.maxima.core.board.BoardEngine.Entry e : be.posts(id, 0)) fps.add(e.from);
+        if (fps.isEmpty()) {
+            JLabel q = k.sub(Language.msg("board.membersQuiet"));
+            q.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(q);
+        }
+        for (String fp : fps) {
+            JPanel row = new JPanel(new BorderLayout(8, 0));
+            row.setOpaque(false);
+            row.setAlignmentX(Component.LEFT_ALIGNMENT);
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+            boolean me = fp.equals(b.myFingerprint());
+            JLabel who = new JLabel(b.nameOf(fp) + (me ? " " + Language.text("chat.you") : ""));
+            Language.font(who, t.font(13f), who.getText());
+            who.setForeground(t.text);
+            row.add(who, BorderLayout.CENTER);
+            if (b.iAmAdmin() && !me && !b.open) {
+                DKit.HoverButton rm = k.dangerButton(Language.msg("board.remove"));
+                rm.onClick(() -> {
+                    int r = javax.swing.JOptionPane.showConfirmDialog(d, Language.text("board.removeConfirm"),
+                            Language.text("board.remove"), javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                            javax.swing.JOptionPane.WARNING_MESSAGE);
+                    if (r == javax.swing.JOptionPane.OK_OPTION) { d.dispose(); boardAct(() -> be.remove(id, fp), "board.removed"); }
+                });
+                row.add(rm, BorderLayout.EAST);
+            }
+            body.add(row);
+        }
+        JScrollPane sp = new JScrollPane(body,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(t.card);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(sp, BorderLayout.CENTER);
+        JPanel bar = new JPanel();
+        bar.setOpaque(false);
+        bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+        bar.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton leave = k.dangerButton(Language.msg("board.leave"));
+        leave.onClick(() -> {
+            int r = javax.swing.JOptionPane.showConfirmDialog(d, Language.text("board.leaveConfirm"),
+                    Language.text("board.leave"), javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                    javax.swing.JOptionPane.WARNING_MESSAGE);
+            if (r == javax.swing.JOptionPane.OK_OPTION) { d.dispose(); boardAct(() -> be.leave(id), "board.left"); }
+        });
+        bar.add(leave);
+        bar.add(Box.createHorizontalGlue());
+        if (b.iAmAdmin()) {
+            DKit.HoverButton rename = k.ghostButton(Language.msg("board.name"));
+            rename.onClick(() -> {
+                String n = javax.swing.JOptionPane.showInputDialog(d, Language.text("board.name"), b.name);
+                if (n != null && !n.trim().isEmpty()) { d.dispose(); boardAct(() -> be.rename(id, n.trim()), null); }
+            });
+            bar.add(rename);
+            bar.add(Box.createRigidArea(new Dimension(8, 0)));
+        }
+        DKit.HoverButton link = k.primaryButton(Language.msg("board.link"));
+        link.onClick(() -> { d.dispose(); showBoardLink(b); });
+        bar.add(link);
+        wrap.add(bar, BorderLayout.SOUTH);
+        d.setContentPane(wrap);
+        d.setSize(420, 460);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    private interface BoardWork { void run() throws Exception; }
+
+    /** A board operation off the EDT, then a refresh and an optional message. */
+    private void boardAct(BoardWork zWork, String zOkKey) {
+        new Thread(() -> {
+            try {
+                zWork.run();
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    mThreadSig = ""; mLastSig = "";
+                    refresh();
+                    if (zOkKey != null) info(Language.text(zOkKey));
+                });
+            } catch (Exception ex) {
+                javax.swing.SwingUtilities.invokeLater(() ->
+                        info(Language.text("nativeChat.operationFailed", "error", Language.system(ex.getMessage()))));
+            }
+        }, "board-act").start();
+    }
+
+    /** The link as QR + full text (RULE 1: the whole link, copy in one click). */
+    private void showBoardLink(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
+        final String link;
+        try { link = node.boards().link(b.id); } catch (Exception ex) { info(Language.system(ex.getMessage())); return; }
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        JLabel help = k.sub(Language.msg(b.open ? "board.linkOpenHelp" : "board.linkInviteHelp"));
+        help.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(help);
+        body.add(k.vgap(10));
+        java.awt.image.BufferedImage qr = DesktopQr.encode(link, 260, 0xFF000000, 0xFFFFFFFF);
+        if (qr != null) {
+            JLabel img = new JLabel(new javax.swing.ImageIcon(qr));
+            img.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(img);
+            body.add(k.vgap(10));
+        }
+        // RULE 1: the whole link on screen, wrapped, never cut; Copy puts the whole of it on the clipboard.
+        JTextArea linkText = new JTextArea(link);
+        linkText.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 11));
+        linkText.setForeground(t.text);
+        linkText.setBackground(t.input);
+        linkText.setBorder(new EmptyBorder(8, 10, 8, 10));
+        linkText.setEditable(false);
+        linkText.setLineWrap(true);
+        linkText.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(linkText);
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                boardTitle(b), java.awt.Dialog.ModalityType.MODELESS);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(body, BorderLayout.CENTER);
+        JPanel bar = new JPanel();
+        bar.setOpaque(false);
+        bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+        bar.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton close = k.ghostButton(Language.msg("language.close"));
+        close.onClick(d::dispose);
+        DKit.HoverButton copy = k.primaryButton(Language.msg("board.copyLink"));
+        copy.onClick(() -> { clip(link); info(Language.text("common.copied")); });
+        bar.add(Box.createHorizontalGlue());
+        bar.add(close);
+        bar.add(Box.createRigidArea(new Dimension(8, 0)));
+        bar.add(copy);
+        wrap.add(bar, BorderLayout.SOUTH);
+        d.setContentPane(wrap);
+        d.setSize(380, 600);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    /** New board: a name and open/invite-only, then the link to hand out. */
+    private void newBoard() {
+        final com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        if (be == null) return;
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        JLabel help = k.sub(Language.msg("board.newHelp"));
+        help.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(help);
+        body.add(k.vgap(10));
+        final JTextField nameField = k.field(Language.msg("board.name"));
+        nameField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(nameField);
+        body.add(k.vgap(10));
+        final javax.swing.JCheckBox open = Language.bind(new javax.swing.JCheckBox(), Language.msg("board.openLabel"));
+        open.setOpaque(false);
+        open.setForeground(t.text);
+        Language.font(open, t.font(13f), open.getText());
+        open.setSelected(true);
+        open.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(open);
+        JLabel openHelp = k.sub(Language.msg("board.openHelp"));
+        openHelp.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(openHelp);
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                Language.text("board.new"), java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(body, BorderLayout.CENTER);
+        JPanel bar = new JPanel();
+        bar.setOpaque(false);
+        bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+        bar.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton cancel = k.ghostButton(Language.msg("common.cancel"));
+        cancel.onClick(d::dispose);
+        DKit.HoverButton create = k.primaryButton(Language.msg("board.create"));
+        create.onClick(() -> {
+            final String n = nameField.getText().trim();
+            if (n.isEmpty()) { info(Language.text("board.nameRequired")); return; }
+            final boolean isOpen = open.isSelected();
+            d.dispose();
+            new Thread(() -> {
+                try {
+                    com.eurobuddha.maxima.core.board.BoardEngine.Board b = be.create(n, isOpen);
+                    javax.swing.SwingUtilities.invokeLater(() -> { openBoard(b.id); showBoardLink(b); });
+                } catch (Exception ex) {
+                    javax.swing.SwingUtilities.invokeLater(() ->
+                            info(Language.text("nativeChat.operationFailed", "error", Language.system(ex.getMessage()))));
+                }
+            }, "board-create").start();
+        });
+        bar.add(Box.createHorizontalGlue());
+        bar.add(cancel);
+        bar.add(Box.createRigidArea(new Dimension(8, 0)));
+        bar.add(create);
+        wrap.add(bar, BorderLayout.SOUTH);
+        d.setContentPane(wrap);
+        d.setSize(380, 300);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+        nameField.requestFocusInWindow();
+    }
+
+    /** Join a board from a pasted link. */
+    private void joinBoard() {
+        if (node.boards() == null) return;
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(t.card);
+        JLabel help = k.sub(Language.msg("board.joinHelp"));
+        help.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(help);
+        body.add(k.vgap(10));
+        final JTextField linkField = k.field(com.eurobuddha.maxima.core.board.BoardLink.PREFIX + "…");
+        linkField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(linkField);
+        final JDialog d = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+                Language.text("board.joinTitle"), java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setBackground(t.card);
+        wrap.setBorder(new EmptyBorder(14, 14, 14, 14));
+        wrap.add(body, BorderLayout.CENTER);
+        JPanel bar = new JPanel();
+        bar.setOpaque(false);
+        bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+        bar.setBorder(new EmptyBorder(12, 0, 0, 0));
+        DKit.HoverButton cancel = k.ghostButton(Language.msg("common.cancel"));
+        cancel.onClick(d::dispose);
+        DKit.HoverButton join = k.primaryButton(Language.msg("board.joinButton"));
+        join.onClick(() -> { String s = linkField.getText(); d.dispose(); joinBoardLink(s); });
+        bar.add(Box.createHorizontalGlue());
+        bar.add(cancel);
+        bar.add(Box.createRigidArea(new Dimension(8, 0)));
+        bar.add(join);
+        wrap.add(bar, BorderLayout.SOUTH);
+        d.setContentPane(wrap);
+        d.setSize(380, 240);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+        linkField.requestFocusInWindow();
+    }
+
+    /** Join from link text; false when the text is not a board link (callers fall through). */
+    public boolean joinBoardLink(String zText) {
+        final com.eurobuddha.maxima.core.board.BoardEngine be = node.boards();
+        if (be == null || !com.eurobuddha.maxima.core.board.BoardLink.isLink(zText)) {
+            if (be != null) info(Language.text("board.invalidLink"));
+            return false;
+        }
+        final String link = zText.trim();
+        new Thread(() -> {
+            try {
+                com.eurobuddha.maxima.core.board.BoardEngine.Board b = be.join(link);
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    openBoard(b.id);
+                    info(Language.text(b.joining ? "board.knocked" : "board.joined"));
+                });
+            } catch (Exception ex) {
+                javax.swing.SwingUtilities.invokeLater(() ->
+                        info(Language.text("nativeChat.operationFailed", "error", Language.system(ex.getMessage()))));
+            }
+        }, "board-join").start();
+        return true;
     }
 }
