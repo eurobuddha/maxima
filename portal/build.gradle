@@ -21,8 +21,8 @@ android {
         applicationId "com.eurobuddha.parlons.cloud"
         minSdk 28
         targetSdk 35
-        versionCode 298
-        versionName "0.2.98"
+        versionCode 299
+        versionName "0.2.99"
     }
 
     signingConfigs {

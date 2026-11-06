@@ -301,6 +301,8 @@ public final class CloudSession {
                     PortalCalls.onPushedSignal(app, ev);
                 } else if ("walletsent".equals(type) || "walletfail".equals(type)) {
                     PortalNotifier.onWalletEvent(app, ev);
+                } else if ("board".equals(type)) {
+                    PortalNotifier.onPushedBoard(app, ev);
                 }
             } catch (Exception ignored) {
             }

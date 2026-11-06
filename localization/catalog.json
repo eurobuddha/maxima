@@ -23398,5 +23398,26 @@
     "zh-Hans": "管理员",
     "ru": "Администратор",
     "uk": "Адміністратор"
+  },
+  "board.newPosts": {
+    "en": {
+      "one": "{count} new post",
+      "other": "{count} new posts"
+    },
+    "zh-Hans": {
+      "other": "{count} 条新帖子"
+    },
+    "ru": {
+      "one": "{count} новая запись",
+      "few": "{count} новые записи",
+      "many": "{count} новых записей",
+      "other": "{count} новой записи"
+    },
+    "uk": {
+      "one": "{count} новий допис",
+      "few": "{count} нові дописи",
+      "many": "{count} нових дописів",
+      "other": "{count} нового допису"
+    }
   }
 }

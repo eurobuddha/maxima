@@ -313,6 +313,7 @@ public final class MaximaService extends Service {
         final com.eurobuddha.maxima.core.board.BoardEngine boards =
                 new com.eurobuddha.maxima.core.board.BoardEngine(sNode);
         sBoards = boards;
+        boards.setListener(b -> com.eurobuddha.maxima.app.chat.ChatNotifier.postBoard(MaximaService.this, boards, b));
         new Thread(() -> {
             try {
                 boards.setStore(com.eurobuddha.maxima.core.store.FileStore.coalescing(

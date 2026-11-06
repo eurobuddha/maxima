@@ -2665,6 +2665,24 @@ public final class ParlonsControl implements AutoCloseable {
         push(ev);
     }
 
+    /** A board gained posts (pulled from the relays) → the devices badge it. */
+    public void pushBoard(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
+        com.eurobuddha.maxima.core.board.BoardEngine boards = mBoards;
+        if (mClosed || boards == null) return;
+        JSONObject ev = new JSONObject();
+        ev.put("type", "board");
+        ev.put("id", b.id);
+        ev.put("name", safe(b.name));
+        ev.put("unread", boards.unread(b));
+        java.util.List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> last = boards.posts(b.id, 1);
+        if (!last.isEmpty()) {
+            ev.put("sname", b.nameOf(last.get(0).from));
+            ev.put("body", safe(last.get(0).body()));
+            ev.put("time", last.get(0).ts);
+        }
+        push(ev);
+    }
+
     /** A delivery-state change (✓ → ✓✓ → read) → live tick updates on every device. */
     public void pushState(ChatEngine.Entry e) {
         if (mClosed) return;

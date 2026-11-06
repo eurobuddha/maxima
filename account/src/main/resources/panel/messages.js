@@ -3922,7 +3922,11 @@ window.ParlonsMessages = {
     "board.left": "You left the board.",
     "board.invalidLink": "That is not a board link.",
     "board.scan": "Scan a board link",
-    "board.admin": "Admin"
+    "board.admin": "Admin",
+    "board.newPosts": {
+      "one": "{count} new post",
+      "other": "{count} new posts"
+    }
   },
   "zh-Hans": {
     "language.title": "语言",
@@ -7802,7 +7806,10 @@ window.ParlonsMessages = {
     "board.left": "你已退出布告板。",
     "board.invalidLink": "这不是布告板链接。",
     "board.scan": "扫描布告板链接",
-    "board.admin": "管理员"
+    "board.admin": "管理员",
+    "board.newPosts": {
+      "other": "{count} 条新帖子"
+    }
   },
   "ru": {
     "language.title": "Язык",
@@ -11814,7 +11821,13 @@ window.ParlonsMessages = {
     "board.left": "Вы покинули доску.",
     "board.invalidLink": "Это не ссылка на доску.",
     "board.scan": "Сканировать ссылку на доску",
-    "board.admin": "Администратор"
+    "board.admin": "Администратор",
+    "board.newPosts": {
+      "one": "{count} новая запись",
+      "few": "{count} новые записи",
+      "many": "{count} новых записей",
+      "other": "{count} новой записи"
+    }
   },
   "uk": {
     "language.title": "Мова",
@@ -15826,6 +15839,12 @@ window.ParlonsMessages = {
     "board.left": "Ви залишили дошку.",
     "board.invalidLink": "Це не посилання на дошку.",
     "board.scan": "Сканувати посилання на дошку",
-    "board.admin": "Адміністратор"
+    "board.admin": "Адміністратор",
+    "board.newPosts": {
+      "one": "{count} новий допис",
+      "few": "{count} нові дописи",
+      "many": "{count} нових дописів",
+      "other": "{count} нового допису"
+    }
   }
 };

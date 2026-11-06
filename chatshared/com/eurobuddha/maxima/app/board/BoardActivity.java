@@ -41,6 +41,13 @@ import java.util.concurrent.Executors;
 public final class BoardActivity extends AppCompatActivity {
 
     public static final String EXTRA_BOARD = "board";
+    /** The board on screen right now ("" when none): its notifications stay quiet. */
+    public static volatile String sOnScreen = "";
+
+    /** One notification per board; a hash collision merges two boards, never loses one. */
+    public static int notificationId(String zBoardId) {
+        return 0x4B00_0000 | (zBoardId.hashCode() & 0x00FF_FFFF);
+    }
     private static final long POLL_MS = 8000;
 
     private String mBoardId = "";
@@ -111,6 +118,11 @@ public final class BoardActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        sOnScreen = mBoardId;
+        try {
+            getSystemService(android.app.NotificationManager.class).cancel(notificationId(mBoardId));
+        } catch (Exception ignored) {
+        }
         load(true);
         mUi.postDelayed(mPoll, POLL_MS);
     }
@@ -118,6 +130,9 @@ public final class BoardActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (mBoardId.equals(sOnScreen)) {
+            sOnScreen = "";
+        }
         mUi.removeCallbacks(mPoll);
     }
 

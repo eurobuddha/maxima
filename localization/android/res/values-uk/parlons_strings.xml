@@ -4470,4 +4470,11 @@
     <string name="l10n_board_invalid_link" formatted="false">"Це не посилання на дошку."</string>
     <string name="l10n_board_scan" formatted="false">"Сканувати посилання на дошку"</string>
     <string name="l10n_board_admin" formatted="false">"Адміністратор"</string>
+    <!-- Arguments: count -->
+    <plurals name="l10n_board_new_posts">
+        <item quantity="one">"%1$d новий допис"</item>
+        <item quantity="few">"%1$d нові дописи"</item>
+        <item quantity="many">"%1$d нових дописів"</item>
+        <item quantity="other">"%1$d нового допису"</item>
+    </plurals>
 </resources>

@@ -178,6 +178,7 @@ public final class ParlonsCore {
         mPairing = new DevicePairing(zDataDir);
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
         mControl.setBoards(mBoards);
+        mBoards.setListener(mControl::pushBoard);
         mControl.setChatOnly(mWallet == null);
         mControl.setFileCommands(mFileCommands);
         mControl.setFileSources(mPrivateFiles::directSources);

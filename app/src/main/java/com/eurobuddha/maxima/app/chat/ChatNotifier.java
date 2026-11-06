@@ -193,6 +193,55 @@ public final class ChatNotifier {
         }
     }
 
+    /**
+     * A board gained posts (the engine pulled them): one notification per board, counting the
+     * unread posts, opening the board. Quiet while that board is on screen. Boards are read by
+     * many, so no per-sender lines: a count and the newest line are enough.
+     */
+    public static void postBoard(Context zCtx, com.eurobuddha.maxima.core.board.BoardEngine zBoards,
+                                 com.eurobuddha.maxima.core.board.BoardEngine.Board zBoard) {
+        NotificationManager nm = zCtx.getSystemService(NotificationManager.class);
+        if (nm == null) {
+            return;
+        }
+        int unread = zBoards.unread(zBoard);
+        int id = com.eurobuddha.maxima.app.board.BoardActivity.notificationId(zBoard.id);
+        if (unread <= 0 || zBoard.id.equals(com.eurobuddha.maxima.app.board.BoardActivity.sOnScreen)) {
+            nm.cancel(id);
+            return;
+        }
+        createChannel(zCtx);
+        List<com.eurobuddha.maxima.core.board.BoardEngine.Entry> last = zBoards.posts(zBoard.id, 1);
+        String title = zBoard.name.isEmpty() ? Language.text(zCtx, R.string.l10n_board_untitled) : zBoard.name;
+        CharSequence line = last.isEmpty() ? "" : zBoard.nameOf(last.get(0).from) + ": " + last.get(0).body();
+        Intent open = new Intent(zCtx, com.eurobuddha.maxima.app.board.BoardActivity.class);
+        open.putExtra(com.eurobuddha.maxima.app.board.BoardActivity.EXTRA_BOARD, zBoard.id);
+        open.setAction("board:" + zBoard.id);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pi = PendingIntent.getActivity(zCtx, id, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        boolean sound = com.eurobuddha.maxima.app.ChatPrefs.messageSound(zCtx);
+        if (sound) {
+            Pssst.ensureAudible(zCtx);
+        }
+        NotificationCompat.Builder b = new NotificationCompat.Builder(zCtx, sound ? CHANNEL_ID : CHANNEL_ID_MUTED)
+                .setSmallIcon(R.drawable.ic_stat_maxima)
+                .setContentTitle(title)
+                .setContentText(line)
+                .setSubText(Language.count(R.plurals.l10n_board_new_posts, unread).toString())
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(line))
+                .setLargeIcon(Avatars.bitmap(zBoard.id, title, 128))
+                .setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setWhen(last.isEmpty() ? System.currentTimeMillis() : last.get(0).ts)
+                .setContentIntent(pi);
+        try {
+            nm.notify(id, b.build());
+        } catch (Exception ignored) {
+            // POST_NOTIFICATIONS can be denied; never take the engine's lane down for it
+        }
+    }
+
     /** Called when the user opens a thread - the badge has served its purpose. */
     public static void clear(Context zCtx, String zConversation) {
         NotificationManager nm = zCtx.getSystemService(NotificationManager.class);

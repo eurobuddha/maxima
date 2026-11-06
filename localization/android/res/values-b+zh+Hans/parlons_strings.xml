@@ -4338,4 +4338,8 @@
     <string name="l10n_board_invalid_link" formatted="false">"这不是布告板链接。"</string>
     <string name="l10n_board_scan" formatted="false">"扫描布告板链接"</string>
     <string name="l10n_board_admin" formatted="false">"管理员"</string>
+    <!-- Arguments: count -->
+    <plurals name="l10n_board_new_posts">
+        <item quantity="other">"%1$d 条新帖子"</item>
+    </plurals>
 </resources>

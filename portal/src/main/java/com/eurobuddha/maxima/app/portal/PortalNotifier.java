@@ -216,6 +216,51 @@ public final class PortalNotifier {
         }
     }
 
+    /** A board on the cloud account gained posts: one notification per board, a count and the
+     *  newest line, opening the board. Quiet while that board is on screen. */
+    public static void onPushedBoard(Context c, JSONObject ev) {
+        String id = str(ev, "id");
+        int unread = (int) lng(ev, "unread");
+        if (id.isEmpty()) {
+            return;
+        }
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        int nid = com.eurobuddha.maxima.app.board.BoardActivity.notificationId(id);
+        if (unread <= 0 || id.equals(com.eurobuddha.maxima.app.board.BoardActivity.sOnScreen)) {
+            if (nm != null) nm.cancel(nid);
+            return;
+        }
+        ensureChannels(c);
+        String title = firstNonEmpty(str(ev, "name"), Language.text(c, R.string.l10n_board_untitled));
+        String line = str(ev, "body").isEmpty() ? "" : firstNonEmpty(str(ev, "sname"), "") + ": " + str(ev, "body");
+        long when = lng(ev, "time");
+        Intent open = new Intent(c, com.eurobuddha.maxima.app.board.BoardActivity.class);
+        open.putExtra(com.eurobuddha.maxima.app.board.BoardActivity.EXTRA_BOARD, id);
+        open.setAction("board:" + id);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pi = PendingIntent.getActivity(c, nid, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        boolean sound = messageSound(c);
+        if (sound) {
+            ensureAudible(c);
+        }
+        NotificationCompat.Builder b = new NotificationCompat.Builder(c, sound ? CHANNEL_ID : CHANNEL_ID_MUTED)
+                .setSmallIcon(R.drawable.ic_send)
+                .setContentTitle(title)
+                .setContentText(line)
+                .setSubText(Language.count(R.plurals.l10n_board_new_posts, unread).toString())
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(line))
+                .setLargeIcon(Avatars.bitmap(id, title, 128))
+                .setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setWhen(when > 0 ? when : System.currentTimeMillis())
+                .setContentIntent(pi);
+        try {
+            if (nm != null) nm.notify(nid, b.build());
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Wallet send outcome (async on the node) — always worth a notification. */
     public static void onWalletEvent(Context c, JSONObject ev) {
         ensureChannels(c);

@@ -4382,4 +4382,9 @@
     <string name="l10n_board_invalid_link" formatted="false">"That is not a board link."</string>
     <string name="l10n_board_scan" formatted="false">"Scan a board link"</string>
     <string name="l10n_board_admin" formatted="false">"Admin"</string>
+    <!-- Arguments: count -->
+    <plurals name="l10n_board_new_posts">
+        <item quantity="one">"%1$d new post"</item>
+        <item quantity="other">"%1$d new posts"</item>
+    </plurals>
 </resources>
