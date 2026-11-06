@@ -122,7 +122,11 @@ public final class BoardActivity extends AppCompatActivity {
         mList.setAdapter(mAdapter);
         findViewById(R.id.btn_chat_back).setOnClickListener(v -> finish());
         findViewById(R.id.btn_chat_info).setOnClickListener(v -> details());
-        findViewById(R.id.btn_chat_send).setOnClickListener(v -> send());
+        // Boards are text only: the one button is always "send" (the chat layout starts it as a mic).
+        android.widget.ImageButton sendBtn = findViewById(R.id.btn_chat_send);
+        sendBtn.setImageResource(R.drawable.ic_send);
+        Language.description(sendBtn, Language.msg(R.string.l10n_chat_send));
+        sendBtn.setOnClickListener(v -> send());
         for (int id : new int[] {R.id.btn_chat_video, R.id.btn_chat_call, R.id.btn_chat_theme,
                 R.id.btn_chat_emoji, R.id.btn_chat_attach, R.id.btn_chat_camera, R.id.btn_scroll_bottom}) {
             BoardFlows.gone(findViewById(android.R.id.content), id);
