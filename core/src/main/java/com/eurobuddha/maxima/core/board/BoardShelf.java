@@ -383,6 +383,15 @@ public final class BoardShelf {
         }
     }
 
+    /** Every board held here, as 32-byte ids (what a peer relay is asked about when mirroring). */
+    public synchronized List<byte[]> boards() {
+        List<byte[]> out = new ArrayList<>();
+        for (String hex : mBoards.keySet()) {
+            out.add(new MiniData(hex).getBytes());
+        }
+        return out;
+    }
+
     public synchronized int boardCount() {
         return mBoards.size();
     }

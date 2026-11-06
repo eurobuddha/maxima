@@ -413,6 +413,53 @@ public final class RelayServer {
 
     public void setBoardShelf(com.eurobuddha.maxima.core.board.BoardShelf zShelf) {
         mBoards = zShelf;
+        mBoardMirror = zShelf == null ? null : new BoardMirror(mIdentity, zShelf, mVersion);
+    }
+
+    /** Pulls the boards we host from one peer pool relay per maintain tick (phase-3 mirroring). */
+    private volatile BoardMirror mBoardMirror;
+    private final java.util.concurrent.atomic.AtomicBoolean mMirroring = new java.util.concurrent.atomic.AtomicBoolean();
+    private int mMirrorTurn;
+
+    /**
+     * Relay-to-relay board mirroring: every maintain tick, ask ONE peer pool relay (round
+     * robin over the mesh targets) for anything newer than our cursor on each board we already
+     * host, and shelve it. Pull, not push, so a relay only ever grows the boards its own
+     * members gave it; the members' own re-seeding stays the first line of redundancy.
+     * -Dparlons.boards.mirror=false turns it off; replication 0 (--replicate 0) does too.
+     */
+    private void mirrorBoards() {
+        BoardMirror mirror = mBoardMirror;
+        if (mirror == null || !mPool || mReplicas <= 0
+                || !Boolean.parseBoolean(System.getProperty("parlons.boards.mirror", "true"))) {
+            return;
+        }
+        java.util.List<String> targets = forwardTargets();
+        if (targets.isEmpty() || !mMirroring.compareAndSet(false, true)) {
+            return;
+        }
+        final String hp = targets.get(Math.floorMod(mMirrorTurn++, targets.size()));
+        try {
+            mReplicateExec.execute(() -> {
+                try {
+                    int n = mirror.pull(hp);
+                    if (n > 0) {
+                        log("boards: mirrored " + n + " post(s) from " + hp);
+                    }
+                } catch (Exception ignored) {
+                } finally {
+                    mMirroring.set(false);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException full) {
+            mMirroring.set(false);
+        }
+    }
+
+    /** Test hook: mirror from one peer now, on the caller's thread. Posts stored. */
+    int mirrorFrom(String zHostPort) {
+        BoardMirror mirror = mBoardMirror;
+        return mirror == null ? 0 : mirror.pull(zHostPort);
     }
 
     public com.eurobuddha.maxima.core.board.BoardShelf boardShelf() {
@@ -1952,6 +1999,7 @@ public final class RelayServer {
         }
         mPeers.expire();
         considerBootstrapPeers();
+        mirrorBoards();
         ensureAccepting();
         sweepConnections(now);
         shedIfOverloaded(now);

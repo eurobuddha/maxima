@@ -249,4 +249,37 @@ public class BoardRelayTest {
             }
         }
     }
+
+    /** Phase 3: a pool relay pulls, from a peer, the boards it already hosts - and only those. */
+    @Test public void peerRelayMirrorsTheBoardsItHosts() throws Exception {
+        try (Relay a = new Relay(); Relay b = new Relay()) {
+            MaximaIdentity me = identity();
+            byte[] board = BoardKeys.newBoardId();
+            byte[] other = BoardKeys.newBoardId();
+            KeyPair pseudonym = BoardKeys.pseudonym(me, board);
+            KeyPair pseudonym2 = BoardKeys.pseudonym(me, other);
+            byte[] p1 = new BoardPost(board, BoardKeys.newPostId(), 1, 1, null, new byte[] {1}).sign(pseudonym).raw;
+            byte[] p2 = new BoardPost(board, BoardKeys.newPostId(), 2, 1, null, new byte[] {2}).sign(pseudonym).raw;
+            byte[] o1 = new BoardPost(other, BoardKeys.newPostId(), 1, 1, null, new byte[] {3}).sign(pseudonym2).raw;
+            assertEquals(BoardShelf.Result.STORED, a.shelf.put(p1));
+            assertEquals(BoardShelf.Result.STORED, a.shelf.put(o1));     // a board b does not host
+            assertEquals(BoardShelf.Result.STORED, b.shelf.put(p2));
+
+            assertEquals("b has nothing from a yet", 1, b.shelf.count(board));
+            assertEquals(1, b.server.mirrorFrom(a.host));
+            assertEquals(2, b.shelf.count(board));
+            assertEquals("only hosted boards are mirrored", 0, b.shelf.count(other));
+            assertEquals("a was never asked to mirror", 1, a.shelf.count(board));
+
+            // The cursor moves: a second pull is free, a new post on a comes over.
+            assertEquals(0, b.server.mirrorFrom(a.host));
+            byte[] p3 = new BoardPost(board, BoardKeys.newPostId(), 3, 1, null, new byte[] {4}).sign(pseudonym).raw;
+            assertEquals(BoardShelf.Result.STORED, a.shelf.put(p3));
+            assertEquals(1, b.server.mirrorFrom(a.host));
+            assertEquals(3, b.shelf.count(board));
+
+            // Nothing listening there: no exception, nothing stored.
+            assertEquals(0, b.server.mirrorFrom("127.0.0.1:1"));
+        }
+    }
 }
