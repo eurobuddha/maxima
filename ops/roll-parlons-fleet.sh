@@ -29,11 +29,15 @@ roll_node() {   # <box> <ssh-target> <relay-port> <deploy flags...>
   echo "==== $box ($t) -> parlons-node $VER"
   local old; old="$(ssh -o ConnectTimeout=15 -o BatchMode=yes "$t" 'systemctl show -p MainPID --value parlons-node')"
   local attempt
-  for attempt in 1 2 3; do   # a dropped scp or a refused ssh session is retried, the script is idempotent
-    ops/deploy-parlons-node.sh "$t" --jar "$NODE_JAR" "$@" && break
-    echo "      deploy attempt $attempt failed on $box; retrying in 20 s"; sleep 20
+  for attempt in 1 2 3; do
+    # The deploy script's last step greps the whole journal and can hang or lose its ssh session
+    # AFTER the node is already up on the new jar: verify first, and only redeploy (idempotent,
+    # but another restart) when the box really is not running the new version yet.
+    ops/deploy-parlons-node.sh "$t" --jar "$NODE_JAR" "$@" || echo "      deploy script exited non-zero on $box (attempt $attempt); verifying"
+    verify_node "$t" "$port" "$old" && return 0
+    echo "      $box not on $VER yet; redeploying in 20 s"; sleep 20
   done
-  verify_node "$t" "$port" "$old"
+  return 1
 }
 for box in "${BOXES[@]}"; do case "$box" in
   vigilance)  roll_node vigilance vigilance 9501 --heap 2560m --memmax 3328M --p2p-port 9101 --rpc --relay-port 9501 --peers 95.179.179.181:9501,65.109.31.226:9501,45.77.246.226:9501,78.141.237.9:9501,192.248.151.55:9501 --blobstore 1024 --gateway-port 9585 --no-megammr --rootnode 65.109.31.226:9001 --node-args "-isclient" --keets --dex 9602 --dex-public https://wallet.minima.global/dex-relay ;;
