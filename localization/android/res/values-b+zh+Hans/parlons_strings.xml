@@ -4287,4 +4287,55 @@
     <string name="l10n_share_connect" formatted="false">"正在连接以加载联系人…"</string>
     <string name="l10n_share_no_contacts" formatted="false">"请在 Parlons 中添加联系人，然后重新分享文件。"</string>
     <string name="l10n_share_photo_too_large" formatted="false">"照片超出预览大小限制。请作为文件发送。"</string>
+    <string name="l10n_board_title" formatted="false">"布告板"</string>
+    <string name="l10n_board_new" formatted="false">"新建布告板"</string>
+    <string name="l10n_board_join" formatted="false">"加入"</string>
+    <string name="l10n_board_empty" formatted="false">"还没有布告板。创建一个，或通过链接加入。"</string>
+    <string name="l10n_board_untitled" formatted="false">"布告板"</string>
+    <string name="l10n_board_waiting" formatted="false">"等待管理员批准加入"</string>
+    <!-- Arguments: count -->
+    <string name="l10n_board_open_members">"%1$d 位成员 · 公开链接"</string>
+    <!-- Arguments: count -->
+    <string name="l10n_board_invite_members">"%1$d 位成员 · 仅限邀请"</string>
+    <string name="l10n_board_new_help" formatted="false">"布告板面向许多人：板上的每个人都可以发帖和回复，不会向任何人单独发送。成员可达数千人。"</string>
+    <string name="l10n_board_name" formatted="false">"布告板名称"</string>
+    <string name="l10n_board_name_required" formatted="false">"请为布告板命名。"</string>
+    <string name="l10n_board_open_label" formatted="false">"任何持有链接的人都可以加入"</string>
+    <string name="l10n_board_open_help" formatted="false">"关闭后：申请加入，由管理员批准。"</string>
+    <string name="l10n_board_create" formatted="false">"创建布告板"</string>
+    <string name="l10n_board_created" formatted="false">"布告板已创建。分享链接邀请他人。"</string>
+    <string name="l10n_board_join_title" formatted="false">"加入布告板"</string>
+    <string name="l10n_board_join_help" formatted="false">"粘贴收到的布告板链接（parlons://board/…）。公开链接可立即加入；仅限邀请的链接会向管理员申请。"</string>
+    <string name="l10n_board_join_button" formatted="false">"加入"</string>
+    <string name="l10n_board_joined" formatted="false">"你已加入布告板。"</string>
+    <string name="l10n_board_knocked" formatted="false">"已申请加入，等待管理员批准。"</string>
+    <string name="l10n_board_link" formatted="false">"邀请链接"</string>
+    <string name="l10n_board_link_open_help" formatted="false">"此链接包含布告板密钥：持有者都能阅读和发帖。只分享给你想邀请的人。"</string>
+    <string name="l10n_board_link_invite_help" formatted="false">"打开此链接的人会申请加入；你在布告板详情中批准。"</string>
+    <string name="l10n_board_copy_link" formatted="false">"复制链接"</string>
+    <string name="l10n_board_share_link" formatted="false">"分享链接"</string>
+    <string name="l10n_board_details" formatted="false">"布告板详情"</string>
+    <string name="l10n_board_loading" formatted="false">"正在加载布告板…"</string>
+    <string name="l10n_board_no_posts" formatted="false">"还没有帖子。来开个头吧。"</string>
+    <string name="l10n_board_waiting_long" formatted="false">"你已申请加入。管理员批准后会显示帖子。"</string>
+    <string name="l10n_board_post" formatted="false">"发帖"</string>
+    <string name="l10n_board_placeholder" formatted="false">"写一条帖子"</string>
+    <string name="l10n_board_reply" formatted="false">"回复"</string>
+    <!-- Arguments: name -->
+    <string name="l10n_board_replying_to">"回复 %1$s"</string>
+    <string name="l10n_board_cancel_reply" formatted="false">"取消回复"</string>
+    <string name="l10n_board_knocks" formatted="false">"申请加入"</string>
+    <string name="l10n_board_approve" formatted="false">"批准"</string>
+    <string name="l10n_board_approved" formatted="false">"已批准。对方会通过布告板收到密钥。"</string>
+    <string name="l10n_board_members" formatted="false">"成员"</string>
+    <string name="l10n_board_members_quiet" formatted="false">"成员发帖后会显示在这里。"</string>
+    <string name="l10n_board_remove" formatted="false">"移除"</string>
+    <string name="l10n_board_remove_confirm" formatted="false">"移除此成员？布告板将换用对方无法打开的新密钥。"</string>
+    <string name="l10n_board_removed" formatted="false">"已移除。布告板已换用新密钥。"</string>
+    <string name="l10n_board_leave" formatted="false">"退出布告板"</string>
+    <string name="l10n_board_leave_confirm" formatted="false">"退出此布告板？此账户上的副本将被删除。"</string>
+    <string name="l10n_board_left" formatted="false">"你已退出布告板。"</string>
+    <string name="l10n_board_invalid_link" formatted="false">"这不是布告板链接。"</string>
+    <string name="l10n_board_scan" formatted="false">"扫描布告板链接"</string>
+    <string name="l10n_board_admin" formatted="false">"管理员"</string>
 </resources>

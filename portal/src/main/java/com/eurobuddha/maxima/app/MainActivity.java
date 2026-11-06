@@ -136,6 +136,9 @@ public final class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(this,
                         com.eurobuddha.maxima.app.portal.CloudSearchActivity.class)));
         findViewById(R.id.btn_main_theme).setOnClickListener(v -> cycleTheme());
+        // Boards answer over the account's parlons.board.* RPC on the session's lane.
+        com.eurobuddha.maxima.app.board.BoardSource.Holder.set(
+                new com.eurobuddha.maxima.app.portal.RemoteBoardSource(this));
         findViewById(R.id.btn_main_more).setOnClickListener(v -> {
             android.widget.PopupMenu m = new android.widget.PopupMenu(this, v);
             m.getMenu().add(0, 1, 1, Language.text(this, R.string.l10n_nav_settings));
@@ -143,6 +146,8 @@ public final class MainActivity extends AppCompatActivity {
             m.getMenu().add(0, 3, 3, Language.text(this, R.string.l10n_account_copy_address));
             m.getMenu().add(0, 4, 4, Language.text(this, R.string.l10n_account_node_status));
             m.getMenu().add(0, 5, 5, Language.text(this, R.string.l10n_account_unpair));
+            m.getMenu().add(0, 6, 6, Language.text(this, R.string.l10n_board_new));
+            m.getMenu().add(0, 7, 7, Language.text(this, R.string.l10n_board_join_title));
             m.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == 1) {
                     startActivity(new Intent(this,
@@ -158,6 +163,10 @@ public final class MainActivity extends AppCompatActivity {
                     showTab(3);
                 } else if (item.getItemId() == 5) {
                     confirmUnpair();
+                } else if (item.getItemId() == 6) {
+                    com.eurobuddha.maxima.app.board.BoardFlows.newBoard(this);
+                } else if (item.getItemId() == 7) {
+                    com.eurobuddha.maxima.app.board.BoardFlows.joinBoard(this, this::scanTo);
                 }
                 return true;
             });

@@ -4419,4 +4419,55 @@
     <string name="l10n_share_connect" formatted="false">"Підключення для завантаження контактів…"</string>
     <string name="l10n_share_no_contacts" formatted="false">"Додайте контакт у Parlons, потім поділіться файлами знову."</string>
     <string name="l10n_share_photo_too_large" formatted="false">"Фото перевищує ліміт попереднього перегляду. Надішліть його як файл."</string>
+    <string name="l10n_board_title" formatted="false">"Дошки"</string>
+    <string name="l10n_board_new" formatted="false">"Нова дошка"</string>
+    <string name="l10n_board_join" formatted="false">"Увійти"</string>
+    <string name="l10n_board_empty" formatted="false">"Дощок ще немає. Створіть дошку або увійдіть за посиланням."</string>
+    <string name="l10n_board_untitled" formatted="false">"Дошка"</string>
+    <string name="l10n_board_waiting" formatted="false">"Очікування схвалення адміністратора"</string>
+    <!-- Arguments: count -->
+    <string name="l10n_board_open_members">"%1$d учасників · відкрите посилання"</string>
+    <!-- Arguments: count -->
+    <string name="l10n_board_invite_members">"%1$d учасників · лише за запрошенням"</string>
+    <string name="l10n_board_new_help" formatted="false">"Дошка для багатьох: кожен на ній дописує і відповідає, нікому нічого не надсилається. До тисяч учасників."</string>
+    <string name="l10n_board_name" formatted="false">"Назва дошки"</string>
+    <string name="l10n_board_name_required" formatted="false">"Дайте дошці назву."</string>
+    <string name="l10n_board_open_label" formatted="false">"Увійти може будь-хто з посиланням"</string>
+    <string name="l10n_board_open_help" formatted="false">"Вимкнено: люди просять увійти, адміністратор впускає."</string>
+    <string name="l10n_board_create" formatted="false">"Створити дошку"</string>
+    <string name="l10n_board_created" formatted="false">"Дошку створено. Поділіться посиланням, щоб запросити людей."</string>
+    <string name="l10n_board_join_title" formatted="false">"Увійти на дошку"</string>
+    <string name="l10n_board_join_help" formatted="false">"Вставте отримане посилання на дошку (parlons://board/…). Відкрите посилання впускає одразу; посилання за запрошенням надсилає запит адміністратору."</string>
+    <string name="l10n_board_join_button" formatted="false">"Увійти"</string>
+    <string name="l10n_board_joined" formatted="false">"Ви на дошці."</string>
+    <string name="l10n_board_knocked" formatted="false">"Запит надіслано. Адміністратор вас впустить."</string>
+    <string name="l10n_board_link" formatted="false">"Посилання-запрошення"</string>
+    <string name="l10n_board_link_open_help" formatted="false">"Це посилання містить ключ дошки: будь-хто з ним може читати й дописувати. Діліться лише з тими, кого хочете бачити."</string>
+    <string name="l10n_board_link_invite_help" formatted="false">"Ті, хто відкриє це посилання, просять увійти; ви впускаєте їх у відомостях про дошку."</string>
+    <string name="l10n_board_copy_link" formatted="false">"Скопіювати посилання"</string>
+    <string name="l10n_board_share_link" formatted="false">"Поділитися посиланням"</string>
+    <string name="l10n_board_details" formatted="false">"Відомості про дошку"</string>
+    <string name="l10n_board_loading" formatted="false">"Завантаження дошки…"</string>
+    <string name="l10n_board_no_posts" formatted="false">"Поки нічого не написано. Почніть першим."</string>
+    <string name="l10n_board_waiting_long" formatted="false">"Ви попросили увійти. Дописи з’являться, коли адміністратор вас впустить."</string>
+    <string name="l10n_board_post" formatted="false">"Опублікувати"</string>
+    <string name="l10n_board_placeholder" formatted="false">"Написати допис"</string>
+    <string name="l10n_board_reply" formatted="false">"Відповісти"</string>
+    <!-- Arguments: name -->
+    <string name="l10n_board_replying_to">"Відповідь для %1$s"</string>
+    <string name="l10n_board_cancel_reply" formatted="false">"Скасувати відповідь"</string>
+    <string name="l10n_board_knocks" formatted="false">"Просять увійти"</string>
+    <string name="l10n_board_approve" formatted="false">"Впустити"</string>
+    <string name="l10n_board_approved" formatted="false">"Впущено. Ключ надійде через дошку."</string>
+    <string name="l10n_board_members" formatted="false">"Учасники"</string>
+    <string name="l10n_board_members_quiet" formatted="false">"Учасники з’являться тут після першого допису."</string>
+    <string name="l10n_board_remove" formatted="false">"Вилучити"</string>
+    <string name="l10n_board_remove_confirm" formatted="false">"Вилучити учасника? Дошка отримає новий ключ, недоступний йому."</string>
+    <string name="l10n_board_removed" formatted="false">"Вилучено. У дошки новий ключ."</string>
+    <string name="l10n_board_leave" formatted="false">"Залишити дошку"</string>
+    <string name="l10n_board_leave_confirm" formatted="false">"Залишити дошку? Її копію на цьому акаунті буде видалено."</string>
+    <string name="l10n_board_left" formatted="false">"Ви залишили дошку."</string>
+    <string name="l10n_board_invalid_link" formatted="false">"Це не посилання на дошку."</string>
+    <string name="l10n_board_scan" formatted="false">"Сканувати посилання на дошку"</string>
+    <string name="l10n_board_admin" formatted="false">"Адміністратор"</string>
 </resources>

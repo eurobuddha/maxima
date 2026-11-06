@@ -285,3 +285,18 @@ button:disabled { cursor: default; opacity: .55; }
 
 /* Keep the target visible while a file is held over this conversation. */
 #chatpane.file-drop { outline: 3px solid var(--accent, #ff5722); outline-offset: -5px; }
+
+/* ---- boards (post once, read by many) ---- */
+.boards { margin: 0 0 6px; }
+.boards .bhead { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 4px; }
+.boards .bhead .h { font-size: 14px; font-weight: 600; color: var(--subtext); }
+.boards .bhead .acts { display: flex; gap: 6px; }
+.boards .bempty { padding: 0 12px 8px; }
+.replies { margin-left: 28px; }
+.rpill { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 13px; color: var(--subtext); background: var(--card2); border-top: 1px solid var(--line); }
+.rpill span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.mrow.mine .linkbtn { color: var(--boutsub); }
+.sheet .h2 { font-weight: 600; margin: 12px 0 4px; }
+.sheet .blink { font-size: 12px; overflow-wrap: anywhere; margin: 6px 0; user-select: all; }
+.sheet .brow { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; }

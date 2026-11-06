@@ -62,6 +62,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity android:configChanges="locale|layoutDirection|screenLayout"
+            android:name=".board.BoardActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity android:configChanges="locale|layoutDirection|screenLayout"
             android:name=".portal.CloudSettingsActivity"
             android:exported="false" />
 

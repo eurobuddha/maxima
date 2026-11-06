@@ -4419,4 +4419,55 @@
     <string name="l10n_share_connect" formatted="false">"Подключение для загрузки контактов…"</string>
     <string name="l10n_share_no_contacts" formatted="false">"Добавьте контакт в Parlons, затем поделитесь файлами снова."</string>
     <string name="l10n_share_photo_too_large" formatted="false">"Фото превышает лимит предпросмотра. Отправьте его как файл."</string>
+    <string name="l10n_board_title" formatted="false">"Доски"</string>
+    <string name="l10n_board_new" formatted="false">"Новая доска"</string>
+    <string name="l10n_board_join" formatted="false">"Войти"</string>
+    <string name="l10n_board_empty" formatted="false">"Досок пока нет. Создайте доску или войдите по ссылке."</string>
+    <string name="l10n_board_untitled" formatted="false">"Доска"</string>
+    <string name="l10n_board_waiting" formatted="false">"Ожидание одобрения администратора"</string>
+    <!-- Arguments: count -->
+    <string name="l10n_board_open_members">"%1$d участников · открытая ссылка"</string>
+    <!-- Arguments: count -->
+    <string name="l10n_board_invite_members">"%1$d участников · только по приглашению"</string>
+    <string name="l10n_board_new_help" formatted="false">"Доска для многих: каждый на ней пишет и отвечает, никому ничего не отправляется. До тысяч участников."</string>
+    <string name="l10n_board_name" formatted="false">"Название доски"</string>
+    <string name="l10n_board_name_required" formatted="false">"Дайте доске название."</string>
+    <string name="l10n_board_open_label" formatted="false">"Войти может любой, у кого есть ссылка"</string>
+    <string name="l10n_board_open_help" formatted="false">"Выключено: люди просят войти, администратор впускает."</string>
+    <string name="l10n_board_create" formatted="false">"Создать доску"</string>
+    <string name="l10n_board_created" formatted="false">"Доска создана. Поделитесь ссылкой, чтобы пригласить людей."</string>
+    <string name="l10n_board_join_title" formatted="false">"Войти на доску"</string>
+    <string name="l10n_board_join_help" formatted="false">"Вставьте полученную ссылку на доску (parlons://board/…). Открытая ссылка впускает сразу; ссылка по приглашению отправляет запрос администратору."</string>
+    <string name="l10n_board_join_button" formatted="false">"Войти"</string>
+    <string name="l10n_board_joined" formatted="false">"Вы на доске."</string>
+    <string name="l10n_board_knocked" formatted="false">"Запрос отправлен. Администратор вас впустит."</string>
+    <string name="l10n_board_link" formatted="false">"Ссылка-приглашение"</string>
+    <string name="l10n_board_link_open_help" formatted="false">"Эта ссылка содержит ключ доски: любой, у кого она есть, может читать и писать. Делитесь ею только с теми, кого хотите видеть."</string>
+    <string name="l10n_board_link_invite_help" formatted="false">"Открывшие эту ссылку просят войти; вы впускаете их в сведениях о доске."</string>
+    <string name="l10n_board_copy_link" formatted="false">"Скопировать ссылку"</string>
+    <string name="l10n_board_share_link" formatted="false">"Поделиться ссылкой"</string>
+    <string name="l10n_board_details" formatted="false">"Сведения о доске"</string>
+    <string name="l10n_board_loading" formatted="false">"Загрузка доски…"</string>
+    <string name="l10n_board_no_posts" formatted="false">"Пока ничего не написано. Начните первым."</string>
+    <string name="l10n_board_waiting_long" formatted="false">"Вы попросили войти. Записи появятся, когда администратор вас впустит."</string>
+    <string name="l10n_board_post" formatted="false">"Опубликовать"</string>
+    <string name="l10n_board_placeholder" formatted="false">"Написать запись"</string>
+    <string name="l10n_board_reply" formatted="false">"Ответить"</string>
+    <!-- Arguments: name -->
+    <string name="l10n_board_replying_to">"Ответ для %1$s"</string>
+    <string name="l10n_board_cancel_reply" formatted="false">"Отменить ответ"</string>
+    <string name="l10n_board_knocks" formatted="false">"Просят войти"</string>
+    <string name="l10n_board_approve" formatted="false">"Впустить"</string>
+    <string name="l10n_board_approved" formatted="false">"Впущен. Ключ придёт через доску."</string>
+    <string name="l10n_board_members" formatted="false">"Участники"</string>
+    <string name="l10n_board_members_quiet" formatted="false">"Участники появятся здесь после первой записи."</string>
+    <string name="l10n_board_remove" formatted="false">"Удалить"</string>
+    <string name="l10n_board_remove_confirm" formatted="false">"Удалить участника? Доска получит новый ключ, который ему недоступен."</string>
+    <string name="l10n_board_removed" formatted="false">"Удалён. У доски новый ключ."</string>
+    <string name="l10n_board_leave" formatted="false">"Покинуть доску"</string>
+    <string name="l10n_board_leave_confirm" formatted="false">"Покинуть доску? Её копия на этом аккаунте будет удалена."</string>
+    <string name="l10n_board_left" formatted="false">"Вы покинули доску."</string>
+    <string name="l10n_board_invalid_link" formatted="false">"Это не ссылка на доску."</string>
+    <string name="l10n_board_scan" formatted="false">"Сканировать ссылку на доску"</string>
+    <string name="l10n_board_admin" formatted="false">"Администратор"</string>
 </resources>

@@ -124,7 +124,7 @@ public final class SystemMessages {
             case "Queued": return R.string.l10n_files_queued;
             case "Waiting for peers": return R.string.l10n_files_waiting;
             case "Add": return R.string.l10n_common_add;
-            case "Remove": return R.string.l10n_common_remove;
+            case "Remove": return R.string.l10n_board_remove;
             case "Clear": return R.string.l10n_common_clear;
             case "Name": return R.string.l10n_common_name;
             case "Address": return R.string.l10n_common_address;
@@ -146,7 +146,7 @@ public final class SystemMessages {
             case "Only an admin can change the group.": return R.string.l10n_chat_group_admin_only;
             case "Link": return R.string.l10n_link_title;
             case "Open link": return R.string.l10n_link_open;
-            case "Copy link": return R.string.l10n_link_copy;
+            case "Copy link": return R.string.l10n_board_copy_link;
             case "Add contact": return R.string.l10n_contacts_add;
             case "Add a contact": return R.string.l10n_contacts_add_heading;
             case "No contacts yet.": return R.string.l10n_contacts_empty;
@@ -288,7 +288,7 @@ public final class SystemMessages {
         switch (value) {
             case "Contact sent": return R.string.l10n_contacts_sent;
             case "No one else to send it to yet": return R.string.l10n_contacts_none_to_send;
-            case "Share link": return R.string.l10n_link_share;
+            case "Share link": return R.string.l10n_board_share_link;
             case "Copy link to share": return R.string.l10n_link_copy_to_share;
             case "Could not share this link. Use Copy link instead.": return R.string.l10n_link_share_failed;
             case "Update Parlons to open this file": return R.string.l10n_files_update_required;
@@ -1063,7 +1063,7 @@ public final class SystemMessages {
             case "No contacts yet. Add someone in the Contacts tab first.": return R.string.l10n_desktop_chat_add_contacts;
             case "Add some contacts first.": return R.string.l10n_desktop_chat_contacts_first;
             case "Pick at least one person.": return R.string.l10n_desktop_chat_pick_person;
-            case "Members": return R.string.l10n_desktop_chat_members;
+            case "Members": return R.string.l10n_board_members;
             default: return 0;
         }
     }
@@ -2048,7 +2048,7 @@ public final class SystemMessages {
             case "burn (optional, e.g. 0.1)": return R.string.l10n_txn_workbench_burn_hint;
             case "Post transaction": return R.string.l10n_txn_workbench_post_title;
             case "This broadcasts on-chain. Success = status:true; the PoW mines asynchronously so istransaction:false at return is NORMAL — do not re-post, watch the chain instead. Did you run Sign then Basics?": return R.string.l10n_txn_workbench_post_body;
-            case "Post": return R.string.l10n_txn_workbench_post;
+            case "Post": return R.string.l10n_board_post;
             case "posted — status:true means accepted; it mines over the next blocks": return R.string.l10n_txn_workbench_posted;
             case "… exporting": return R.string.l10n_txn_workbench_exporting;
             case "no data": return R.string.l10n_txn_workbench_no_data;
@@ -3323,6 +3323,45 @@ public final class SystemMessages {
             case "Connecting to load your contacts…": return R.string.l10n_share_connect;
             case "Add a contact in Parlons, then share your files again.": return R.string.l10n_share_no_contacts;
             case "Photo exceeds preview limit. Send it as a file.": return R.string.l10n_share_photo_too_large;
+            case "Boards": return R.string.l10n_board_title;
+            case "New board": return R.string.l10n_board_new;
+            case "Join": return R.string.l10n_board_join_button;
+            case "No boards yet. Make one, or join one from a link.": return R.string.l10n_board_empty;
+            case "Board": return R.string.l10n_board_untitled;
+            case "Waiting for an admin to let you in": return R.string.l10n_board_waiting;
+            case "A board is for many people: everyone on it posts and replies, nothing is sent to anyone. Up to thousands of members.": return R.string.l10n_board_new_help;
+            case "Board name": return R.string.l10n_board_name;
+            case "Give the board a name.": return R.string.l10n_board_name_required;
+            case "Anyone with the link can join": return R.string.l10n_board_open_label;
+            case "Off: people ask to join and an admin lets them in.": return R.string.l10n_board_open_help;
+            case "Create board": return R.string.l10n_board_create;
+            case "Board created. Share the link to bring people in.": return R.string.l10n_board_created;
+            case "Join a board": return R.string.l10n_board_join_title;
+            case "Paste the board link you were given (parlons://board/…). An open link lets you in at once; an invite-only one asks the admin.": return R.string.l10n_board_join_help;
+            case "You are on the board.": return R.string.l10n_board_joined;
+            case "Asked to join. The admin will let you in.": return R.string.l10n_board_knocked;
+            case "Invite link": return R.string.l10n_board_link;
+            case "This link carries the board key: anyone who has it can read and post. Share it with people you want in.": return R.string.l10n_board_link_open_help;
+            case "People who open this link ask to join; you let them in from the board details.": return R.string.l10n_board_link_invite_help;
+            case "Board details": return R.string.l10n_board_details;
+            case "Loading the board…": return R.string.l10n_board_loading;
+            case "Nothing posted yet. Start it off.": return R.string.l10n_board_no_posts;
+            case "You asked to join. Posts appear once an admin lets you in.": return R.string.l10n_board_waiting_long;
+            case "Write a post": return R.string.l10n_board_placeholder;
+            case "Reply": return R.string.l10n_board_reply;
+            case "Cancel reply": return R.string.l10n_board_cancel_reply;
+            case "Asking to join": return R.string.l10n_board_knocks;
+            case "Let in": return R.string.l10n_board_approve;
+            case "Let in. They get the key through the board.": return R.string.l10n_board_approved;
+            case "Members show here once they post.": return R.string.l10n_board_members_quiet;
+            case "Remove this member? The board gets a new key they cannot open.": return R.string.l10n_board_remove_confirm;
+            case "Removed. The board has a new key.": return R.string.l10n_board_removed;
+            case "Leave board": return R.string.l10n_board_leave;
+            case "Leave this board? Your copy of it is deleted on this account.": return R.string.l10n_board_leave_confirm;
+            case "You left the board.": return R.string.l10n_board_left;
+            case "That is not a board link.": return R.string.l10n_board_invalid_link;
+            case "Scan a board link": return R.string.l10n_board_scan;
+            case "Admin": return R.string.l10n_board_admin;
             default: return 0;
         }
     }

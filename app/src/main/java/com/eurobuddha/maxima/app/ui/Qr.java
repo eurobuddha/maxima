@@ -14,12 +14,12 @@ import java.util.Map;
 
 /** Render a string to a QR bitmap. A Maxima contact address is ~273 chars, so
  *  a roomy quiet zone + medium ECC keeps it scannable. */
-final class Qr {
+public final class Qr {
 
     private Qr() {
     }
 
-    static Bitmap encode(String zText, int zSizePx) {
+    public static Bitmap encode(String zText, int zSizePx) {
         try {
             Map<EncodeHintType, Object> hints = new HashMap<>();
             hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M);

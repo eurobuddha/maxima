@@ -613,6 +613,11 @@ public final class CloudContactsPage implements Page {
             mAct.toast(tr(R.string.l10n_native_contacts_paste_first));
             return;
         }
+        // A board link (pasted or scanned) joins the board rather than adding a contact.
+        if (com.eurobuddha.maxima.core.board.BoardLink.isLink(address)) {
+            com.eurobuddha.maxima.app.board.BoardFlows.join(mAct, address);
+            return;
+        }
         // Mirror the app's introduceAddr guard: a Parlons address is Mx…@host:port or a MAX#…
         // permanent address. Reject anything else up-front and KEEP the field so it can be fixed.
         if (!address.startsWith("Mx") && !address.startsWith("MAX#")) {

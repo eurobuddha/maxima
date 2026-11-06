@@ -110,6 +110,12 @@
             android:parentActivityName=".MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity android:configChanges="locale|layoutDirection|screenLayout"
+            android:name=".board.BoardActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".MaximaService"
             android:enabled="true"

@@ -493,6 +493,10 @@ public final class ContactsPage implements Page {
             mAct.toast(tr(R.string.l10n_native_contacts_paste_mx));
             return false;
         }
+        // A board link (pasted or scanned) joins the board rather than adding a contact.
+        if (com.eurobuddha.maxima.core.board.BoardLink.isLink(addr)) {
+            return com.eurobuddha.maxima.app.board.BoardFlows.join(mAct, addr);
+        }
         final com.eurobuddha.maxima.core.ChatPort node = MaximaService.port();
         if (node == null) {
             mAct.toast(tr(R.string.l10n_native_chat_transport_stopped));

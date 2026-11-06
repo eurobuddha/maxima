@@ -145,6 +145,13 @@ public final class MaximaService extends Service {
         return sChat;
     }
 
+    /** Boards (post once, read by many) - built-in engine only; null in jar mode. */
+    private static volatile com.eurobuddha.maxima.core.board.BoardEngine sBoards;
+
+    public static com.eurobuddha.maxima.core.board.BoardEngine boards() {
+        return sBoards;
+    }
+
     public static com.eurobuddha.maxima.app.direct.DirectReachability direct() {
         return sDirect;
     }
@@ -301,6 +308,21 @@ public final class MaximaService extends Service {
         sChat = chat;
         com.eurobuddha.maxima.app.chat.ChatNotifier.createChannel(this);
         com.eurobuddha.maxima.app.chat.Pssst.ensureAudible(this);
+        // Boards share the chat store directory (their own collections and logs). Loaded OFF
+        // the main thread: every board derives a pseudonym (an RSA keygen, 25-80 ms each).
+        final com.eurobuddha.maxima.core.board.BoardEngine boards =
+                new com.eurobuddha.maxima.core.board.BoardEngine(sNode);
+        sBoards = boards;
+        new Thread(() -> {
+            try {
+                boards.setStore(com.eurobuddha.maxima.core.store.FileStore.coalescing(
+                        new java.io.File(getFilesDir(), "chat"), 2000));
+                com.eurobuddha.maxima.app.board.BoardSource.Holder.set(
+                        new com.eurobuddha.maxima.app.board.LocalBoardSource(boards));
+            } catch (Exception e) {
+                EventLog.add("boards unavailable: " + e.getMessage());
+            }
+        }, "boards-load").start();
 
         // Surface inbound chat so the UI has something to show. Anything that
         // is not ours is logged too - silence is the enemy of debugging on a
@@ -760,6 +782,12 @@ public final class MaximaService extends Service {
                             mt.setDaemon(true);
                             mt.start();
                         }
+                        // Boards pull their deltas on the same beat (their network work runs
+                        // on their own lane, never here).
+                        final com.eurobuddha.maxima.core.board.BoardEngine bb = sBoards;
+                        if (bb != null) {
+                            try { bb.tick(); } catch (Exception e) { Log.w(TAG, "boards: " + e); }
+                        }
                         // Write-behind: state changes are batched, so they must
                         // actually be flushed on the heartbeat.
                         if (sChat != null) {
@@ -987,6 +1015,12 @@ public final class MaximaService extends Service {
         }
         if (sFileCommands != null) { sFileCommands.close(); sFileCommands = null; }
         if (sPrivateFiles != null) { sPrivateFiles.close(); sPrivateFiles = null; }
+        com.eurobuddha.maxima.app.board.BoardSource.Holder.set(null);
+        final com.eurobuddha.maxima.core.board.BoardEngine bd = sBoards;
+        if (bd != null) {
+            try { bd.flush(); bd.stop(); } catch (Exception ignored) { }
+            sBoards = null;
+        }
         MaximaNode n = sNode;
         if (n != null) {
             n.stop();

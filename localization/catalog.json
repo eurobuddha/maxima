@@ -23110,5 +23110,293 @@
     "zh-Hans": "照片超出预览大小限制。请作为文件发送。",
     "ru": "Фото превышает лимит предпросмотра. Отправьте его как файл.",
     "uk": "Фото перевищує ліміт попереднього перегляду. Надішліть його як файл."
+  },
+  "board.title": {
+    "en": "Boards",
+    "zh-Hans": "布告板",
+    "ru": "Доски",
+    "uk": "Дошки"
+  },
+  "board.new": {
+    "en": "New board",
+    "zh-Hans": "新建布告板",
+    "ru": "Новая доска",
+    "uk": "Нова дошка"
+  },
+  "board.join": {
+    "en": "Join",
+    "zh-Hans": "加入",
+    "ru": "Войти",
+    "uk": "Увійти"
+  },
+  "board.empty": {
+    "en": "No boards yet. Make one, or join one from a link.",
+    "zh-Hans": "还没有布告板。创建一个，或通过链接加入。",
+    "ru": "Досок пока нет. Создайте доску или войдите по ссылке.",
+    "uk": "Дощок ще немає. Створіть дошку або увійдіть за посиланням."
+  },
+  "board.untitled": {
+    "en": "Board",
+    "zh-Hans": "布告板",
+    "ru": "Доска",
+    "uk": "Дошка"
+  },
+  "board.waiting": {
+    "en": "Waiting for an admin to let you in",
+    "zh-Hans": "等待管理员批准加入",
+    "ru": "Ожидание одобрения администратора",
+    "uk": "Очікування схвалення адміністратора"
+  },
+  "board.openMembers": {
+    "en": "{count} members · open link",
+    "zh-Hans": "{count} 位成员 · 公开链接",
+    "ru": "{count} участников · открытая ссылка",
+    "uk": "{count} учасників · відкрите посилання"
+  },
+  "board.inviteMembers": {
+    "en": "{count} members · invite only",
+    "zh-Hans": "{count} 位成员 · 仅限邀请",
+    "ru": "{count} участников · только по приглашению",
+    "uk": "{count} учасників · лише за запрошенням"
+  },
+  "board.newHelp": {
+    "en": "A board is for many people: everyone on it posts and replies, nothing is sent to anyone. Up to thousands of members.",
+    "zh-Hans": "布告板面向许多人：板上的每个人都可以发帖和回复，不会向任何人单独发送。成员可达数千人。",
+    "ru": "Доска для многих: каждый на ней пишет и отвечает, никому ничего не отправляется. До тысяч участников.",
+    "uk": "Дошка для багатьох: кожен на ній дописує і відповідає, нікому нічого не надсилається. До тисяч учасників."
+  },
+  "board.name": {
+    "en": "Board name",
+    "zh-Hans": "布告板名称",
+    "ru": "Название доски",
+    "uk": "Назва дошки"
+  },
+  "board.nameRequired": {
+    "en": "Give the board a name.",
+    "zh-Hans": "请为布告板命名。",
+    "ru": "Дайте доске название.",
+    "uk": "Дайте дошці назву."
+  },
+  "board.openLabel": {
+    "en": "Anyone with the link can join",
+    "zh-Hans": "任何持有链接的人都可以加入",
+    "ru": "Войти может любой, у кого есть ссылка",
+    "uk": "Увійти може будь-хто з посиланням"
+  },
+  "board.openHelp": {
+    "en": "Off: people ask to join and an admin lets them in.",
+    "zh-Hans": "关闭后：申请加入，由管理员批准。",
+    "ru": "Выключено: люди просят войти, администратор впускает.",
+    "uk": "Вимкнено: люди просять увійти, адміністратор впускає."
+  },
+  "board.create": {
+    "en": "Create board",
+    "zh-Hans": "创建布告板",
+    "ru": "Создать доску",
+    "uk": "Створити дошку"
+  },
+  "board.created": {
+    "en": "Board created. Share the link to bring people in.",
+    "zh-Hans": "布告板已创建。分享链接邀请他人。",
+    "ru": "Доска создана. Поделитесь ссылкой, чтобы пригласить людей.",
+    "uk": "Дошку створено. Поділіться посиланням, щоб запросити людей."
+  },
+  "board.joinTitle": {
+    "en": "Join a board",
+    "zh-Hans": "加入布告板",
+    "ru": "Войти на доску",
+    "uk": "Увійти на дошку"
+  },
+  "board.joinHelp": {
+    "en": "Paste the board link you were given (parlons://board/…). An open link lets you in at once; an invite-only one asks the admin.",
+    "zh-Hans": "粘贴收到的布告板链接（parlons://board/…）。公开链接可立即加入；仅限邀请的链接会向管理员申请。",
+    "ru": "Вставьте полученную ссылку на доску (parlons://board/…). Открытая ссылка впускает сразу; ссылка по приглашению отправляет запрос администратору.",
+    "uk": "Вставте отримане посилання на дошку (parlons://board/…). Відкрите посилання впускає одразу; посилання за запрошенням надсилає запит адміністратору."
+  },
+  "board.joinButton": {
+    "en": "Join",
+    "zh-Hans": "加入",
+    "ru": "Войти",
+    "uk": "Увійти"
+  },
+  "board.joined": {
+    "en": "You are on the board.",
+    "zh-Hans": "你已加入布告板。",
+    "ru": "Вы на доске.",
+    "uk": "Ви на дошці."
+  },
+  "board.knocked": {
+    "en": "Asked to join. The admin will let you in.",
+    "zh-Hans": "已申请加入，等待管理员批准。",
+    "ru": "Запрос отправлен. Администратор вас впустит.",
+    "uk": "Запит надіслано. Адміністратор вас впустить."
+  },
+  "board.link": {
+    "en": "Invite link",
+    "zh-Hans": "邀请链接",
+    "ru": "Ссылка-приглашение",
+    "uk": "Посилання-запрошення"
+  },
+  "board.linkOpenHelp": {
+    "en": "This link carries the board key: anyone who has it can read and post. Share it with people you want in.",
+    "zh-Hans": "此链接包含布告板密钥：持有者都能阅读和发帖。只分享给你想邀请的人。",
+    "ru": "Эта ссылка содержит ключ доски: любой, у кого она есть, может читать и писать. Делитесь ею только с теми, кого хотите видеть.",
+    "uk": "Це посилання містить ключ дошки: будь-хто з ним може читати й дописувати. Діліться лише з тими, кого хочете бачити."
+  },
+  "board.linkInviteHelp": {
+    "en": "People who open this link ask to join; you let them in from the board details.",
+    "zh-Hans": "打开此链接的人会申请加入；你在布告板详情中批准。",
+    "ru": "Открывшие эту ссылку просят войти; вы впускаете их в сведениях о доске.",
+    "uk": "Ті, хто відкриє це посилання, просять увійти; ви впускаєте їх у відомостях про дошку."
+  },
+  "board.copyLink": {
+    "en": "Copy link",
+    "zh-Hans": "复制链接",
+    "ru": "Скопировать ссылку",
+    "uk": "Скопіювати посилання"
+  },
+  "board.shareLink": {
+    "en": "Share link",
+    "zh-Hans": "分享链接",
+    "ru": "Поделиться ссылкой",
+    "uk": "Поділитися посиланням"
+  },
+  "board.details": {
+    "en": "Board details",
+    "zh-Hans": "布告板详情",
+    "ru": "Сведения о доске",
+    "uk": "Відомості про дошку"
+  },
+  "board.loading": {
+    "en": "Loading the board…",
+    "zh-Hans": "正在加载布告板…",
+    "ru": "Загрузка доски…",
+    "uk": "Завантаження дошки…"
+  },
+  "board.noPosts": {
+    "en": "Nothing posted yet. Start it off.",
+    "zh-Hans": "还没有帖子。来开个头吧。",
+    "ru": "Пока ничего не написано. Начните первым.",
+    "uk": "Поки нічого не написано. Почніть першим."
+  },
+  "board.waitingLong": {
+    "en": "You asked to join. Posts appear once an admin lets you in.",
+    "zh-Hans": "你已申请加入。管理员批准后会显示帖子。",
+    "ru": "Вы попросили войти. Записи появятся, когда администратор вас впустит.",
+    "uk": "Ви попросили увійти. Дописи з’являться, коли адміністратор вас впустить."
+  },
+  "board.post": {
+    "en": "Post",
+    "zh-Hans": "发帖",
+    "ru": "Опубликовать",
+    "uk": "Опублікувати"
+  },
+  "board.placeholder": {
+    "en": "Write a post",
+    "zh-Hans": "写一条帖子",
+    "ru": "Написать запись",
+    "uk": "Написати допис"
+  },
+  "board.reply": {
+    "en": "Reply",
+    "zh-Hans": "回复",
+    "ru": "Ответить",
+    "uk": "Відповісти"
+  },
+  "board.replyingTo": {
+    "en": "Replying to {name}",
+    "zh-Hans": "回复 {name}",
+    "ru": "Ответ для {name}",
+    "uk": "Відповідь для {name}"
+  },
+  "board.cancelReply": {
+    "en": "Cancel reply",
+    "zh-Hans": "取消回复",
+    "ru": "Отменить ответ",
+    "uk": "Скасувати відповідь"
+  },
+  "board.knocks": {
+    "en": "Asking to join",
+    "zh-Hans": "申请加入",
+    "ru": "Просят войти",
+    "uk": "Просять увійти"
+  },
+  "board.approve": {
+    "en": "Let in",
+    "zh-Hans": "批准",
+    "ru": "Впустить",
+    "uk": "Впустити"
+  },
+  "board.approved": {
+    "en": "Let in. They get the key through the board.",
+    "zh-Hans": "已批准。对方会通过布告板收到密钥。",
+    "ru": "Впущен. Ключ придёт через доску.",
+    "uk": "Впущено. Ключ надійде через дошку."
+  },
+  "board.members": {
+    "en": "Members",
+    "zh-Hans": "成员",
+    "ru": "Участники",
+    "uk": "Учасники"
+  },
+  "board.membersQuiet": {
+    "en": "Members show here once they post.",
+    "zh-Hans": "成员发帖后会显示在这里。",
+    "ru": "Участники появятся здесь после первой записи.",
+    "uk": "Учасники з’являться тут після першого допису."
+  },
+  "board.remove": {
+    "en": "Remove",
+    "zh-Hans": "移除",
+    "ru": "Удалить",
+    "uk": "Вилучити"
+  },
+  "board.removeConfirm": {
+    "en": "Remove this member? The board gets a new key they cannot open.",
+    "zh-Hans": "移除此成员？布告板将换用对方无法打开的新密钥。",
+    "ru": "Удалить участника? Доска получит новый ключ, который ему недоступен.",
+    "uk": "Вилучити учасника? Дошка отримає новий ключ, недоступний йому."
+  },
+  "board.removed": {
+    "en": "Removed. The board has a new key.",
+    "zh-Hans": "已移除。布告板已换用新密钥。",
+    "ru": "Удалён. У доски новый ключ.",
+    "uk": "Вилучено. У дошки новий ключ."
+  },
+  "board.leave": {
+    "en": "Leave board",
+    "zh-Hans": "退出布告板",
+    "ru": "Покинуть доску",
+    "uk": "Залишити дошку"
+  },
+  "board.leaveConfirm": {
+    "en": "Leave this board? Your copy of it is deleted on this account.",
+    "zh-Hans": "退出此布告板？此账户上的副本将被删除。",
+    "ru": "Покинуть доску? Её копия на этом аккаунте будет удалена.",
+    "uk": "Залишити дошку? Її копію на цьому акаунті буде видалено."
+  },
+  "board.left": {
+    "en": "You left the board.",
+    "zh-Hans": "你已退出布告板。",
+    "ru": "Вы покинули доску.",
+    "uk": "Ви залишили дошку."
+  },
+  "board.invalidLink": {
+    "en": "That is not a board link.",
+    "zh-Hans": "这不是布告板链接。",
+    "ru": "Это не ссылка на доску.",
+    "uk": "Це не посилання на дошку."
+  },
+  "board.scan": {
+    "en": "Scan a board link",
+    "zh-Hans": "扫描布告板链接",
+    "ru": "Сканировать ссылку на доску",
+    "uk": "Сканувати посилання на дошку"
+  },
+  "board.admin": {
+    "en": "Admin",
+    "zh-Hans": "管理员",
+    "ru": "Администратор",
+    "uk": "Адміністратор"
   }
 }

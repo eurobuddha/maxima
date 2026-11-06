@@ -113,7 +113,36 @@ public final class CloudChatsPage implements Page {
         return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_chats);
     }
 
+    /** A board row's key, so the one list holds boards above conversations. */
+    private static final String BOARD_PREFIX = "board:";
+
+    private List<Row> boardRows(JSONObject res) {
+        List<Row> rows = new ArrayList<>();
+        JSONArray arr = (JSONArray) res.get("boards");
+        if (arr != null) {
+            for (Object o : arr) {
+                JSONObject b = (JSONObject) o;
+                Row row = new Row();
+                row.key = BOARD_PREFIX + str(b, "id");
+                row.name = str(b, "name");
+                if (row.name.isEmpty()) {
+                    row.name = tr(R.string.l10n_board_untitled);
+                }
+                row.preview = bool(b, "joining") ? tr(R.string.l10n_board_waiting)
+                        : tr(bool(b, "open") ? R.string.l10n_board_open_members : R.string.l10n_board_invite_members, (int) lng(b, "members"));
+                row.time = lng(b, "lastActivity");
+                row.unread = (int) lng(b, "unread");
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
     private void open(Row r) {
+        if (r.key.startsWith(BOARD_PREFIX)) {
+            com.eurobuddha.maxima.app.board.BoardFlows.open(mAct, r.key.substring(BOARD_PREFIX.length()));
+            return;
+        }
         Intent i = new Intent(mAct, CloudChatActivity.class);
         i.putExtra(CloudChatActivity.EXTRA_PEER, r.key);
         i.putExtra(CloudChatActivity.EXTRA_NAME, r.name);
@@ -225,6 +254,11 @@ public final class CloudChatsPage implements Page {
                     JSONObject res = r.summaries();
                     got = parseRows(res);
                     CloudSession.cache(mAct, "summaries", res.toString());
+                    try {
+                        got.addAll(0, boardRows(r.boards()));
+                    } catch (Exception ignored) {
+                        // an older account without boards still lists its chats
+                    }
                 } catch (Exception e) {
                     error = e.getMessage() == null ? e.toString() : e.getMessage();
                 }

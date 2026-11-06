@@ -236,6 +236,7 @@
   }
 
   const privateFiles = window.ParlonsFiles.create({ api, sheet, closeSheet, esc, toast });
+  const boards = window.ParlonsBoards.create({ api, sheet, closeSheet, esc, toast, el, go, ic, avatar, drawQr, listTime, label, $, copy });
 
   // ---------- routing ----------
   function go(hash) { location.hash = hash; }
@@ -244,7 +245,13 @@
   function render() {
     const h = location.hash.replace(/^#/, '') || 'chats';
     const [route, arg] = h.split('/');
-    if (route === 'chat' && arg) { openChat(decodeURIComponent(arg)); if (S.route !== 'chats') { S.route = 'chats'; renderChats(); } setTab('chats'); return; }
+    if (route === 'chat' && arg) { boards.close(); openChat(decodeURIComponent(arg)); if (S.route !== 'chats') { S.route = 'chats'; renderChats(); } setTab('chats'); return; }
+    if (route === 'board' && arg) {
+      S.open = null; S.msgs = []; ++openSeq;
+      if (S.route !== 'chats') { S.route = 'chats'; renderChats(); } else renderChatsList();
+      setTab('chats'); boards.open(decodeURIComponent(arg)); return;
+    }
+    boards.close();
     closeSheet();
     S.open = null; S.msgs = []; ++openSeq; olderBusy = false; seekingMessage = false; searchTarget = null;
     $('chatpane').innerHTML = '<div class="ground"><div class="groundText" data-i18n="chat.pick"><span data-i18n="chat.pick">Pick a conversation.</span></div></div>'; I.apply($('chatpane'));
@@ -283,6 +290,7 @@
       let t = null; f.addEventListener('input', () => { S.search = f.value; clearTimeout(t); t = setTimeout(renderChatsList, 200); });
       page.appendChild(f);
     }
+    boards.strip(page);
     page.appendChild(el('<div class="convs" id="convs"></div>'));
     const fab = el('<button class="fab" id="fab" title="New group" data-i18n-title="chat.newGroup">' + ic('newchat') + '</button>');
     fab.addEventListener('click', newGroup);

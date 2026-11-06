@@ -164,6 +164,8 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
             m.getMenu().add(0, 2, 2, Language.text(this, R.string.l10n_common_scan_qr));
             m.getMenu().add(0, 3, 3, Language.text(this, R.string.l10n_common_search));
             m.getMenu().add(0, 4, 4, Language.text(this, R.string.l10n_nav_settings));
+            m.getMenu().add(0, 5, 5, Language.text(this, R.string.l10n_board_new));
+            m.getMenu().add(0, 6, 6, Language.text(this, R.string.l10n_board_join_title));
             m.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == 1) {
                     showTab(0);
@@ -179,6 +181,10 @@ public final class MainActivity extends AppCompatActivity implements ChatEngine.
                             com.eurobuddha.maxima.app.ui.SearchActivity.class));
                 } else if (item.getItemId() == 4) {
                     showTab(4);
+                } else if (item.getItemId() == 5) {
+                    com.eurobuddha.maxima.app.board.BoardFlows.newBoard(this);
+                } else if (item.getItemId() == 6) {
+                    com.eurobuddha.maxima.app.board.BoardFlows.joinBoard(this, sink -> scanQr(sink::accept));
                 }
                 return true;
             });

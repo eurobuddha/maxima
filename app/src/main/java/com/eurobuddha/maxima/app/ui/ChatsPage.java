@@ -94,7 +94,14 @@ public final class ChatsPage implements Page {
         return com.eurobuddha.maxima.app.i18n.Language.msg(com.eurobuddha.maxima.app.R.string.l10n_nav_chats);
     }
 
+    /** A board row's key, so the one list holds boards above conversations. */
+    private static final String BOARD_PREFIX = "board:";
+
     private void open(String zConversation) {
+        if (zConversation.startsWith(BOARD_PREFIX)) {
+            com.eurobuddha.maxima.app.board.BoardFlows.open(mAct, zConversation.substring(BOARD_PREFIX.length()));
+            return;
+        }
         Intent i = new Intent(mAct, ChatActivity.class);
         i.putExtra(ChatActivity.EXTRA_CONVERSATION, zConversation);
         mAct.startActivity(i);
@@ -115,6 +122,24 @@ public final class ChatsPage implements Page {
         // until you have already messaged them is useless for starting.
         List<Row> rows = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
+        // Boards first: the many-member rooms, read from the local engine (cheap).
+        com.eurobuddha.maxima.app.board.BoardSource bs = com.eurobuddha.maxima.app.board.BoardSource.Holder.get();
+        if (bs != null) {
+            try {
+                for (com.eurobuddha.maxima.app.board.BoardSource.BoardRow b : bs.boards()) {
+                    Row r = new Row();
+                    r.key = BOARD_PREFIX + b.id;
+                    r.name = b.name.isEmpty() ? tr(R.string.l10n_board_untitled) : b.name;
+                    r.preview = b.joining ? tr(R.string.l10n_board_waiting)
+                            : tr(b.open ? R.string.l10n_board_open_members : R.string.l10n_board_invite_members, b.members);
+                    r.time = b.lastActivity;
+                    r.unread = b.unread;
+                    rows.add(r);
+                }
+            } catch (Exception ignored) {
+                // the list is still useful without boards
+            }
+        }
         for (ChatEngine.Summary s : chat.summaries()) {
             Row r = new Row();
             r.key = s.conversation;
