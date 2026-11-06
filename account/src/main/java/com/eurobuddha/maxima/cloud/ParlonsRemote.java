@@ -693,6 +693,87 @@ public final class ParlonsRemote {
     }
 
     /** Group roster + admins. */
+    // ---- boards (post once, read by many) ----
+
+    public JSONObject boards() throws Exception {
+        return rpc(ParlonsControl.M_BOARD_LIST, new JSONObject());
+    }
+
+    public JSONObject createBoard(String zName, boolean zOpen) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("name", zName);
+        p.put("open", zOpen);
+        return rpc(ParlonsControl.M_BOARD_CREATE, p);
+    }
+
+    public JSONObject joinBoard(String zLink) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("link", zLink);
+        return rpc(ParlonsControl.M_BOARD_JOIN, p);
+    }
+
+    public JSONObject boardLink(String zId) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        return rpc(ParlonsControl.M_BOARD_LINK, p);
+    }
+
+    public JSONObject boardPosts(String zId, int zLimit) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        p.put("limit", zLimit);
+        return rpc(ParlonsControl.M_BOARD_POSTS, p);
+    }
+
+    public JSONObject boardPost(String zId, String zBody, String zRe) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        p.put("body", zBody);
+        if (zRe != null && !zRe.isEmpty()) {
+            p.put("re", zRe);
+        }
+        return rpc(ParlonsControl.M_BOARD_POST, p);
+    }
+
+    public JSONObject boardKnocks(String zId) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        return rpc(ParlonsControl.M_BOARD_KNOCKS, p);
+    }
+
+    public JSONObject boardApprove(String zId, String zFp) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        p.put("fp", zFp);
+        return rpc(ParlonsControl.M_BOARD_APPROVE, p);
+    }
+
+    public JSONObject boardRemove(String zId, String zFp) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        p.put("fp", zFp);
+        return rpc(ParlonsControl.M_BOARD_REMOVE, p);
+    }
+
+    public JSONObject boardRename(String zId, String zName) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        p.put("name", zName);
+        return rpc(ParlonsControl.M_BOARD_RENAME, p);
+    }
+
+    public JSONObject boardLeave(String zId) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        return rpc(ParlonsControl.M_BOARD_LEAVE, p);
+    }
+
+    public JSONObject boardMarkRead(String zId) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("id", zId);
+        return rpc(ParlonsControl.M_BOARD_READ, p);
+    }
+
     public JSONObject groupInfo(String zId) throws Exception {
         JSONObject p = new JSONObject();
         p.put("id", zId);

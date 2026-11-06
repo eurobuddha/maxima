@@ -249,6 +249,16 @@ public final class RelayRuntime {
         // ciphertext we hold for offline peers.
         relay.setStore(new com.eurobuddha.maxima.core.store.FileStore(
                 mDataDir.resolve("relaystore").toFile()));
+        // The board shelf (post once, read by many) on every POOL relay, under <data>/boards.
+        // Opt out with -Dparlons.boards=false. Non-pool relays (a phone's) never host boards.
+        if (mPool && Boolean.parseBoolean(System.getProperty("parlons.boards", "true"))) {
+            com.eurobuddha.maxima.core.board.BoardShelf shelf = new com.eurobuddha.maxima.core.board.BoardShelf();
+            com.eurobuddha.maxima.core.store.FileStore bs = new com.eurobuddha.maxima.core.store.FileStore(
+                    mDataDir.resolve("boards").toFile());
+            bs.setWriteBehind(true);
+            shelf.setStore(bs);
+            relay.setBoardShelf(shelf);
+        }
         // The media shelf: self-hosted media parked here survives a phone
         // sleeping. Content-addressed, byte-capped, LRU — lives under <data>/blobs.
         if (mBlobBytes > 0) {

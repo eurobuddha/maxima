@@ -68,6 +68,19 @@ public final class ParlonsControl implements AutoCloseable {
     public static final String M_CHAT_SEARCH  = "parlons.chat.search";
     public static final String M_GROUP_INFO   = "parlons.group.info";
     public static final String M_GROUP_UPDATE = "parlons.group.update";
+    /** Boards: post once, read by many - the 1,000+ member "group" (core/board). */
+    public static final String M_BOARD_CREATE = "parlons.board.create";
+    public static final String M_BOARD_JOIN   = "parlons.board.join";
+    public static final String M_BOARD_LIST   = "parlons.board.list";
+    public static final String M_BOARD_POSTS  = "parlons.board.posts";
+    public static final String M_BOARD_POST   = "parlons.board.post";
+    public static final String M_BOARD_LINK   = "parlons.board.link";
+    public static final String M_BOARD_KNOCKS = "parlons.board.knocks";
+    public static final String M_BOARD_APPROVE = "parlons.board.approve";
+    public static final String M_BOARD_REMOVE = "parlons.board.remove";
+    public static final String M_BOARD_RENAME = "parlons.board.rename";
+    public static final String M_BOARD_LEAVE  = "parlons.board.leave";
+    public static final String M_BOARD_READ   = "parlons.board.markread";
     public static final String M_CONTACT_INFO = "parlons.contacts.info";
     public static final String M_NODE_LOG     = "parlons.node.log";
     public static final String M_NODE_FIGURES = "parlons.node.figures";
@@ -2239,6 +2252,195 @@ public final class ParlonsControl implements AutoCloseable {
             out.put("address", addr);
             out.put("balance", (JSONObject) cached[0]);
             return bytes(out);
+        });
+
+        registerBoards(zReg);
+    }
+
+    // ---- boards: the many-member "group" that never fans out (core/board/BoardEngine) ----
+
+    private volatile com.eurobuddha.maxima.core.board.BoardEngine mBoards;
+
+    public void setBoards(com.eurobuddha.maxima.core.board.BoardEngine zBoards) {
+        mBoards = zBoards;
+    }
+
+    private com.eurobuddha.maxima.core.board.BoardEngine boards() {
+        com.eurobuddha.maxima.core.board.BoardEngine b = mBoards;
+        if (b == null) {
+            throw new IllegalStateException("boards are not available on this account");
+        }
+        return b;
+    }
+
+    private JSONObject boardJson(com.eurobuddha.maxima.core.board.BoardEngine.Board b) {
+        JSONObject o = new JSONObject();
+        o.put("id", b.id);
+        o.put("name", safe(b.name));
+        o.put("open", b.open);
+        o.put("admin", b.iAmAdmin());
+        o.put("canPost", b.canPost());
+        o.put("joining", b.joining);
+        o.put("members", b.memberCount());
+        o.put("epoch", b.epoch);
+        o.put("lastActivity", b.lastActivity);
+        o.put("unread", boards().unread(b));
+        o.put("me", safe(b.myFingerprint()));
+        return o;
+    }
+
+    private static JSONObject entryJson(com.eurobuddha.maxima.core.board.BoardEngine.Board b,
+                                        com.eurobuddha.maxima.core.board.BoardEngine.Entry e) {
+        JSONObject o = new JSONObject();
+        o.put("id", e.id);
+        o.put("from", e.from);
+        o.put("name", b.nameOf(e.from));
+        o.put("address", b.cardOf(e.from));
+        o.put("ts", e.ts);
+        o.put("re", e.re);
+        o.put("body", e.body());
+        o.put("mine", e.mine);
+        return o;
+    }
+
+    private void registerBoards(ServiceRegistry zReg) {
+        zReg.register(M_BOARD_LIST, req -> {
+            requireAuth(req);
+            JSONArray arr = new JSONArray();
+            for (com.eurobuddha.maxima.core.board.BoardEngine.Board b : boards().boards()) {
+                arr.add(boardJson(b));
+            }
+            JSONObject out = ok();
+            out.put("boards", arr);
+            return bytes(out);
+        });
+        zReg.register(M_BOARD_CREATE, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String name = str(in, "name").trim();
+            if (name.isEmpty()) {
+                return bytes(err("name required"));
+            }
+            com.eurobuddha.maxima.core.board.BoardEngine.Board b = boards().create(name, bool(in, "open"));
+            JSONObject out = ok();
+            out.put("board", boardJson(b));
+            out.put("link", boards().link(b.id));
+            return bytes(out);
+        });
+        zReg.register(M_BOARD_JOIN, req -> {
+            requireAuth(req);
+            String link = str(parse(req), "link").trim();
+            try {
+                com.eurobuddha.maxima.core.board.BoardEngine.Board b = boards().join(link);
+                JSONObject out = ok();
+                out.put("board", boardJson(b));
+                return bytes(out);
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                return bytes(err(safe(e.getMessage())));
+            }
+        });
+        zReg.register(M_BOARD_LINK, req -> {
+            requireAuth(req);
+            String id = str(parse(req), "id");
+            com.eurobuddha.maxima.core.board.BoardEngine.Board b = boards().board(id);
+            if (b == null) {
+                return bytes(err("no such board"));
+            }
+            JSONObject out = ok();
+            out.put("link", boards().link(id));
+            out.put("open", b.open);
+            return bytes(out);
+        });
+        zReg.register(M_BOARD_POSTS, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String id = str(in, "id");
+            com.eurobuddha.maxima.core.board.BoardEngine.Board b = boards().board(id);
+            if (b == null) {
+                return bytes(err("no such board"));
+            }
+            int limit = intOf(in, "limit", 200);
+            JSONArray arr = new JSONArray();
+            for (com.eurobuddha.maxima.core.board.BoardEngine.Entry e : boards().posts(id, Math.min(limit, 500))) {
+                arr.add(entryJson(b, e));
+            }
+            JSONObject out = ok();
+            out.put("board", boardJson(b));
+            out.put("posts", arr);
+            return bytes(out);
+        });
+        zReg.register(M_BOARD_POST, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            String id = str(in, "id");
+            com.eurobuddha.maxima.core.board.BoardEngine.Board b = boards().board(id);
+            if (b == null) {
+                return bytes(err("no such board"));
+            }
+            try {
+                com.eurobuddha.maxima.core.board.BoardEngine.Entry e = boards().post(id, str(in, "body"), str(in, "re"));
+                JSONObject out = ok();
+                out.put("post", entryJson(b, e));
+                return bytes(out);
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                return bytes(err(safe(e.getMessage())));
+            }
+        });
+        zReg.register(M_BOARD_KNOCKS, req -> {
+            requireAuth(req);
+            String id = str(parse(req), "id");
+            JSONArray arr = new JSONArray();
+            for (com.eurobuddha.maxima.core.board.BoardEngine.Knock k : boards().knocks(id)) {
+                JSONObject o = new JSONObject();
+                o.put("fp", k.fp);
+                o.put("name", safe(k.name));
+                o.put("address", safe(k.address));
+                o.put("ts", k.ts);
+                arr.add(o);
+            }
+            JSONObject out = ok();
+            out.put("knocks", arr);
+            return bytes(out);
+        });
+        zReg.register(M_BOARD_APPROVE, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            try {
+                boards().approve(str(in, "id"), str(in, "fp"));
+                return bytes(ok());
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                return bytes(err(safe(e.getMessage())));
+            }
+        });
+        zReg.register(M_BOARD_REMOVE, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            try {
+                boards().remove(str(in, "id"), str(in, "fp"));
+                return bytes(ok());
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                return bytes(err(safe(e.getMessage())));
+            }
+        });
+        zReg.register(M_BOARD_RENAME, req -> {
+            requireAuth(req);
+            JSONObject in = parse(req);
+            try {
+                boards().rename(str(in, "id"), str(in, "name"));
+                return bytes(ok());
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                return bytes(err(safe(e.getMessage())));
+            }
+        });
+        zReg.register(M_BOARD_LEAVE, req -> {
+            requireAuth(req);
+            boards().leave(str(parse(req), "id"));
+            return bytes(ok());
+        });
+        zReg.register(M_BOARD_READ, req -> {
+            requireAuth(req);
+            boards().markRead(str(parse(req), "id"));
+            return bytes(ok());
         });
     }
 

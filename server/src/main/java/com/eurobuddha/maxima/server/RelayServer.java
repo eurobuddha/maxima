@@ -405,6 +405,20 @@ public final class RelayServer {
         return mBlobs;
     }
 
+    /** The board shelf (post once, read by many) - pool relays only; null = not offered. */
+    private volatile com.eurobuddha.maxima.core.board.BoardShelf mBoards;
+    /** Board puts cost disk and a signature check - cap per source. Reads ride the to-us limit. */
+    private static final int PER_SOURCE_BOARD_PUTS_PER_MIN = 30;
+    private final Map<String, RateLimit> mBoardPutLimits = new ConcurrentHashMap<>();
+
+    public void setBoardShelf(com.eurobuddha.maxima.core.board.BoardShelf zShelf) {
+        mBoards = zShelf;
+    }
+
+    public com.eurobuddha.maxima.core.board.BoardShelf boardShelf() {
+        return mBoards;
+    }
+
     private final AtomicLong mConnSeq = new AtomicLong();
     /**
      * The push pool: every write the relay initiates on its own (mailbox drains, keep-alives)
@@ -1328,6 +1342,49 @@ public final class RelayServer {
         }
     }
 
+    /**
+     * The board shelf. A pool-relay service only (a phone's in-process relay is never a board
+     * host, exactly as it is never a directory anchor). PUT re-verifies the envelope and is
+     * rate-limited per source; SINCE is open like blob GET: a board id is only ever learned from
+     * an invite and the bytes are ciphertext.
+     */
+    private void handleBoard(Conn zConn, String zApp, MaximaMessage zMsg) throws Exception {
+        com.eurobuddha.maxima.core.board.BoardShelf shelf = mBoards;
+        if (shelf == null || !mPool) {
+            zConn.write(Frame.ack(Frame.RESPONSE_UNKNOWN));   // service not offered here
+            return;
+        }
+        byte[] data = zMsg.mData.getBytes();
+        if (com.eurobuddha.maxima.core.board.BoardWire.APP_PUT.equals(zApp)) {
+            if (!allow(mBoardPutLimits, zConn.sourceIp, PER_SOURCE_BOARD_PUTS_PER_MIN)) {
+                zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+                return;
+            }
+            com.eurobuddha.maxima.core.board.BoardShelf.Result r = shelf.put(data);
+            switch (r) {
+                case STORED:
+                case DUPLICATE:
+                    zConn.write(Frame.ack(Frame.RESPONSE_OK));
+                    return;
+                case TOOBIG:
+                    zConn.write(Frame.ack(Frame.RESPONSE_TOOBIG));
+                    return;
+                default:
+                    zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+                    return;
+            }
+        }
+        // SINCE
+        com.eurobuddha.maxima.core.board.BoardWire.SinceRequest req;
+        try {
+            req = com.eurobuddha.maxima.core.board.BoardWire.SinceRequest.fromBytes(data);
+        } catch (Exception e) {
+            zConn.write(Frame.ack(Frame.RESPONSE_FAIL));
+            return;
+        }
+        zConn.write(Frame.body(Frame.MSG_PING, new MiniData(shelf.answer(req).toBytes())));
+    }
+
     /** A message addressed to the relay itself - directory or mailbox traffic. */
     private void handleForUs(Conn zConn, MaximaPackage zPkg) throws Exception {
         try {
@@ -1362,6 +1419,12 @@ public final class RelayServer {
             String mediaApp = mm.mApplication.toString();
             if (com.eurobuddha.maxima.core.media.MediaWire.isMediaApp(mediaApp)) {
                 handleBlob(zConn, mediaApp, mm);
+                return;
+            }
+
+            // The board shelf: publish a signed post / pull a board's deltas.
+            if (com.eurobuddha.maxima.core.board.BoardWire.isBoardApp(mediaApp)) {
+                handleBoard(zConn, mediaApp, mm);
                 return;
             }
 
@@ -1874,10 +1937,17 @@ public final class RelayServer {
         }
         long now = System.currentTimeMillis();
         for (Map<String, RateLimit> m : java.util.Arrays.asList(mLimits, mFrameLimits,
-                mTousLimits, mProbeLimits, mClaimLimits, mBlobPutLimits,
+                mTousLimits, mProbeLimits, mClaimLimits, mBlobPutLimits, mBoardPutLimits,
                 mReplicaInLimits, mReplicateLimit, mForwardLimit)) {
             synchronized (m) {
                 m.entrySet().removeIf(e -> now - e.getValue().windowStart > 60_000);
+            }
+        }
+        com.eurobuddha.maxima.core.board.BoardShelf boards = mBoards;
+        if (boards != null) {
+            try {
+                boards.maintain();
+            } catch (Exception ignored) {
             }
         }
         mPeers.expire();
@@ -2052,6 +2122,10 @@ public final class RelayServer {
     /** Flush any write-behind persistence. Called on the maintenance tick + shutdown. */
     public void flush() {
         mMailbox.flush();
+        com.eurobuddha.maxima.core.board.BoardShelf boards = mBoards;
+        if (boards != null) {
+            boards.flush();
+        }
     }
 
     /** Strip control chars from an attacker-influenced value before logging it. */

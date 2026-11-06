@@ -1999,6 +1999,20 @@ public final class MaximaNode implements ChatPort {
     public MaximaSender.Result sendRaw(String zAddress, String zApplication, byte[] zData,
                                        int zConnectTimeoutMs, int zReadTimeoutMs)
             throws Exception {
+        return sendRawAs(mIdentity.keyPair(), zAddress, zApplication, zData,
+                zConnectTimeoutMs, zReadTimeoutMs);
+    }
+
+    /**
+     * As {@link #sendRaw(String, String, byte[], int, int)} but signed and sent AS another
+     * keypair - a board pseudonym ({@code BoardWire}), so the relay learns a per-board key,
+     * never the identity. The transport is the same: the attached link when the host is one of
+     * ours, a fresh socket otherwise.
+     */
+    public MaximaSender.Result sendRawAs(java.security.KeyPair zFrom, String zAddress,
+                                         String zApplication, byte[] zData,
+                                         int zConnectTimeoutMs, int zReadTimeoutMs)
+            throws Exception {
         int at = zAddress.indexOf('@');
         int colon = at < 0 ? -1 : zAddress.indexOf(':', at + 1);
         // Guard a bare / hostless address (e.g. classic slave mode advertises
@@ -2015,7 +2029,7 @@ public final class MaximaNode implements ChatPort {
         int port = Integer.parseInt(zAddress.substring(colon + 1));
 
         MaximaSender.Built built = MaximaSender.build(
-                mIdentity.publicKey(), mIdentity.keyPair().getPrivate(),
+                zFrom.getPublic().getEncoded(), zFrom.getPrivate(),
                 routing.getBytes(), zApplication, zData, System.currentTimeMillis());
 
         // Over the attached link when this host is one of our relays; a fresh socket otherwise.

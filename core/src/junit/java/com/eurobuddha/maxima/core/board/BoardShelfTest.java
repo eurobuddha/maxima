@@ -1,0 +1,145 @@
+package com.eurobuddha.maxima.core.board;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import com.eurobuddha.maxima.core.identity.Bip39;
+import com.eurobuddha.maxima.core.identity.MaximaIdentity;
+import com.eurobuddha.maxima.core.store.FileStore;
+
+import java.io.File;
+import java.security.KeyPair;
+import org.junit.Test;
+
+/** The relay's shelf: idempotent puts, cursor deltas, reset, per-board quota, reload. */
+public class BoardShelfTest {
+
+    static File tmp(String zTag) {
+        return new File(System.getProperty("java.io.tmpdir"), "maxima-boards-" + zTag + "-" + System.nanoTime());
+    }
+
+    private final MaximaIdentity me = MaximaIdentity.fromPhrase(Bip39.generate(24));
+    private final byte[] board = BoardKeys.newBoardId();
+    private final KeyPair pseudonym = BoardKeys.pseudonym(me, board);
+
+    private byte[] post(byte[] zBoard, int zN) {
+        return new BoardPost(zBoard, BoardKeys.newPostId(), zN, 1, null, new byte[] {(byte) zN}).sign(pseudonym).raw;
+    }
+
+    @Test
+    public void putsAreIdempotentAndSinceIsCursorBased() {
+        BoardShelf s = new BoardShelf();
+        byte[] a = post(board, 1);
+        byte[] b = post(board, 2);
+        assertEquals(BoardShelf.Result.STORED, s.put(a));
+        assertEquals(BoardShelf.Result.DUPLICATE, s.put(a));
+        assertEquals(BoardShelf.Result.STORED, s.put(b));
+        assertEquals(2, s.count(board));
+
+        BoardWire.Slice first = s.since(board, 0, BoardWire.MAX_REPLY_BYTES);
+        assertEquals(2, first.raws.size());
+        assertTrue("cursor 0 predates everything", first.reset);
+        BoardWire.Slice none = s.since(board, first.cursor, BoardWire.MAX_REPLY_BYTES);
+        assertEquals(0, none.raws.size());
+        assertFalse(none.reset);
+        assertEquals(first.cursor, none.cursor);
+
+        byte[] c = post(board, 3);
+        assertEquals(BoardShelf.Result.STORED, s.put(c));
+        BoardWire.Slice delta = s.since(board, first.cursor, BoardWire.MAX_REPLY_BYTES);
+        assertEquals(1, delta.raws.size());
+        assertFalse(delta.reset);
+        assertTrue(delta.cursor > first.cursor);
+    }
+
+    @Test
+    public void junkIsRefused() {
+        BoardShelf s = new BoardShelf();
+        assertEquals(BoardShelf.Result.INVALID, s.put(new byte[] {1, 2, 3}));
+        byte[] bad = post(board, 1);
+        bad[bad.length / 2] ^= 1;
+        assertEquals(BoardShelf.Result.INVALID, s.put(bad));
+        assertEquals(BoardShelf.Result.TOOBIG, s.put(new byte[BoardPost.MAX_BYTES + 1]));
+        assertEquals(0, s.boardCount());
+    }
+
+    @Test
+    public void perBoardQuotaDropsOldestAndFlagsReset() {
+        BoardShelf s = new BoardShelf(3, 1 << 20, 10, 1 << 24, 1000, 1L << 40);
+        byte[][] p = new byte[5][];
+        for (int i = 0; i < 5; i++) {
+            p[i] = post(board, i + 1);
+            assertEquals(BoardShelf.Result.STORED, s.put(p[i]));
+        }
+        assertEquals(3, s.count(board));
+        BoardWire.Slice all = s.since(board, 0, BoardWire.MAX_REPLY_BYTES);
+        assertEquals(3, all.raws.size());
+        assertEquals("oldest kept is #3", 3, BoardPost.verify(all.raws.get(0)).post.mBlob.getBytes()[0]);
+        assertTrue(all.reset);
+    }
+
+    @Test
+    public void relayFullEvictsLeastRecentlyReadBoard() {
+        BoardShelf s = new BoardShelf(100, 1 << 20, 2, 1 << 24, 1000, 1L << 40);
+        byte[] b1 = BoardKeys.newBoardId();
+        byte[] b2 = BoardKeys.newBoardId();
+        byte[] b3 = BoardKeys.newBoardId();
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b1, BoardKeys.newPostId(), 1, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b2, BoardKeys.newPostId(), 2, 1, null, new byte[1]).sign(pseudonym).raw));
+        s.since(b1, 0, 1 << 20);   // b1 read now, b2 is the LRU
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(b3, BoardKeys.newPostId(), 3, 1, null, new byte[1]).sign(pseudonym).raw));
+        assertEquals(2, s.boardCount());
+        assertEquals(1, s.count(b1));
+        assertEquals(0, s.count(b2));
+        assertEquals(1, s.count(b3));
+    }
+
+    @Test
+    public void survivesRestartOnDisk() {
+        File dir = tmp("reload");
+        BoardShelf s = new BoardShelf();
+        s.setStore(new FileStore(dir));
+        byte[] a = post(board, 1);
+        byte[] b = post(board, 2);
+        assertEquals(BoardShelf.Result.STORED, s.put(a));
+        assertEquals(BoardShelf.Result.STORED, s.put(b));
+        long cursor = s.since(board, 0, 1 << 20).cursor;
+        s.flush();
+
+        BoardShelf again = new BoardShelf();
+        again.setStore(new FileStore(dir));
+        assertEquals(2, again.count(board));
+        assertEquals(BoardShelf.Result.DUPLICATE, again.put(a));
+        BoardWire.Slice all = again.since(board, 0, 1 << 20);
+        assertEquals(2, all.raws.size());
+        assertEquals(cursor, all.cursor);
+        byte[] c = post(board, 3);
+        assertEquals(BoardShelf.Result.STORED, again.put(c));
+        assertTrue("sequence keeps climbing after a restart", again.since(board, cursor, 1 << 20).cursor > cursor);
+    }
+
+    @Test
+    public void answerBatchesBoardsWithinBudget() {
+        BoardShelf s = new BoardShelf();
+        byte[] other = BoardKeys.newBoardId();
+        assertEquals(BoardShelf.Result.STORED, s.put(post(board, 1)));
+        assertEquals(BoardShelf.Result.STORED, s.put(new BoardPost(other, BoardKeys.newPostId(), 1, 1, null, new byte[1]).sign(pseudonym).raw));
+        BoardWire.SinceRequest req = new BoardWire.SinceRequest().add(board, 0).add(other, 0).add(BoardKeys.newBoardId(), 0);
+        BoardWire.SinceReply reply = s.answer(req);
+        assertEquals(3, reply.slices.size());
+        assertEquals(1, reply.slices.get(0).raws.size());
+        assertEquals(1, reply.slices.get(1).raws.size());
+        assertEquals(0, reply.slices.get(2).raws.size());
+        assertTrue("unknown board reads as reset", reply.slices.get(2).reset);
+        // wire round trip
+        BoardWire.SinceReply back;
+        try {
+            back = BoardWire.SinceReply.fromBytes(reply.toBytes());
+        } catch (java.io.IOException e) {
+            throw new AssertionError(e);
+        }
+        assertEquals(3, back.slices.size());
+        assertEquals(reply.slices.get(0).cursor, back.slices.get(0).cursor);
+    }
+}

@@ -54,6 +54,8 @@ public final class ParlonsCore {
     private final RelayGossipClient mGossip;
     private final MediaService mMedia;
     private final ChatEngine mChat;
+    /** Boards: the many-member group that posts once to pool relays instead of fanning out. */
+    private final com.eurobuddha.maxima.core.board.BoardEngine mBoards;
     /** The chat store instance (write-behind) - the LIVE one, for the portable backup. */
     private final FileStore mChatStore;
     private final DevicePairing mPairing;
@@ -147,6 +149,10 @@ public final class ParlonsCore {
         mChatStore = FileStore.coalescing(new File(base, AccountBackup.CHAT_DIR), 2000);
         mChat.setStore(mChatStore);   // flushed before any mailbox ack
         mChat.setMediaService(mMedia);
+        // Boards share the chat store directory (their own collections and logs inside it), so
+        // the portable backup carries them too.
+        mBoards = new com.eurobuddha.maxima.core.board.BoardEngine(mNode);
+        mBoards.setStore(mChatStore);
         try {
             mPrivateFiles = new com.eurobuddha.maxima.files.PrivateFiles(mNode, mChat, zDataDir.resolve("private-files"), true);
             mPrivateFiles.setExtraSources(() -> {
@@ -171,6 +177,7 @@ public final class ParlonsCore {
         // (MaximaNode routes RpcEnvelope.APPLICATION first), so control never hits chat.
         mPairing = new DevicePairing(zDataDir);
         mControl = new ParlonsControl(mNode, mChat, mPairing, mWallet);
+        mControl.setBoards(mBoards);
         mControl.setChatOnly(mWallet == null);
         mControl.setFileCommands(mFileCommands);
         mControl.setFileSources(mPrivateFiles::directSources);
@@ -385,6 +392,7 @@ public final class ParlonsCore {
     }
     public List<String> directFileSources() { return mPrivateFiles.directSources(); }
     public ChatEngine chat() { return mChat; }
+    public com.eurobuddha.maxima.core.board.BoardEngine boards() { return mBoards; }
     public MediaService media() { return mMedia; }
     public MaximaIdentity identity() { return mIdentity; }
     public boolean relayRunning() { return mRelay != null; }
@@ -735,6 +743,8 @@ public final class ParlonsCore {
         mMaint.scheduleWithFixedDelay(() -> {
             try { healStuckPeers(); } catch (Exception ignored) { }
             try { mChat.resendUndelivered(); } catch (Exception ignored) { }
+            // Boards pull their deltas on the same beat (their network work runs on their own lane).
+            try { mBoards.tick(); } catch (Exception ignored) { }
         }, 30, 45, TimeUnit.SECONDS);
         mMaint.scheduleWithFixedDelay(() -> {
             // Ticks, receipts and read state are batched in memory (persistLater): without this
@@ -1016,6 +1026,7 @@ public final class ParlonsCore {
         try { if (mReach != null) mReach.shutdown(); } catch (Exception ignored) { }
         try { if (mRelay != null && !mExternalRelay) mRelay.stop(); } catch (Exception ignored) { }
         try { mChat.close(); } catch (Exception ignored) { }
+        try { mBoards.stop(); } catch (Exception ignored) { }
         try { mNode.stop(); } catch (Exception ignored) { }
     }
 

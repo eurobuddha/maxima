@@ -83,7 +83,9 @@ public final class ParlonsLocal {
             "contacts.remove", "contacts.info",
             "chat.summaries", "chat.conversation", "chat.send", "chat.markread", "chat.clear",
             "chat.search", "chat.since", "media.up", "files",
-            "group.create", "group.info", "group.update"
+            "group.create", "group.info", "group.update",
+            "board.list", "board.create", "board.join", "board.link", "board.posts", "board.post",
+            "board.knocks", "board.approve", "board.remove", "board.rename", "board.leave", "board.markread"
     )));
 
     private static final SecureRandom RAND = new SecureRandom();
