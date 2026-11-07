@@ -989,6 +989,7 @@
 
   // ---------- Node page ----------
   let nodeTimer = null;
+  let nodeGen = 0;
   async function renderNode() {
     // Live figures: the relay learns its address and proves its reach minutes after start, so the
     // page re-reads itself every 15 s while it is the one showing (never while a field is focused).
@@ -997,12 +998,15 @@
     return renderNodeBody();
   }
   async function renderNodeBody() {
-    const page = $('page'); page.innerHTML = '';
-    const body = el('<div class="pagebody"></div>'); page.appendChild(body);
+    // Built detached and swapped in at the end, keeping the scroll position: the 15 s refresh
+    // must not yank the reader back to the top (or blank the page while the figures load).
+    const page = $('page'), y = page.scrollTop, gen = ++nodeGen;
+    const body = el('<div class="pagebody"></div>');
+    const show = () => { page.innerHTML = ''; page.appendChild(body); page.scrollTop = y; };
     let st = {}, fig = {};
     try { st = await api('node.status'); fig = await api('node.figures'); }
-    catch (e) { retryCard(body, 'node.loadFailed', e.message, renderNode); return; }
-    if (!body.isConnected) return;
+    catch (e) { if (S.route === 'node' && gen === nodeGen) { show(); retryCard(body, 'node.loadFailed', e.message, renderNode); } return; }
+    if (S.route !== 'node' || gen !== nodeGen) return;
     const up = Number(st.uptime || 0), h = Math.floor(up / 3600000), m = Math.floor((up % 3600000) / 60000);
     const anchor = (st.permanent || '').split('@').pop();
     const ownAnchor = !!fig.ownRelay && anchor === fig.ownRelay;
@@ -1061,7 +1065,7 @@
     const log = el('<div class="card"><div class="ctitle2"><span data-i18n="node.log">Log</span></div><div class="log" id="nodeLog">…</div><div class="frow"><button class="btn ghost sm" id="logRefresh"><span data-i18n="common.refresh">Refresh</span></button><button class="btn ghost sm" id="logClear"><span data-i18n="common.clear">Clear</span></button></div></div>');
     async function loadLog(clear) { try { const r = await api('node.log', clear ? { clear: true } : {}); if ((r.lines || []).length) I.text(log.querySelector('#nodeLog'), r.lines.join('\n')); else I.bind(log.querySelector('#nodeLog'), 'node.emptyLog'); } catch (e) { toast(e.message, 'err'); } }
     log.querySelector('#logRefresh').addEventListener('click', () => loadLog(false)); log.querySelector('#logClear').addEventListener('click', () => loadLog(true));
-    body.appendChild(log); loadLog(false);
+    body.appendChild(log); show(); loadLog(false);
   }
 
   // ---------- Settings page ----------
