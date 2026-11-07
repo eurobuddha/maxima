@@ -3362,6 +3362,7 @@ public final class SystemMessages {
             case "That is not a board link.": return R.string.l10n_board_invalid_link;
             case "Scan a board link": return R.string.l10n_board_scan;
             case "Admin": return R.string.l10n_board_admin;
+            case "An admin removed you from this board. You can read what you had; you cannot post.": return R.string.l10n_board_removed_you;
             default: return 0;
         }
     }

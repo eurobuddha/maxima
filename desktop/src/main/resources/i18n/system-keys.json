@@ -3275,5 +3275,6 @@
   "You left the board.": "board.left",
   "That is not a board link.": "board.invalidLink",
   "Scan a board link": "board.scan",
-  "Admin": "board.admin"
+  "Admin": "board.admin",
+  "An admin removed you from this board. You can read what you had; you cannot post.": "board.removedYou"
 }
