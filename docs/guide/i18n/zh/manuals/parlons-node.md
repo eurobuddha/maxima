@@ -1,7 +1,7 @@
 # Parlons Node — 运维手册
 
-适用于 Parlons Node **0.2.144**（发布标签 `node-v0.2.144`），其内含 DEX 中继
-**0.1.5**。该发布提供两个 jar：`parlons-node-0.2.144.jar` 是普通节点；`parlons-node-fleet-0.2.144.jar` 是同一节点并内嵌 Node.js 运行时和 keets 附属进程，因此一个 jar 还能运行 keets 传输、公开的 HyperDHT 引导节点和 keets 邮箱（[§18](#18-the-keets-sidecar-keetchat-bridge)）。只要机器能运行，一行命令安装程序就会选择 fleet jar。
+适用于 Parlons Node **0.2.152**（发布标签 `node-v0.2.152`），其内含 DEX 中继
+**0.1.5**。该发布提供两个 jar：`parlons-node-0.2.152.jar` 是普通节点；`parlons-node-fleet-0.2.152.jar` 是同一节点并内嵌 Node.js 运行时和 keets 附属进程，因此一个 jar 还能运行 keets 传输、公开的 HyperDHT 引导节点和 keets 邮箱（[§18](#18-the-keets-sidecar-keetchat-bridge)）。只要机器能运行，一行命令安装程序就会选择 fleet jar。
 
 示例中的主机名（`node.example.com`、`peer1.example.net` 等）都是
 占位符，请换成你自己的。
@@ -225,7 +225,7 @@ Parlons Node 是一个 Java 进程，其中包含：
 1. 下载 jar 和校验和文件：
 
    ```bash
-   VER=0.2.144
+   VER=0.2.152
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
@@ -234,30 +234,30 @@ Parlons Node 是一个 Java 进程，其中包含：
    `parlons-node-fleet-$VER.jar`。其 SHA-256 为
    `3dfd655e2c2e3541f471252b3ddbd058c9040ba5814b2bbbbba40674771bf166`。
 
-2. 检查 SHA-256 哈希。`parlons-node-0.2.144.jar` 的哈希是：
+2. 检查 SHA-256 哈希。`parlons-node-0.2.152.jar` 的哈希是：
 
    ```
-   c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5
+   1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1
    ```
 
    ```bash
-   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
+   echo "1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   它必须输出 `parlons-node-0.2.144.jar: OK`。如果不是，请删除该文件，不要运行它。
+   它必须输出 `parlons-node-0.2.152.jar: OK`。如果不是，请删除该文件，不要运行它。
 
 3. 确认版本。这不会启动节点：
 
    ```bash
-   java -jar parlons-node-0.2.144.jar --version
-   # parlons-node 0.2.144
+   java -jar parlons-node-0.2.152.jar --version
+   # parlons-node 0.2.152
    ```
 
 4. 打印内置帮助，其中列出了主要属性。这同样不会启动节点：
 
    ```bash
-   java -jar parlons-node-0.2.144.jar --help
+   java -jar parlons-node-0.2.152.jar --help
    ```
 
 ### 如何改为从源代码构建 jar
@@ -379,7 +379,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.144.jar dist/
+   mv ~/Downloads/parlons-node-0.2.152.jar dist/
    ```
 
 3. 检查以 root 身份基于密钥的 SSH 是否可用。脚本使用 `BatchMode=yes`，所以无法应答
@@ -394,7 +394,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.144.jar \
+       --jar dist/parlons-node-0.2.152.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -493,11 +493,11 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. 把校验过的 jar 复制到 `/opt/maxima`，并把符号链接指向它：
 
    ```bash
-   cp parlons-node-0.2.144.jar /opt/maxima/
+   cp parlons-node-0.2.152.jar /opt/maxima/
    cd /opt/maxima
-   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.144.jar
-   ln -sfn parlons-node-0.2.144.jar parlons-node.jar
+   echo "1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.152.jar
+   ln -sfn parlons-node-0.2.152.jar parlons-node.jar
    ```
 
 4. 可选：从仓库检出副本安装配对辅助工具：
@@ -542,7 +542,7 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. 找到启动行。它列出了版本、数据文件夹和端口：
 
    ```
-   [parlons-node] Parlons Node 0.2.144 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.152 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. 观察区块链同步。每 30 秒会有一行心跳日志打印区块高度：
@@ -584,7 +584,7 @@ systemd 不允许在行尾或续行的 `ExecStart` 内部写注释，所以
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.144)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.152)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -822,6 +822,8 @@ WantedBy=multi-user.target
 | `parlons.relay.peers` | 网格引导列表（`host:port`，逗号分隔）。如果未设置，使用编译内置的 `Bootstrap.RELAYS` 列表。账户也把这些用作网格对等节点。 | 编译内置的列表 | `peer1.example.net:9501,peer2.example.net:8001` |
 | `parlons.relay.blob` | 媒体 blob 存储区的大小，单位 MB（用于存放用户的照片）。`0` = 关闭。 | `0` | `1024` |
 | `parlons.relay.maxconn` | 中继保持的最大连接数。`0` 保留内置默认值：平台线程为 512，虚拟线程（JDK 21+）为 4096。 | `0` | `8192` |
+| `parlons.boards` | 在这个池中继上托管布告板存储区（发布一次、多人阅读的群组），位于 `relay/boards/` 下。`false` 关闭布告板托管；中继随后用“service not offered”应答布告板请求。见[布告板托管](#boards-hosting)。 | `true` | `false` |
+| `parlons.boards.mirror` | 每个维护周期从网格对等节点拉取一次本中继托管的布告板。`false` 关闭镜像；`maxima.relay.replicate=0` 也会关闭它。 | `true` | `false` |
 
 来自 `RelayServer` 的中继级属性（在节点内同样适用）：
 
@@ -1000,6 +1002,7 @@ ss -lunp | grep java
 | `cloud-settings.properties` | 账户设置。 | 私密。 |
 | `node/`、`chat/`、`media/`、`private-files/` | 账户存储、聊天记录、媒体。 | 私密。 |
 | `relay/` | 中继状态：目录、信箱条目、blob 存储区。 | 私密。 |
+| `relay/boards/` | 布告板存储区：封装的布告板帖子，每条帖子一个二进制记录，外加镜像游标。仅有密文。 | 私密。 |
 | `nft/` | 托管的 NFT 文件（`<sha256>.<ext>`、`c/<16-hex>/…`），以及存放上传中文件的 `tmp/`。 | 公开内容。 |
 | `account-history/<import-id>/previous/` | 身份导入之后的旧身份。 | **是。** |
 | `.seed-adopted` | 部署脚本的 `--seed-from` 写入的标记。 | 否。 |
@@ -1420,6 +1423,73 @@ cape 必须知道自己的公网地址。它用这个地址在对等节点列表
    ```bash
    journalctl -u parlons-node -b --no-pager | grep 'blob shelf'
    ```
+
+### 布告板托管
+
+布告板是面向一千名或更多成员的“发布一次，多人阅读”的群组（Parlons! 用户手册，
+*布告板*一章）。每个**池**中继默认托管它们，而 cape 始终以池主机身份运行，所以
+除非你关闭它，Parlons Node 都会托管布告板。非池中继（手机自己的中继）
+永远不托管布告板。
+
+存储区保存什么、做什么（`core/src/main/java/com/eurobuddha/maxima/core/board/BoardShelf.java`、
+`server/src/main/java/com/eurobuddha/maxima/server/BoardMirror.java`）：
+
+- `<data>/relay/boards/` 下的一个**布告板存储区**：每个布告板一份有序日志，内含已签名、已封装的
+  信封和一个游标。成员把帖子发布到两三个中继（`**maxima_board_put**`），
+  并按游标拉取增量（`**maxima_board_since**`）。
+- **准入只看签名。**只要信封能用签名它的假名验证通过，存储区就会保存。
+  成员资格由成员自己依据解密后的管理员签名名单来执行；中继既不知道也不检查
+  谁在布告板上。
+- **配额，在代码中固定：**每个布告板 20,000 条帖子或 32 MiB（先删最旧的文字），每个中继总计
+  1,000 个布告板、1 GiB 和 200,000 条帖子；单条帖子最大 64 KB；超过 **180
+  天**的帖子会被清理。超出配额的布告板会被缩减（先删最旧的文字），而不是被丢弃；只有
+  整个中继满了，才会按最久未*读取*的顺序逐出整个布告板。成员持有
+  完整副本，并为遗忘的中继重新补回（每个布告板和中继最多每十分钟一次，
+  每次 50 条帖子），所以中继只是冗余，从来不是权威记录。
+- **速率限制：**每个来源 IP 每分钟 30 次布告板 put。读取沿用普通的发往本机限制。
+- **镜像（第 3b 阶段）：**每个维护周期，中继按网格目标（[网格](#the-mesh-and-parlonsrelaypeers)）
+  轮询地向**一个**对等池中继请求它已托管的每个布告板上比自己游标更新的内容，
+  并存入存储区。只拉不推：中继只会增长它自己的成员交给它的布告板，而对等节点
+  可以扣留但永远无法伪造（每个信封都会被验证）。每次调用最多 32 个布告板，每次拉取最多
+  24 次调用，所以一次拉取不会超出对等节点的按来源预算。游标保存在存储区的元数据存储中，
+  重启后依然保留。拉取带回内容时，日志显示
+  `boards: mirrored N post(s) from host:port`。
+
+操作员能看到什么、看不到什么：你能看到存储区保存了多少个布告板和帖子、它们的大小、
+帖子何时到达，以及每条由哪个假名签名；假名是按布告板派生的密钥，无法关联到某个
+Parlons 地址，也无法关联到另一个布告板上的同一个人。你无法读取帖子、布告板的名称
+或其成员名单；这些全都封装在成员的布告板密钥之下。拉取由每台设备的读取密钥签名，所以你
+能看到某台设备同时关注几个布告板，但看不到那是谁的设备。
+
+两个属性，都列在 [§8.2](#82-relay-cape-maxima) 中：`parlons.boards`（托管）和
+`parlons.boards.mirror`（镜像）。不托管存储区的中继用“service not offered”应答布告板请求；
+成员的客户端仍会通过任何一个接收该帖子的其他中继成功，所以在这里关闭托管
+只会让节点群少一个副本，而不会失去布告板。
+
+#### 如何关闭布告板托管
+
+1. 把该属性加入单元文件的 `ExecStart` 并重启（[§7](#how-to-change-the-unit)）：
+
+   ```
+   -Dparlons.boards=false
+   ```
+
+2. `relay/boards/` 目录会原样保留。想收回磁盘空间就删除它。
+
+#### 如何关闭布告板镜像
+
+把 `-Dparlons.boards.mirror=false` 加入单元文件并重启。中继仍会托管它自己的成员交给它的
+布告板；它只是不再从对等节点补充内容。
+
+#### 如何检查布告板是否正在被镜像
+
+```bash
+journalctl -u parlons-node --since -1h --no-pager | grep 'boards: mirrored'
+du -sh /var/lib/parlons-node/relay/boards
+```
+
+布告板没有新帖子的中继上，日志安静是正常的；`du` 这一行显示存储区
+在 1 GiB 上限之内增长。
 
 ### 如何提高连接上限
 
@@ -2483,7 +2553,7 @@ systemctl restart parlons-node
 2. 以临时文件名把它复制到服务器上：
 
    ```bash
-   B=parlons-node-0.2.144.jar
+   B=parlons-node-0.2.152.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2491,9 +2561,9 @@ systemctl restart parlons-node
 
    ```bash
    cd /opt/maxima
-   echo 'c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.144.jar.part parlons-node-0.2.144.jar
-   chmod 644 parlons-node-0.2.144.jar
+   echo '1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.152.jar.part parlons-node-0.2.152.jar
+   chmod 644 parlons-node-0.2.152.jar
    ```
 
 4. 记下符号链接当前指向的 jar。回滚时需要它：
@@ -2505,19 +2575,19 @@ systemctl restart parlons-node
 5. 备份单元文件：
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.144.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.152.jar
    ```
 
 6. 更新单元文件 `Description` 行中的版本号（可选；它只是一个标签）：
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.144)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.152)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. 把符号链接指向新的 jar：
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.144.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.152.jar /opt/maxima/parlons-node.jar
    ```
 
 8. 重启：
@@ -2534,7 +2604,7 @@ systemctl restart parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   启动行必须显示 `Parlons Node 0.2.144`，DEX cape 必须显示 `dex relay 0.1.5 up`。
+   启动行必须显示 `Parlons Node 0.2.152`，DEX cape 必须显示 `dex relay 0.1.5 up`。
 10. 从外部验证（[§23](#23-verifying-from-outside)）。
 
 如果你运行多台服务器，请**一次升级一台**，每台验证通过后再开始下一台。
@@ -2545,7 +2615,7 @@ systemctl restart parlons-node
 2. 用与之前**相同的参数**和新的 jar 重新运行脚本：
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.144.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.152.jar <your usual flags>
    ```
 
    脚本会上传并检查 jar，切换符号链接，并根据参数重写单元文件。

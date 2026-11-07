@@ -1,8 +1,8 @@
 # Parlons Node — Operator's Manual
 
-For Parlons Node **0.2.144** (release tag `node-v0.2.144`), which carries DEX relay
-**0.1.5**. The release ships two jars: `parlons-node-0.2.144.jar`, the plain node, and
-`parlons-node-fleet-0.2.144.jar`, the same node with a Node.js runtime and the keets sidecar
+For Parlons Node **0.2.152** (release tag `node-v0.2.152`), which carries DEX relay
+**0.1.5**. The release ships two jars: `parlons-node-0.2.152.jar`, the plain node, and
+`parlons-node-fleet-0.2.152.jar`, the same node with a Node.js runtime and the keets sidecar
 embedded, so one jar also runs the keets transport, a public HyperDHT bootstrap node and a keets
 mailbox ([§18](#18-the-keets-sidecar-keetchat-bridge)). The one-line installer picks the fleet jar
 whenever the box can run it. Every flag, port, default and endpoint in this manual comes from the source in the
@@ -232,7 +232,7 @@ pick a node release by its tag.
 1. Download the jar and the checksum file:
 
    ```bash
-   VER=0.2.144
+   VER=0.2.152
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
@@ -241,30 +241,30 @@ pick a node release by its tag.
    `parlons-node-fleet-$VER.jar` from the same release instead. Its SHA-256 is
    `3dfd655e2c2e3541f471252b3ddbd058c9040ba5814b2bbbbba40674771bf166`.
 
-2. Check the SHA-256 hash. The hash of `parlons-node-0.2.144.jar` is:
+2. Check the SHA-256 hash. The hash of `parlons-node-0.2.152.jar` is:
 
    ```
-   c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5
+   1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1
    ```
 
    ```bash
-   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
+   echo "1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   It must print `parlons-node-0.2.144.jar: OK`. If it does not, delete the file and do not run it.
+   It must print `parlons-node-0.2.152.jar: OK`. If it does not, delete the file and do not run it.
 
 3. Confirm the version. This does not start a node:
 
    ```bash
-   java -jar parlons-node-0.2.144.jar --version
-   # parlons-node 0.2.144
+   java -jar parlons-node-0.2.152.jar --version
+   # parlons-node 0.2.152
    ```
 
 4. Print the built-in help, which lists the main properties. This does not start a node either:
 
    ```bash
-   java -jar parlons-node-0.2.144.jar --help
+   java -jar parlons-node-0.2.152.jar --help
    ```
 
 ### How to build the jar from source instead
@@ -386,7 +386,7 @@ same operation.
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.144.jar dist/
+   mv ~/Downloads/parlons-node-0.2.152.jar dist/
    ```
 
 3. Check that key-based SSH as root works. The script uses `BatchMode=yes`, so it cannot answer a
@@ -402,7 +402,7 @@ same operation.
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.144.jar \
+       --jar dist/parlons-node-0.2.152.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -501,11 +501,11 @@ These steps do on the box what the deploy script does. Run them as root.
 3. Copy the verified jar into `/opt/maxima` and point the symlink at it:
 
    ```bash
-   cp parlons-node-0.2.144.jar /opt/maxima/
+   cp parlons-node-0.2.152.jar /opt/maxima/
    cd /opt/maxima
-   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.144.jar
-   ln -sfn parlons-node-0.2.144.jar parlons-node.jar
+   echo "1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.152.jar
+   ln -sfn parlons-node-0.2.152.jar parlons-node.jar
    ```
 
 4. Optional: install the pairing helper from a checkout of the repository:
@@ -551,7 +551,7 @@ These steps do on the box what the deploy script does. Run them as root.
 3. Find the boot line. It names the version, the data folder and the ports:
 
    ```
-   [parlons-node] Parlons Node 0.2.144 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.152 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Watch the chain sync. Every 30 s a heartbeat line prints the block height:
@@ -593,7 +593,7 @@ explanations are in the comment block above `ExecStart`.
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.144)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.152)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -831,6 +831,8 @@ Use this for secrets such as `mdspassword`, so they never appear on the command 
 | `parlons.relay.peers` | The mesh bootstrap list (`host:port`, comma-separated). If unset, the compiled-in `Bootstrap.RELAYS` list is used. The account also uses these as mesh peers. | the compiled-in list | `peer1.example.net:9501,peer2.example.net:8001` |
 | `parlons.relay.blob` | Size of the media blob shelf in MB (where users' photos are held). `0` = off. | `0` | `1024` |
 | `parlons.relay.maxconn` | Maximum number of connections the relay holds. `0` keeps the built-in default: 512 on platform threads, 4096 on virtual threads (JDK 21+). | `0` | `8192` |
+| `parlons.boards` | Host a board shelf (post-once, read-by-many groups) on this pool relay, under `relay/boards/`. `false` turns board hosting off; the relay then answers board requests with "service not offered". See [Boards hosting](#boards-hosting). | `true` | `false` |
+| `parlons.boards.mirror` | Pull the boards this relay hosts from mesh peers once per maintain tick. `false` turns mirroring off; so does `maxima.relay.replicate=0`. | `true` | `false` |
 
 Relay-level properties from `RelayServer` (these also apply inside the node):
 
@@ -1009,6 +1011,7 @@ script). The directory and every secret file must be owned by the service user, 
 | `cloud-settings.properties` | Account settings. | Private. |
 | `node/`, `chat/`, `media/`, `private-files/` | Account store, chat history, media. | Private. |
 | `relay/` | Relay state: directory, mailbox items, blob shelf. | Private. |
+| `relay/boards/` | The board shelf: sealed board posts, one binary record per post, plus mirror cursors. Ciphertext only. | Private. |
 | `nft/` | Hosted NFT files (`<sha256>.<ext>`, `c/<16-hex>/…`), plus `tmp/` for uploads in progress. | Public content. |
 | `account-history/<import-id>/previous/` | The previous identity after an identity import. | **Yes.** |
 | `.seed-adopted` | Marker written by the deploy script's `--seed-from`. | No. |
@@ -1432,6 +1435,74 @@ the cape to use.
    ```bash
    journalctl -u parlons-node -b --no-pager | grep 'blob shelf'
    ```
+
+### Boards hosting
+
+Boards are the "post once, read by many" groups for a thousand members or more (Parlons! manual,
+chapter *Boards*). Every **pool** relay hosts them by default, and the cape always runs as a pool
+host, so a Parlons Node hosts boards unless you turn it off. Non-pool relays (a phone's own relay)
+never host boards.
+
+What the shelf holds and does (`core/src/main/java/com/eurobuddha/maxima/core/board/BoardShelf.java`,
+`server/src/main/java/com/eurobuddha/maxima/server/BoardMirror.java`):
+
+- A **board shelf** under `<data>/relay/boards/`: per board, an ordered log of signed, sealed
+  envelopes with a cursor. Members publish a post to two or three relays (`**maxima_board_put**`)
+  and pull deltas by cursor (`**maxima_board_since**`).
+- **Admission is signature only.** The shelf stores any envelope that verifies against the
+  pseudonym that signed it. Membership is enforced by the members, from admin-signed rosters they
+  decrypt; the relay neither knows nor checks who is on a board.
+- **Quotas, fixed in code:** 20,000 posts or 32 MiB per board (oldest text first), 1,000 boards,
+  1 GiB and 200,000 posts per relay in total; a post is at most 64 KB; posts older than **180
+  days** are pruned. A board over its quota is shrunk, oldest text first, not dropped; only when
+  the whole relay is full are entire boards evicted, least-recently-*read* first. Members hold
+  full copies and re-seed a relay that forgot (at most once per ten minutes per board and relay,
+  50 posts a tick), so the relay is redundancy, never the record.
+- **Rate limit:** 30 board puts per minute per source IP. Reads ride the ordinary to-us limit.
+- **Mirroring (phase 3b):** every maintain tick the relay asks **one** peer pool relay, round
+  robin over the mesh targets ([the mesh](#the-mesh-and-parlonsrelaypeers)), for anything newer
+  than its cursor on each board it already hosts, and shelves it. Pull only: a relay grows only
+  the boards its own members gave it, and a peer can withhold but never forge (every envelope is
+  verified). At most 32 boards per call, 24 calls per pull, so a pull stays under the peer's
+  per-source budget. Cursors survive a restart in the shelf's meta store. The log says
+  `boards: mirrored N post(s) from host:port` when a pull brought something.
+
+What the operator can and cannot see: you can see how many boards and posts the shelf holds,
+their sizes, when posts arrive and which pseudonym signed each; a pseudonym is a key derived per
+board and cannot be linked to a Parlons address or to the same person on another board. You
+cannot read a post, a board's name, or its roster; all of that is sealed under the members'
+board key. Pulls are signed by a per-device reader key, so you can see that one device follows
+several boards together, not whose device it is.
+
+Two properties, both listed in [§8.2](#82-relay-cape-maxima): `parlons.boards` (hosting) and
+`parlons.boards.mirror` (mirroring). A relay that hosts no shelf answers a board request with
+"service not offered"; the member's client still succeeds through any other relay that takes the
+post, so turning hosting off here costs the fleet one replica, not the board.
+
+#### How to turn board hosting off
+
+1. Add the property to the unit's `ExecStart` and restart ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.boards=false
+   ```
+
+2. The `relay/boards/` directory is left as it is. Delete it if you want the disk back.
+
+#### How to turn board mirroring off
+
+Add `-Dparlons.boards.mirror=false` to the unit and restart. The relay still hosts the boards
+its own members give it; it only stops filling in from peers.
+
+#### How to check that boards are being mirrored
+
+```bash
+journalctl -u parlons-node --since -1h --no-pager | grep 'boards: mirrored'
+du -sh /var/lib/parlons-node/relay/boards
+```
+
+A quiet log is normal on a relay whose boards have no new posts; the `du` line shows the shelf
+growing within its 1 GiB ceiling.
 
 ### How to raise the connection cap
 
@@ -2511,7 +2582,7 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 2. Copy it to the box under a temporary name:
 
    ```bash
-   B=parlons-node-0.2.144.jar
+   B=parlons-node-0.2.152.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2519,9 +2590,9 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 
    ```bash
    cd /opt/maxima
-   echo 'c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.144.jar.part parlons-node-0.2.144.jar
-   chmod 644 parlons-node-0.2.144.jar
+   echo '1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.152.jar.part parlons-node-0.2.152.jar
+   chmod 644 parlons-node-0.2.152.jar
    ```
 
 4. Note the jar the symlink points at now. You need it to roll back:
@@ -2533,19 +2604,19 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
 5. Back up the unit:
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.144.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.152.jar
    ```
 
 6. Update the version in the unit's `Description` line (optional; it is only a label):
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.144)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.152)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. Point the symlink at the new jar:
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.144.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.152.jar /opt/maxima/parlons-node.jar
    ```
 
 8. Restart:
@@ -2562,7 +2633,7 @@ unit always runs `/opt/maxima/parlons-node.jar`, which is a symlink.
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   The boot line must show `Parlons Node 0.2.144`, and a DEX cape must show `dex relay 0.1.5 up`.
+   The boot line must show `Parlons Node 0.2.152`, and a DEX cape must show `dex relay 0.1.5 up`.
 10. Verify from outside ([§23](#23-verifying-from-outside)).
 
 If you run several boxes, upgrade **one box at a time**, and verify each one before you start the next.
@@ -2573,7 +2644,7 @@ If you run several boxes, upgrade **one box at a time**, and verify each one bef
 2. Re-run the script with the **same flags** you used before, and the new jar:
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.144.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.152.jar <your usual flags>
    ```
 
    The script uploads and checks the jar, flips the symlink, and rewrites the unit from its flags.

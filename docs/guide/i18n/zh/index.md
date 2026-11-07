@@ -179,6 +179,7 @@ iPhone 应用**尚未提供**。Android 应用需要 Android 9 或更新版本�
 - **照片和文件：**在聊天中选择 **Attach（附件）**。Android 可选 **Photo library（照片库）**或 **Private file（私密文件）**，选中后发送。桌面传输选项见[应用手册](parlons.html)。
 - **通话：**在 Android 聊天或 minimaCore Desktop/minimaDesk 的 Parlons 面板中使用 **Voice call** 或 **Video call**，允许麦克风和摄像头访问。独立 MaximaNode 聊天应用不传输通话音视频。
 - **群组：**Android 上打开 **Chats → New group（新建群组）**，命名、选择联系人并点击 **Create（创建）**。
+- **布告板：**面向一千人或更多的人，发布一次，由每位成员拉取。打开三点菜单，点击 **New board（新建布告板）**或 **Join a board（加入布告板）**，然后分享布告板链接或二维码。[布告板章节](parlons.html#boards-one-post-read-by-thousands)。
 - **通知：**在 Android 设置中允许通知和后台运行。Cloud 的账户主机也必须在线。
 - **支付：**在支持钱包的一对一聊天中选择 **Attach → Send payment（附件 → 发送支付）**，选择 Minima 或 MxUSD 并输入金额。确认前检查收款人和金额。支付结算在公开 Minima 区块链上，加密聊天不会使其匿名。仅聊天访客账户不提供支付。[支付说明](parlons.html#15-payments-minima-and-mxusd)。
 

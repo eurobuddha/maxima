@@ -1,7 +1,7 @@
 # Parlons Node — посібник оператора
 
-Для Parlons Node **0.2.144** (тег випуску `node-v0.2.144`), який несе DEX-ретранслятор
-**0.1.5**. У випуску два jar: `parlons-node-0.2.144.jar` — звичайний вузол, і `parlons-node-fleet-0.2.144.jar` — той самий вузол із вбудованими середовищем Node.js і допоміжним процесом keets, тож один jar ще й запускає транспорт keets, публічний вузол початкового завантаження HyperDHT і поштову скриньку keets ([§18](#18-the-keets-sidecar-keetchat-bridge)). Інсталятор одним рядком обирає fleet-jar завжди, коли машина його тягне.
+Для Parlons Node **0.2.152** (тег випуску `node-v0.2.152`), який несе DEX-ретранслятор
+**0.1.5**. У випуску два jar: `parlons-node-0.2.152.jar` — звичайний вузол, і `parlons-node-fleet-0.2.152.jar` — той самий вузол із вбудованими середовищем Node.js і допоміжним процесом keets, тож один jar ще й запускає транспорт keets, публічний вузол початкового завантаження HyperDHT і поштову скриньку keets ([§18](#18-the-keets-sidecar-keetchat-bridge)). Інсталятор одним рядком обирає fleet-jar завжди, коли машина його тягне.
 
 Імена хостів у прикладах (`node.example.com`, `peer1.example.net` тощо) — це
 заповнювачі. Замініть їх своїми.
@@ -225,7 +225,7 @@ Parlons Node — це один Java-процес, який містить:
 1. Завантажте jar і файл контрольних сум:
 
    ```bash
-   VER=0.2.144
+   VER=0.2.152
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/parlons-node-$VER.jar
    curl -fLO https://github.com/eurobuddha/maxima/releases/download/node-v$VER/SHA256SUMS
    ```
@@ -234,30 +234,30 @@ Parlons Node — це один Java-процес, який містить:
    того самого випуску `parlons-node-fleet-$VER.jar`. Його SHA-256:
    `3dfd655e2c2e3541f471252b3ddbd058c9040ba5814b2bbbbba40674771bf166`.
 
-2. Перевірте хеш SHA-256. Хеш `parlons-node-0.2.144.jar`:
+2. Перевірте хеш SHA-256. Хеш `parlons-node-0.2.152.jar`:
 
    ```
-   c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5
+   1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1
    ```
 
    ```bash
-   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
+   echo "1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar" | sha256sum -c -
    # macOS: shasum -a 256 -c  (same input)
    ```
 
-   Має вивестися `parlons-node-0.2.144.jar: OK`. Якщо ні, видаліть файл і не запускайте його.
+   Має вивестися `parlons-node-0.2.152.jar: OK`. Якщо ні, видаліть файл і не запускайте його.
 
 3. Перевірте версію. Це не запускає вузол:
 
    ```bash
-   java -jar parlons-node-0.2.144.jar --version
-   # parlons-node 0.2.144
+   java -jar parlons-node-0.2.152.jar --version
+   # parlons-node 0.2.152
    ```
 
 4. Виведіть вбудовану довідку, у якій перелічено основні властивості. Це теж не запускає вузол:
 
    ```bash
-   java -jar parlons-node-0.2.144.jar --help
+   java -jar parlons-node-0.2.152.jar --help
    ```
 
 ### Як натомість зібрати jar із вихідного коду
@@ -379,7 +379,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    mkdir -p dist
-   mv ~/Downloads/parlons-node-0.2.144.jar dist/
+   mv ~/Downloads/parlons-node-0.2.152.jar dist/
    ```
 
 3. Перевірте, що SSH-вхід як root за ключем працює. Скрипт використовує `BatchMode=yes`, тому не може відповісти на
@@ -395,7 +395,7 @@ curl -fsSL {{NODE_INSTALL}} | bash
 
    ```bash
    ops/deploy-parlons-node.sh root@node.example.com \
-       --jar dist/parlons-node-0.2.144.jar \
+       --jar dist/parlons-node-0.2.152.jar \
        --heap 3g \
        --rootnode seed-peer.example.net:9001 \
        --rpc \
@@ -494,11 +494,11 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. Скопіюйте перевірений jar в `/opt/maxima` і спрямуйте на нього символьне посилання:
 
    ```bash
-   cp parlons-node-0.2.144.jar /opt/maxima/
+   cp parlons-node-0.2.152.jar /opt/maxima/
    cd /opt/maxima
-   echo "c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar" | sha256sum -c -
-   chmod 644 parlons-node-0.2.144.jar
-   ln -sfn parlons-node-0.2.144.jar parlons-node.jar
+   echo "1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar" | sha256sum -c -
+   chmod 644 parlons-node-0.2.152.jar
+   ln -sfn parlons-node-0.2.152.jar parlons-node.jar
    ```
 
 4. Необов'язково: встановіть помічник під'єднання з клону репозиторію:
@@ -544,7 +544,7 @@ java -Xmx3g -Dparlons.node.data=/var/lib/parlons-node -jar parlons-node.jar
 3. Знайдіть рядок запуску. У ньому вказано версію, теку даних і порти:
 
    ```
-   [parlons-node] Parlons Node 0.2.144 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
+   [parlons-node] Parlons Node 0.2.152 — booting embedded Minima node <ver> at /var/lib/parlons-node/<base> (p2p 9001, megammr true, admin rpc 127.0.0.1:9005 (loopback-bound))
    ```
 
 4. Стежте за синхронізацією ланцюга. Кожні 30 с рядок пульсу виводить висоту блока:
@@ -586,7 +586,7 @@ systemd не дозволяє коментарів у кінці рядка чи
 ```ini
 # /etc/systemd/system/parlons-node.service
 [Unit]
-Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.144)
+Description=Parlons Node - full Minima node + Maxima cape + wallet gateway (0.2.152)
 Documentation=https://github.com/eurobuddha/maxima
 After=network-online.target
 Wants=network-online.target
@@ -824,6 +824,8 @@ WantedBy=multi-user.target
 | `parlons.relay.peers` | Початковий список меш-мережі (`host:port`, через кому). Якщо не задано, використовується вкомпільований список `Bootstrap.RELAYS`. Обліковий запис також використовує їх як вузли меш-мережі. | вкомпільований список | `peer1.example.net:9501,peer2.example.net:8001` |
 | `parlons.relay.blob` | Розмір полиці медіаблобів у MB (де зберігаються фотографії користувачів). `0` = вимкнено. | `0` | `1024` |
 | `parlons.relay.maxconn` | Максимальна кількість з'єднань, які тримає ретранслятор. `0` залишає вбудоване типове значення: 512 на платформних потоках, 4096 на віртуальних потоках (JDK 21+). | `0` | `8192` |
+| `parlons.boards` | Розміщувати полицю дошок (групи «опублікував один раз — читають багато») на цьому ретрансляторі пулу, в `relay/boards/`. `false` вимикає розміщення дошок; тоді ретранслятор відповідає на запити дошок «service not offered». Див. [Розміщення дошок](#boards-hosting). | `true` | `false` |
+| `parlons.boards.mirror` | Забирати дошки, які розміщує цей ретранслятор, із вузлів меш-мережі раз на такт обслуговування. `false` вимикає віддзеркалення; так само діє `maxima.relay.replicate=0`. | `true` | `false` |
 
 Властивості рівня ретранслятора з `RelayServer` (вони діють і всередині вузла):
 
@@ -1002,6 +1004,7 @@ UDP STUN-відповідач.
 | `cloud-settings.properties` | Налаштування облікового запису. | Приватно. |
 | `node/`, `chat/`, `media/`, `private-files/` | Сховище облікового запису, історія чатів, медіа. | Приватно. |
 | `relay/` | Стан ретранслятора: каталог, елементи поштових скриньок, полиця блобів. | Приватно. |
+| `relay/boards/` | Полиця дошок: запечатані дописи дошок, один двійковий запис на допис, плюс курсори віддзеркалення. Лише шифротекст. | Приватно. |
 | `nft/` | Розміщені файли NFT (`<sha256>.<ext>`, `c/<16-hex>/…`), а також `tmp/` для вивантажень, що тривають. | Публічний вміст. |
 | `account-history/<import-id>/previous/` | Попередня ідентичність після імпорту ідентичності. | **Так.** |
 | `.seed-adopted` | Позначка, яку записує `--seed-from` скрипту розгортання. | Ні. |
@@ -1425,6 +1428,77 @@ Caddy сам отримує й поновлює сертифікат.
    ```bash
    journalctl -u parlons-node -b --no-pager | grep 'blob shelf'
    ```
+
+### Розміщення дошок
+
+Дошки — це групи «опублікував один раз — читають багато» для тисячі учасників чи більше (посібник
+Parlons!, розділ *Дошки*). Кожен ретранслятор **пулу** розміщує їх типово, а кейп завжди працює як хост
+пулу, тож Parlons Node розміщує дошки, якщо ви цього не вимкнете. Ретранслятори поза пулом (власний
+ретранслятор телефону) дошок ніколи не розміщують.
+
+Що зберігає й робить полиця (`core/src/main/java/com/eurobuddha/maxima/core/board/BoardShelf.java`,
+`server/src/main/java/com/eurobuddha/maxima/server/BoardMirror.java`):
+
+- **Полиця дошок** у `<data>/relay/boards/`: для кожної дошки — упорядкований журнал підписаних,
+  запечатаних конвертів із курсором. Учасники публікують допис на два-три ретранслятори
+  (`**maxima_board_put**`) і забирають зміни за курсором (`**maxima_board_since**`).
+- **Допуск — лише за підписом.** Полиця зберігає будь-який конверт, що проходить перевірку за
+  псевдонімом, який його підписав. Членство забезпечують учасники за підписаними адміністратором
+  списками, які вони розшифровують; ретранслятор не знає й не перевіряє, хто на дошці.
+- **Квоти, зафіксовані в коді:** 20 000 дописів або 32 MiB на дошку (спочатку найстаріший текст),
+  1 000 дошок, 1 GiB і 200 000 дописів на ретранслятор загалом; допис — щонайбільше 64 KB; дописи,
+  старші за **180 днів**, вичищаються. Дошку понад квоту стискають, спочатку найстаріший текст, а не
+  скидають; лише коли повний увесь ретранслятор, виселяються цілі дошки, спочатку ті, які найдавніше
+  *читали*. Учасники тримають повні копії й наново заповнюють ретранслятор, який забув (не частіше
+  ніж раз на десять хвилин на дошку й ретранслятор, 50 дописів за такт), тож ретранслятор — це
+  надлишковість, а не першоджерело.
+- **Обмеження частоти:** 30 публікацій на дошки за хвилину з однієї IP-адреси джерела. Читання
+  підпадає під звичайний ліміт «до нас».
+- **Віддзеркалення (фаза 3b):** на кожному такті обслуговування ретранслятор запитує в **одного**
+  іншого ретранслятора пулу, по колу серед цілей меш-мережі ([меш-мережа](#the-mesh-and-parlonsrelaypeers)),
+  усе новіше за свій курсор на кожній дошці, яку вже розміщує, і кладе це на полицю. Лише
+  забирання: ретранслятор нарощує лише ті дошки, які дали йому власні учасники, а інший вузол може
+  притримати, але ніколи не підробити (кожен конверт перевіряється). Щонайбільше 32 дошки за виклик,
+  24 виклики за забирання, тож забирання лишається в межах бюджету того вузла на одне джерело. Курсори
+  переживають перезапуск у метасховищі полиці. Журнал каже `boards: mirrored N post(s) from host:port`,
+  коли забирання щось принесло.
+
+Що оператор може й чого не може бачити: ви бачите, скільки дошок і дописів зберігає полиця, їхні
+розміри, коли надходять дописи і який псевдонім підписав кожен; псевдонім — це ключ, виведений для
+кожної дошки окремо, і його не можна пов'язати з адресою Parlons чи з тією самою людиною на іншій
+дошці. Ви не можете прочитати допис, назву дошки чи її склад; усе це запечатано ключем дошки
+учасників. Забирання підписуються ключем читача, окремим для кожного пристрою, тож ви бачите, що один
+пристрій стежить за кількома дошками разом, але не чий це пристрій.
+
+Дві властивості, обидві перелічені в [§8.2](#82-relay-cape-maxima): `parlons.boards` (розміщення) і
+`parlons.boards.mirror` (віддзеркалення). Ретранслятор без полиці відповідає на запит дошки
+«service not offered»; клієнт учасника все одно досягає успіху через будь-який інший ретранслятор, що
+приймає допис, тож вимкнення розміщення тут коштує флоту однієї репліки, а не дошки.
+
+#### Як вимкнути розміщення дошок
+
+1. Додайте властивість до `ExecStart` юніта й перезапустіть ([§7](#how-to-change-the-unit)):
+
+   ```
+   -Dparlons.boards=false
+   ```
+
+2. Каталог `relay/boards/` лишається як є. Видаліть його, якщо хочете звільнити диск.
+
+#### Як вимкнути віддзеркалення дошок
+
+Додайте `-Dparlons.boards.mirror=false` до юніта й перезапустіть. Ретранслятор і далі розміщує дошки,
+які дають йому власні учасники; він лише перестає доповнювати їх від вузлів меш-мережі.
+
+#### Як перевірити, що дошки віддзеркалюються
+
+```bash
+journalctl -u parlons-node --since -1h --no-pager | grep 'boards: mirrored'
+du -sh /var/lib/parlons-node/relay/boards
+```
+
+Тихий журнал — норма для ретранслятора, на чиїх дошках немає нових дописів; рядок `du` показує, як
+полиця зростає в межах своєї стелі 1 GiB.
 
 ### Як підняти ліміт з'єднань
 
@@ -2492,7 +2566,7 @@ systemctl restart parlons-node
 2. Скопіюйте його на сервер під тимчасовою назвою:
 
    ```bash
-   B=parlons-node-0.2.144.jar
+   B=parlons-node-0.2.152.jar
    scp $B root@node.example.com:/opt/maxima/$B.part
    ```
 
@@ -2500,9 +2574,9 @@ systemctl restart parlons-node
 
    ```bash
    cd /opt/maxima
-   echo 'c5b114cc13294bdeee95d9872fc6710cd99c92472ffb63c1581081343663a6f5  parlons-node-0.2.144.jar.part' | sha256sum -c --quiet
-   mv parlons-node-0.2.144.jar.part parlons-node-0.2.144.jar
-   chmod 644 parlons-node-0.2.144.jar
+   echo '1b3a0dc7921675d54e96a611be5a37194116227c4529e32d8aeb74bb72ec1fd1  parlons-node-0.2.152.jar.part' | sha256sum -c --quiet
+   mv parlons-node-0.2.152.jar.part parlons-node-0.2.152.jar
+   chmod 644 parlons-node-0.2.152.jar
    ```
 
 4. Запишіть, на який jar зараз вказує символьне посилання. Це знадобиться для відкату:
@@ -2514,19 +2588,19 @@ systemctl restart parlons-node
 5. Створіть резервну копію юніта:
 
    ```bash
-   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.144.jar
+   cp /etc/systemd/system/parlons-node.service /etc/systemd/system/parlons-node.service.before-parlons-node-0.2.152.jar
    ```
 
 6. Оновіть версію в рядку `Description` юніта (необов'язково; це лише підпис):
 
    ```bash
-   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.144)/' /etc/systemd/system/parlons-node.service
+   sed -i 's/wallet gateway ([0-9.]*)/wallet gateway (0.2.152)/' /etc/systemd/system/parlons-node.service
    ```
 
 7. Спрямуйте символьне посилання на новий jar:
 
    ```bash
-   ln -sfn /opt/maxima/parlons-node-0.2.144.jar /opt/maxima/parlons-node.jar
+   ln -sfn /opt/maxima/parlons-node-0.2.152.jar /opt/maxima/parlons-node.jar
    ```
 
 8. Перезапустіть:
@@ -2543,7 +2617,7 @@ systemctl restart parlons-node
    journalctl -u parlons-node --since -40s --no-pager | grep -E 'Parlons Node|dex relay|Exception' | grep -v seed
    ```
 
-   Рядок запуску має показувати `Parlons Node 0.2.144`, а кейп DEX має показувати `dex relay 0.1.5 up`.
+   Рядок запуску має показувати `Parlons Node 0.2.152`, а кейп DEX має показувати `dex relay 0.1.5 up`.
 10. Перевірте ззовні ([§23](#23-verifying-from-outside)).
 
 Якщо у вас кілька серверів, оновлюйте **по одному серверу**, і перевіряйте кожен, перш ніж братися за наступний.
@@ -2554,7 +2628,7 @@ systemctl restart parlons-node
 2. Повторно запустіть скрипт із **тими самими прапорцями**, що й раніше, і новим jar:
 
    ```bash
-   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.144.jar <your usual flags>
+   ops/deploy-parlons-node.sh root@node.example.com --jar dist/parlons-node-0.2.152.jar <your usual flags>
    ```
 
    Скрипт вивантажує й перевіряє jar, перемикає символьне посилання й переписує юніт на основі своїх прапорців.

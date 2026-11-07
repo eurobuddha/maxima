@@ -26,6 +26,7 @@ Every task in this manual has numbered steps. Labels in **bold** are the exact w
 8. [Adding people](#8-adding-people)
 9. [Chats](#9-chats)
 10. [Groups](#10-groups)
+    - [Boards: one post, read by thousands](#boards-one-post-read-by-thousands)
 11. [Photos, voice notes and the photo gallery](#11-photos-voice-notes-and-the-photo-gallery)
 12. [Private files](#12-private-files)
 13. [Voice and video calls](#13-voice-and-video-calls)
@@ -55,6 +56,7 @@ Parlons is private chat with no company in the middle.
 What you can do with it:
 
 - One-to-one chats and groups of up to 12 people.
+- Boards: one post, read by a thousand people or more, open or invite-only.
 - Photos, voice notes, and shared contacts.
 - Private files up to 100 MB, sent encrypted, straight between the people in the chat.
 - Voice and video calls (Android).
@@ -118,6 +120,7 @@ Answer one question: do you want to chat on **this device**, or have **one accou
 |---|---|---|
 | Chats and groups | Yes | Yes |
 | Photos | Yes, including the camera | Yes, including paste from the clipboard |
+| Boards (groups for thousands) | Yes | Yes, on the built-in engine |
 | Voice notes | Yes (up to 60 seconds) | Yes |
 | Private files (up to 100 MB) | Yes | Yes |
 | Voice and video calls | Yes | No. Incoming calls are shown and declined politely. Answer on your phone. |
@@ -693,6 +696,113 @@ Only an admin can do this. You are the admin of a group you create.
 You always stay in a group you are admin of. If you tick too many people you see the 12-person limit message and nothing changes.
 
 There is no "leave group" button. To stop seeing a group, use **Clear messages** ([section 9.5](#95-manage-a-chat)), or ask an admin to remove you.
+
+---
+
+## Boards: one post, read by thousands
+
+### What a board is
+
+A group stops at 12 people because every message is sealed and sent once per member. A **board** turns that around: you post once, and everyone on the board pulls the post. That is what lets a board hold a thousand people or more.
+
+- A post is sealed with a **board key** that every member holds, signed, and published to two or three Parlons relays. Members pull new posts from those relays.
+- Every member keeps a full copy. If a relay loses posts, members put them back. No relay is required, and none is trusted: a relay only ever holds sealed posts.
+- On a board you are a **pseudonym**: a key derived from your 24 words for that board only. A relay cannot tell which Parlons address is behind it, or that two pseudonyms on two boards are the same person. Other members, however, do see your display name, and can message you directly (see [What a board does not hide](#what-a-board-does-not-hide)).
+- A board is **open** or **invite-only**. An open board's link carries the key: whoever has the link reads and posts at once. An invite-only link lets people *ask*; an admin lets them in, and the key reaches them through the board itself.
+- Posts can be text, a **reply** to a post (shown under it), a photo, or a link you can tap.
+
+Boards work on Parlons! for Android, Parlons Desktop (built-in engine only, not on the **Classic engine**), Parlons Cloud and the Parlons web panel. On a Parlons account, your boards live on the account, so every paired device sees the same boards.
+
+### Limits
+
+| Limit | Value |
+|---|---|
+| Members | Designed for 1,000 to 2,000. There is no hard cap in the app. |
+| Boards per identity | 200. |
+| Posts kept on your device | The newest 5,000 text posts per board. Membership records are never dropped. |
+| Posts kept on a relay | 20,000 or 32 MB per board, whichever comes first, and nothing older than 180 days. Members re-seed a relay that forgot. |
+| One post | 64 KB sealed. Photos are shrunk on your device and published once. |
+| Calls, payments, private files | Not on boards. Message a member one-to-one for those. |
+
+Your boards are listed at the top of the **Chats** tab, above your conversations. The line under a board's name says **N members · open link**, **N members · invite only**, or **Waiting for an admin to let you in**.
+
+### Create a board (Android)
+
+1. Tap the three dots in the top bar, then **New board**.
+2. Type a **Board name**.
+3. Leave **Anyone with the link can join** ticked for an open board. Untick it for an invite-only board: *Off: people ask to join and an admin lets them in.*
+4. Tap **Create board**.
+
+The board opens and the **Invite link** dialog appears with a QR code and the link. Tap **Copy link**, or **Share link** to send it through another app or a Parlons chat. You can show the link again any time from the board's details.
+
+On an open board the dialog warns: *This link carries the board key: anyone who has it can read and post. Share it with people you want in.* Treat an open link like the key it is.
+
+### Create a board (Desktop)
+
+1. On the **Chats** tab, click the round **New chat** button.
+2. Click **New board** at the top of the list.
+3. Type a **Board name**, tick or untick **Anyone with the link can join**, then click **Create board**.
+
+The board opens and its link is shown with a QR code and a **Copy link** button. Boards are listed under a **Boards** label above the chats.
+
+### Join a board
+
+Someone gives you a link that starts with `parlons://board/`, or shows you its QR code.
+
+#### How to join (Android)
+
+1. Tap the three dots in the top bar, then **Join a board**.
+2. Paste the link, or tap **Scan a board link** and point the camera at the QR code.
+3. Tap **Join**.
+
+Scanning a board QR code with the ordinary **Scan QR** menu item joins the board too.
+
+- Open board: the app says **You are on the board.** and opens it.
+- Invite-only board: the app says **Asked to join. The admin will let you in.** The board shows *You asked to join. Posts appear once an admin lets you in.* until an admin approves you.
+
+#### How to join (Desktop)
+
+1. On the **Chats** tab, click the round **New chat** button, then **Join a board**.
+2. Paste the link and click **Join**.
+
+### Post, reply, and add a photo
+
+1. Open the board. The composer at the bottom says **Write a post**.
+2. Type and tap the send button. Your post is published to the board's relays and appears for everyone on their next pull: within seconds while they have the board open, otherwise on the app's regular heartbeat.
+3. To reply, tap a post (Android) or right-click it (Desktop) and choose **Reply**. The header changes to **Replying to <name> · Cancel reply**; tap it to cancel. Replies sit under the post they answer.
+4. **Copy message** in the same menu copies a post's text.
+5. For a photo on Android, tap the attach button to pick one or the camera button to take one, add a caption if you like, and tap **Post**. On Desktop, use the attach button or paste an image from the clipboard. Photos are shrunk on your device, encrypted and published once; tap one to view, save or share it.
+6. Links in posts are tappable, like links in chats ([section 14](#14-links-in-chats)).
+
+A board with no posts yet says *Nothing posted yet. Start it off.*
+
+### Board details: link, members, admins
+
+Open the board and tap the **info** button (Android) or click the board's name at the top (Desktop). You see the member count, **Admin** if you are one, and the note about what the link does.
+
+- **Invite link** shows the link and QR code again (**Copy link**, and **Share link** on Android).
+- **Members** lists the people whose posts you have loaded, by display name. A quiet board says *Members show here once they post.*
+- **Leave board** asks *Leave this board? Your copy of it is deleted on this account.* Leaving deletes the board from your device. Your past posts stay on the relays and in other members' copies.
+
+If you are an admin, the **Members** list also offers:
+
+- **Rename** (Desktop: the **Board name** button). The new name reaches every member.
+- **Let in: <name>** for each person asking to join an invite-only board. They get the key through the board: *Let in. They get the key through the board.*
+- **Remove: <name>** for a member. The app asks *Remove this member? The board gets a new key they cannot open.* After **Remove**, the board is re-keyed: every remaining member gets the new key, sealed to their pseudonym. The removed person keeps what they already pulled, cannot read anything new, and cannot post. On their screen the board says **An admin removed you from this board. You can read what you had; you cannot post.**
+
+You are the admin of a board you create; the creator's admin key is in every link, which is how members verify membership and re-key posts. Removal is only as strong as the link: on an **open** board, the current link carries the new key, so anyone who gets that link, including the removed person, is back in. Use an invite-only board when keeping someone out matters.
+
+### Notifications
+
+New posts on a board raise one notification per board, with the number of new posts and the newest line. It is quiet while that board is on screen. Boards use the same notification channel as messages, so the **Message sound** switch ([section 17](#17-notifications)) applies to them.
+
+### What a board does not hide
+
+- **Members see each other.** Joining a board posts a sealed "hello" with your display name and your Parlons address, so members can find you and message you one-to-one. On an open board, that means anyone who has the link. Use a board as you would a public room, not a private chat.
+- **Relays see activity, not content.** A relay holds sealed posts it cannot open. It can see when posts arrive and how big they are, which pseudonym signed each one, and which reader key pulls which boards. The reader key is one per device, so a relay can tell that one device follows several boards together; it cannot tell whose device it is.
+- **An open link is the key.** Whoever has it reads everything the relays still hold (up to 180 days) and everything members re-seed. Re-keying after a removal does not change that for the people who hold the current link.
+- **Admins are trusted.** Only an admin can let people in, remove them, rename the board or re-key it. Posts are checked against the admin-signed membership on arrival, so a stranger who finds an invite-only board on a relay can neither read it nor post to it.
+- **Leaving is local.** It deletes your copy. It does not recall your posts.
 
 ---
 

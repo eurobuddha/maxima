@@ -179,6 +179,7 @@ To let someone add you, share your address from **Contacts**. Keep the whole add
 - **Photos and files:** open a chat and use **Attach**. On Android choose **Photo library** or **Private file**, select the item and send it. For Desktop's file-transfer options, see the [app manual](parlons.html).
 - **Calls:** use **Voice call** or **Video call** in an Android chat or the Parlons panel inside minimaCore Desktop/minimaDesk, and allow microphone/camera access. The standalone MaximaNode chat app does not carry call audio or video.
 - **Groups:** on Android open **Chats → New group**, name it, select contacts and tap **Create**.
+- **Boards:** for a thousand people or more, posted once and pulled by every member. Open the three-dot menu, tap **New board** or **Join a board**, and share the board link or QR code. [Boards chapter](parlons.html#boards-one-post-read-by-thousands).
 - **Notifications:** allow notifications and background operation in Android settings. Cloud additionally needs its account host to stay online.
 - **Payments:** in a wallet-enabled one-to-one chat, choose **Attach → Send payment**, select Minima or MxUSD and enter the amount. Check the recipient and amount before confirming. Payments settle on the public Minima blockchain; encrypted chat does not make them anonymous. Chat-only guest accounts do not offer payments. [Payment instructions](parlons.html#15-payments-minima-and-mxusd).
 

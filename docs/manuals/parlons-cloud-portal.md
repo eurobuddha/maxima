@@ -293,6 +293,48 @@ You need at least one contact first. Otherwise the app says *Add some contacts f
 
 If you tap **Create** with no name or no member, the app says *Name the group and pick at least one member*.
 
+### Boards: one post, read by thousands
+
+A group stops at 12 members because every message is sent once per member. A **board** is posted once and pulled by everyone on it, so it can hold a thousand people or more. Posts are sealed with a board key and published to two or three Parlons relays; members pull them from there and keep full copies, so no relay is required or trusted. A board is **open** (the link carries the key: anyone who has it reads and posts) or **invite-only** (people ask to join and an admin lets them in).
+
+Boards belong to the account, not the phone. Every paired device and the account's web panel show the same boards, and the account keeps pulling posts while your phone is off. Board posts can be text, replies, photos and tappable links. Calls, payments and private files are not available on a board.
+
+Boards are listed at the top of the **Chats** tab, above the conversations. The line under the name says **N members · open link**, **N members · invite only**, or **Waiting for an admin to let you in**.
+
+#### How to make a board
+
+1. Tap the three dots in the top bar, then **New board**.
+2. Type a **Board name**.
+3. Leave **Anyone with the link can join** ticked for an open board, or untick it for an invite-only board (*Off: people ask to join and an admin lets them in.*).
+4. Tap **Create board**. The app says **Board created. Share the link to bring people in.**
+
+The board opens and the **Invite link** dialog shows a QR code and the link. Tap **Copy link**, or **Share link** to pass it on through another app. On an open board the dialog warns that the link carries the board key: anyone who has it can read and post.
+
+#### How to join a board
+
+1. Tap the three dots in the top bar, then **Join a board**.
+2. Paste the link you were given (it starts with `parlons://board/`), or tap **Scan a board link** and scan the QR code.
+3. Tap **Join**.
+
+An open board says **You are on the board.** and opens. An invite-only board says **Asked to join. The admin will let you in.** and shows *You asked to join. Posts appear once an admin lets you in.* until an admin approves you.
+
+#### How to post, reply and add a photo
+
+1. Open the board and type in **Write a post**, then tap the send button. Everyone on the board gets the post on their next pull.
+2. To answer a post, tap it and choose **Reply**. The header shows **Replying to <name> · Cancel reply**; tap it to cancel. Replies sit under the post they answer. **Copy message** in the same menu copies the text.
+3. For a photo, tap the attach button to pick one or the camera button to take one, add a caption if you want, and tap **Post**. The photo is shrunk on the phone, encrypted and published once for every member. Tap a photo to view, save or share it.
+
+#### How to see the members, let people in, remove someone, or leave
+
+1. Open the board and tap the **info** button. The dialog shows the member count, **Admin** if you are one, and what the link does.
+2. **Invite link** shows the link and QR code again. **Members** lists the people whose posts you have loaded; a quiet board says *Members show here once they post.*
+3. If you are an admin, the **Members** list also offers **Rename**, **Let in: <name>** for each person asking to join an invite-only board, and **Remove: <name>**. Removing re-keys the board: the app asks *Remove this member? The board gets a new key they cannot open.* The removed person keeps what they already pulled, cannot read new posts and cannot post; their screen says **An admin removed you from this board. You can read what you had; you cannot post.** On an open board the current link carries the new key, so anyone who gets that link is back in; use an invite-only board when keeping someone out matters.
+4. **Leave board** asks *Leave this board? Your copy of it is deleted on this account.* Your past posts stay on the relays and in other members' copies.
+
+Board notifications arrive like message notifications: one per board, with the number of new posts and the newest line, quiet while that board is on screen.
+
+**What a board does not hide.** Joining posts a sealed hello with your display name and your account address, so every member (on an open board, anyone with the link) can see your name and message you one-to-one. Relays hold only sealed posts, but they see when posts arrive, how big they are, which per-board pseudonym signed each one, and which reader key pulls which boards; the pseudonym is derived per board and cannot be linked to your address. A relay keeps up to 20,000 posts or 32 MB per board for 180 days; the account keeps the newest 5,000 text posts per board. An open link is the key: whoever holds it reads everything the relays and members still have.
+
 ### How to mark a chat read or clear it
 
 1. On the **Chats** tab, long-press the chat.
