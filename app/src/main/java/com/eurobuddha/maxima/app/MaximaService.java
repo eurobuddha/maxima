@@ -313,6 +313,7 @@ public final class MaximaService extends Service {
         final com.eurobuddha.maxima.core.board.BoardEngine boards =
                 new com.eurobuddha.maxima.core.board.BoardEngine(sNode);
         sBoards = boards;
+        boards.setMediaService(sMedia);   // board photos ride the same media mesh as chat
         boards.setListener(b -> com.eurobuddha.maxima.app.chat.ChatNotifier.postBoard(MaximaService.this, boards, b));
         new Thread(() -> {
             try {
