@@ -30,8 +30,12 @@ import java.util.function.Consumer;
  */
 final class NodeAccountWallet implements AccountWallet {
 
-    /** A node default key: TreeKey depth 3 × 64 leaves. */
-    private static final int MAX_USES = 262144;
+    /** A CLASSIC node default key (TreeKey 64 leaves × 3 levels) - the answer only until the node's own
+     *  key table has been read. Under {@code -blockaskeyuses} a key is 128 × 4 (268435456 uses) and its
+     *  counter follows the block number, so the capacity is always taken from the node ({@code keys}
+     *  rows carry {@code maxuses}); a constant here made a block wallet look exhausted (0.2.153). */
+    static final int CLASSIC_MAX_USES = 262144;
+    private volatile int mMaxUses = 0;
 
     private final Path mDataDir;
     private volatile NodeWallet.Address mAddress;
@@ -87,29 +91,61 @@ final class NodeAccountWallet implements AccountWallet {
 
     /** Uses of the default key, read live from the node's key table. */
     @Override public int uses() {
-        NodeWallet.Address a = mAddress;
-        if (a == null) {
+        if (mAddress == null) {
             return -1;
         }
-        try {
-            JSONObject resp = NodeWallet.response(NodeWallet.run("keys"));
-            Object keys = resp.get("keys");
-            if (keys instanceof JSONArray) {
-                for (Object o : (JSONArray) keys) {
-                    JSONObject k = (JSONObject) o;
-                    // the default address's key: match on the publickey inside our script
-                    String pub = String.valueOf(k.get("publickey"));
-                    if (!pub.isEmpty() && mScript.contains(pub)) {
-                        return Integer.parseInt(String.valueOf(k.getOrDefault("uses", "0")));
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return 0;
+        return readKey()[0];
     }
 
-    @Override public int maxUses() { return MAX_USES; }
+    /** The default key's capacity as the node reports it (classic 262144, block mode 268435456). */
+    @Override public int maxUses() {
+        int max = mMaxUses;
+        if (max <= 0 && mAddress != null) {
+            max = readKey()[1];
+        }
+        return max > 0 ? max : CLASSIC_MAX_USES;
+    }
+
+    private int[] readKey() {
+        int[] um = {0, 0};
+        try {
+            um = usesAndMax(NodeWallet.response(NodeWallet.run("keys")).get("keys"), mScript);
+        } catch (Exception ignored) {
+        }
+        if (um[1] > 0) {
+            mMaxUses = um[1];   // a key's shape never changes
+        }
+        return um;
+    }
+
+    /** {uses, maxuses} of the key inside {@code zScript} from a {@code keys} reply; maxuses falls back to
+     *  any row's (every default key of a wallet has the same shape), 0 when the node gave none. */
+    static int[] usesAndMax(Object zKeys, String zScript) {
+        int uses = 0, max = 0, anyMax = 0;
+        if (zKeys instanceof JSONArray) {
+            for (Object o : (JSONArray) zKeys) {
+                JSONObject k = (JSONObject) o;
+                int rowMax = intOf(k.get("maxuses"));
+                if (anyMax == 0) anyMax = rowMax;
+                // the default address's key: match on the publickey inside our script
+                String pub = String.valueOf(k.get("publickey"));
+                if (!pub.isEmpty() && zScript != null && zScript.contains(pub)) {
+                    uses = intOf(k.get("uses"));
+                    max = rowMax;
+                    break;
+                }
+            }
+        }
+        return new int[]{uses, max > 0 ? max : anyMax};
+    }
+
+    private static int intOf(Object zValue) {
+        try {
+            return Integer.parseInt(String.valueOf(zValue));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
 
     @Override public void raiseUsesTo(int zTo) {
         throw new UnsupportedOperationException("the node owns its own key-use counter");
