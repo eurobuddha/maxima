@@ -187,7 +187,11 @@ public final class NodeGateway {
                 }
             }
             // Forward to the in-process node and hand its JSON straight back.
-            JSONObject result = CommandRunner.getRunner().runSingleCommand(trimmed);
+            // Run as a NON-ADMIN caller (0xFF): the bearer token is shared with every phone, so the node's
+            // non-admin gates apply too (a txnimport file: is confined to a plain .txn in the base folder, an
+            // overwrite of an existing file needs ADMIN..). Every command the phone clients send stays open to
+            // 0xFF on this line (see NodeGatewayNonAdminTest). The reply keeps runSingleCommand's shape.
+            JSONObject result = firstResult(CommandRunner.getRunner().runMultiCommand("0xFF", trimmed));
             byte[] out = result.toString().getBytes(StandardCharsets.UTF_8);
             // Ceiling on what we'll push back (above the phone's 8 MB read cap; a bigger response is
             // pathological — e.g. coins for an address with an enormous UTXO set).
@@ -365,4 +369,10 @@ public final class NodeGateway {
             return false;
         }
     }
+
+    /** What runSingleCommand returned: the first reply, or an empty object */
+    static JSONObject firstResult(org.minima.utils.json.JSONArray zResults) {
+        return zResults.size() > 0 ? (JSONObject) zResults.get(0) : new JSONObject();
+    }
+
 }
