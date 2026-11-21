@@ -176,6 +176,15 @@ public final class NodeGateway {
                     fail(ex, 403, verb + " through the gateway requires an address: parameter");
                     return;
                 }
+                // txnpost burn: makes the NODE build and sign a burn paid from ITS OWN coins. The bearer token is
+                // shared with every phone that uses this gateway, so no client may ask for it (the phone wallet
+                // never does: its burn is inside its own signed txn). Parsed by the node's own parser, so no
+                // spelling ("burn :1", quoted names) slips past.
+                if ("txnpost".equals(verb)
+                        && org.minima.system.commands.CommandRunner.getRunner().getCommand(seg).getParams().containsKey("burn")) {
+                    fail(ex, 403, "txnpost burn: is not permitted through the gateway (it is paid from this node's coins)");
+                    return;
+                }
             }
             // Forward to the in-process node and hand its JSON straight back.
             JSONObject result = CommandRunner.getRunner().runSingleCommand(trimmed);
