@@ -54,4 +54,21 @@ public class NodeGatewayBurnTest {
             gw.stop();
         }
     }
+
+    /** Round-5 review: no file: of any command through the gateway (it names a file on the node's machine) */
+    @Test public void fileParamIsRefused() throws Exception {
+        Path dir = Files.createTempDirectory("gateway-file");
+        NodeGateway gw = NodeGateway.create(dir, freePort());
+        gw.start();
+        try {
+            for (String cmd : new String[] {"txnimport id:x file:pay.txn", "txnimport id:x file :pay.txn",
+                    "coinexport coinid:0x01 file:x.txn", "status ; txnimport id:y file:../../wallet.txn"}) {
+                StringBuilder body = new StringBuilder();
+                assertEquals(cmd, 403, post(gw.port(), gw.token(), cmd, body));
+                assertTrue(body.toString(), body.toString().contains("file:"));
+            }
+        } finally {
+            gw.stop();
+        }
+    }
 }

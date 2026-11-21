@@ -909,7 +909,7 @@ public final class ParlonsNodeMain {
                     + "(PARLONS_NODE_PASSPHRASE / -Dparlons.node.passphrase.file) — cape/gateway will wait");
             return;
         }
-        // The passphrase goes in as ONE separated parameter (node 1.1.2.4-euro1 runCommand): it is never
+        // The passphrase goes in as ONE separated parameter (the node's CommandRunner.runCommand, from the 2026-11-21 command-injection fix): it is never
         // parsed as command text, so a quote, space or ';' in it can neither break out nor add parameters.
         try {
             JSONObject r = CommandRunner.getRunner()

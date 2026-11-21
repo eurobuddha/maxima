@@ -180,9 +180,17 @@ public final class NodeGateway {
                 // shared with every phone that uses this gateway, so no client may ask for it (the phone wallet
                 // never does: its burn is inside its own signed txn). Parsed by the node's own parser, so no
                 // spelling ("burn :1", quoted names) slips past.
-                if ("txnpost".equals(verb)
-                        && org.minima.system.commands.CommandRunner.getRunner().getCommand(seg).getParams().containsKey("burn")) {
+                org.minima.utils.json.JSONObject segparams =
+                        org.minima.system.commands.CommandRunner.getRunner().getCommand(seg).getParams();
+                if ("txnpost".equals(verb) && segparams.containsKey("burn")) {
                     fail(ex, 403, "txnpost burn: is not permitted through the gateway (it is paid from this node's coins)");
+                    return;
+                }
+                // file: reads or writes a file on THIS machine (txnimport file:, and any later command with one).
+                // No phone client sends one (they send txnimport data:), so the gateway refuses every file: -
+                // parsed by the node's own parser, as burn: is.
+                if (segparams.containsKey("file")) {
+                    fail(ex, 403, "file: is not permitted through the gateway (it names a file on this node)");
                     return;
                 }
             }

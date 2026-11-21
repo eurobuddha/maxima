@@ -54,7 +54,10 @@ public class NodeGatewayNonAdminTest {
         try (ServerSocket s = new ServerSocket(0)) { return s.getLocalPort(); }
     }
 
-    @Test public void aTokenHolderGetsTheNonAdminFileRule() throws Exception {
+    /** The file: oracle (as ADMIN, "txnimport file:/etc/hosts" told a token holder whether any path exists) is now
+     *  refused by the gateway itself, before the node's own non-admin file rule (NodeGatewayBurnTest has the
+     *  spellings). On this line no other allow-listed command differs between 0xFF and ADMIN. */
+    @Test public void aTokenHolderCannotNameAFile() throws Exception {
         Path dir = Files.createTempDirectory("gateway-nonadmin");
         NodeGateway gw = NodeGateway.create(dir, freePort());
         gw.start();
@@ -70,8 +73,7 @@ public class NodeGatewayNonAdminTest {
             try (InputStream in = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream()) {
                 body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
-            // as ADMIN it read /etc/hosts (an existence oracle for any path); as 0xFF the path is confined
-            assertTrue(body, body.contains("only use files in the node's base folder"));
+            assertTrue(body, c.getResponseCode() == 403 && body.contains("file: is not permitted"));
         } finally {
             gw.stop();
         }
