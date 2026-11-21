@@ -40,7 +40,7 @@ public final class ParlonsNodeMain {
      * Parlons Node release. Bumped on EVERY code change (house rule: one change = one version), and
      * printed at boot + stamped into the dist jar name so a running box is always attributable.
      */
-    public static final String  NODE_VERSION = "0.2.151";
+    public static final String  NODE_VERSION = "0.2.154";
 
     /** Parlons Maxima relay port. 9501 fleet-wide; free where the node's 9001/8001 are taken. */
     /** -Dparlons.relay.port: a port (own listener), 0 (no relay), or "shared" (the relay rides the
@@ -909,15 +909,11 @@ public final class ParlonsNodeMain {
                     + "(PARLONS_NODE_PASSPHRASE / -Dparlons.node.passphrase.file) — cape/gateway will wait");
             return;
         }
-        // Operator-supplied, but still refuse a value that could break out of the command string.
-        if (pass.matches(".*[\";\\s].*")) {
-            System.out.println("[parlons-node] passphrase contains whitespace/quote/';' — unsupported "
-                    + "by the vault command; not attempting unlock");
-            return;
-        }
+        // The passphrase goes in as ONE separated parameter (node 1.1.2.4-euro1 runCommand): it is never
+        // parsed as command text, so a quote, space or ';' in it can neither break out nor add parameters.
         try {
             JSONObject r = CommandRunner.getRunner()
-                    .runSingleCommand("vault action:passwordunlock password:" + pass);
+                    .runCommand("vault", "action", "passwordunlock", "password", pass);
             System.out.println("[parlons-node] node unlock attempted — status="
                     + (r == null ? "?" : r.get("status")));
         } catch (Throwable t) {

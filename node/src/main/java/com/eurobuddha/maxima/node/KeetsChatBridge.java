@@ -119,7 +119,7 @@ final class KeetsChatBridge implements KeetsTransport {
                 continue;   // not acked - redelivered next poll
             }
             if (consumed) {
-                NodeWallet.run("keets action:ack id:" + id);
+                NodeWallet.run("keets", "action", "ack", "id", id);
             }
         }
     }
@@ -173,8 +173,7 @@ final class KeetsChatBridge implements KeetsTransport {
             return false;   // never interpolate a malformed target into the command
         }
         String hex = new MiniData(zPayload.getBytes(StandardCharsets.UTF_8)).to0xString();
-        JSONObject res = NodeWallet.run("keets action:send to:" + zPubkey.toLowerCase()
-                + " datahex:" + hex);
+        JSONObject res = NodeWallet.run("keets", "action", "send", "to", zPubkey.toLowerCase(), "datahex", hex);
         return Boolean.TRUE.equals(res.get("status"));
     }
 
@@ -184,8 +183,7 @@ final class KeetsChatBridge implements KeetsTransport {
         File tmp = File.createTempFile("keets-pub", ".bin");
         try {
             Files.write(tmp.toPath(), zBytes);
-            JSONObject res = NodeWallet.run("keets action:publish path:" + zPath
-                    + " file:" + tmp.getAbsolutePath());
+            JSONObject res = NodeWallet.run("keets", "action", "publish", "path", zPath, "file", tmp.getAbsolutePath());
             if (!Boolean.TRUE.equals(res.get("status"))) {
                 throw new Exception("keets publish failed: " + res.get("error"));
             }
@@ -205,8 +203,7 @@ final class KeetsChatBridge implements KeetsTransport {
         }
         File tmp = File.createTempFile("keets-fetch", ".bin");
         try {
-            JSONObject res = NodeWallet.run("keets action:fetch url:" + zUrl
-                    + " file:" + tmp.getAbsolutePath());
+            JSONObject res = NodeWallet.run("keets", "action", "fetch", "url", zUrl, "file", tmp.getAbsolutePath());
             if (!Boolean.TRUE.equals(res.get("status"))) {
                 throw new Exception("keets fetch failed: " + res.get("error"));
             }
