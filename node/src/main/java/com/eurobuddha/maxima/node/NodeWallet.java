@@ -91,9 +91,8 @@ public final class NodeWallet {
 
     /** As {@link #send(String, String)} for any token: "0x00" is Minima, else a full token id (MxUSD...). */
     public static SendResult send(String zToAddress, String zAmount, String zTokenId) throws Exception {
-        // Interpolating into a command string: reject anything that isn't a bare address / decimal so
-        // a caller can never smuggle a second ';'-separated command (the node splits on ';' and runs
-        // each) — same command-injection class the gateway guards against.
+        // Still only a bare address / decimal / token id (a clear error beats a node error), and the
+        // values go in as separated parameters - never pasted into command text.
         if (zToAddress == null || !zToAddress.matches("(0x[0-9A-Fa-f]+|Mx[0-9A-Za-z]+)")) {
             throw new WalletException("refusing to send to a malformed address: " + zToAddress);
         }
@@ -103,9 +102,9 @@ public final class NodeWallet {
         if (!(zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId) || zTokenId.matches("0x[0-9A-Fa-f]{64}"))) {
             throw new WalletException("refusing to send a malformed token id: " + zTokenId);
         }
-        String cmd = "send address:" + zToAddress + " amount:" + zAmount
-                + (zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId) ? "" : " tokenid:" + zTokenId);
-        Object r = run(cmd);
+        Object r = (zTokenId == null || zTokenId.isEmpty() || "0x00".equalsIgnoreCase(zTokenId))
+                ? run("send", "address", zToAddress, "amount", zAmount)
+                : run("send", "address", zToAddress, "amount", zAmount, "tokenid", zTokenId);
         JSONObject top = (r instanceof JSONObject) ? (JSONObject) r : new JSONObject();
         boolean status = Boolean.TRUE.equals(top.get("status"));
         if (!status) {
@@ -126,9 +125,16 @@ public final class NodeWallet {
 
     // ── plumbing ──────────────────────────────────────────────────────────────────────────────────
 
-    /** Run one node command in-process (package-visible: the account wallet reuses it). */
+    /** Run one node command in-process (package-visible: the account wallet reuses it). FIXED text only:
+     *  any value from outside goes through {@link #run(String, Object...)}. */
     static JSONObject run(String zCommand) {
         return CommandRunner.getRunner().runSingleCommand(zCommand);
+    }
+
+    /** One node command from separated parameters - name, then name, value, … Values are never parsed
+     *  as command text (no ';', quote or space can add a command or a parameter). */
+    static JSONObject run(String zName, Object... zNameValues) {
+        return CommandRunner.getRunner().runCommand(zName, zNameValues);
     }
 
     static JSONObject response(Object zResult) {

@@ -68,7 +68,7 @@ final class NodeAccountWallet implements AccountWallet {
         } catch (Exception ignored) {
         }
         if (pinned.matches("Mx[0-9A-Z]+")) {
-            JSONObject top = NodeWallet.run("scripts address:" + pinned);
+            JSONObject top = NodeWallet.run("scripts", "address", pinned);
             JSONObject resp = NodeWallet.response(top);
             if (Boolean.TRUE.equals(top.get("status")) && Boolean.TRUE.equals(resp.get("default"))
                     && pinned.equals(String.valueOf(resp.get("miniaddress")))) {
@@ -209,8 +209,8 @@ final class NodeAccountWallet implements AccountWallet {
     @Override public void resyncTo(String zPhrase) {
         final String host = System.getProperty("parlons.node.archive", "65.109.31.226:9001");
         final String phrase = zPhrase == null ? "" : zPhrase.trim().toLowerCase().replaceAll("\\s+", " ");
-        // The phrase is interpolated into a node command: only 24 plain words may pass, whatever
-        // the caller validated (a quote here would break out of the phrase:"…" argument).
+        // Only 24 plain words may pass, whatever the caller validated. (It goes to the node as one
+        // separated parameter, so it can no longer break out of the command either.)
         if (!phrase.matches("[a-z]+( [a-z]+){23}")) {
             throw new IllegalArgumentException("a phrase is 24 plain words");
         }
@@ -221,8 +221,7 @@ final class NodeAccountWallet implements AccountWallet {
                 Thread.sleep(1500);   // let the RPC reply leave first
                 System.out.println("[parlons-node] wallet resync to a new phrase via " + host
                         + " (identity pinned, node restarts on success)");
-                JSONObject r = NodeWallet.run("megammrsync action:resync host:" + host
-                        + " phrase:\"" + phrase + "\"");
+                JSONObject r = NodeWallet.run("megammrsync", "action", "resync", "host", host, "phrase", phrase);
                 if (Boolean.TRUE.equals(r.get("status"))) {
                     System.out.println("[parlons-node] wallet resync finished - restarting");
                     System.exit(3);
