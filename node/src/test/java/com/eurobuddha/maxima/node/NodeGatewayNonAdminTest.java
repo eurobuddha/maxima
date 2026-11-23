@@ -1,5 +1,6 @@
 package com.eurobuddha.maxima.node;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -38,7 +39,8 @@ public class NodeGatewayNonAdminTest {
         "txnimport id:phone1 data:0x00",
         "txnbasics id:phone1",
         "txnpost id:phone1 mine:true",
-        "txndelete id:phone1",
+        // "txndelete id:phone1" goes through the gateway's relay-row path (txndeleteOnlyForRelayRows): the node
+        // itself refuses txndelete to 0xFF since the 2026-11-23 txn-table gate
     };
 
     @Test public void everyClientCallPassesTheNonAdminGate() {
@@ -74,6 +76,53 @@ public class NodeGatewayNonAdminTest {
                 body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
             assertTrue(body, c.getResponseCode() == 403 && body.contains("file: is not permitted"));
+        } finally {
+            gw.stop();
+        }
+    }
+
+    /** One command through a started gateway: "<http code> <body>" */
+    static String post(NodeGateway zGw, String zCommand) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL("http://127.0.0.1:" + zGw.port() + "/cmd").openConnection();
+        c.setRequestMethod("POST");
+        c.setDoOutput(true);
+        c.setRequestProperty("Authorization", "Bearer " + zGw.token());
+        JSONObject body = new JSONObject();
+        body.put("command", zCommand);
+        try (OutputStream o = c.getOutputStream()) {
+            o.write(body.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        try (InputStream in = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream()) {
+            return c.getResponseCode() + " " + new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    /** The node refuses txndelete to 0xFF (the txn table is shared): a phone's failure-path cleanup still removes
+     *  ITS relay row - imported through this gateway - and nothing else (2026-11-23). */
+    @Test public void txndeleteOnlyForRelayRows() throws Exception {
+        org.minima.database.MinimaDB.createDB();
+        java.lang.reflect.Field txndb = org.minima.database.MinimaDB.class.getDeclaredField("mTxnDB");
+        txndb.setAccessible(true);
+        txndb.set(org.minima.database.MinimaDB.getDB(), new org.minima.database.userprefs.txndb.TxnDB());
+        org.minima.database.userprefs.txndb.TxnRow row = new org.minima.database.userprefs.txndb.TxnRow(
+                "x", new org.minima.objects.Transaction(), new org.minima.objects.Witness());
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        row.writeDataStream(new java.io.DataOutputStream(bo));
+        String blob = new org.minima.objects.base.MiniData(bo.toByteArray()).to0xString();
+        CommandRunner.getRunner().runCommand("txncreate", "id", "adminrow");
+
+        Path dir = Files.createTempDirectory("gateway-relay");
+        NodeGateway gw = NodeGateway.create(dir, freePort());
+        gw.start();
+        try {
+            assertTrue(post(gw, "txnimport id:relayrow data:" + blob).startsWith("200 "));
+            assertTrue(post(gw, "txndelete id:adminrow").startsWith("403 "));
+            assertTrue(post(gw, "status;txndelete id:relayrow").startsWith("403 "));
+            String r = post(gw, "txndelete id:relayrow");
+            assertTrue(r, r.startsWith("200 ") && r.contains("\"status\":true"));
+            assertEquals(null, org.minima.database.MinimaDB.getDB().getCustomTxnDB().getTransactionRow("relayrow"));
+            assertTrue(post(gw, "txndelete id:relayrow").startsWith("403 "));
+            assertTrue(org.minima.database.MinimaDB.getDB().getCustomTxnDB().getTransactionRow("adminrow") != null);
         } finally {
             gw.stop();
         }

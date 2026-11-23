@@ -47,6 +47,16 @@ public final class NodeGateway {
             "txnimport", "txnbasics", "txnpost", "txndelete", "txncheck"
     ));
 
+    /** Transactions imported through this gateway (bounded, oldest dropped): the only rows a client's txndelete may
+     *  remove. The node refuses txndelete to a non-admin caller (the txn table is shared, and the bearer token is
+     *  shared with every phone), so a phone's failure-path cleanup of ITS relay row runs here as the node itself. */
+    private final Set<String> mRelayRows = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(
+            new java.util.LinkedHashMap<String, Boolean>() {
+                @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> zEldest) {
+                    return size() > 4096;
+                }
+            }));
+
     private final int mPort;
     private final String mBindHost;
     private final String mToken;
@@ -152,6 +162,7 @@ public final class NodeGateway {
                 fail(ex, 400, "empty command"); return;
             }
             String trimmed = command.trim();
+            String relayDelete = null;
             // CRITICAL: the node executes EVERY ';'-separated segment (runMultiCommand splits on
             // ';' with a StringTokenizer and runs each as a full admin command). So checking only
             // the first verb is a fund-drain bypass: "status ; send address:<attacker> amount:<all>"
@@ -193,13 +204,36 @@ public final class NodeGateway {
                     fail(ex, 403, "file: is not permitted through the gateway (it names a file on this node)");
                     return;
                 }
+                // txndelete: only a row imported through this gateway, sent on its own (see mRelayRows)
+                if ("txndelete".equals(verb)) {
+                    Object id = segparams.get("id");
+                    if (trimmed.contains(";") || id == null || !mRelayRows.contains(id.toString())) {
+                        fail(ex, 403, "txndelete through the gateway only removes a transaction imported through it, on its own");
+                        return;
+                    }
+                    relayDelete = id.toString();
+                }
             }
             // Forward to the in-process node and hand its JSON straight back.
             // Run as a NON-ADMIN caller (0xFF): the bearer token is shared with every phone, so the node's
             // non-admin gates apply too (a txnimport file: is confined to a plain .txn in the base folder, an
             // overwrite of an existing file needs ADMIN..). Every command the phone clients send stays open to
             // 0xFF on this line (see NodeGatewayNonAdminTest). The reply keeps runSingleCommand's shape.
-            JSONObject result = firstResult(CommandRunner.getRunner().runMultiCommand("0xFF", trimmed));
+            JSONObject result;
+            if (relayDelete != null) {
+                result = CommandRunner.getRunner().runCommand("txndelete", "id", relayDelete);
+                mRelayRows.remove(relayDelete);
+            } else {
+                result = firstResult(CommandRunner.getRunner().runMultiCommand("0xFF", trimmed));
+                // remember a relay row this request imported (a lone txnimport with an id:)
+                if (!trimmed.contains(";") && trimmed.toLowerCase().startsWith("txnimport ")
+                        && Boolean.TRUE.equals(result.get("status"))) {
+                    Object id = CommandRunner.getRunner().getCommand(trimmed).getParams().get("id");
+                    if (id != null) {
+                        mRelayRows.add(id.toString());
+                    }
+                }
+            }
             byte[] out = result.toString().getBytes(StandardCharsets.UTF_8);
             // Ceiling on what we'll push back (above the phone's 8 MB read cap; a bigger response is
             // pathological — e.g. coins for an address with an enormous UTXO set).
