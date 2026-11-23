@@ -36,4 +36,41 @@ public class AdminRpcTest {
             assertEquals(400, call(rpc, "POST", host, "Origin: http://" + host + "\r\nSec-Fetch-Site: same-origin\r\n"));
         } finally { rpc.stop(); }
     }
+
+    private String send(AdminRpc rpc, String method, String path, String extra, String body) throws Exception {
+        try (Socket s = new Socket("127.0.0.1", rpc.port())) {
+            s.setSoTimeout(5000);
+            byte[] b = body.getBytes(StandardCharsets.UTF_8);
+            String request = method + " /" + path + " HTTP/1.1\r\nHost: 127.0.0.1:" + rpc.port() + "\r\n"
+                    + extra + "Content-Length: " + b.length + "\r\nConnection: close\r\n\r\n";
+            s.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+            s.getOutputStream().write(b);
+            return new String(s.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    /** A request a page could send without a preflight (a GET or simple POST with no X-Minima-Rpc / Authorization)
+     *  runs as a non-admin caller; the desktops' rpcCall (GET + Basic) and X-Minima-Rpc run as ADMIN (2026-11-23). */
+    @Test public void simpleRequestsRunAsNonAdmin() throws Exception {
+        org.minima.database.MinimaDB.createDB();
+        java.lang.reflect.Field txndb = org.minima.database.MinimaDB.class.getDeclaredField("mTxnDB");
+        txndb.setAccessible(true);
+        txndb.set(org.minima.database.MinimaDB.getDB(), new org.minima.database.userprefs.txndb.TxnDB());
+        org.minima.database.userprefs.txndb.TxnDB db = org.minima.database.MinimaDB.getDB().getCustomTxnDB();
+        AdminRpc rpc = AdminRpc.start(0);
+        try {
+            // seedrandom: a WRITE command on every node jar (txncreate became one only with this series' txn gate)
+            String r = send(rpc, "GET", "seedrandom%20modifier:x", "", "");
+            assertTrue(r, r.contains("You need ADMIN privileges") && r.contains("X-Minima-Rpc"));
+            r = send(rpc, "POST", "", "Content-Type: text/plain\r\n", "seedrandom modifier:x");
+            assertTrue(r, r.contains("You need ADMIN privileges"));
+            assertTrue(send(rpc, "GET", "random", "", "").contains("\"status\":true"));
+
+            send(rpc, "POST", "", "X-Minima-Rpc: 1\r\n", "txncreate id:admheader");
+            assertTrue(db.getTransactionRow("admheader") != null);
+            // the desktops' rpcCall: GET with a Basic header
+            send(rpc, "GET", "txncreate%20id:admbasic", "Authorization: Basic bWluaW1hOng=\r\n", "");
+            assertTrue(db.getTransactionRow("admbasic") != null);
+        } finally { rpc.stop(); }
+    }
 }

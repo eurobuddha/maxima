@@ -87,13 +87,26 @@ final class AdminRpc {
         String out;
         int code = 200;
         try {
-            JSONObject res = CommandRunner.getRunner().runSingleCommand(command);
+            // SECURITY (2026-11-23): localRequest cannot see a request with neither Origin nor Sec-Fetch-Site - an
+            // <img>, a form, a page in a browser that sends no Fetch Metadata. ADMIN only for what no page can send
+            // without a CORS preflight (OPTIONS is refused here): see adminRequest. Anything else runs as a
+            // non-admin caller - reads work, WRITE commands are refused.
+            boolean admin = adminRequest(ex);
+            JSONObject res;
+            if (admin) {
+                res = CommandRunner.getRunner().runSingleCommand(command);
+            } else {
+                res = NodeGateway.firstResult(CommandRunner.getRunner().runMultiCommand("0xFF", command));
+                if (String.valueOf(res.get("error")).contains("ADMIN")) {
+                    res.put("error", res.get("error") + " - send the command as a POST with the header X-Minima-Rpc: 1");
+                }
+            }
             out = res.toString();
             // Minima's `quit` stops the node's own threads but never exits the JVM (Minima.main did
             // that, and this jar does not run it): the cape, gateway and account would linger with
             // no chain under them. A desktop app stops its node with `quit` and expects the process
             // to end - so end it, through the shutdown hook, once the reply has left.
-            if ("quit".equals(command.split("\\s+", 2)[0].toLowerCase())) {
+            if (admin && "quit".equals(command.split("\\s+", 2)[0].toLowerCase())) {
                 Thread exit = new Thread(() -> {
                     try { Thread.sleep(800); } catch (InterruptedException ignored) { }
                     System.out.println("[parlons-node] quit: node stopped - exiting");
@@ -110,6 +123,20 @@ final class AdminRpc {
             out = err.toString();
         }
         reply(ex, code, out);
+    }
+
+    /** May this request run as ADMIN? One with X-Minima-Rpc or Authorization - headers a page can only send after
+     *  a preflight (the desktops' rpcCall always sends Basic, by GET) - or a POST with a Content-Type other than the
+     *  three a form / simple fetch can send. */
+    static boolean adminRequest(HttpExchange ex) {
+        com.sun.net.httpserver.Headers h = ex.getRequestHeaders();
+        if (h.getFirst("X-Minima-Rpc") != null || h.getFirst("Authorization") != null) return true;
+        if (!"POST".equals(ex.getRequestMethod())) return false;
+        String type = h.getFirst("Content-Type");
+        if (type == null) return false;
+        type = type.split(";")[0].trim().toLowerCase();
+        return !type.isEmpty() && !type.equals("text/plain") && !type.equals("application/x-www-form-urlencoded")
+                && !type.equals("multipart/form-data");
     }
 
     /** Adapted from ParlonsLocal.hostOk/originOk. Unlike its cookie-bound panel, this
