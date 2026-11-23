@@ -43,7 +43,9 @@ final class NodeAccountWallet implements AccountWallet {
         try {
             Path f = mDataDir.resolve("watch.txt");
             if (Files.exists(f)) {
-                mWatch = new String(Files.readAllBytes(f), StandardCharsets.UTF_8).trim();
+                // only a full address: it goes into a "balance .. address:" command line (2026-11-23)
+                String watch = new String(Files.readAllBytes(f), StandardCharsets.UTF_8).trim();
+                mWatch = isAddress(watch) ? watch : "";
             }
         } catch (Exception ignored) {
         }
@@ -115,7 +117,14 @@ final class NodeAccountWallet implements AccountWallet {
         throw new UnsupportedOperationException("the node owns its own key-use counter");
     }
 
-    /** Any node command — the control channel only ever passes reads (balance/coins). */
+    /** A full Minima address - the only text that ever reaches {@link #cmd} from outside this class */
+    static boolean isAddress(String zAddress) {
+        return zAddress.matches("Mx[0-9A-Z]+") || zAddress.matches("0x[0-9A-Fa-f]{64}");
+    }
+
+    /** Any node command, run as ADMIN. Its only callers (ParlonsControl's wallet-balance and token-list
+     *  handlers) pass "balance megammr:true address:" + the account's own address (from the node's getaddress,
+     *  or the Mx-only pin) or the watch address (isAddress on set and on load) - no outside text. */
     @Override public JSONObject cmd(String zCommand) throws Exception {
         return NodeWallet.run(zCommand);
     }
@@ -124,7 +133,7 @@ final class NodeAccountWallet implements AccountWallet {
 
     @Override public synchronized void setWatchAddress(String zAddress) throws Exception {
         String a = zAddress == null ? "" : zAddress.trim();
-        if (!a.isEmpty() && !a.matches("Mx[0-9A-Z]+") && !a.matches("0x[0-9A-Fa-f]{64}")) {
+        if (!a.isEmpty() && !isAddress(a)) {
             throw new IllegalArgumentException("not a full Minima address");
         }
         Files.write(mDataDir.resolve("watch.txt"), a.getBytes(StandardCharsets.UTF_8));
