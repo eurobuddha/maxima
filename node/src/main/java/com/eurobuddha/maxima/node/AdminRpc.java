@@ -34,6 +34,11 @@ import com.sun.net.httpserver.HttpServer;
 final class AdminRpc {
 
     private static final int MAX_BODY = 64 * 1024;
+    /** How many commands are answered at once. It was 2: a host app whose chat screen fetched two photos from an offline
+     *  peer ("keets action:fetch", 30 s each, again at every redraw) held both, and every other command of that app, a
+     *  balance, a chat send, even "quit", waited until its own time ran out (Pandamonium Desktop, 24 Nov 2026). The node's
+     *  own RPC server gives every request its own thread, so commands are safe side by side. */
+    static final int WORKERS = 8;
 
     private final HttpServer mServer;
     private final ExecutorService mExec;
@@ -44,7 +49,7 @@ final class AdminRpc {
     static AdminRpc start(int zPort) throws IOException {
         HttpServer srv = HttpServer.create(new InetSocketAddress("127.0.0.1", zPort), 16);
         srv.createContext("/", AdminRpc::handle);
-        ExecutorService exec = Executors.newFixedThreadPool(2, r -> {
+        ExecutorService exec = Executors.newFixedThreadPool(WORKERS, r -> {
             Thread t = new Thread(r, "parlons-admin-rpc");
             t.setDaemon(true);
             return t;

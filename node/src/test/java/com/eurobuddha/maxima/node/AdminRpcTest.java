@@ -36,4 +36,23 @@ public class AdminRpcTest {
             assertEquals(400, call(rpc, "POST", host, "Origin: http://" + host + "\r\nSec-Fetch-Site: same-origin\r\n"));
         } finally { rpc.stop(); }
     }
+
+    /** Two requests that are still being served (their bodies have not arrived) must not hold up a third: with two
+     *  worker threads two slow commands starved every other command of the host app (24 Nov 2026). */
+    @Test public void twoSlowRequestsDoNotHoldUpAThird() throws Exception {
+        AdminRpc rpc = AdminRpc.start(0);
+        java.util.List<Socket> held = new java.util.ArrayList<>();
+        try {
+            String host = "127.0.0.1:" + rpc.port();
+            for (int i = 0; i < 4; i++) {   // four handlers wait for a body that does not come
+                Socket s = new Socket("127.0.0.1", rpc.port());
+                s.getOutputStream().write(("POST / HTTP/1.1\r\nHost: " + host + "\r\nContent-Length: 10\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                s.getOutputStream().flush();
+                held.add(s);
+            }
+            Thread.sleep(300);
+            assertTrue(AdminRpc.WORKERS >= 8);
+            assertEquals("a fifth request is answered while four are held", 400, call(rpc, "GET", host, ""));
+        } finally { for (Socket s : held) try { s.close(); } catch (Exception ignored) { } rpc.stop(); }
+    }
 }
