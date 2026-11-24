@@ -62,7 +62,7 @@ public class NodeGatewayBurnTest {
         gw.start();
         try {
             for (String cmd : new String[] {"txnimport id:x file:pay.txn", "txnimport id:x file :pay.txn",
-                    "coinexport coinid:0x01 file:x.txn", "status ; txnimport id:y file:../../wallet.txn"}) {
+                    "coinexport coinid:0x01 file:x.txn", "txnimport id:y data:0x00 file:../../wallet.txn"}) {
                 StringBuilder body = new StringBuilder();
                 assertEquals(cmd, 403, post(gw.port(), gw.token(), cmd, body));
                 assertTrue(body.toString(), body.toString().contains("file:"));

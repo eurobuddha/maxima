@@ -97,6 +97,123 @@ public class NodeGatewayNonAdminTest {
         }
     }
 
+    static void freshTxnTable() throws Exception {
+        org.minima.database.MinimaDB.createDB();
+        java.lang.reflect.Field txndb = org.minima.database.MinimaDB.class.getDeclaredField("mTxnDB");
+        txndb.setAccessible(true);
+        txndb.set(org.minima.database.MinimaDB.getDB(), new org.minima.database.userprefs.txndb.TxnDB());
+    }
+
+    static String rowBlob() throws Exception {
+        org.minima.database.userprefs.txndb.TxnRow row = new org.minima.database.userprefs.txndb.TxnRow(
+                "x", new org.minima.objects.Transaction(), new org.minima.objects.Witness());
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        row.writeDataStream(new java.io.DataOutputStream(bo));
+        return new org.minima.objects.base.MiniData(bo.toByteArray()).to0xString();
+    }
+
+    static boolean row(String zId) {
+        return org.minima.database.MinimaDB.getDB().getCustomTxnDB().getTransactionRow(zId) != null;
+    }
+
+    /** Review round 3 (2026-11-24): the gateway split a request at every ';' itself and checked each piece, while a
+     *  node whose splitter keeps a ';' inside a quoted value runs the first line below as ONE txnimport with
+     *  file:secret.txn. One command per request now: any ';' is refused, whatever the embedded node would do. */
+    @Test public void aSemicolonIsRefusedWhateverTheNodesSplitter() throws Exception {
+        freshTxnTable();
+        Path dir = Files.createTempDirectory("gateway-chain");
+        NodeGateway gw = NodeGateway.create(dir, freePort());
+        gw.start();
+        try {
+            for (String cmd : new String[] {
+                    "txnimport id:a data:\"0x00;txncheck \"x file:secret.txn",
+                    "txnimport id:a data:\"" + rowBlob() + ";txncheck \"x file:secret.txn",
+                    "status;status", "status;", ";status",
+                    "status;send address:0xFF amount:1",
+                    "newscript trackall:true script:\"RETURN TRUE;\""}) {
+                String r = post(gw, cmd);
+                assertTrue(cmd + " -> " + r, r.startsWith("403 ") && r.contains("one command per request"));
+            }
+            assertFalse(row("a"));
+        } finally {
+            gw.stop();
+        }
+    }
+
+    /** The rules are applied to the command as the node's own parser reads it */
+    @Test public void rulesReadTheNodesOwnParse() throws Exception {
+        freshTxnTable();
+        Path dir = Files.createTempDirectory("gateway-parse");
+        NodeGateway gw = NodeGateway.create(dir, freePort());
+        gw.start();
+        try {
+            // "address:" in another parameter's value is not an address: parameter
+            assertTrue(post(gw, "coins tokenid:\"address:0x01\"").contains("requires an address: parameter"));
+            assertTrue(post(gw, "balance megammr:false").contains("requires an address: parameter"));
+            // the verb is the node's: upper case is the same command, an unknown or unparsable line is refused
+            assertTrue(post(gw, "SEND address:0xFF amount:1").startsWith("403 "));
+            assertTrue(post(gw, "nosuchcommand").startsWith("403 "));
+            // parameter names are case-sensitive to the node: BURN is not burn, and the node refuses it itself
+            assertTrue(post(gw, "txnpost id:x BURN:1").contains("Invalid parameter : BURN"));
+            // a relay row needs a plain id
+            assertTrue(post(gw, "txnimport data:" + rowBlob()).contains("needs an id:"));
+            assertTrue(post(gw, "txnimport id:\"a b\" data:" + rowBlob()).contains("needs an id:"));
+        } finally {
+            gw.stop();
+        }
+    }
+
+    /** Relay rows survive a restart of the gateway (gateway-relay-rows.txt), and the gateway removes a row itself
+     *  once its txnpost ran or its txnbasics failed - the clients never delete after a successful publish. */
+    @Test public void relayRowsSurviveARestartAndAreCleanedUp() throws Exception {
+        freshTxnTable();
+        String blob = rowBlob();
+        Path dir = Files.createTempDirectory("gateway-restart");
+        NodeGateway gw = NodeGateway.create(dir, freePort());
+        gw.start();
+        try {
+            for (String id : new String[] {"restart1", "restart2", "restart3"}) {
+                assertTrue(post(gw, "txnimport id:" + id + " data:" + blob).contains("\"status\":true"));
+            }
+        } finally {
+            gw.stop();
+        }
+        assertEquals(java.util.Arrays.asList("restart1", "restart2", "restart3"),
+                Files.readAllLines(dir.resolve("gateway-relay-rows.txt")));
+
+        gw = NodeGateway.create(dir, freePort());
+        gw.start();
+        try {
+            // the cleanup of a row imported before the restart
+            String r = post(gw, "txndelete id:restart1");
+            assertTrue(r, r.startsWith("200 ") && r.contains("\"status\":true"));
+            assertFalse(row("restart1"));
+
+            // txnpost (no node runs here, so it fails - a posted row is removed the same way)
+            r = post(gw, "txnpost id:restart2 mine:true");
+            assertTrue(r, r.startsWith("200 "));
+            assertFalse("the gateway left its relay row after txnpost: " + r, row("restart2"));
+            assertTrue(post(gw, "txndelete id:restart2").startsWith("403 "));
+
+            // a failed txnbasics
+            r = post(gw, "txnbasics id:restart3");
+            assertTrue(r, r.startsWith("200 "));
+            assertEquals("a relay row is removed after a failed txnbasics only: " + r, r.contains("\"status\":true"), row("restart3"));
+            if (row("restart3")) {
+                assertTrue(post(gw, "txndelete id:restart3").contains("\"status\":true"));
+            }
+            assertEquals(java.util.Collections.emptyList(), Files.readAllLines(dir.resolve("gateway-relay-rows.txt")));
+
+            // a row the gateway did not import is never touched
+            CommandRunner.getRunner().runCommand("txncreate", "id", "adminrow2");
+            post(gw, "txnpost id:adminrow2 mine:true");
+            post(gw, "txnbasics id:adminrow2");
+            assertTrue(row("adminrow2"));
+        } finally {
+            gw.stop();
+        }
+    }
+
     /** The node refuses txndelete to 0xFF (the txn table is shared): a phone's failure-path cleanup still removes
      *  ITS relay row - imported through this gateway - and nothing else (2026-11-23). */
     @Test public void txndeleteOnlyForRelayRows() throws Exception {

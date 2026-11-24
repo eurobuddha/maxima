@@ -47,8 +47,8 @@ public final class NodeGateway {
             "txnimport", "txnbasics", "txnpost", "txndelete", "txncheck"
     ));
 
-    /** Transactions imported through this gateway (bounded, oldest dropped): the only rows a client's txndelete may
-     *  remove. The node refuses txndelete to a non-admin caller (the txn table is shared, and the bearer token is
+    /** Transactions imported through this gateway (bounded, oldest dropped; kept in gateway-relay-rows.txt): the only
+     *  rows a client's txndelete may remove. The node refuses txndelete to a non-admin caller (the txn table is shared, and the bearer token is
      *  shared with every phone), so a phone's failure-path cleanup of ITS relay row runs here as the node itself. */
     private final Set<String> mRelayRows = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(
             new java.util.LinkedHashMap<String, Boolean>() {
@@ -56,6 +56,45 @@ public final class NodeGateway {
                     return size() > 4096;
                 }
             }));
+
+    /** Where the relay rows are kept across a restart (one id per line) - or the cleanup txndelete of a row
+     *  imported before the restart is refused and the row stays in the node's txn table for good. */
+    private Path mRelayFile;
+
+    private void loadRelayRows(Path zFile) {
+        mRelayFile = zFile;
+        try {
+            if (Files.exists(zFile)) {
+                for (String line : Files.readAllLines(zFile, StandardCharsets.UTF_8)) {
+                    if (!line.trim().isEmpty()) mRelayRows.add(line.trim());
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("[parlons-node] gateway relay rows not read: " + e);
+        }
+    }
+
+    private void saveRelayRows() {
+        if (mRelayFile == null) return;
+        synchronized (mRelayRows) {
+            try {
+                Files.createDirectories(mRelayFile.getParent());
+                Path tmp = mRelayFile.resolveSibling(mRelayFile.getFileName() + ".tmp");
+                Files.write(tmp, mRelayRows, StandardCharsets.UTF_8);
+                Files.move(tmp, mRelayFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                System.out.println("[parlons-node] gateway relay rows not saved: " + e);
+            }
+        }
+    }
+
+    /** Remove a relay row as the node itself (the node refuses txndelete to a non-admin caller) and forget it */
+    private JSONObject deleteRelayRow(String zId) {
+        JSONObject result = CommandRunner.getRunner().runCommand("txndelete", "id", zId);
+        mRelayRows.remove(zId);
+        saveRelayRows();
+        return result;
+    }
 
     private final int mPort;
     private final String mBindHost;
@@ -105,7 +144,9 @@ public final class NodeGateway {
         // protects --gateway-public / direct-exposure mode.
         double globalRate = doubleProp("parlons.gateway.rate.global", 50);
         double perIpRate  = doubleProp("parlons.gateway.rate.perip", 10);
-        return new NodeGateway(bind, zPort, token, new RateLimiter(globalRate, perIpRate));
+        NodeGateway gateway = new NodeGateway(bind, zPort, token, new RateLimiter(globalRate, perIpRate));
+        gateway.loadRelayRows(zDataDir.resolve("gateway-relay-rows.txt"));
+        return gateway;
     }
 
     private static double doubleProp(String zKey, double zDefault) {
@@ -162,57 +203,61 @@ public final class NodeGateway {
                 fail(ex, 400, "empty command"); return;
             }
             String trimmed = command.trim();
-            String relayDelete = null;
-            // CRITICAL: the node executes EVERY ';'-separated segment (runMultiCommand splits on
-            // ';' with a StringTokenizer and runs each as a full admin command). So checking only
-            // the first verb is a fund-drain bypass: "status ; send address:<attacker> amount:<all>"
-            // passes a first-verb check and then DRAINS the wallet. Validate EVERY segment's verb.
-            for (String segment : trimmed.split(";")) {
-                String seg = segment.trim();
-                if (seg.isEmpty()) continue;
-                String verb = seg.split("\\s+", 2)[0].toLowerCase();
-                if (!ALLOWED.contains(verb)) {
-                    fail(ex, 403, "command not permitted through the gateway: " + verb);
-                    return;
-                }
-                // coins/balance must target a specific address — never let a client enumerate the
-                // operator's OWN wallet coins (a privacy leak; the phone always passes address:).
-                // A node WITHOUT the MegaMMR only knows its own coins: a megammr:true read here would
-                // answer "0" for any funded address — a wrong answer, not an error. Refuse with a
-                // 503 so a fleet client fails over to a MegaMMR node instead of trusting it.
-                if (seg.contains("megammr:true") && !org.minima.system.params.GeneralParams.IS_MEGAMMR) {
-                    fail(ex, 503, "this node has no MegaMMR - use a MegaMMR gateway node"); return;
-                }
-                if (("coins".equals(verb) || "balance".equals(verb)) && !seg.contains("address:")) {
-                    fail(ex, 403, verb + " through the gateway requires an address: parameter");
-                    return;
-                }
-                // txnpost burn: makes the NODE build and sign a burn paid from ITS OWN coins. The bearer token is
-                // shared with every phone that uses this gateway, so no client may ask for it (the phone wallet
-                // never does: its burn is inside its own signed txn). Parsed by the node's own parser, so no
-                // spelling ("burn :1", quoted names) slips past.
-                org.minima.utils.json.JSONObject segparams =
-                        org.minima.system.commands.CommandRunner.getRunner().getCommand(seg).getParams();
-                if ("txnpost".equals(verb) && segparams.containsKey("burn")) {
-                    fail(ex, 403, "txnpost burn: is not permitted through the gateway (it is paid from this node's coins)");
-                    return;
-                }
-                // file: reads or writes a file on THIS machine (txnimport file:, and any later command with one).
-                // No phone client sends one (they send txnimport data:), so the gateway refuses every file: -
-                // parsed by the node's own parser, as burn: is.
-                if (segparams.containsKey("file")) {
-                    fail(ex, 403, "file: is not permitted through the gateway (it names a file on this node)");
-                    return;
-                }
-                // txndelete: only a row imported through this gateway, sent on its own (see mRelayRows)
-                if ("txndelete".equals(verb)) {
-                    Object id = segparams.get("id");
-                    if (trimmed.contains(";") || id == null || !mRelayRows.contains(id.toString())) {
-                        fail(ex, 403, "txndelete through the gateway only removes a transaction imported through it, on its own");
-                        return;
-                    }
-                    relayDelete = id.toString();
-                }
+            // ONE command per request, and no ';' at all (2026-11-24). The node runs every command of a ';' chain,
+            // and WHERE it splits is the node's business: this handler used to split at every ';' itself and check
+            // each piece, while a node whose splitter keeps a ';' inside a quoted value runs
+            //   txnimport id:a data:"0x00;txncheck "x file:secret.txn
+            // as ONE txnimport with file:secret.txn - past the "no file:" rule below, which only saw two harmless
+            // pieces. No phone client sends a chain (GatewayNode / WalletPublisher / TxnFactory send one command per
+            // request), so any ';' is refused - whatever the embedded node's splitter does with it.
+            if (trimmed.indexOf(';') != -1) {
+                fail(ex, 403, "one command per request: a ';' is not permitted through the gateway");
+                return;
+            }
+            // The command name and parameters as the NODE's own parser reads them (a line without ';' is one
+            // command to every node version) - every rule below is applied to what will actually run.
+            org.minima.system.commands.Command parsed = CommandRunner.getRunner().getCommand(trimmed);
+            String verb = parsed.getName();
+            JSONObject params = parsed.getParams();
+            if (!ALLOWED.contains(verb)) {
+                fail(ex, 403, "command not permitted through the gateway: " + trimmed.split("\\s+", 2)[0].toLowerCase());
+                return;
+            }
+            // coins/balance must target a specific address — never let a client enumerate the
+            // operator's OWN wallet coins (a privacy leak; the phone always passes address:).
+            // A node WITHOUT the MegaMMR only knows its own coins: a megammr:true read here would
+            // answer "0" for any funded address — a wrong answer, not an error. Refuse with a
+            // 503 so a fleet client fails over to a MegaMMR node instead of trusting it.
+            if ("true".equals(String.valueOf(params.get("megammr"))) && !org.minima.system.params.GeneralParams.IS_MEGAMMR) {
+                fail(ex, 503, "this node has no MegaMMR - use a MegaMMR gateway node"); return;
+            }
+            if (("coins".equals(verb) || "balance".equals(verb)) && !params.containsKey("address")) {
+                fail(ex, 403, verb + " through the gateway requires an address: parameter");
+                return;
+            }
+            // txnpost burn: makes the NODE build and sign a burn paid from ITS OWN coins. The bearer token is
+            // shared with every phone that uses this gateway, so no client may ask for it (the phone wallet
+            // never does: its burn is inside its own signed txn).
+            if ("txnpost".equals(verb) && params.containsKey("burn")) {
+                fail(ex, 403, "txnpost burn: is not permitted through the gateway (it is paid from this node's coins)");
+                return;
+            }
+            // file: reads or writes a file on THIS machine (txnimport file:, and any later command with one).
+            // No phone client sends one (they send txnimport data:), so the gateway refuses every file:.
+            if (params.containsKey("file")) {
+                fail(ex, 403, "file: is not permitted through the gateway (it names a file on this node)");
+                return;
+            }
+            String id = params.get("id") == null ? null : params.get("id").toString();
+            // a relay row is remembered by its id (also on disk): the id must be plain, and given
+            if ("txnimport".equals(verb) && (id == null || !id.matches("[\\x21-\\x7E]{1,128}"))) {
+                fail(ex, 403, "txnimport through the gateway needs an id: of 1-128 printable characters");
+                return;
+            }
+            // txndelete: only a row imported through this gateway (see mRelayRows)
+            if ("txndelete".equals(verb) && (id == null || !mRelayRows.contains(id))) {
+                fail(ex, 403, "txndelete through the gateway only removes a transaction imported through it, on its own");
+                return;
             }
             // Forward to the in-process node and hand its JSON straight back.
             // Run as a NON-ADMIN caller (0xFF): the bearer token is shared with every phone, so the node's
@@ -220,18 +265,21 @@ public final class NodeGateway {
             // overwrite of an existing file needs ADMIN..). Every command the phone clients send stays open to
             // 0xFF on this line (see NodeGatewayNonAdminTest). The reply keeps runSingleCommand's shape.
             JSONObject result;
-            if (relayDelete != null) {
-                result = CommandRunner.getRunner().runCommand("txndelete", "id", relayDelete);
-                mRelayRows.remove(relayDelete);
+            if ("txndelete".equals(verb)) {
+                result = deleteRelayRow(id);
             } else {
                 result = firstResult(CommandRunner.getRunner().runMultiCommand("0xFF", trimmed));
-                // remember a relay row this request imported (a lone txnimport with an id:)
-                if (!trimmed.contains(";") && trimmed.toLowerCase().startsWith("txnimport ")
-                        && Boolean.TRUE.equals(result.get("status"))) {
-                    Object id = CommandRunner.getRunner().getCommand(trimmed).getParams().get("id");
-                    if (id != null) {
-                        mRelayRows.add(id.toString());
-                    }
+                boolean ok = Boolean.TRUE.equals(result.get("status"));
+                if ("txnimport".equals(verb) && ok) {
+                    // remember the relay row this request imported
+                    mRelayRows.add(id);
+                    saveRelayRows();
+                } else if (id != null && mRelayRows.contains(id)
+                        && ("txnpost".equals(verb) || ("txnbasics".equals(verb) && !ok))) {
+                    // The gateway cleans its relay rows up itself: once a row was posted (the clients never
+                    // delete after a successful publish), and when txnbasics / txnpost failed (the client's own
+                    // cleanup txndelete may never arrive). A txndelete for a row already gone gets the 403 above.
+                    deleteRelayRow(id);
                 }
             }
             byte[] out = result.toString().getBytes(StandardCharsets.UTF_8);
