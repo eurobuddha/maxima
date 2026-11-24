@@ -78,6 +78,10 @@ public final class DesktopNodeLink {
                 String tok = Base64.getEncoder().encodeToString(
                         ("minima:" + password).getBytes(StandardCharsets.UTF_8));
                 req.append("Authorization: Basic ").append(tok).append("\r\n");
+            } else {
+                // A password-less node RPC runs a plain GET read-only (2026-11-23): this header - one no web page
+                // can send without a preflight - makes it an ADMIN request, as a Basic header does.
+                req.append("X-Minima-Rpc: 1\r\n");
             }
             req.append("Connection: close\r\n\r\n");
             OutputStream out = s.getOutputStream();

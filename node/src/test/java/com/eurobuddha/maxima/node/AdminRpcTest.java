@@ -61,7 +61,7 @@ public class AdminRpcTest {
         try {
             // seedrandom: a WRITE command on every node jar (txncreate became one only with this series' txn gate)
             String r = send(rpc, "GET", "seedrandom%20modifier:x", "", "");
-            assertTrue(r, r.contains("You need ADMIN privileges") && r.contains("X-Minima-Rpc"));
+            assertTrue(r, r.contains("You need ADMIN privileges") && r.contains("Add the request header  X-Minima-Rpc: 1  (curl: -H 'X-Minima-Rpc: 1')"));
             r = send(rpc, "POST", "", "Content-Type: text/plain\r\n", "seedrandom modifier:x");
             assertTrue(r, r.contains("You need ADMIN privileges"));
             assertTrue(send(rpc, "GET", "random", "", "").contains("\"status\":true"));

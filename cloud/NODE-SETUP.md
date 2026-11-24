@@ -73,7 +73,7 @@ By hand, on the box:
 
 ```bash
 cd /var/lib/parlons-node && wget -q https://eurobuddha.com/mega.mmr && chown maxima:maxima mega.mmr
-curl 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
+curl -H 'X-Minima-Rpc: 1' 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
 systemctl restart parlons-node
 # prove it: a known funded address must now show its coins
 curl 'http://127.0.0.1:9005/coins%20megammr:true%20address:<Mx…>'
@@ -218,7 +218,7 @@ Parlons Node instead of a phone-local Minima Core. Same on the Mac: `parlons cmd
 
 On first boot the node **generates its own seed** at `/var/lib/parlons-node`. That
 seed is the node wallet **and** the Maxima identity — back it up (read it with the
-`vault` command over the loopback RPC on the box — `curl http://127.0.0.1:9005/vault` —
+`vault` command over the loopback RPC on the box — `curl -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/vault` —
 which needs `--rpc`; it is never logged).
 
 To run this node on an **existing account seed** (e.g. migrate the sally account so

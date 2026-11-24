@@ -28,6 +28,7 @@ public class RpcAccountWalletTest {
     private HttpServer node;
     private final List<String> commands = new ArrayList<>();
     private final List<String> auths = new ArrayList<>();
+    private final List<String> rpcHeaders = new ArrayList<>();
     private volatile boolean refuseSend;
     private volatile int getaddressCalls;
     private volatile boolean forgetPinned;
@@ -39,6 +40,7 @@ public class RpcAccountWalletTest {
             String cmd = URLDecoder.decode(ex.getRequestURI().getRawPath().substring(1), "UTF-8");
             commands.add(cmd);
             auths.add(ex.getRequestHeaders().getFirst("Authorization"));
+            rpcHeaders.add(ex.getRequestHeaders().getFirst("X-Minima-Rpc"));
             String body;
             if (cmd.equals("getaddress")) {
                 // a classic node rotates through its default addresses: first call MxAAAA, then others
@@ -97,6 +99,9 @@ public class RpcAccountWalletTest {
         RpcAccountWallet open = wallet(null);
         open.open();
         assertNull("no secret file: no Authorization header", auths.get(auths.size() - 1));
+        // a password-less node RPC runs a plain GET read-only: without a secret the wallet sends X-Minima-Rpc
+        assertEquals("1", rpcHeaders.get(rpcHeaders.size() - 1));
+        assertNull("with a secret the Basic header is enough", rpcHeaders.get(0));
     }
 
     @Test

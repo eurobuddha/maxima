@@ -1520,7 +1520,7 @@ cape 必须知道自己的公网地址。它用这个地址在对等节点列表
 4. 通过回环 RPC 导入它（P2P 端口 9001 意味着 RPC 是 9005）：
 
    ```bash
-   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
    ```
 
    它必须回复 `"status":true`。导入结束时节点会关闭。
@@ -1557,7 +1557,7 @@ MegaMMR 已有数据时跳过它们。
    锁，不需要停机：
 
    ```bash
-   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:export%20file:/var/lib/parlons-node/donor.megammr'
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' 'http://127.0.0.1:9005/megammr%20action:export%20file:/var/lib/parlons-node/donor.megammr'
    ```
 
 2. 把文件复制到新节点的数据目录，并交给服务用户：
@@ -2194,7 +2194,7 @@ Parlons Cloud 应用与它配对。用 `-Dparlons.account=false` 关闭它。
 3. 如果你没有设置密码，请在服务器上通过管理 RPC 读取自动生成的密码：
 
    ```bash
-   curl -s http://127.0.0.1:9005/mds
+   curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/mds
    ```
 
 4. 在你的电脑上，打开一条到 MDS 文件端口的 SSH 隧道（P2P 端口 9001 意味着 9003）：
@@ -2237,7 +2237,7 @@ Parlons Cloud 应用与它配对。用 `-Dparlons.account=false` 关闭它。
 2. 在服务器上，在一个不被录制的会话中打印 vault：
 
    ```bash
-   curl -s http://127.0.0.1:9005/vault
+   curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/vault
    ```
 
 3. 把 24 个词的 `phrase` 写在纸上，或存入离线存储。不要把它重定向到共享位置的
@@ -2327,7 +2327,7 @@ Parlons Cloud 应用与它配对。用 `-Dparlons.account=false` 关闭它。
 2. 把它作为 POST 请求体发送给管理 RPC。这可能需要几分钟：
 
    ```bash
-   curl -s -m 3600 --data-binary @"$tmp" http://127.0.0.1:9005/
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' --data-binary @"$tmp" http://127.0.0.1:9005/
    shred -u "$tmp"
    ```
 
@@ -2339,7 +2339,7 @@ Parlons Cloud 应用与它配对。用 `-Dparlons.account=false` 关闭它。
    until curl -s -m 5 http://127.0.0.1:9005/status >/dev/null; do sleep 2; done
    ```
 
-4. 在不被录制的会话中，检查 vault 现在是否保存着新的助记词（`curl -s http://127.0.0.1:9005/vault`）。
+4. 在不被录制的会话中，检查 vault 现在是否保存着新的助记词（`curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/vault`）。
 5. 如果你要导入 MegaMMR，现在请重新导入（[§13](#13-megammr-mode-and-the-rootnode)）：
    重新同步重置了区块链数据库。
 

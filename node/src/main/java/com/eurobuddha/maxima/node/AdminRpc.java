@@ -98,7 +98,8 @@ final class AdminRpc {
             } else {
                 res = NodeGateway.firstResult(CommandRunner.getRunner().runMultiCommand("0xFF", command));
                 if (String.valueOf(res.get("error")).contains("ADMIN")) {
-                    res.put("error", res.get("error") + " - send the command as a POST with the header X-Minima-Rpc: 1");
+                    res.put("error", res.get("error") + " - this RPC has no password, so a request without the header ran"
+                            + " read-only. Add the request header  X-Minima-Rpc: 1  (curl: -H 'X-Minima-Rpc: 1')");
                 }
             }
             out = res.toString();

@@ -452,7 +452,7 @@ for i in \$(seq 1 60); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/de
 tmp=\$(mktemp /var/lib/parlons-node/.resync.XXXXXX); chmod 600 "\$tmp"
 printf 'megammrsync action:resync host:%s phrase:"%s"' "$ARCHIVE" "\$(tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//')" > "\$tmp"
 echo "      resyncing the wallet to the phrase via archive $ARCHIVE (this takes a few minutes)"
-out=\$(curl -s -m 3600 --data-binary @"\$tmp" "http://127.0.0.1:\$RPC_PORT/")
+out=\$(curl -s -m 3600 -H 'X-Minima-Rpc: 1' --data-binary @"\$tmp" "http://127.0.0.1:\$RPC_PORT/")
 shred -u "\$tmp" 2>/dev/null || rm -f "\$tmp"
 case "\$out" in *'"status":true'*) ;; *) echo "      RESYNC FAILED: \$(echo "\$out" | head -c 300)" >&2; exit 1 ;; esac
 echo "      resync finished - restarting (resync ends with a node shutdown)"
@@ -460,7 +460,7 @@ systemctl restart parlons-node
 for i in \$(seq 1 90); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
 # Prove it without printing anything secret: vault phrase == file phrase?
 want=\$(tr -s ' \n\t' '   ' < "$SEED_FROM" | sed 's/^ *//; s/ *\$//' | tr 'a-z' 'A-Z')
-got=\$(curl -s -m 30 "http://127.0.0.1:\$RPC_PORT/vault" | python3 -c 'import sys,json; print(json.load(sys.stdin)["response"]["phrase"].strip().upper())' 2>/dev/null || echo "?")
+got=\$(curl -s -m 30 -H 'X-Minima-Rpc: 1' "http://127.0.0.1:\$RPC_PORT/vault" | python3 -c 'import sys,json; print(json.load(sys.stdin)["response"]["phrase"].strip().upper())' 2>/dev/null || echo "?")
 if [ "\$want" = "\$got" ]; then
     date -u +%Y-%m-%dT%H:%M:%SZ > "\$marker"; chown maxima:maxima "\$marker"
     # Pin the identity to the adopted phrase (0.2.4+: identity.txt, not the vault, is what the
@@ -500,7 +500,7 @@ wget -q -c --timeout=60 -O mega.mmr "$MEGA_SEED"
 chown maxima:maxima mega.mmr
 echo "      downloaded \$(stat -c %s mega.mmr) bytes; importing over loopback RPC :\$RPC_PORT"
 for i in \$(seq 1 30); do curl -s -m 5 "http://127.0.0.1:\$RPC_PORT/status" >/dev/null 2>&1 && break; sleep 2; done
-out=\$(curl -s -m 3600 "http://127.0.0.1:\$RPC_PORT/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr")
+out=\$(curl -s -m 3600 -H 'X-Minima-Rpc: 1' "http://127.0.0.1:\$RPC_PORT/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr")
 case "\$out" in *'"status":true'*) ;; *) echo "      IMPORT FAILED: \$out" >&2; exit 1 ;; esac
 echo "      import finished - restarting (import ends with a node shutdown)"
 systemctl restart parlons-node

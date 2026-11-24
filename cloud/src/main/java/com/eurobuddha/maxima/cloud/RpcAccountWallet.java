@@ -166,6 +166,10 @@ public final class RpcAccountWallet implements AccountWallet {
         c.setReadTimeout(READ_MS);
         if (!mAuth.isEmpty()) {
             c.setRequestProperty("Authorization", mAuth);
+        } else {
+            // A password-less node RPC runs a plain GET read-only (2026-11-23): this header - one no web page can
+            // send without a preflight - makes it an ADMIN request, as a Basic header does.
+            c.setRequestProperty("X-Minima-Rpc", "1");
         }
         int code = c.getResponseCode();
         InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();

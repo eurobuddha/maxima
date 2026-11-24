@@ -419,7 +419,7 @@ path, or whenever `megammr.mmr` is under 1 MB.
 4. Import over loopback. It must reply `"status":true` and ends with a node shutdown:
 
    ```bash
-   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
    ```
 
 5. Bring the node back and check the file is now over 1 MB:
@@ -1086,7 +1086,7 @@ same phrase; after a wallet resync or an identity import they differ, so back up
    session on the box:
 
    ```bash
-   curl -s http://127.0.0.1:9005/vault
+   curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/vault
    ```
 
    Write the 24-word `phrase` on paper or into offline storage. Clear the terminal scrollback.

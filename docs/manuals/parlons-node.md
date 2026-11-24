@@ -1532,7 +1532,7 @@ Do this once, after the first sync. Run the commands on the box as root.
 4. Import it over the loopback RPC (P2P port 9001 means RPC 9005):
 
    ```bash
-   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' 'http://127.0.0.1:9005/megammr%20action:import%20file:/var/lib/parlons-node/mega.mmr'
    ```
 
    It must reply with `"status":true`. The import ends with a node shutdown.
@@ -1569,7 +1569,7 @@ MegaMMR is already populated.
    lock and needs no downtime:
 
    ```bash
-   curl -s -m 3600 'http://127.0.0.1:9005/megammr%20action:export%20file:/var/lib/parlons-node/donor.megammr'
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' 'http://127.0.0.1:9005/megammr%20action:export%20file:/var/lib/parlons-node/donor.megammr'
    ```
 
 2. Copy the file to the new node's data directory, and give it to the service user:
@@ -2221,7 +2221,7 @@ route with the plain jar and an external sidecar.
 3. If you did not set a password, read the generated one over the admin RPC, on the box:
 
    ```bash
-   curl -s http://127.0.0.1:9005/mds
+   curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/mds
    ```
 
 4. From your computer, open an SSH tunnel to the MDS file port (P2P port 9001 means 9003):
@@ -2264,7 +2264,7 @@ instead. From then on, the identity comes from `identity.txt`, not from the vaul
 2. On the box, in a session that is not recorded, print the vault:
 
    ```bash
-   curl -s http://127.0.0.1:9005/vault
+   curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/vault
    ```
 
 3. Write the 24-word `phrase` on paper, or into offline storage. Do not redirect it into a file in
@@ -2354,7 +2354,7 @@ By hand on the box (this is what the deploy script's `--seed-from` does):
 2. Send it to the admin RPC as a POST body. This can take several minutes:
 
    ```bash
-   curl -s -m 3600 --data-binary @"$tmp" http://127.0.0.1:9005/
+   curl -s -m 3600 -H 'X-Minima-Rpc: 1' --data-binary @"$tmp" http://127.0.0.1:9005/
    shred -u "$tmp"
    ```
 
@@ -2366,7 +2366,7 @@ By hand on the box (this is what the deploy script's `--seed-from` does):
    until curl -s -m 5 http://127.0.0.1:9005/status >/dev/null; do sleep 2; done
    ```
 
-4. Check that the vault now holds the new phrase (`curl -s http://127.0.0.1:9005/vault`), in an
+4. Check that the vault now holds the new phrase (`curl -s -H 'X-Minima-Rpc: 1' http://127.0.0.1:9005/vault`), in an
    unrecorded session.
 5. If you seed the MegaMMR, import it again now ([§13](#13-megammr-mode-and-the-rootnode)): the
    resync reset the chain databases.
