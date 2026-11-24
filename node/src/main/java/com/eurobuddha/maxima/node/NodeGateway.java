@@ -88,6 +88,23 @@ public final class NodeGateway {
         }
     }
 
+    /** How many relay rows are remembered at most. */
+    static final int MAX_RELAY_ROWS = 4096;
+
+    /** Remember a relay row. The set is bounded: the oldest row is not only forgotten but DELETED from the node's txn
+     *  table first (forgetting it alone left the row in the node for good, the leak the set exists to stop). */
+    private void rememberRelayRow(String zId) {
+        String eldest = null;
+        synchronized (mRelayRows) {
+            if (!mRelayRows.contains(zId) && mRelayRows.size() >= MAX_RELAY_ROWS) {
+                eldest = mRelayRows.iterator().next();
+            }
+        }
+        if (eldest != null) deleteRelayRow(eldest);
+        mRelayRows.add(zId);
+        saveRelayRows();
+    }
+
     /** Remove a relay row as the node itself (the node refuses txndelete to a non-admin caller) and forget it */
     private JSONObject deleteRelayRow(String zId) {
         JSONObject result = CommandRunner.getRunner().runCommand("txndelete", "id", zId);
@@ -228,7 +245,8 @@ public final class NodeGateway {
             // A node WITHOUT the MegaMMR only knows its own coins: a megammr:true read here would
             // answer "0" for any funded address — a wrong answer, not an error. Refuse with a
             // 503 so a fleet client fails over to a MegaMMR node instead of trusting it.
-            if ("true".equals(String.valueOf(params.get("megammr"))) && !org.minima.system.params.GeneralParams.IS_MEGAMMR) {
+            // the node reads megammr:TRUE as true as well (getBooleanParam): fold the case as it does
+            if ("true".equalsIgnoreCase(String.valueOf(params.get("megammr")).trim()) && !org.minima.system.params.GeneralParams.IS_MEGAMMR) {
                 fail(ex, 503, "this node has no MegaMMR - use a MegaMMR gateway node"); return;
             }
             if (("coins".equals(verb) || "balance".equals(verb)) && !params.containsKey("address")) {
@@ -259,6 +277,13 @@ public final class NodeGateway {
                 fail(ex, 403, "txndelete through the gateway only removes a transaction imported through it, on its own");
                 return;
             }
+            // txnbasics / txnpost / txncheck: only a row imported through this gateway too. The bearer token is shared
+            // with every phone and the node's txn table is shared with the operator: a client that knew (or guessed)
+            // the id of an operator's own draft could otherwise post it (txnpost id:<their row> mine:true) or alter it.
+            if (("txnbasics".equals(verb) || "txnpost".equals(verb) || "txncheck".equals(verb)) && (id == null || !mRelayRows.contains(id))) {
+                fail(ex, 403, verb + " through the gateway only works on a transaction imported through it");
+                return;
+            }
             // Forward to the in-process node and hand its JSON straight back.
             // Run as a NON-ADMIN caller (0xFF): the bearer token is shared with every phone, so the node's
             // non-admin gates apply too (a txnimport file: is confined to a plain .txn in the base folder, an
@@ -272,8 +297,7 @@ public final class NodeGateway {
                 boolean ok = Boolean.TRUE.equals(result.get("status"));
                 if ("txnimport".equals(verb) && ok) {
                     // remember the relay row this request imported
-                    mRelayRows.add(id);
-                    saveRelayRows();
+                    rememberRelayRow(id);
                 } else if (id != null && mRelayRows.contains(id)
                         && ("txnpost".equals(verb) || ("txnbasics".equals(verb) && !ok))) {
                     // The gateway cleans its relay rows up itself: once a row was posted (the clients never

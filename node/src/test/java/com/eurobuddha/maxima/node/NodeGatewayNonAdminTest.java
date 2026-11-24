@@ -154,7 +154,8 @@ public class NodeGatewayNonAdminTest {
             assertTrue(post(gw, "SEND address:0xFF amount:1").startsWith("403 "));
             assertTrue(post(gw, "nosuchcommand").startsWith("403 "));
             // parameter names are case-sensitive to the node: BURN is not burn, and the node refuses it itself
-            assertTrue(post(gw, "txnpost id:x BURN:1").contains("Invalid parameter : BURN"));
+            // (a txnpost of a row the gateway did not import no longer reaches the node: 2026-11-24. txnimport does.)
+            assertTrue(post(gw, "txnimport id:x9 data:0x00 FILE:x").contains("Invalid parameter : FILE"));
             // a relay row needs a plain id
             assertTrue(post(gw, "txnimport data:" + rowBlob()).contains("needs an id:"));
             assertTrue(post(gw, "txnimport id:\"a b\" data:" + rowBlob()).contains("needs an id:"));
@@ -204,11 +205,18 @@ public class NodeGatewayNonAdminTest {
             }
             assertEquals(java.util.Collections.emptyList(), Files.readAllLines(dir.resolve("gateway-relay-rows.txt")));
 
-            // a row the gateway did not import is never touched
+            // a row the gateway did not import is never touched - and never posted, completed or checked either
+            // (2026-11-24: only txndelete was limited to relay rows; the token is shared with every phone)
             CommandRunner.getRunner().runCommand("txncreate", "id", "adminrow2");
-            post(gw, "txnpost id:adminrow2 mine:true");
-            post(gw, "txnbasics id:adminrow2");
+            for (String cmd : new String[] {"txnpost id:adminrow2 mine:true", "txnbasics id:adminrow2", "txncheck id:adminrow2", "txnpost mine:true"}) {
+                String refused = post(gw, cmd);
+                assertTrue(cmd + " -> " + refused, refused.startsWith("403 ") && refused.contains("only works on a transaction imported through it"));
+            }
             assertTrue(row("adminrow2"));
+            // megammr:TRUE is true to the node: a node without the MegaMMR answers 503 for it as for megammr:true
+            if (!org.minima.system.params.GeneralParams.IS_MEGAMMR) {
+                assertTrue(post(gw, "balance megammr:TRUE address:" + ADDR).startsWith("503 "));
+            }
         } finally {
             gw.stop();
         }
